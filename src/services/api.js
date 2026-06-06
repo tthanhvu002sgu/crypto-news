@@ -399,6 +399,39 @@ export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 500000) => {
   }
 };
 
+// ─── CORS PROXY HELPER ─────────────────────────────────────────────────────────
+
+/**
+ * Fallback mechanism trying multiple public CORS proxies sequentially.
+ */
+const fetchWithProxyFallback = async (targetUrlStr, params) => {
+  const targetUrl = new URL(targetUrlStr);
+  Object.keys(params).forEach(key => targetUrl.searchParams.append(key, params[key]));
+  const fullUrl = targetUrl.toString();
+  
+  const proxies = [
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(fullUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(fullUrl)}`
+  ];
+
+  for (const proxyUrl of proxies) {
+    try {
+      const res = await axios.get(proxyUrl, { timeout: 8000 });
+      let data = res.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch {}
+      }
+      if (data && typeof data === 'object') {
+        return data;
+      }
+    } catch (e) {
+      console.warn(`[Proxy Fallback] Failed for ${proxyUrl.split('?')[0]}`, e.message);
+    }
+  }
+  throw new Error('All CORS proxies failed');
+};
+
 // ─── FRED API (Macro yields & interest rates) ──────────────────────────────────
 export const getFREDMetric = async (seriesId, apiKey) => {
   if (!apiKey) return null;
@@ -422,17 +455,7 @@ export const getFREDMetric = async (seriesId, apiKey) => {
     }
     console.warn(`[API] FRED direct request failed for ${seriesId}, trying via CORS proxy... Error:`, e.message);
     try {
-      const targetUrl = new URL('https://api.stlouisfed.org/fred/series/observations');
-      Object.keys(params).forEach(key => targetUrl.searchParams.append(key, params[key]));
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl.toString())}`;
-      
-      const res = await axios.get(proxyUrl, { timeout: 8000 });
-      let data = res.data;
-      if (typeof data === 'string') {
-        try {
-          data = JSON.parse(data);
-        } catch {}
-      }
+      const data = await fetchWithProxyFallback('https://api.stlouisfed.org/fred/series/observations', params);
       const obs = data?.observations?.[0];
       return obs ? parseFloat(obs.value) : null;
     } catch (proxyError) {
@@ -481,17 +504,7 @@ export const getFREDStockQuote = async (seriesId, apiKey) => {
     }
     console.warn(`[API] FRED Stock Quote direct failed for ${seriesId}, trying proxy... Error:`, e.message);
     try {
-      const targetUrl = new URL('https://api.stlouisfed.org/fred/series/observations');
-      Object.keys(params).forEach(key => targetUrl.searchParams.append(key, params[key]));
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl.toString())}`;
-      
-      const res = await axios.get(proxyUrl, { timeout: 8000 });
-      let data = res.data;
-      if (typeof data === 'string') {
-        try {
-          data = JSON.parse(data);
-        } catch {}
-      }
+      const data = await fetchWithProxyFallback('https://api.stlouisfed.org/fred/series/observations', params);
       const obsList = (data?.observations || [])
         .map(o => ({ value: parseFloat(o.value), date: o.date }))
         .filter(o => !isNaN(o.value));
@@ -544,17 +557,7 @@ export const getAlphaVantageQuote = async (symbol, apiKey) => {
     }
     console.warn(`[API] Alpha Vantage direct request failed for ${symbol}, trying via CORS proxy... Error:`, e.message);
     try {
-      const targetUrl = new URL('https://www.alphavantage.co/query');
-      Object.keys(params).forEach(key => targetUrl.searchParams.append(key, params[key]));
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl.toString())}`;
-      
-      const res = await axios.get(proxyUrl, { timeout: 8000 });
-      let data = res.data;
-      if (typeof data === 'string') {
-        try {
-          data = JSON.parse(data);
-        } catch {}
-      }
+      const data = await fetchWithProxyFallback('https://www.alphavantage.co/query', params);
       const quote = data?.['Global Quote'];
       if (quote && quote['05. price']) {
         return {
