@@ -377,30 +377,88 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
  * Lọc các lệnh giới hạn có giá trị ≥ $500K USD.
  * Phân tích tỷ lệ Bid Walls vs Ask Walls.
  */
-export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 500000) => {
+export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 1000000) => {
+  const symbolBinance = symbol.toUpperCase();
+  // Bybit uses the same symbol for linear futures and spot
+  const symbolBybit = symbol.toUpperCase();
+
+  const urls = {
+    binanceFutures: `https://fapi.binance.com/fapi/v1/depth?symbol=${symbolBinance}&limit=1000`,
+    binanceSpot: `https://api.binance.com/api/v3/depth?symbol=${symbolBinance}&limit=1000`,
+    bybitFutures: `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbolBybit}&limit=500`,
+    bybitSpot: `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbolBybit}&limit=500`
+  };
+
+  const fetchSource = async (name, url, parser) => {
+    try {
+      const res = await axios.get(url, { timeout: 6000 });
+      return parser(res.data);
+    } catch (e) {
+      console.warn(`[API - OrderBook] Failed to fetch ${name}:`, e.message);
+      return { bids: [], asks: [] };
+    }
+  };
+
+  const binanceParser = (data) => ({
+    bids: data.bids || [],
+    asks: data.asks || []
+  });
+
+  const bybitParser = (data) => ({
+    bids: data.result?.b || [],
+    asks: data.result?.a || []
+  });
+
   try {
-    const res = await axios.get('https://fapi.binance.com/fapi/v1/depth', {
-      params: { symbol, limit: 1000 },
-      timeout: 8000,
+    const results = await Promise.all([
+      fetchSource('Binance Futures', urls.binanceFutures, binanceParser),
+      fetchSource('Binance Spot', urls.binanceSpot, binanceParser),
+      fetchSource('Bybit Futures', urls.bybitFutures, bybitParser),
+      fetchSource('Bybit Spot', urls.bybitSpot, bybitParser)
+    ]);
+
+    const bidsMap = new Map();
+    const asksMap = new Map();
+
+    const processLevels = (levels, map, sourceName) => {
+      for (const [pStr, qStr] of levels) {
+        const price = parseFloat(pStr);
+        const qty = parseFloat(qStr);
+        if (isNaN(price) || isNaN(qty) || qty <= 0) continue;
+        const usdValue = price * qty;
+        const roundedPrice = Math.round(price); // Group by integer USD price level
+        
+        if (!map.has(roundedPrice)) {
+          map.set(roundedPrice, { price: roundedPrice, qty: 0, usdValue: 0, sources: {} });
+        }
+        const entry = map.get(roundedPrice);
+        entry.qty += qty;
+        entry.usdValue += usdValue;
+        if (!entry.sources[sourceName]) entry.sources[sourceName] = 0;
+        entry.sources[sourceName] += usdValue;
+      }
+    };
+
+    const sourceNames = ['Binance Futures', 'Binance Spot', 'Bybit Futures', 'Bybit Spot'];
+    results.forEach((r, idx) => {
+      processLevels(r.bids, bidsMap, sourceNames[idx]);
+      processLevels(r.asks, asksMap, sourceNames[idx]);
     });
 
-    const bids = res.data.bids || [];
-    const asks = res.data.asks || [];
-
-    const filterWhale = (levels, side) =>
-      levels
-        .map(([p, q]) => ({
-          price: parseFloat(p),
-          qty: parseFloat(q),
-          usdValue: parseFloat(p) * parseFloat(q),
-          side,
-        }))
+    const filterAndFormat = (map, side) =>
+      Array.from(map.values())
         .filter(o => o.usdValue >= minUsd)
         .sort((a, b) => b.usdValue - a.usdValue)
-        .slice(0, 15); // Top 15 per side
+        .map(o => ({
+          price: o.price,
+          qty: o.qty,
+          usdValue: o.usdValue,
+          side,
+          sources: o.sources
+        }));
 
-    const whaleBids = filterWhale(bids, 'BID');
-    const whaleAsks = filterWhale(asks, 'ASK');
+    const whaleBids = filterAndFormat(bidsMap, 'BID');
+    const whaleAsks = filterAndFormat(asksMap, 'ASK');
 
     const bidWallTotal = whaleBids.reduce((s, o) => s + o.usdValue, 0);
     const askWallTotal = whaleAsks.reduce((s, o) => s + o.usdValue, 0);
@@ -409,8 +467,8 @@ export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 500000) => {
     const bidRatio = wallTotal > 0 ? bidWallTotal / wallTotal : 0.5;
 
     return {
-      whaleBids,
-      whaleAsks,
+      whaleBids: whaleBids.slice(0, 15),
+      whaleAsks: whaleAsks.slice(0, 15),
       bidWallTotal,
       askWallTotal,
       bidRatio: parseFloat(bidRatio.toFixed(3)),
@@ -418,7 +476,7 @@ export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 500000) => {
       signalCls: bidRatio > 0.6 ? 'text-emerald' : bidRatio < 0.4 ? 'text-rose' : 'text-slate-400',
     };
   } catch (e) {
-    console.error('[API] Whale Walls:', e.message);
+    console.error('[API] Whale Walls Aggregation Error:', e.message);
     return null;
   }
 };
@@ -662,6 +720,7 @@ export const getYahooStockQuote = async (ticker) => {
     return null;
   };
 
+  // 1. Try direct or Vite proxy
   try {
     const res = await axios.get(url, {
       params,
@@ -680,6 +739,34 @@ export const getYahooStockQuote = async (ticker) => {
     }
   }
 
+  // 2. Try Jina Reader CORS proxy fallback
+  try {
+    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+    const jinaUrl = `https://r.jina.ai/${targetUrl}`;
+    const res = await axios.get(jinaUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Return-Format': 'json'
+      },
+      timeout: 12000
+    });
+    const content = res.data?.data?.content;
+    if (content) {
+      let cleanContent = content.trim();
+      if (cleanContent.startsWith('```')) {
+        cleanContent = cleanContent.replace(/^```[a-zA-Z]*\n?/, '');
+        cleanContent = cleanContent.replace(/```$/, '');
+        cleanContent = cleanContent.trim();
+      }
+      const data = JSON.parse(cleanContent);
+      const parsed = parseYahooMeta(data);
+      if (parsed) return parsed;
+    }
+  } catch (jinaError) {
+    console.warn(`[API] Yahoo Jina proxy failed for ${ticker}:`, jinaError.message);
+  }
+
+  // 3. Try AllOrigins CORS proxy fallback
   try {
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`${url}?interval=1d&range=1d`)}`;
     const res = await axios.get(proxyUrl, { timeout: 8000 });
@@ -791,63 +878,33 @@ export const getFREDMetric = async (seriesId, apiKey) => {
 };
 
 export const getFREDStockQuote = async (seriesId, apiKey) => {
+  let quote = null;
   if (seriesId === 'SP500') {
-    return getYahooStockQuote('^GSPC');
+    quote = await getYahooStockQuote('^GSPC');
+  } else if (seriesId === 'NASDAQ100') {
+    quote = await getYahooStockQuote('^NDX');
+  } else if (seriesId === 'VIXCLS') {
+    quote = await getYahooStockQuote('^VIX');
   }
-  if (seriesId === 'NASDAQ100') {
-    return getYahooStockQuote('^NDX');
-  }
-  if (seriesId === 'VIXCLS') {
-    return getYahooStockQuote('^VIX');
-  }
+  
+  if (quote) return quote;
+
   // Fallback
-  return getFredCSVMetric(seriesId);
+  const rawVal = await getFredCSVMetric(seriesId);
+  if (rawVal !== null) {
+    return { price: rawVal, changePercent: 0 };
+  }
+  return null;
 };
 
 
 // ─── YAHOO FINANCE API (U.S. Dollar Index DXY) ──────────────────────────────────
 export const getDXYQuote = async () => {
-  const url = isLocal ? '/api-yahoo/v8/finance/chart/DX-Y.NYB' : 'https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB';
-  const params = {
-    interval: '1d',
-    range: '1d',
-  };
-
-  try {
-    const res = await axios.get(url, {
-      params,
-      timeout: 8000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-    const price = res.data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-    return price || null;
-  } catch (e) {
-    if (isLocal) {
-      console.error('[API] Yahoo DXY dev proxy error:', e.message);
-      return null;
-    }
-    console.warn('[API] Yahoo DXY direct failed, trying proxy... Error:', e.message);
-    try {
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`${url}?interval=1d&range=1d`)}`;
-      const res = await axios.get(proxyUrl, { timeout: 8000 });
-      let data = res.data;
-      if (typeof data === 'string') {
-        try { data = JSON.parse(data); } catch {}
-      }
-      const contentsStr = data?.contents;
-      if (contentsStr) {
-        const parsed = JSON.parse(contentsStr);
-        const price = parsed?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        if (price) return price;
-      }
-      return null;
-    } catch (proxyError) {
-      console.error('[API] Yahoo DXY proxy failed:', proxyError.message);
-      return null;
-    }
+  const quote = await getYahooStockQuote('DX-Y.NYB');
+  if (quote && quote.price) {
+    return parseFloat(quote.price.toFixed(3));
   }
+  return null;
 };
 
 // ─── ALPHA VANTAGE API (Equities & Volatility ETFs) ─────────────────────────────
@@ -1166,6 +1223,24 @@ export const getCMECot = async () => {
     return null;
   } catch (e) {
     console.error('[API] CME COT error:', e.message);
+    return null;
+  }
+};
+
+/** Fetch Crypto Fear and Greed Index */
+export const getFearAndGreed = async () => {
+  try {
+    const res = await axios.get('https://api.alternative.me/fng/', { timeout: 6000 });
+    const d = res.data?.data?.[0];
+    if (d) {
+      return {
+        value: parseInt(d.value),
+        sentiment: d.value_classification,
+      };
+    }
+    return null;
+  } catch (e) {
+    console.error('[API] Fear and Greed:', e.message);
     return null;
   }
 };

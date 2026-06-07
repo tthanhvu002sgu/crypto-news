@@ -1,6 +1,7 @@
 import React from 'react';
 import { OpenRouter } from "@openrouter/sdk";
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines } from '../services/api';
 
@@ -94,7 +95,12 @@ export default function SummaryTab({
     // --- Whale Walls price-level details ---
     const fmtWalls = (walls) => {
       if (!walls || walls.length === 0) return '  Không có dữ liệu';
-      return walls.slice(0, 5).map(w => `  $${w.price.toFixed(0)} — ${(w.usdValue/1e6).toFixed(2)}M USD (${w.qty.toFixed(2)} BTC)`).join('\n');
+      return walls.slice(0, 5).map(w => {
+        const srcStr = Object.entries(w.sources || {})
+          .map(([name, val]) => `${name}: $${(val/1e6).toFixed(1)}M`)
+          .join(', ');
+        return `  $${w.price.toFixed(0)} — ${(w.usdValue/1e6).toFixed(2)}M USD (${w.qty.toFixed(2)} BTC) [Gộp từ: ${srcStr}]`;
+      }).join('\n');
     };
 
     // Format Data for Prompt
@@ -171,30 +177,74 @@ ${data.news.slice(0, 4).map(n => '- ' + n.title + ' (' + n.tag + ')').join('\n')
 
       const systemPrompt = `Bạn là chuyên gia phân tích vĩ mô và giao dịch tiền điện tử (Crypto) lão luyện. Hãy phân tích thị trường dựa trên DỮ LIỆU LỊCH SỬ ĐA KHUNG THỜI GIAN và dữ liệu hiện tại được cung cấp. Báo cáo bằng tiếng Việt, định dạng Markdown rõ ràng, chuyên nghiệp. Không bịa đặt dữ liệu.
 
-QUY TẮC BẮT BUỘC:
-1. LUÔN ĐỐI CHIẾU LỊCH SỬ: Khi nhận xét giá "cao" hay "thấp", BẮT BUỘC so sánh với dữ liệu 7d/30d/90d/1y được cấp. Ví dụ: "Giá $X hiện tại thấp hơn X% so với đỉnh 90 ngày ($Y), và cao hơn X% so với đáy 1 năm ($Z)."
-2. PHÂN TÍCH XU HƯỚNG THEO NHIỀU KHUNG: Xác định xu hướng ngắn hạn (48h-7d), trung hạn (30d-90d), dài hạn (1y). Chỉ rõ đây là giai đoạn tích lũy / phục hồi / suy giảm dựa trên số liệu cụ thể.
-3. TƯƠNG QUAN LIÊN THỊ TRƯỜNG: Phân tích mối liên hệ DXY ↔ BTC (DXY tăng thường ép BTC), VIX ↔ BTC (VIX cao = risk-off), ETF Flow ↔ Giá (flow vào nhưng giá giảm = absorb selling pressure).
-4. TRÁNH NHẬN ĐỊNH CHỦ QUAN: Không nói "giá cao" hay "giá thấp" chung chung. Luôn kèm theo dữ liệu % so với mốc cụ thể (48h/7d/30d/90d/1y).
+CÁC NGUYÊN TẮC PHÂN TÍCH BẮT BUỘC (RÀNG BUỘC CỦA HỆ THỐNG):
 
-BẮT BUỘC TUÂN THỦ CẤU TRÚC SAU:
+0. CẤM SỬ DỤNG LATEX VÀ KÝ HIỆU TOÁN HỌC PHỨC TẠP:
+   - TUYỆT ĐỐI CẤM sử dụng định dạng toán học LaTeX. Không bọc số liệu hoặc ký hiệu trong các ký tự dollar '$' hoặc '$$'. Không sử dụng các cú pháp LaTeX như '\\text{}', '\\mathrm{}', '\\rightarrow', '\\delta', v.v.
+   - Tất cả con số, đơn vị tiền tệ và xu hướng phải được viết dưới dạng văn bản thường và ký hiệu phổ thông (Ví dụ: viết '-2,071M USD' thay vì '$-2,071\\text{M USD}$', viết 'Fed Rate' hoặc 'Lãi suất Fed' thay vì '(\\text{Fed Rate})', viết '102.3K' thay vì '$102.3\\text{K}$', sử dụng dấu mũi tên thông thường '->' hoặc chữ 'đến' thay vì '\\rightarrow').
+
+1. PHÂN TÍCH VĨ MÔ SÂU SẮC (MACRO):
+   - Không được liệt kê số liệu thô một cách máy móc.
+   - BẮT BUỘC tính toán Lãi suất thực (Real Rate) theo công thức: Lãi suất thực = Lãi suất Fed - Lạm phát (CPI).
+   - BẮT BUỘC phân tích mâu thuẫn hệ thống nếu có (Ví dụ: Lãi suất thực âm/thấp nhưng Lợi suất trái phiếu 10 năm (10Y Yield) lại vọt lên cao). Giải thích rõ hiện tượng này (đường cong lợi suất dốc lên, kỳ vọng lạm phát dài hạn, hoặc áp lực tài chính) và ảnh hưởng của nó đến tài sản rủi ro.
+
+2. LOGIC ON-CHAIN & SỨC MUA STABLECOIN:
+   - KHÔNG ĐƯỢC coi Tổng vốn hóa/Tổng cung lưu hành của USDT/Stablecoin là lực cầu tiềm năng đang chờ để hấp thụ lực bán BTC. Giải thích rõ rằng: Tổng cung USDT/Stablecoin lưu hành có thể nằm trong các pool DeFi, làm tài sản thế chấp hoặc nằm trong ví dài hạn của người dùng.
+   - Chỉ ra rằng để phân tích lực cầu tiềm năng mua BTC trực tiếp, bắt buộc phải dùng số liệu Stablecoin trên các sàn giao dịch (Stablecoin Exchange Reserves). Do hệ thống hiện tại chưa cung cấp số liệu này, bạn phải nhấn mạnh điểm hạn chế này thay vì suy diễn từ Tổng vốn hóa Stablecoin.
+
+3. ĐỘ TRỄ CỦA CME COT (COMMITMENT OF TRADERS):
+   - Nhận thức rõ dữ liệu CME COT được cập nhật hàng tuần (vào thứ Sáu, phản ánh dữ liệu thứ Ba trước đó), có độ trễ từ 3-7 ngày.
+   - BẮT BUỘC: KHÔNG ĐƯỢC sử dụng dữ liệu CME COT để nhận định hay phân tích hành vi giá ngắn hạn (khung 48h - 7 ngày). CME COT chỉ có giá trị cho bức tranh Trung - Dài hạn (Position Trading). Phải phân tách rõ nhận định ngắn hạn (dựa trên ETF Flow, Order Book, CVD, HFT) và nhận định dài hạn (dựa trên CME COT).
+
+4. TƯƠNG QUAN PHÁI SINH & DÒNG TIỀN (HFT):
+   - Phân tích mối tương quan chặt chẽ giữa Long/Short Ratio (đếm theo số tài khoản) và CVD/Volume (tính theo khối lượng tiền) kèm OBI.
+   - Ví dụ quan trọng: Nếu lệnh Long chiếm ưu thế tuyệt đối (L/S Ratio cao, > 1.5) nhưng CVD âm nặng và OBI âm, hãy chỉ ra sự xung đột: phe Long chỉ đang đặt lệnh giới hạn (Limit Orders) thụ động để đỡ giá, trong khi phe Short/Bán đang rải lệnh thị trường (Market Orders) ép xuống rất rát. Điều này phản ánh xu hướng giảm chủ động chứ không phải tích cực mua lên.
+   - Phân tích kỹ hiện tượng Short Squeeze (Giá tăng + Open Interest giảm) hoặc Long Squeeze (Giá giảm + Open Interest giảm) nếu có.
+
+5. THANG ĐO QUY MÔ WHALE WALLS (SỔ LỆNH GỘP):
+   - Dữ liệu Whale Walls được cung cấp là sổ lệnh gộp (Aggregated Order Book) từ 4 sàn lớn nhất: Binance Spot, Binance Futures, Bybit Spot, Bybit Futures.
+   - Áp dụng thang đo quy mô nghiêm ngặt cho BTC:
+     * Tổng tường lệnh dưới 10M USD: Quá nhỏ đối với BTC, không đủ ý nghĩa làm vùng hỗ trợ/kháng cự cứng (có thể bị nuốt chửng trong vòng vài giây bởi các lệnh Market).
+     * Tổng tường lệnh từ 10M - 30M USD: Hỗ trợ/kháng cự yếu/vi mô trong khung thời gian siêu ngắn (HFT scalping).
+     * Tổng tường lệnh từ 30M - 50M USD: Vùng hỗ trợ/kháng cự trung bình.
+     * Tổng tường lệnh trên 50M USD: Vùng hỗ trợ/kháng cự mạnh (tường cá voi Whale Walls thực sự).
+     * Tổng tường lệnh trên 100M USD: Vùng cản cực mạnh có khả năng gây đảo chiều xu hướng ngắn hạn.
+   - Chỉ ra cụ thể mức giá và tổng giá trị USD gộp từ các sàn (Binance Spot, Binance Futures, Bybit Spot, Bybit Futures) để chứng minh.
+
+6. MA TRẬN TRỌNG SỐ (SCORING MATRIX) CHO DỰ PHÒNG:
+   - Cấm tự phán đoán ngẫu nhiên xác suất (ví dụ: 70% / 30%) một cách cảm tính.
+   - BẮT BUỘC tự xây dựng và in ra một **Bảng Ma trận trọng số (Scoring Matrix)** để tính toán điểm xu hướng.
+   - Các danh mục chấm điểm (từ -2 đến +2 mỗi danh mục: cực xấu là -2, xấu là -1, trung lập là 0, tốt là +1, cực tốt là +2):
+     * 1. Bối cảnh Vĩ mô (Macro)
+     * 2. Dòng tiền ETF Tổ chức (ETF Flow)
+     * 3. Hành vi giá Spot & Onchain
+     * 4. Phái sinh & Open Interest (Derivatives/OI)
+     * 5. Dòng tiền HFT & Sổ lệnh gộp (HFT/Aggregated Order Book)
+   - Tính tổng điểm (tối đa +10, tối thiểu -10). Quy đổi ra xác suất như sau:
+     * Tổng điểm >= +6: Bullish (>75% xác suất tăng), Bearish (<25%)
+     * Tổng điểm từ +2 đến +5: Moderately Bullish (60% - 70% xác suất tăng), Bearish (30% - 40%)
+     * Tổng điểm từ -1 đến +1: Neutral (50% tăng / 50% giảm)
+     * Tổng điểm từ -5 đến -2: Moderately Bearish (60% - 70% xác suất giảm), Bullish (30% - 40%)
+     * Tổng điểm <= -6: Bearish (>75% xác suất giảm), Bullish (<25%)
+   - Phải in bảng điểm này cụ thể trong phần 5. BẮT BUỘC xuống dòng (sử dụng ký tự xuống dòng '\\n' thực sự) cho từng dòng của bảng (tiêu đề, dòng phân cách :---, và từng hàng dữ liệu). Tuyệt đối không được viết dồn tất cả các hàng của bảng trên cùng một dòng. Hãy viết bảng chuẩn markdown gồm: Dòng 1: Tiêu đề (| Cột 1 | Cột 2 |), Dòng 2: Phân cách (| :--- | :---: |), Dòng 3+: Các hàng dữ liệu.
+
+BẮT BUỘC TUÂN THỦ CẤU TRÚC BÁO CÁO SAU:
 ### 1. BỐI CẢNH VĨ MÔ (MACRO)
-Đánh giá thanh khoản, lãi suất, DXY, VIX, High Yield Spread và ảnh hưởng đến tài sản rủi ro. Phân tích tương quan DXY ↔ BTC, VIX ↔ BTC.
+Phân tích thanh khoản ròng, lãi suất thực, lạm phát, DXY, VIX, và High Yield Spread. Chỉ rõ các mâu thuẫn hệ thống và ảnh hưởng đến BTC.
 ### 2. TÌNH HÌNH THỊ TRƯỜNG CRYPTO & ON-CHAIN
-Đánh giá hành vi giá BTC đa khung: vị trí hiện tại so với 7d/30d/90d/1y (High/Low), sức khỏe altcoin (ETH/SOL), volume xác nhận xu hướng, và dữ liệu on-chain. Nêu rõ giá đang trong giai đoạn nào của chu kỳ.
+Hành vi giá BTC so với đỉnh/đáy lịch sử 7d/30d/90d/1y. Phân tích Altcoin, Volume và tính chất chu kỳ. Nhận định về Stablecoin và hạn chế dữ liệu Exchange Reserves.
 ### 3. DÒNG TIỀN TỔ CHỨC (ETF & CME)
-Phân tích tổng BTC ETF đang nắm, xu hướng ETF Flow 7 ngày (tổng net flow, ngày flow dương/âm), đối chiếu flow với hành vi giá, và vị thế CME COT.
+Dòng tiền ETF 7 ngày qua và sự hấp thụ lực bán. Vị thế CME COT trung-dài hạn và nhấn mạnh tính trễ đối với phân tích ngắn hạn.
 ### 4. PHÁI SINH & DÒNG TIỀN NGẮN HẠN (HFT)
-Phân tích Funding Rate, xu hướng OI 24h (tăng/giảm bao nhiêu), xu hướng L/S Ratio, CVD, OBI và Whale Walls (nêu cụ thể vùng giá hỗ trợ/kháng cự từ dữ liệu) để xác định áp lực mua/bán trong ngắn hạn.
+Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale Walls gộp theo thang đo quy mô (độ mạnh yếu của các bức tường hỗ trợ/kháng cự).
 ### 5. KẾT LUẬN & DỰ PHÓNG XU HƯỚNG
-BẮT BUỘC bao gồm:
-- **BIAS**: Ghi rõ 🟢 BULLISH / 🔴 BEARISH / 🟡 NEUTRAL ngay đầu kết luận.
+- **BIAS**: Ghi rõ 🟢 BULLISH / 🔴 BEARISH / 🟡 NEUTRAL.
 - **ĐIỂM RỦI RO**: Cho điểm từ 1 (rất an toàn) đến 10 (rất rủi ro), giải thích ngắn gọn.
-- **VÙNG GIÁ QUAN TRỌNG**: Nêu cụ thể vùng hỗ trợ (từ Whale Bid Walls + đáy lịch sử) và kháng cự (từ Whale Ask Walls + đỉnh lịch sử).
-- **KỊCH BẢN**: Mô tả kịch bản tăng (điều kiện gì cần xảy ra) và kịch bản giảm (điều kiện gì cần xảy ra).
-- Căn cứ hoàn toàn vào dữ liệu thực tế.
+- **MA TRẬN CHẤM ĐIỂM (SCORING MATRIX)**: In bảng điểm chi tiết cho 5 chỉ số và tổng điểm để quy ra xác suất tăng/giảm.
+- **VÙNG GIÁ QUAN TRỌNG**: Nêu cụ thể hỗ trợ và kháng cự theo số liệu Whale Walls gộp thực tế.
+- **KỊCH BẢN**: Mô tả kịch bản tăng và giảm kèm điều kiện kích hoạt.
 
-⚠️ Lưu ý cuối: "Báo cáo này chỉ mang tính chất tham khảo, không phải lời khuyên đầu tư. Hãy tự nghiên cứu (DYOR) trước khi ra quyết định."`;
+⚠️ Báo cáo phải khách quan, logic chặt chẽ, dựa hoàn toàn trên các con số thực tế được cung cấp. Cuối báo cáo thêm cảnh báo: "Báo cáo này chỉ mang tính chất tham khảo, không phải lời khuyên đầu tư. Hãy tự nghiên cứu (DYOR) trước khi ra quyết định."`;
 
       const stream = await openrouter.chat.send({
         chatRequest: {
@@ -253,7 +303,7 @@ BẮT BUỘC bao gồm:
       }}>
         {aiSummary ? (
           <div className="markdown-body">
-            <ReactMarkdown>{aiSummary}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiSummary}</ReactMarkdown>
           </div>
         ) : (
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>

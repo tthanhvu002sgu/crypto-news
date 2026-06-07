@@ -7,6 +7,7 @@ import {
   fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics,
   getFREDMetric, getAlphaVantageQuote, getFREDStockQuote,
   getETFHoldings, getETFFlowHistory, getCMECot, getDXYQuote,
+  getFearAndGreed,
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import {
@@ -40,6 +41,16 @@ const fundingLabel = (r) => {
   if (pct > 0.01) return { text: 'Long Bias', cls: 'text-amber' };
   if (pct < -0.01) return { text: 'Short Bias', cls: 'text-emerald' };
   return { text: 'Balanced', cls: 'text-slate-400' };
+};
+
+const fngColor = (val, isLight) => {
+  if (val == null) return isLight ? '#475569' : '#94a3b8';
+  const v = Number(val);
+  if (v >= 75) return '#10b981'; // Extreme Greed
+  if (v >= 55) return '#059669'; // Greed
+  if (v >= 45) return '#d97706'; // Neutral
+  if (v >= 25) return '#ea580c'; // Fear
+  return '#e11d48'; // Extreme Fear
 };
 
 const getChartOpts = (theme) => {
@@ -182,6 +193,7 @@ const INIT = {
   linkPrice: null,
   netLiquidity: 6050.25, // default baseline
   cotData: null,
+  fngData: null,
 };
 
 // US Spot Bitcoin ETFs Baseline Holdings (Fallback)
@@ -396,7 +408,7 @@ function App() {
       onChainRes, onChainMetricsRes,
       etfHoldingsRes, etfHistoryRes,
       cotRes,
-      yield10yRes, dxyRes, sp500Res, vixRes, qqqRes
+      yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes
     ] = await Promise.allSettled([
       getBTCTicker24h('BTCUSDT'),
       getBTCKlines('BTCUSDT', '1h', 48),
@@ -416,7 +428,8 @@ function App() {
       getDXYQuote(),              // DXY (Yahoo Finance)
       getFREDStockQuote('SP500'), // S&P 500 (Yahoo Finance)
       getFREDStockQuote('VIXCLS'), // VIX (Yahoo Finance)
-      getFREDStockQuote('NASDAQ100') // Nasdaq (Yahoo Finance)
+      getFREDStockQuote('NASDAQ100'), // Nasdaq (Yahoo Finance)
+      getFearAndGreed()           // Fear & Greed Index (alternative.me)
     ]);
 
     const get = (res, label, hasKey) => {
@@ -452,6 +465,7 @@ function App() {
     const sp500           = get(sp500Res,           'S&P 500 Index (Yahoo Finance)', true);
     const vix             = get(vixRes,             'VIX Volatility Index (Yahoo Finance)', true);
     const qqq             = get(qqqRes,             'Nasdaq 100 Index (Yahoo Finance)', true);
+    const fngData         = get(fngRes,             'Chỉ số Fear & Greed (alternative.me)', true);
 
     const now = new Date().toLocaleString('vi-VN');
     addLog(`Đồng bộ hoàn tất lúc ${now}`, 'system');
@@ -496,6 +510,7 @@ function App() {
       qqq:            qqq             ?? prev.qqq,
       netLiquidity:   netLiquidity    ?? prev.netLiquidity,
       cotData:        cotData         ?? prev.cotData,
+      fngData:        fngData         ?? prev.fngData,
     }));
 
     setLastSync(now);
@@ -1276,7 +1291,7 @@ function App() {
                     <span className="text-slate-400">OI:</span>
                     <span>{data.openInterest ? `${(data.openInterest/1000).toFixed(1)}K BTC` : '---'}</span>
                     <span className="text-slate-400">F&G:</span>
-                    <span style={{ color: fngColor(fngData?.value, theme === 'light') }}>{fngData?.value || '---'}</span>
+                    <span style={{ color: fngColor(data.fngData?.value, theme === 'light') }}>{data.fngData?.value || '---'}</span>
                     <span className="text-slate-400">HashRate:</span>
                     <span>{data.onChain?.hashRate ? `${data.onChain.hashRate}EH/s` : '---'}</span>
                     <span className="text-slate-400">WS:</span>
