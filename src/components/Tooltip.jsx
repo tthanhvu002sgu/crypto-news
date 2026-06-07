@@ -91,6 +91,14 @@ export const METRIC_METADATA = {
     api: 'FRED API (REST - Series FEDFUNDS)',
     def: 'Lãi suất liên bang do Ngân hàng Trung ương Mỹ (FED) ấn định.'
   },
+  cpi: {
+    api: 'FRED API (REST - Series CPIAUCSL)',
+    def: 'Chỉ số giá tiêu dùng (Consumer Price Index) của Hoa Kỳ, đo lường lạm phát.'
+  },
+  unrate: {
+    api: 'FRED API (REST - Series UNRATE)',
+    def: 'Tỷ lệ thất nghiệp của Hoa Kỳ, phần trăm lực lượng lao động không có việc làm.'
+  },
   tenYearYield: {
     api: 'FRED API (REST - Series DGS10)',
     def: 'Lợi suất trái phiếu chính phủ Mỹ kỳ hạn 10 năm.'

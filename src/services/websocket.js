@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getDailyCVD } from './api';
 
 // ─── Stream #1: BTC, ETH, SOL, LINK Ticker + BTC Mark Price (v6.0) ───────────────────────
 const WS_TICKER_URL =
   'wss://fstream.binance.com/market/stream?streams=btcusdt@ticker/btcusdt@markPrice@1s/ethusdt@ticker/solusdt@ticker/linkusdt@ticker';
-
-// ─── Stream #2: Liquidation (Force Order) ─────────────────────────────────────
-// Removed as per user request to replace with Target Liquidity (Whale Walls).
 
 // ─── Stream #3: Aggregate Trades → CVD Calculator ─────────────────────────────
 const WS_AGG_URL = 'wss://fstream.binance.com/market/stream?streams=btcusdt@aggTrade';
@@ -127,9 +125,27 @@ export function useCVDStream() {
   const historyRef    = useRef([]); // [{time, cvd}]
   const throttleRef   = useRef(null);
   const minuteRef     = useRef(null); // for history sampling
+  const isFetchingInitialRef = useRef(true);
+  
+  // Helper: get today's date string for daily reset
+  const getTodayStr = () => new Date().toLocaleDateString('vi-VN');
+  const todayRef = useRef(getTodayStr());
 
   useEffect(() => {
     mountedRef.current = true;
+
+    // Fetch initial CVD from start of day
+    getDailyCVD('BTCUSDT').then((init) => {
+      if (!mountedRef.current) return;
+      cvdRef.current = init.initialCvd;
+      buyRef.current = init.initialBuyVol;
+      sellRef.current = init.initialSellVol;
+      isFetchingInitialRef.current = false;
+      
+      setCvd(cvdRef.current);
+      setBuyVolume(buyRef.current);
+      setSellVolume(sellRef.current);
+    });
 
     const conn = createReconnectingWS(
       WS_AGG_URL,
@@ -140,6 +156,22 @@ export function useCVDStream() {
         const price = parseFloat(data.p);
         const qty = parseFloat(data.q);
         const usdtVol = price * qty;
+
+        // Reset history at midnight
+        const today = getTodayStr();
+        if (today !== todayRef.current) {
+          todayRef.current = today;
+          cvdRef.current = 0;
+          buyRef.current = 0;
+          sellRef.current = 0;
+          historyRef.current = [];
+        }
+
+        if (isFetchingInitialRef.current) {
+          // Skip websocket updates while fetching initial CVD to avoid double counting 
+          // or replacing the fetched initial value incorrectly.
+          return;
+        }
 
         // m=true → buyer is maker → taker SELLS → bearish → CVD decreases
         // m=false → seller is maker → taker BUYS → bullish → CVD increases
@@ -192,3 +224,5 @@ export function useCVDStream() {
 
   return { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, cvdStatus };
 }
+
+

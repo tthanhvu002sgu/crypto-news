@@ -46,6 +46,40 @@ export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 
   }
 };
 
+/** Get CVD from the start of the local day using 5m klines */
+export const getDailyCVD = async (symbol = 'BTCUSDT') => {
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0); // Local midnight
+    const startTime = startOfDay.getTime();
+    
+    // 24 hours * 12 (5m intervals) = 288 candles, well under 1000 limit
+    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+      params: { symbol, interval: '5m', startTime, limit: 300 },
+    });
+    
+    let initialCvd = 0;
+    let initialBuyVol = 0;
+    let initialSellVol = 0;
+    
+    res.data.forEach(k => {
+      // k[7] = Quote asset volume, k[10] = Taker buy quote asset volume
+      const quoteVol = parseFloat(k[7]);
+      const takerBuyVol = parseFloat(k[10]);
+      const takerSellVol = quoteVol - takerBuyVol;
+      
+      initialBuyVol += takerBuyVol;
+      initialSellVol += takerSellVol;
+      initialCvd += (takerBuyVol - takerSellVol);
+    });
+    
+    return { initialCvd, initialBuyVol, initialSellVol, lastKlineTime: res.data.length > 0 ? res.data[res.data.length - 1][6] : startTime };
+  } catch (e) {
+    console.error('[API] Daily CVD:', e.message);
+    return { initialCvd: 0, initialBuyVol: 0, initialSellVol: 0, lastKlineTime: 0 };
+  }
+};
+
 /** Global Long/Short Account Ratio — last N periods */
 export const getLongShortRatio = async (symbol = 'BTCUSDT', period = '1h', limit = 24) => {
   try {
@@ -98,18 +132,7 @@ export const getOIHistory = async (symbol = 'BTCUSDT', period = '1h', limit = 24
   }
 };
 
-// ─── FEAR & GREED INDEX ──────────────────────────────────────────────────────
 
-/** Crypto Fear & Greed Index — 0=Extreme Fear, 100=Extreme Greed */
-export const getFearAndGreed = async () => {
-  try {
-    const res = await axios.get('https://api.alternative.me/fng/?limit=7');
-    return res.data.data; // [{value, value_classification, timestamp}, ...]
-  } catch (e) {
-    console.error('[API] Fear & Greed:', e.message);
-    return null;
-  }
-};
 
 // ─── COINGECKO (FREE TIER) ────────────────────────────────────────────────────
 
@@ -262,6 +285,7 @@ const NEWS_SOURCES = [
   { url: 'https://cointelegraph.com/rss',                  tag: 'CoinTelegraph', cat: 'crypto' },
   { url: 'https://decrypt.co/feed',                        tag: 'Decrypt',       cat: 'crypto' },
   { url: 'https://www.theblock.co/rss.xml',                tag: 'The Block',     cat: 'crypto' },
+  { url: 'https://medium.com/feed/coinshares',             tag: 'CoinShares',    cat: 'crypto' },
   { url: 'https://feeds.reuters.com/reuters/businessNews', tag: 'Reuters',       cat: 'macro'  },
   { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', tag: 'WSJ Markets',   cat: 'macro'  },
 ];
@@ -432,96 +456,395 @@ const fetchWithProxyFallback = async (targetUrlStr, params) => {
   throw new Error('All CORS proxies failed');
 };
 
-// ─── FRED API (Macro yields & interest rates) ──────────────────────────────────
-export const getFREDMetric = async (seriesId, apiKey) => {
-  if (!apiKey) return null;
+const getFredGraphUrl = (seriesId, units = 'lin') => {
+  const unitsParam = units !== 'lin' ? `&units=${units}` : '';
+  return isLocal
+    ? `/api-fred-graph/graph/fredgraph.csv?id=${seriesId}${unitsParam}`
+    : `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}${unitsParam}`;
+};
+
+// ─── HELPER FOR TEXT-BASED PROXY FALLBACK ─────────────────────────────────────
+const fetchTextWithProxyFallback = async (targetUrlStr) => {
+  const proxies = [
+    `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrlStr)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrlStr)}`,
+    `https://corsproxy.io/?${encodeURIComponent(targetUrlStr)}`
+  ];
+
+  for (const proxyUrl of proxies) {
+    try {
+      const res = await axios.get(proxyUrl, { timeout: 8000 });
+      let data = res.data;
+      if (data && typeof data === 'object' && data.contents) {
+        data = data.contents;
+      }
+      if (data && typeof data === 'string') {
+        // Skip HTML responses (usually Cloudflare block pages or error pages)
+        if (data.trim().startsWith('<')) {
+          console.warn(`[Proxy Fallback Text] Skipping HTML response from ${proxyUrl.split('?')[0]}`);
+          continue;
+        }
+        return data;
+      }
+    } catch (e) {
+      console.warn(`[Proxy Fallback Text] Failed for ${proxyUrl.split('?')[0]}:`, e.message);
+    }
+  }
+  throw new Error('All CORS proxies failed for text fetch');
+};
+
+// ─── TRADING ECONOMICS HTML SCRAPER (FALLBACK CHO FRED) ───────────────────────
+export const getTEMetric = async (indicatorPath) => {
+  try {
+    const url = `https://r.jina.ai/https://tradingeconomics.com/united-states/${indicatorPath}`;
+    const res = await axios.get(url, {
+      headers: { 'Accept': 'text/plain' },
+      timeout: 15000
+    });
+    const content = res.data;
+    if (!content) return null;
+    
+    const lines = content.split('\n');
+    let actualIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('| Actual | Previous |')) {
+        const headers = lines[i].split('|').map(s => s.trim());
+        actualIndex = headers.indexOf('Actual');
+      } else if (actualIndex !== -1 && lines[i].includes('|') && !lines[i].includes('---')) {
+        const cols = lines[i].split('|').map(s => s.trim());
+        if (cols.length > actualIndex) {
+          const val = parseFloat(cols[actualIndex]);
+          if (!isNaN(val)) return val;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[API] TE scrape failed for ${indicatorPath}:`, e.message);
+  }
+  return null;
+};
+
+// ─── YCHARTS HIGH YIELD CRAWLER (FALLBACK CHO FRED SPREAD) ─────────────────────
+export const getYChartsHighYield = async () => {
+  try {
+    const url = 'https://r.jina.ai/https://ycharts.com/indicators/us_high_yield_master_ii_optionadjusted_spread';
+    const res = await axios.get(url, {
+      headers: { 'Accept': 'text/plain' },
+      timeout: 15000
+    });
+    const content = res.data;
+    if (!content) return null;
+
+    const match = content.match(/is at\s+([\d\.]+)%/i) || 
+                  content.match(/Last Value\s+([\d\.]+)%/i) || 
+                  content.match(/value\s+of\s+([\d\.]+)%/i);
+    if (match) {
+      const val = parseFloat(match[1]);
+      if (!isNaN(val)) return val;
+    }
+  } catch (e) {
+    console.warn('[API] YCharts High Yield scrape failed:', e.message);
+  }
+  return null;
+};
+
+// ─── U.S. TREASURY DAILY STATEMENT API (FALLBACK CHO FRED TGA) ───────────────
+export const getTGATreasuryAPI = async () => {
+  try {
+    const url = 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/operating_cash_balance?filter=account_type:eq:Treasury General Account (TGA) Closing Balance&sort=-record_date&page[size]=1';
+    const res = await axios.get(url, { timeout: 10000 });
+    const item = res.data?.data?.[0];
+    if (item && item.open_today_bal) {
+      const val = parseFloat(item.open_today_bal);
+      if (!isNaN(val)) return val; // returns in millions, e.g., 844521
+    }
+  } catch (e) {
+    console.warn('[API] US Treasury TGA API failed:', e.message);
+  }
+  return null;
+};
+
+// ─── OFFICIAL FRED API CLIENT HELPER ──────────────────────────────────────────
+export const getFredAPIMetric = async (seriesId, apiKey) => {
+  const key = apiKey || (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_FRED_API_KEY : null);
+  if (!key || key === 'your_fred_key_here') return null;
+
   const url = getFredUrl();
-  const params = {
-    series_id: seriesId,
-    api_key: apiKey,
-    file_type: 'json',
-    sort_order: 'desc',
-    limit: 1,
+  try {
+    const res = await axios.get(url, {
+      params: {
+        series_id: seriesId,
+        api_key: key,
+        file_type: 'json',
+        sort_order: 'desc',
+        limit: 1
+      },
+      timeout: 8000
+    });
+    const observations = res.data?.observations;
+    if (observations && observations.length > 0) {
+      const val = parseFloat(observations[0].value);
+      if (!isNaN(val)) return val;
+    }
+  } catch (e) {
+    console.error(`[API] FRED API request failed for ${seriesId}:`, e.message);
+  }
+  return null;
+};
+
+
+// ─── KEYLESS FRED CSV PARSER ──────────────────────────────────────────────────
+export const getFredCSVMetric = async (seriesId, units = 'lin') => {
+  const url = getFredGraphUrl(seriesId, units);
+  
+  const parseFredCSV = (csvText) => {
+    if (!csvText) return null;
+    const lines = csvText.trim().split('\n').map(l => l.split(','));
+    for (let i = lines.length - 1; i >= 1; i--) {
+      if (lines[i] && lines[i][1]) {
+        const val = lines[i][1].trim();
+        if (val && val !== '.' && val !== '') {
+          const parsed = parseFloat(val);
+          if (!isNaN(parsed)) return parsed;
+        }
+      }
+    }
+    return null;
   };
 
   try {
-    const res = await axios.get(url, { params, timeout: 8000 });
-    const obs = res.data?.observations?.[0];
-    return obs ? parseFloat(obs.value) : null;
+    const res = await axios.get(url, { timeout: 8000 });
+    if (res.data && typeof res.data === 'string') {
+      return parseFredCSV(res.data);
+    }
   } catch (e) {
     if (isLocal) {
-      console.error(`[API] FRED dev proxy error for ${seriesId}:`, e.message);
-      return null;
-    }
-    console.warn(`[API] FRED direct request failed for ${seriesId}, trying via CORS proxy... Error:`, e.message);
-    try {
-      const data = await fetchWithProxyFallback('https://api.stlouisfed.org/fred/series/observations', params);
-      const obs = data?.observations?.[0];
-      return obs ? parseFloat(obs.value) : null;
-    } catch (proxyError) {
-      console.error(`[API] FRED proxy request failed for ${seriesId}:`, proxyError.message);
-      return null;
+      console.error(`[API] FRED CSV dev proxy error for ${seriesId}:`, e.message);
+    } else {
+      console.warn(`[API] FRED CSV direct fetch failed for ${seriesId}, trying via proxy... Error:`, e.message);
     }
   }
+
+  // 3. Nếu không phải local, thử dùng AllOrigins cho FRED CSV (có thể vẫn bị Cloudflare block)
+  if (!isLocal) {
+    try {
+      const unitsParam = units !== 'lin' ? `&units=${units}` : '';
+      const text = await fetchTextWithProxyFallback(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}${unitsParam}`);
+      return parseFredCSV(text);
+    } catch (proxyError) {
+      console.error(`[API] FRED CSV proxy request failed for ${seriesId}:`, proxyError.message);
+    }
+  }
+  return null;
+};
+
+// ─── YAHOO FINANCE STOCK/INDEX QUOTE ──────────────────────────────────────────
+export const getYahooStockQuote = async (ticker) => {
+  const url = isLocal 
+    ? `/api-yahoo/v8/finance/chart/${ticker}` 
+    : `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
+  const params = {
+    interval: '1d',
+    range: '1d',
+  };
+
+  const parseYahooMeta = (data) => {
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (meta) {
+      const price = meta.regularMarketPrice;
+      const prev = meta.chartPreviousClose || meta.previousClose;
+      let changePercent = 0;
+      if (price && prev) {
+        changePercent = ((price - prev) / prev) * 100;
+      }
+      return { price, changePercent };
+    }
+    return null;
+  };
+
+  try {
+    const res = await axios.get(url, {
+      params,
+      timeout: 8000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    const parsed = parseYahooMeta(res.data);
+    if (parsed) return parsed;
+  } catch (e) {
+    if (isLocal) {
+      console.error(`[API] Yahoo dev proxy error for ${ticker}:`, e.message);
+    } else {
+      console.warn(`[API] Yahoo direct failed for ${ticker}, trying proxy... Error:`, e.message);
+    }
+  }
+
+  try {
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`${url}?interval=1d&range=1d`)}`;
+    const res = await axios.get(proxyUrl, { timeout: 8000 });
+    let data = res.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch {}
+    }
+    const contentsStr = data?.contents;
+    if (contentsStr) {
+      const parsedData = JSON.parse(contentsStr);
+      const parsed = parseYahooMeta(parsedData);
+      if (parsed) return parsed;
+    }
+  } catch (proxyError) {
+    console.error(`[API] Yahoo proxy failed for ${ticker}:`, proxyError.message);
+  }
+  return null;
+};
+
+// ─── YAHOO FINANCE 10Y TREASURY YIELD ─────────────────────────────────────────
+export const getYahoo10YYield = async () => {
+  const quote = await getYahooStockQuote('^TNX');
+  if (quote && quote.price) {
+    return parseFloat(quote.price.toFixed(3));
+  }
+  return null;
+};
+
+// ─── NEW YORK FED REVERSE REPO API ────────────────────────────────────────────
+export const getReverseRepo = async () => {
+  const url = 'https://markets.newyorkfed.org/api/rp/reverserepo/propositions/search.json';
+  
+  const parseNYFed = (data) => {
+    const ops = data?.repo?.operations;
+    if (ops && ops.length > 0) {
+      const latestOp = ops.find(o => o.totalAmtAccepted != null);
+      if (latestOp) {
+        // totalAmtAccepted is in USD thousands, e.g. 761000000 thousands = 761 billion
+        return parseFloat((latestOp.totalAmtAccepted / 1000000).toFixed(3));
+      }
+    }
+    return null;
+  };
+
+  try {
+    const res = await axios.get(url, { timeout: 8000 });
+    const parsed = parseNYFed(res.data);
+    if (parsed !== null) return parsed;
+  } catch (e) {
+    console.warn('[API] NY Fed RRP direct request failed, trying proxy... Error:', e.message);
+  }
+
+  try {
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const res = await axios.get(proxyUrl, { timeout: 8000 });
+    let data = res.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch {}
+    }
+    const contentsStr = data?.contents;
+    if (contentsStr) {
+      const parsedData = JSON.parse(contentsStr);
+      const parsed = parseNYFed(parsedData);
+      if (parsed !== null) return parsed;
+    }
+  } catch (proxyError) {
+    console.error('[API] NY Fed RRP proxy request failed:', proxyError.message);
+  }
+  return null;
+};
+
+
+// ─── BACKWARD COMPATIBILITY FRED API WRAPPERS ─────────────────────────────────
+export const getFREDMetric = async (seriesId, apiKey) => {
+  // 1. Try official FRED API if apiKey is provided or available in env
+  const officialVal = await getFredAPIMetric(seriesId, apiKey);
+  if (officialVal !== null) return officialVal;
+
+  // 2. Fallbacks for specific indicators
+  if (seriesId === 'DGS10') {
+    return getYahoo10YYield();
+  }
+  if (seriesId === 'RRPONTSYD') {
+    return getReverseRepo();
+  }
+  if (seriesId === 'WDTGAL') {
+    const tgaVal = await getTGATreasuryAPI();
+    if (tgaVal !== null) return tgaVal;
+  }
+  if (seriesId === 'BAMLH0A0HYM2EY') {
+    const hyVal = await getYChartsHighYield();
+    if (hyVal !== null) return hyVal;
+  }
+  
+  const teMap = {
+    'FEDFUNDS': 'interest-rate',
+    'CPIAUCSL': 'inflation-cpi',
+    'UNRATE': 'unemployment-rate',
+    'M2SL': 'money-supply-m2',
+    'WALCL': 'central-bank-balance-sheet'
+  };
+  if (teMap[seriesId]) {
+    const teVal = await getTEMetric(teMap[seriesId]);
+    if (teVal !== null) return teVal;
+  }
+  
+  // 3. Last resort fallback
+  return getFredCSVMetric(seriesId);
 };
 
 export const getFREDStockQuote = async (seriesId, apiKey) => {
-  if (!apiKey) return null;
-  const url = getFredUrl();
+  if (seriesId === 'SP500') {
+    return getYahooStockQuote('^GSPC');
+  }
+  if (seriesId === 'NASDAQ100') {
+    return getYahooStockQuote('^NDX');
+  }
+  if (seriesId === 'VIXCLS') {
+    return getYahooStockQuote('^VIX');
+  }
+  // Fallback
+  return getFredCSVMetric(seriesId);
+};
+
+
+// ─── YAHOO FINANCE API (U.S. Dollar Index DXY) ──────────────────────────────────
+export const getDXYQuote = async () => {
+  const url = isLocal ? '/api-yahoo/v8/finance/chart/DX-Y.NYB' : 'https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB';
   const params = {
-    series_id: seriesId,
-    api_key: apiKey,
-    file_type: 'json',
-    sort_order: 'desc',
-    limit: 5, // fetch a few to skip any holiday "." values
+    interval: '1d',
+    range: '1d',
   };
 
   try {
-    const res = await axios.get(url, { params, timeout: 8000 });
-    const obsList = (res.data?.observations || [])
-      .map(o => ({ value: parseFloat(o.value), date: o.date }))
-      .filter(o => !isNaN(o.value));
-    
-    if (obsList.length === 0) return null;
-    
-    const price = obsList[0].value;
-    let changePercent = 0;
-    if (obsList.length > 1) {
-      const prevPrice = obsList[1].value;
-      if (prevPrice > 0) {
-        changePercent = ((price - prevPrice) / prevPrice) * 100;
+    const res = await axios.get(url, {
+      params,
+      timeout: 8000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
-    }
-    
-    return {
-      price,
-      changePercent,
-    };
+    });
+    const price = res.data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    return price || null;
   } catch (e) {
     if (isLocal) {
-      console.error(`[API] FRED Stock Quote dev proxy error for ${seriesId}:`, e.message);
+      console.error('[API] Yahoo DXY dev proxy error:', e.message);
       return null;
     }
-    console.warn(`[API] FRED Stock Quote direct failed for ${seriesId}, trying proxy... Error:`, e.message);
+    console.warn('[API] Yahoo DXY direct failed, trying proxy... Error:', e.message);
     try {
-      const data = await fetchWithProxyFallback('https://api.stlouisfed.org/fred/series/observations', params);
-      const obsList = (data?.observations || [])
-        .map(o => ({ value: parseFloat(o.value), date: o.date }))
-        .filter(o => !isNaN(o.value));
-      
-      if (obsList.length === 0) return null;
-      
-      const price = obsList[0].value;
-      let changePercent = 0;
-      if (obsList.length > 1) {
-        const prevPrice = obsList[1].value;
-        if (prevPrice > 0) {
-          changePercent = ((price - prevPrice) / prevPrice) * 100;
-        }
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`${url}?interval=1d&range=1d`)}`;
+      const res = await axios.get(proxyUrl, { timeout: 8000 });
+      let data = res.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch {}
       }
-      return { price, changePercent };
+      const contentsStr = data?.contents;
+      if (contentsStr) {
+        const parsed = JSON.parse(contentsStr);
+        const price = parsed?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if (price) return price;
+      }
+      return null;
     } catch (proxyError) {
-      console.error(`[API] FRED Stock Quote proxy failed for ${seriesId}:`, proxyError.message);
+      console.error('[API] Yahoo DXY proxy failed:', proxyError.message);
       return null;
     }
   }
@@ -745,14 +1068,11 @@ export const getETFFlowHistory = async () => {
  * Lấy chỉ số thanh khoản ròng vĩ mô (US Net Liquidity) từ FRED
  */
 export const getUSNetLiquidityData = async (apiKey) => {
-  if (!apiKey) return null;
-  const fredKey = apiKey.trim();
-  
   try {
     const [walcl, tga, rrp] = await Promise.all([
-      getFREDMetric('WALCL', fredKey),
-      getFREDMetric('WDTGAL', fredKey),
-      getFREDMetric('RRPONTSYD', fredKey),
+      getFREDMetric('WALCL'),
+      getFREDMetric('WDTGAL'),
+      getFREDMetric('RRPONTSYD'),
     ]);
     
     if (walcl !== null && tga !== null && rrp !== null) {

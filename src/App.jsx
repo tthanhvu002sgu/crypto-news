@@ -3,18 +3,19 @@ import './App.css';
 import {
   getBTCTicker24h, getBTCKlines, getLongShortRatio,
   getFundingRate, getOpenInterest, getOIHistory,
-  getFearAndGreed, getGlobalCryptoData, getStablecoinData,
+  getGlobalCryptoData, getStablecoinData,
   fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics,
   getFREDMetric, getAlphaVantageQuote, getFREDStockQuote,
-  getETFHoldings, getETFFlowHistory, getCMECot,
+  getETFHoldings, getETFFlowHistory, getCMECot, getDXYQuote,
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
-  Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X
+  Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles
 } from 'lucide-react';
 import GlossaryTab from './components/GlossaryTab';
 import HftRadarTab from './components/HftRadarTab';
+import SummaryTab from './components/SummaryTab';
 import Tooltip, { METRIC_METADATA, useTooltipSettings } from './components/Tooltip';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
@@ -31,33 +32,6 @@ const fmt = (n, decimals = 2) => n != null ? Number(n).toLocaleString('en-US', {
 const fmtB = (n) => n != null ? `$${(n / 1e9).toFixed(1)}B` : '---';
 const fmtT = (n) => n != null ? `$${(n / 1e12).toFixed(2)}T` : '---';
 
-const fngColor = (v, isLight = false) => {
-  if (!v) return '#64748b';
-  const n = parseInt(v);
-  if (isLight) {
-    if (n <= 25) return '#047857';   // contrarian green (high contrast)
-    if (n <= 45) return '#0d9488';   // fear (teal)
-    if (n <= 55) return '#b45309';   // neutral (deep amber)
-    if (n <= 75) return '#c2410c';   // greed (deep orange)
-    return '#be123c';                 // extreme greed (deep red)
-  } else {
-    if (n <= 25) return '#10b981';   // extreme fear → contrarian green
-    if (n <= 45) return '#34d399';   // fear
-    if (n <= 55) return '#f59e0b';   // neutral
-    if (n <= 75) return '#f97316';   // greed
-    return '#ef4444';                 // extreme greed → red
-  }
-};
-
-const fngLabel = (v) => {
-  if (!v) return 'N/A';
-  const n = parseInt(v);
-  if (n <= 25) return 'Extreme Fear';
-  if (n <= 45) return 'Fear';
-  if (n <= 55) return 'Neutral';
-  if (n <= 75) return 'Greed';
-  return 'Extreme Greed';
-};
 
 const fundingLabel = (r) => {
   if (r == null) return { text: '---', cls: '' };
@@ -110,6 +84,8 @@ const getChartOpts = (theme) => {
 
 const CASCADE_KEY_MAP = {
   'Fed Funds Rate': 'fedRate',
+  'CPI Inflation': 'cpi',
+  'Unemployment Rate': 'unrate',
   'Stablecoin Supply': 'stablecoin',
   'MVRV Ratio': 'mvrv',
   'DXY (Dollar Index)': 'dxy',
@@ -146,23 +122,7 @@ function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId }) {
   );
 }
 
-function FearGreedMeter({ value, label, theme }) {
-  const color = fngColor(value, theme === 'light');
-  const pct = value ? parseInt(value) : 0;
-  return (
-    <div className="fng-container">
-      <div className="fng-ring" style={{ '--fng-color': color, '--fng-pct': pct }}>
-        <span className="fng-number font-mono" style={{ color }}>{value || '—'}</span>
-      </div>
-      <div>
-        <Tooltip content={METRIC_METADATA.fng}>
-          <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>FEAR &amp; GREED</span>
-        </Tooltip>
-        <span className="metric-sub font-mono" style={{ color }}>{label || '---'}</span>
-      </div>
-    </div>
-  );
-}
+
 
 function LiveDot({ active = true }) {
   return (
@@ -200,7 +160,7 @@ const INIT = {
   fundingRate: null,
   openInterest: null,
   oiHistory: [],
-  fearGreed: null,    // [{value, value_classification}]
+
   globalData: null,
   stablecoins: null,
   news: [],
@@ -208,6 +168,8 @@ const INIT = {
   onChain: null,      // Blockchain.info network stats
   onChainMetrics: null, // CoinMetrics community data
   fedFundsRate: null,
+  cpi: null,
+  unrate: null,
   tenYearYield: null,
   dxy: null,
   sp500: null,
@@ -257,9 +219,12 @@ function App() {
   const [data, setData] = useState(INIT);
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
-    const validTabs = ['dashboard', 'hft', 'cascade', 'glossary', 'terminal'];
+    const validTabs = ['dashboard', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
     return validTabs.includes(hash) ? hash : 'dashboard';
   });
+
+  const [aiSummary, setAiSummary] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   const [etfHoldings, setEtfHoldings] = useState(() => {
     try {
@@ -292,7 +257,7 @@ function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      const validTabs = ['dashboard', 'hft', 'cascade', 'glossary', 'terminal'];
+      const validTabs = ['dashboard', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
       if (validTabs.includes(hash)) {
         setActiveTab(hash);
       }
@@ -323,9 +288,9 @@ function App() {
   const [apiKeys, setApiKeys] = useState(() => {
     try {
       const saved = localStorage.getItem('app-api-keys');
-      return saved ? JSON.parse(saved) : { fred: '', alphaVantage: '' };
+      return saved ? JSON.parse(saved) : { fred: '', alphaVantage: '', openRouter: '' };
     } catch {
-      return { fred: '', alphaVantage: '' };
+      return { fred: '', alphaVantage: '', openRouter: '' };
     }
   });
   const [showSettings, setShowSettings] = useState(false);
@@ -336,6 +301,7 @@ function App() {
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
   const { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, cvdStatus } = useCVDStream();
+
 
   const addLog = useCallback((msg, type = 'info') => {
     const entry = { time: new Date().toLocaleTimeString('vi-VN'), msg, type };
@@ -348,47 +314,89 @@ function App() {
     setIsSyncing(true);
     addLog('Bắt đầu đồng bộ dữ liệu từ tất cả nguồn...', 'system');
 
-    // Conditional FRED API calls
-    let fredPromises = [
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null),
-      Promise.resolve(null)
-    ];
-    const fredKey = apiKeys.fred?.trim();
-    if (fredKey) {
-      addLog('Đang đồng bộ Lãi suất Fed, Yield 10Y, DXY, M2, High Yield, Cung tiền & Thanh khoản ròng từ FRED...', 'system');
-      fredPromises = [
-        getFREDMetric('FEDFUNDS', fredKey),
-        getFREDMetric('DGS10', fredKey),
-        getFREDMetric('DTWEXBGS', fredKey),
-        getFREDMetric('M2SL', fredKey),
-        getFREDMetric('BAMLH0A0HYM2EY', fredKey),
-        getFREDStockQuote('SP500', fredKey),
-        getFREDStockQuote('VIXCLS', fredKey),
-        getFREDStockQuote('NASDAQ100', fredKey),
-        getFREDMetric('WALCL', fredKey),
-        getFREDMetric('WDTGAL', fredKey),
-        getFREDMetric('RRPONTSYD', fredKey)
-      ];
+    addLog('Đang đồng bộ chỉ số vĩ mô từ FRED & NY Fed...', 'system');
+    
+    let fedFundsRateVal = null;
+    let cpiVal = null;
+    let unrateVal = null;
+    let m2SupplyVal = null;
+    let highYieldVal = null;
+    let walclVal = null;
+    let tgaVal = null;
+    let rrpVal = null;
+
+    try {
+      fedFundsRateVal = await getFREDMetric('FEDFUNDS');
+      addLog('✓ Lãi suất Fed (Trading Economics / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ Lãi suất Fed — thất bại: ' + e.message, 'error');
     }
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      cpiVal = await getFREDMetric('CPIAUCSL');
+      addLog('✓ CPI Inflation (Trading Economics / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ CPI Inflation — thất bại: ' + e.message, 'error');
+    }
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      unrateVal = await getFREDMetric('UNRATE');
+      addLog('✓ Tỷ lệ thất nghiệp (Trading Economics / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ Tỷ lệ thất nghiệp — thất bại: ' + e.message, 'error');
+    }
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      m2SupplyVal = await getFREDMetric('M2SL');
+      addLog('✓ M2 Money Supply (Trading Economics / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ M2 Money Supply — thất bại: ' + e.message, 'error');
+    }
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      highYieldVal = await getFREDMetric('BAMLH0A0HYM2EY');
+      addLog('✓ High Yield Spread (YCharts / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ High Yield Spread — thất bại: ' + e.message, 'error');
+    }
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      walclVal = await getFREDMetric('WALCL');
+      addLog('✓ Fed Assets (Trading Economics / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ Fed Assets — thất bại: ' + e.message, 'error');
+    }
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      tgaVal = await getFREDMetric('WDTGAL');
+      addLog('✓ TGA Treasury Account (US Treasury / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ TGA Treasury Account — thất bại: ' + e.message, 'error');
+    }
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      rrpVal = await getFREDMetric('RRPONTSYD');
+      addLog('✓ Reverse Repo (NY Fed / FRED)', 'ok');
+    } catch (e) {
+      addLog('✗ Reverse Repo — thất bại: ' + e.message, 'error');
+    }
+
+    addLog('Đang đồng bộ dữ liệu phái sinh, tin tức, ETF và chỉ số Yahoo Finance...', 'system');
 
     const [
       btcRes, klinesRes, lsRes, fundRes, oiRes, oiHistRes,
-      fngRes, globalRes, stableRes, newsRes,
+      globalRes, stableRes, newsRes,
       onChainRes, onChainMetricsRes,
       etfHoldingsRes, etfHistoryRes,
       cotRes,
-      fedRateRes, yield10yRes, dxyRes, m2Res, highYieldRes,
-      sp500Res, vixRes, qqqRes,
-      walclRes, tgaRes, rrpRes
+      yield10yRes, dxyRes, sp500Res, vixRes, qqqRes
     ] = await Promise.allSettled([
       getBTCTicker24h('BTCUSDT'),
       getBTCKlines('BTCUSDT', '1h', 48),
@@ -396,7 +404,6 @@ function App() {
       getFundingRate('BTCUSDT'),
       getOpenInterest('BTCUSDT'),
       getOIHistory('BTCUSDT', '1h', 24),
-      getFearAndGreed(),
       getGlobalCryptoData(),
       getStablecoinData(),
       fetchRealtimeFeed(),
@@ -405,7 +412,11 @@ function App() {
       getETFHoldings(),
       getETFFlowHistory(),
       getCMECot(),
-      ...fredPromises
+      getFREDMetric('DGS10'),     // Yield 10Y (Yahoo Finance)
+      getDXYQuote(),              // DXY (Yahoo Finance)
+      getFREDStockQuote('SP500'), // S&P 500 (Yahoo Finance)
+      getFREDStockQuote('VIXCLS'), // VIX (Yahoo Finance)
+      getFREDStockQuote('NASDAQ100') // Nasdaq (Yahoo Finance)
     ]);
 
     const get = (res, label, hasKey) => {
@@ -414,9 +425,9 @@ function App() {
         return res.value;
       }
       if (!hasKey) {
-        return null; // Silent skip if no API Key provided
+        return null; // Silent skip
       }
-      const errMsg = res.status === 'rejected' ? res.reason?.message : 'Không nhận được dữ liệu (lỗi API hoặc Key không hợp lệ)';
+      const errMsg = res.status === 'rejected' ? res.reason?.message : 'Không nhận được dữ liệu (lỗi API hoặc phản hồi trống)';
       addLog(`✗ ${label} — thất bại: ${errMsg}`, 'error');
       return null;
     };
@@ -427,7 +438,7 @@ function App() {
     const fundingRate     = get(fundRes,            'Funding Rate (Binance)', true);
     const openInterest    = get(oiRes,              'Open Interest (Binance)', true);
     const oiHistory       = get(oiHistRes,          'OI History 24h (Binance)', true) || [];
-    const fearGreed       = get(fngRes,             'Fear & Greed (alternative.me)', true);
+
     const globalData      = get(globalRes,          'Global Market (CoinGecko)', true);
     const stablecoins     = get(stableRes,          'Stablecoins (CoinGecko)', true);
     const news            = get(newsRes,            'News RSS (rss2json)', true) || [];
@@ -436,17 +447,11 @@ function App() {
     const etfHoldingsVal  = get(etfHoldingsRes,     'Spot ETF Holdings (Bitbo)', true);
     const etfHistoryVal   = get(etfHistoryRes,      'Spot ETF Flow History (Farside)', true);
     const cotData         = get(cotRes,             'Báo cáo CME COT (Tradingster)', true);
-    const fedFundsRate    = get(fedRateRes,         'Lãi suất Fed (FRED)', !!fredKey);
-    const tenYearYield    = get(yield10yRes,        'Yield 10Y (FRED)', !!fredKey);
-    const dxy             = get(dxyRes,             'Chỉ số DXY (FRED)', !!fredKey);
-    const m2Supply        = get(m2Res,              'M2 Money Supply (FRED)', !!fredKey);
-    const highYield       = get(highYieldRes,       'High Yield (FRED)', !!fredKey);
-    const sp500           = get(sp500Res,           'S&P 500 Index (FRED)', !!fredKey);
-    const vix             = get(vixRes,             'VIX Volatility Index (FRED)', !!fredKey);
-    const qqq             = get(qqqRes,             'Nasdaq 100 Index (FRED)', !!fredKey);
-    const walcl           = get(walclRes,           'Fed Assets (FRED)', !!fredKey);
-    const tga             = get(tgaRes,             'TGA Treasury Account (FRED)', !!fredKey);
-    const rrp             = get(rrpRes,             'Reverse Repo (FRED)', !!fredKey);
+    const tenYearYield    = get(yield10yRes,        'Yield 10Y (Yahoo Finance)', true);
+    const dxy             = get(dxyRes,             'Chỉ số DXY (Yahoo Finance)', true);
+    const sp500           = get(sp500Res,           'S&P 500 Index (Yahoo Finance)', true);
+    const vix             = get(vixRes,             'VIX Volatility Index (Yahoo Finance)', true);
+    const qqq             = get(qqqRes,             'Nasdaq 100 Index (Yahoo Finance)', true);
 
     const now = new Date().toLocaleString('vi-VN');
     addLog(`Đồng bộ hoàn tất lúc ${now}`, 'system');
@@ -461,8 +466,8 @@ function App() {
     }
 
     let netLiquidity = null;
-    if (walcl != null && tga != null && rrp != null) {
-      netLiquidity = (walcl / 1000) - (tga / 1000) - rrp;
+    if (walclVal != null && tgaVal != null && rrpVal != null) {
+      netLiquidity = (walclVal / 1000) - (tgaVal / 1000) - rrpVal;
       netLiquidity = parseFloat(netLiquidity.toFixed(2));
     }
 
@@ -473,23 +478,24 @@ function App() {
       fundingRate:    fundingRate   ?? prev.fundingRate,
       openInterest:   openInterest  ?? prev.openInterest,
       oiHistory:      oiHistory.length > 0 ? oiHistory : prev.oiHistory,
-      fearGreed:      fearGreed    ?? prev.fearGreed,
       globalData:     globalData   ?? prev.globalData,
       stablecoins:    stablecoins  ?? prev.stablecoins,
       news:           news.length > 0 ? news : prev.news,
       logs:           [...logsRef.current],
       onChain:        onChain      ?? prev.onChain,
       onChainMetrics: onChainMetrics ?? prev.onChainMetrics,
-      fedFundsRate:   fedFundsRate ?? prev.fedFundsRate,
-      tenYearYield:   tenYearYield ?? prev.tenYearYield,
-      dxy:            dxy          ?? prev.dxy,
-      m2Supply:       m2Supply     ?? prev.m2Supply,
-      highYield:      highYield    ?? prev.highYield,
-      sp500:          sp500        ?? prev.sp500,
-      vix:            vix          ?? prev.vix,
-      qqq:            qqq          ?? prev.qqq,
-      netLiquidity:   netLiquidity ?? prev.netLiquidity,
-      cotData:        cotData      ?? prev.cotData,
+      fedFundsRate:   fedFundsRateVal ?? prev.fedFundsRate,
+      cpi:            cpiVal          ?? prev.cpi,
+      unrate:         unrateVal       ?? prev.unrate,
+      tenYearYield:   tenYearYield    ?? prev.tenYearYield,
+      dxy:            dxy             ?? prev.dxy,
+      m2Supply:       m2SupplyVal     ?? prev.m2Supply,
+      highYield:      highYieldVal    ?? prev.highYield,
+      sp500:          sp500           ?? prev.sp500,
+      vix:            vix             ?? prev.vix,
+      qqq:            qqq             ?? prev.qqq,
+      netLiquidity:   netLiquidity    ?? prev.netLiquidity,
+      cotData:        cotData         ?? prev.cotData,
     }));
 
     setLastSync(now);
@@ -588,7 +594,6 @@ function App() {
   };
 
   const currentLS = data.lsHistory[data.lsHistory.length - 1];
-  const fngData = data.fearGreed?.[0];
   // Use live WebSocket funding rate if available, fallback to REST
   const fund = liveFunding ?? data.fundingRate;
   const fundInfo = fundingLabel(fund);
@@ -649,78 +654,8 @@ function App() {
     }
   };
 
-  // ── Fear & Greed Line Chart ────────────────────────────────────────────────
-  const fngHistoryData = data.fearGreed ? [...data.fearGreed].reverse() : [];
-  
-  const fngChartData = {
-    labels: fngHistoryData.map((d, i) => {
-      const date = new Date(d.timestamp * 1000);
-      return i === fngHistoryData.length - 1 ? 'Hôm nay' : date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-    }),
-    datasets: [{
-      label: 'Chỉ số Fear & Greed',
-      data: fngHistoryData.map(d => parseInt(d.value)),
-      borderColor: theme === 'light' ? '#ea580c' : '#fbbf24',
-      backgroundColor: theme === 'light' ? 'rgba(234, 88, 12, 0.05)' : 'rgba(251, 191, 36, 0.03)',
-      borderWidth: 2,
-      fill: true,
-      tension: 0.35,
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      pointBackgroundColor: fngHistoryData.map(d => fngColor(d.value, theme === 'light')),
-      pointBorderColor: theme === 'light' ? '#fff' : '#1e293b',
-      pointBorderWidth: 1.5,
-    }]
-  };
 
-  const fngChartOpts = {
-    ...getChartOpts(theme),
-    scales: {
-      ...getChartOpts(theme).scales,
-      y: {
-        ...getChartOpts(theme).scales.y,
-        min: 0,
-        max: 100,
-        ticks: {
-          ...getChartOpts(theme).scales.y.ticks,
-          stepSize: 20
-        }
-      }
-    },
-    plugins: {
-      ...getChartOpts(theme).plugins,
-      tooltip: {
-        ...getChartOpts(theme).plugins.tooltip,
-        callbacks: {
-          label: (context) => {
-            const val = context.parsed.y;
-            return ` Fear & Greed: ${val} (${fngLabel(val)})`;
-          }
-        }
-      }
-    }
-  };
 
-  // ── Market signal logic (based on real data) ────────────────────────────────
-  const getBullishSignals = () => {
-    const signals = [];
-    const fng = fngData ? parseInt(fngData.value) : null;
-    if (fng !== null && fng <= 30) signals.push(`F&G = ${fng} (Extreme Fear → cơ hội contrarian)`);
-    if (fund != null && fund * 100 < -0.01) signals.push(`Funding Rate âm (${(fund * 100).toFixed(4)}%) → Short đang trả phí`);
-    if (currentLS && parseFloat(currentLS.longShortRatio) < 0.8) signals.push(`L/S Ratio thấp (${parseFloat(currentLS.longShortRatio).toFixed(2)}) → Short dominance, có thể squeeze`);
-    if (data.btc?.change < -5) signals.push(`BTC giảm ${data.btc.change.toFixed(1)}% → Vùng capitulation tiềm năng`);
-    return signals.length > 0 ? signals : ['Chưa đủ tín hiệu mua mạnh tại thời điểm này'];
-  };
-
-  const getBearishSignals = () => {
-    const signals = [];
-    const fng = fngData ? parseInt(fngData.value) : null;
-    if (fng !== null && fng >= 75) signals.push(`F&G = ${fng} (Extreme Greed → rủi ro phân phối)`);
-    if (fund != null && fund * 100 > 0.05) signals.push(`Funding Rate cao (${(fund * 100).toFixed(4)}%) → Long đang OL, rủi ro flush`);
-    if (currentLS && parseFloat(currentLS.longShortRatio) > 1.8) signals.push(`L/S Ratio cao (${parseFloat(currentLS.longShortRatio).toFixed(2)}) → Đám đông Long, có thể bị thanh lý`);
-    if (data.stablecoins && data.stablecoins.usdtChange < -0.5) signals.push('USDT market cap đang giảm → tiền rút ra khỏi crypto');
-    return signals.length > 0 ? signals : ['Không có tín hiệu bán cực đoan ngay lúc này'];
-  };
 
   return (
     <div className="app-container">
@@ -777,9 +712,8 @@ function App() {
         <aside className="sidebar glass-panel">
           <div className="sidebar-inner">
 
-            {/* Fear & Greed + BTC Price row */}
+            {/* BTC Price row */}
             <div className="sidebar-top-row">
-              <FearGreedMeter value={fngData?.value} label={fngLabel(fngData?.value)} theme={theme} />
               <div className="btc-hero">
                 <Tooltip content={METRIC_METADATA.btcPrice}>
                   <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
@@ -867,6 +801,28 @@ function App() {
 
             <div className="sidebar-divider" />
 
+            <h3 className="widget-title font-mono">
+              <LiveDot /> DỮ LIỆU KINH TẾ MỸ (HÀNG THÁNG)
+            </h3>
+            <div className="metrics-grid">
+              <MetricCard
+                label="CPI"
+                value={data.cpi ? data.cpi.toFixed(2) : '---'}
+                sub="Chỉ số giá tiêu dùng"
+                subCls="text-slate-400"
+                tooltipId="cpi"
+              />
+              <MetricCard
+                label="UNEMPLOYMENT"
+                value={data.unrate ? `${data.unrate}%` : '---'}
+                sub="Tỷ lệ thất nghiệp"
+                subCls="text-slate-400"
+                tooltipId="unrate"
+              />
+            </div>
+
+            <div className="sidebar-divider" />
+
             {/* On-chain Network Stats — Blockchain.info */}
             <h3 className="widget-title font-mono">
               <LiveDot /> BTC NETWORK (ON-CHAIN)
@@ -942,6 +898,7 @@ function App() {
               { id: 'dashboard', icon: <BarChart2 size={13} />, label: 'DASHBOARD' },
               { id: 'hft',       icon: <Crosshair size={13} />, label: 'HFT RADAR' },
               { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN' },
+              { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY' },
               { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ' },
               { id: 'terminal',  icon: <Terminal size={13} />,  label: 'TERMINAL LOGS' },
             ].map(t => (
@@ -1035,31 +992,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Signal Analysis */}
-                <div className="signals-row">
-                  <div className="glass-panel signal-panel signal-panel-bullish">
-                    <div className="signal-header">
-                      <span className="dot dot-emerald animate-pulse" />
-                      <h4 className="signal-title font-mono text-emerald">TÍN HIỆU BULLISH (PHÂN TÍCH THỰC)</h4>
-                    </div>
-                    <ul className="signal-list">
-                      {getBullishSignals().map((s, i) => (
-                        <li key={i} className="signal-item font-mono">{s}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="glass-panel signal-panel signal-panel-bearish">
-                    <div className="signal-header">
-                      <span className="dot dot-rose animate-pulse" />
-                      <h4 className="signal-title font-mono text-rose">TÍN HIỆU BEARISH (PHÂN TÍCH THỰC)</h4>
-                    </div>
-                    <ul className="signal-list">
-                      {getBearishSignals().map((s, i) => (
-                        <li key={i} className="signal-item font-mono">{s}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
 
                 {/* US Spot Bitcoin ETFs Row */}
                 <div className="whales-row">
@@ -1125,19 +1057,8 @@ function App() {
                   </div>
                 </div>
 
-                {/* Fear & Greed Line Chart & CME COT Table Row */}
-                {data.fearGreed && (
-                  <div className="fng-cot-row">
-                    {/* Fear & Greed Chart Panel */}
-                    <div className="glass-panel fng-history-panel" style={{ height: '100%' }}>
-                      <h3 className="chart-title font-mono" style={{ marginBottom: 16 }}>
-                        <span className="dot dot-amber" /> CHỈ SỐ FEAR &amp; GREED — 7 NGÀY GẦN NHẤT
-                      </h3>
-                      <div className="chart-body" style={{ height: '160px' }}>
-                        <Line data={fngChartData} options={fngChartOpts} />
-                      </div>
-                    </div>
-
+                {/* CME COT Table Row */}
+                <div className="fng-cot-row">
                     {/* CME Bitcoin COT positions table */}
                     <div className="glass-panel whale-panel" style={{ height: '100%' }}>
                       <h3 className="chart-title font-mono text-amber" style={{ marginBottom: 16 }}>
@@ -1186,7 +1107,6 @@ function App() {
                       </div>
                     </div>
                   </div>
-                )}
 
               </div>
             )}
@@ -1221,6 +1141,8 @@ function App() {
                         statusColor: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? '#f43f5e' : '#10b981') : '#f43f5e',
                         items: [
                           { k: 'Fed Funds Rate', v: data.fedFundsRate ? `${data.fedFundsRate}%` : '4.25–4.50%', note: 'Lãi suất điều hành' },
+                          { k: 'CPI Inflation', v: data.cpi ? data.cpi.toFixed(2) : '---', note: 'Chỉ số giá tiêu dùng' },
+                          { k: 'Unemployment Rate', v: data.unrate ? `${data.unrate}%` : '---', note: 'Tỷ lệ thất nghiệp' },
                           { k: 'M2 Supply (Billion $)', v: data.m2Supply ? `$${fmt(data.m2Supply, 0)}` : '---', note: 'Tổng cung tiền M2' },
                           { k: 'US Net Liquidity (Billion $)', v: data.netLiquidity ? `$${fmt(data.netLiquidity, 0)}B` : '---', note: 'WALCL - TGA - RRP' },
                         ],
@@ -1364,6 +1286,22 @@ function App() {
               </div>
             )}
 
+            {activeTab === 'summary' && (
+            <SummaryTab 
+              data={data} 
+              apiKeys={apiKeys} 
+              cvd={cvd}
+              buyVolume={buyVolume}
+              sellVolume={sellVolume}
+              etfHoldings={etfHoldings}
+              etfHistory={etfHistory}
+              aiSummary={aiSummary}
+              setAiSummary={setAiSummary}
+              isAiLoading={isAiLoading}
+              setIsAiLoading={setIsAiLoading}
+            />
+          )}
+
             {activeTab === 'glossary' && (
               <GlossaryTab />
             )}
@@ -1423,6 +1361,20 @@ function App() {
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
                 Lấy miễn phí tại: <a href="https://www.alphavantage.co/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>alphavantage.co</a>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>OPENROUTER API KEY</label>
+              <input
+                type="password"
+                placeholder="Nhập OpenRouter API key..."
+                value={apiKeys.openRouter || ''}
+                onChange={(e) => setApiKeys(p => ({ ...p, openRouter: e.target.value }))}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '8px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
+              />
+              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
+                Lấy miễn phí tại: <a href="https://openrouter.ai/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>openrouter.ai</a>
               </span>
             </div>
 

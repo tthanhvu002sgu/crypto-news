@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bar, Line } from 'react-chartjs-2';
+
 import { getOrderBookDepth, getWhaleWalls } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,33 +94,6 @@ function CVDPanel({ cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice
 
   const divergence = detectDivergence();
 
-  // CVD Line Chart
-  const chartData = cvdHistory.length > 2 ? {
-    labels: cvdHistory.map(d => d.time),
-    datasets: [{
-      label: 'CVD',
-      data: cvdHistory.map(d => d.cvd),
-      borderColor: cvd >= 0 
-        ? (theme === 'light' ? 'rgba(4, 120, 87, 0.95)' : 'rgba(16, 185, 129, 0.9)')
-        : (theme === 'light' ? 'rgba(190, 18, 60, 0.95)' : 'rgba(244, 63, 94, 0.9)'),
-      backgroundColor: cvd >= 0 
-        ? (theme === 'light' ? 'rgba(4, 120, 87, 0.15)' : 'rgba(16, 185, 129, 0.1)')
-        : (theme === 'light' ? 'rgba(190, 18, 60, 0.15)' : 'rgba(244, 63, 94, 0.1)'),
-      fill: true,
-      tension: 0.3,
-      pointRadius: 0,
-      borderWidth: 2,
-    }],
-  } : null;
-
-  const chartOpts = {
-    ...getChartOptsBase(theme),
-    scales: {
-      ...getChartOptsBase(theme).scales,
-      y: { ...getChartOptsBase(theme).scales.y, ticks: { ...getChartOptsBase(theme).scales.y.ticks, callback: v => fmtUsd(v) } },
-    },
-  };
-
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header">
@@ -136,7 +110,7 @@ function CVDPanel({ cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice
       {/* CVD Value */}
       <div className="cvd-hero">
         <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title="CVD tích lũy từ khi mở trang">CVD PHIÊN (SESSION CVD)</span>
+          <span className="cvd-label font-mono" title="CVD tích lũy từ đầu ngày (00:00)">CVD TRONG NGÀY (INTRADAY CVD)</span>
           <span className={`cvd-value font-mono ${cvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
             {cvd >= 0 ? '+' : ''}{fmtUsd(cvd)}
           </span>
@@ -166,16 +140,6 @@ function CVDPanel({ cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice
           <span className="font-mono">{divergence.text}</span>
         </div>
       )}
-
-      {/* CVD Chart */}
-      {chartData && (
-        <div className="hft-chart-container">
-          <h4 className="hft-chart-label font-mono">CVD ROLLING (mẫu mỗi phút)</h4>
-          <div className="hft-chart-wrap">
-            <Line data={chartData} options={chartOpts} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -199,7 +163,8 @@ function TargetLiquidityPanel({ whaleData }) {
   }
 
   const { whaleBids, whaleAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls } = whaleData;
-  const allWalls = [...whaleBids, ...whaleAsks].sort((a, b) => b.usdValue - a.usdValue);
+  const sortedAsks = [...whaleAsks].sort((a, b) => b.usdValue - a.usdValue).slice(0, 10);
+  const sortedBids = [...whaleBids].sort((a, b) => b.usdValue - a.usdValue).slice(0, 10);
 
   return (
     <div className="hft-panel glass-panel">
@@ -231,7 +196,7 @@ function TargetLiquidityPanel({ whaleData }) {
       </div>
 
       {/* Table */}
-      {allWalls.length > 0 && (
+      {(sortedAsks.length > 0 || sortedBids.length > 0) && (
         <div className="whale-table-wrap">
           <table className="liq-table font-mono">
             <thead>
@@ -243,11 +208,25 @@ function TargetLiquidityPanel({ whaleData }) {
               </tr>
             </thead>
             <tbody>
-              {allWalls.slice(0, 20).map((w, i) => (
-                <tr key={i} className={w.side === 'BID' ? 'whale-row-bid' : 'whale-row-ask'}>
+              {/* Resistance first */}
+              {sortedAsks.map((w, i) => (
+                <tr key={`ask-${i}`} className="whale-row-ask">
                   <td>
-                    <span className={`liq-side-tag ${w.side === 'BID' ? 'liq-tag-short' : 'liq-tag-long'}`}>
-                      {w.side === 'BID' ? 'SUPPORT' : 'RESISTANCE'}
+                    <span className="liq-side-tag liq-tag-long">
+                      RESISTANCE
+                    </span>
+                  </td>
+                  <td>{fmtPrice(w.price)}</td>
+                  <td>{w.qty.toFixed(3)}</td>
+                  <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>{fmtUsd(w.usdValue)}</td>
+                </tr>
+              ))}
+              {/* Support second */}
+              {sortedBids.map((w, i) => (
+                <tr key={`bid-${i}`} className="whale-row-bid">
+                  <td>
+                    <span className="liq-side-tag liq-tag-short">
+                      SUPPORT
                     </span>
                   </td>
                   <td>{fmtPrice(w.price)}</td>
@@ -391,8 +370,11 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
   );
 }
 
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main HFT Radar Tab Component
+
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function HftRadarTab({
@@ -479,10 +461,13 @@ export default function HftRadarTab({
           depthLimit={depthLimit}
           setDepthLimit={setDepthLimit}
         />
+
+
       </div>
     </div>
   );
 }
+
 
 
 
