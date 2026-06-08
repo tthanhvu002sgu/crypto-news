@@ -115,6 +115,7 @@ export function useCVDStream() {
   const [buyVolume, setBuyVolume]       = useState(0);
   const [sellVolume, setSellVolume]     = useState(0);
   const [cvdHistory, setCvdHistory]     = useState([]);
+  // whaleTrades state is initialized below using whaleRef
   const [cvdStatus, setCvdStatus]       = useState('connecting');
   const mountedRef = useRef(true);
 
@@ -123,6 +124,22 @@ export function useCVDStream() {
   const buyRef        = useRef(0);
   const sellRef       = useRef(0);
   const historyRef    = useRef([]); // [{time, cvd}]
+  const whaleRef      = useRef(() => {
+    try {
+      const saved = localStorage.getItem('hft_whale_trades');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  }); // [{time, price, qty, usdtVol, side, timestamp}]
+  
+  // Actually initialize it correctly for a ref
+  if (typeof whaleRef.current === 'function') {
+    whaleRef.current = whaleRef.current();
+  }
+
+  // Set initial state from ref so it renders on mount
+  const [whaleTrades, setWhaleTrades]   = useState(whaleRef.current);
   const throttleRef   = useRef(null);
   const minuteRef     = useRef(null); // for history sampling
   const isFetchingInitialRef = useRef(true);
@@ -165,6 +182,8 @@ export function useCVDStream() {
           buyRef.current = 0;
           sellRef.current = 0;
           historyRef.current = [];
+          whaleRef.current = [];
+          localStorage.removeItem('hft_whale_trades');
         }
 
         if (isFetchingInitialRef.current) {
@@ -181,6 +200,17 @@ export function useCVDStream() {
         } else {
           cvdRef.current += usdtVol;
           buyRef.current += usdtVol;
+        }
+
+        // Track Whale Trades (Volume > $100k)
+        if (usdtVol >= 100000) {
+          const timeStr = new Date(data.T).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const side = data.m ? 'SELL' : 'BUY';
+          whaleRef.current = [
+            { time: timeStr, price, qty, usdtVol, side, timestamp: data.T },
+            ...whaleRef.current
+          ].slice(0, 50); // Keep last 50 large trades
+          localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
         }
 
         // Sample history once per minute (for chart — keep 60 points = 1h)
@@ -202,6 +232,7 @@ export function useCVDStream() {
               setBuyVolume(buyRef.current);
               setSellVolume(sellRef.current);
               setCvdHistory([...historyRef.current]);
+              setWhaleTrades([...whaleRef.current]);
             }
             throttleRef.current = null;
           }, 500);
@@ -222,7 +253,7 @@ export function useCVDStream() {
     ? buyRef.current / (buyRef.current + sellRef.current)
     : 0.5;
 
-  return { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, cvdStatus };
+  return { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus };
 }
 
 

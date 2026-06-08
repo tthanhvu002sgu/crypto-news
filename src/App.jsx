@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import './App.css';
 import {
   getBTCTicker24h, getBTCKlines, getLongShortRatio,
@@ -113,7 +113,56 @@ const CASCADE_KEY_MAP = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId }) {
+const fetchCached = async (cacheKey, fetchFn, expiryMs, addLog, label, force = false) => {
+  let cachedVal = null;
+  let hasCached = false;
+  try {
+    const cached = localStorage.getItem(`cache_${cacheKey}`);
+    if (cached) {
+      const { val, time } = JSON.parse(cached);
+      cachedVal = val;
+      hasCached = true;
+      if (!force && (Date.now() - time < expiryMs)) {
+        if (addLog && label) {
+          addLog(`✓ ${label} (Dữ liệu cache)`, 'ok');
+        }
+        return val;
+      }
+    }
+  } catch (e) {
+    console.warn(`Lỗi đọc cache cho ${cacheKey}:`, e);
+  }
+
+  try {
+    const freshVal = await fetchFn();
+    if (freshVal !== null && freshVal !== undefined) {
+      try {
+        localStorage.setItem(`cache_${cacheKey}`, JSON.stringify({ val: freshVal, time: Date.now() }));
+      } catch (e) {
+        console.warn(`Lỗi ghi cache cho ${cacheKey}:`, e);
+      }
+      if (addLog && label) {
+        addLog(`✓ ${label}`, 'ok');
+      }
+      return freshVal;
+    } else {
+      throw new Error("Phản hồi trống hoặc lỗi API");
+    }
+  } catch (e) {
+    if (hasCached) {
+      if (addLog && label) {
+        addLog(`⚠ ${label} — lỗi truy vấn, dùng tạm cache cũ`, 'warning');
+      }
+      return cachedVal;
+    }
+    if (addLog && label) {
+      addLog(`✗ ${label} — thất bại: ${e.message}`, 'error');
+    }
+  }
+  return null;
+};
+
+const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId }) {
   const metadata = tooltipId ? METRIC_METADATA[tooltipId] : null;
   return (
     <div className="metric-card">
@@ -131,20 +180,18 @@ function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId }) {
       {badge && <span className={`metric-badge font-mono ${badgeCls || ''}`}>{badge}</span>}
     </div>
   );
-}
+});
 
-
-
-function LiveDot({ active = true }) {
+const LiveDot = React.memo(function LiveDot({ active = true }) {
   return (
     <span className="live-dot-wrap">
       <span className={`live-dot ${active ? 'live-dot--active' : ''}`} />
       <span className={`live-dot live-dot--ping ${active ? 'live-dot--active' : ''}`} />
     </span>
   );
-}
+});
 
-function NewsItem({ item }) {
+const NewsItem = React.memo(function NewsItem({ item }) {
   const catColor = item.cat === 'macro' ? 'var(--color-amber-400)' : 'var(--color-emerald-400)';
   const catBg = item.cat === 'macro' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)';
   const catBorder = item.cat === 'macro' ? 'rgba(245,158,11,0.25)' : 'rgba(16,185,129,0.25)';
@@ -160,7 +207,7 @@ function NewsItem({ item }) {
       </a>
     </div>
   );
-}
+});
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
@@ -312,7 +359,7 @@ function App() {
     useBinanceWebSocket();
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
-  const { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, cvdStatus } = useCVDStream();
+  const { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus } = useCVDStream();
 
 
   const addLog = useCallback((msg, type = 'info') => {
@@ -321,84 +368,33 @@ function App() {
     return entry;
   }, []);
 
-  const syncData = useCallback(async () => {
+  const syncData = useCallback(async (force = false) => {
     if (isSyncing) return;
     setIsSyncing(true);
-    addLog('Bắt đầu đồng bộ dữ liệu từ tất cả nguồn...', 'system');
+    addLog(force ? 'Bắt đầu đồng bộ dữ liệu (Bỏ qua cache)...' : 'Bắt đầu đồng bộ dữ liệu...', 'system');
 
     addLog('Đang đồng bộ chỉ số vĩ mô từ FRED & NY Fed...', 'system');
     
-    let fedFundsRateVal = null;
-    let cpiVal = null;
-    let unrateVal = null;
-    let m2SupplyVal = null;
-    let highYieldVal = null;
-    let walclVal = null;
-    let tgaVal = null;
-    let rrpVal = null;
+    // Fetch macro metrics in parallel using cache
+    const macroResults = await Promise.allSettled([
+      fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS'), 12 * 60 * 60 * 1000, addLog, 'Lãi suất Fed', force),
+      fetchCached('cpi', () => getFREDMetric('CPIAUCSL'), 12 * 60 * 60 * 1000, addLog, 'CPI Inflation', force),
+      fetchCached('unrate', () => getFREDMetric('UNRATE'), 12 * 60 * 60 * 1000, addLog, 'Tỷ lệ thất nghiệp', force),
+      fetchCached('m2Supply', () => getFREDMetric('M2SL'), 12 * 60 * 60 * 1000, addLog, 'M2 Money Supply', force),
+      fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY'), 12 * 60 * 60 * 1000, addLog, 'High Yield Spread', force),
+      fetchCached('walcl', () => getFREDMetric('WALCL'), 12 * 60 * 60 * 1000, addLog, 'Fed Assets', force),
+      fetchCached('tga', () => getFREDMetric('WDTGAL'), 12 * 60 * 60 * 1000, addLog, 'TGA Treasury Account', force),
+      fetchCached('rrp', () => getFREDMetric('RRPONTSYD'), 12 * 60 * 60 * 1000, addLog, 'Reverse Repo', force)
+    ]);
 
-    try {
-      fedFundsRateVal = await getFREDMetric('FEDFUNDS');
-      addLog('✓ Lãi suất Fed (Trading Economics / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ Lãi suất Fed — thất bại: ' + e.message, 'error');
-    }
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-      cpiVal = await getFREDMetric('CPIAUCSL');
-      addLog('✓ CPI Inflation (Trading Economics / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ CPI Inflation — thất bại: ' + e.message, 'error');
-    }
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-      unrateVal = await getFREDMetric('UNRATE');
-      addLog('✓ Tỷ lệ thất nghiệp (Trading Economics / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ Tỷ lệ thất nghiệp — thất bại: ' + e.message, 'error');
-    }
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-      m2SupplyVal = await getFREDMetric('M2SL');
-      addLog('✓ M2 Money Supply (Trading Economics / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ M2 Money Supply — thất bại: ' + e.message, 'error');
-    }
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-      highYieldVal = await getFREDMetric('BAMLH0A0HYM2EY');
-      addLog('✓ High Yield Spread (YCharts / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ High Yield Spread — thất bại: ' + e.message, 'error');
-    }
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-      walclVal = await getFREDMetric('WALCL');
-      addLog('✓ Fed Assets (Trading Economics / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ Fed Assets — thất bại: ' + e.message, 'error');
-    }
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-      tgaVal = await getFREDMetric('WDTGAL');
-      addLog('✓ TGA Treasury Account (US Treasury / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ TGA Treasury Account — thất bại: ' + e.message, 'error');
-    }
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-      rrpVal = await getFREDMetric('RRPONTSYD');
-      addLog('✓ Reverse Repo (NY Fed / FRED)', 'ok');
-    } catch (e) {
-      addLog('✗ Reverse Repo — thất bại: ' + e.message, 'error');
-    }
+    const fedFundsRateVal = macroResults[0].status === 'fulfilled' ? macroResults[0].value : null;
+    const cpiVal          = macroResults[1].status === 'fulfilled' ? macroResults[1].value : null;
+    const unrateVal       = macroResults[2].status === 'fulfilled' ? macroResults[2].value : null;
+    const m2SupplyVal     = macroResults[3].status === 'fulfilled' ? macroResults[3].value : null;
+    const highYieldVal    = macroResults[4].status === 'fulfilled' ? macroResults[4].value : null;
+    const walclVal        = macroResults[5].status === 'fulfilled' ? macroResults[5].value : null;
+    const tgaVal          = macroResults[6].status === 'fulfilled' ? macroResults[6].value : null;
+    const rrpVal          = macroResults[7].status === 'fulfilled' ? macroResults[7].value : null;
 
     addLog('Đang đồng bộ dữ liệu phái sinh, tin tức, ETF và chỉ số Yahoo Finance...', 'system');
 
@@ -416,20 +412,20 @@ function App() {
       getFundingRate('BTCUSDT'),
       getOpenInterest('BTCUSDT'),
       getOIHistory('BTCUSDT', '1h', 24),
-      getGlobalCryptoData(),
-      getStablecoinData(),
-      fetchRealtimeFeed(),
-      getBTCOnChain(),
-      getBTCOnChainMetrics(),
-      getETFHoldings(),
-      getETFFlowHistory(),
-      getCMECot(),
-      getFREDMetric('DGS10'),     // Yield 10Y (Yahoo Finance)
-      getDXYQuote(),              // DXY (Yahoo Finance)
-      getFREDStockQuote('SP500'), // S&P 500 (Yahoo Finance)
-      getFREDStockQuote('VIXCLS'), // VIX (Yahoo Finance)
-      getFREDStockQuote('NASDAQ100'), // Nasdaq (Yahoo Finance)
-      getFearAndGreed()           // Fear & Greed Index (alternative.me)
+      fetchCached('globalCryptoData', () => getGlobalCryptoData(), 15 * 60 * 1000, addLog, 'Global Market (CoinGecko)', force),
+      fetchCached('stablecoinData', () => getStablecoinData(), 15 * 60 * 1000, addLog, 'Stablecoins (CoinGecko)', force),
+      fetchCached('realtimeFeed', () => fetchRealtimeFeed(), 15 * 60 * 1000, addLog, 'News RSS (rss2json)', force),
+      fetchCached('btcOnChain', () => getBTCOnChain(), 6 * 60 * 60 * 1000, addLog, 'BTC Network (blockchain.info)', force),
+      fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), 6 * 60 * 60 * 1000, addLog, 'On-chain Metrics (CoinMetrics)', force),
+      fetchCached('etfHoldings', () => getETFHoldings(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Holdings (Bitbo)', force),
+      fetchCached('etfFlowHistory', () => getETFFlowHistory(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Flow History (Farside)', force),
+      fetchCached('cmeCot', () => getCMECot(), 12 * 60 * 60 * 1000, addLog, 'Báo cáo CME COT (Tradingster)', force),
+      fetchCached('yield10y', () => getFREDMetric('DGS10'), 30 * 60 * 1000, addLog, 'Yield 10Y (Yahoo Finance)', force),
+      fetchCached('dxyQuote', () => getDXYQuote(), 30 * 60 * 1000, addLog, 'Chỉ số DXY (Yahoo Finance)', force),
+      fetchCached('sp500Quote', () => getFREDStockQuote('SP500'), 30 * 60 * 1000, addLog, 'S&P 500 Index (Yahoo Finance)', force),
+      fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS'), 30 * 60 * 1000, addLog, 'VIX Volatility Index (Yahoo Finance)', force),
+      fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100'), 30 * 60 * 1000, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force),
+      fetchCached('fearAndGreed', () => getFearAndGreed(), 4 * 60 * 60 * 1000, addLog, 'Chỉ số Fear & Greed (alternative.me)', force)
     ]);
 
     const get = (res, label, hasKey) => {
@@ -452,20 +448,20 @@ function App() {
     const openInterest    = get(oiRes,              'Open Interest (Binance)', true);
     const oiHistory       = get(oiHistRes,          'OI History 24h (Binance)', true) || [];
 
-    const globalData      = get(globalRes,          'Global Market (CoinGecko)', true);
-    const stablecoins     = get(stableRes,          'Stablecoins (CoinGecko)', true);
-    const news            = get(newsRes,            'News RSS (rss2json)', true) || [];
-    const onChain         = get(onChainRes,         'BTC Network (blockchain.info)', true);
-    const onChainMetrics  = get(onChainMetricsRes,  'On-chain Metrics (CoinMetrics)', true);
-    const etfHoldingsVal  = get(etfHoldingsRes,     'Spot ETF Holdings (Bitbo)', true);
-    const etfHistoryVal   = get(etfHistoryRes,      'Spot ETF Flow History (Farside)', true);
-    const cotData         = get(cotRes,             'Báo cáo CME COT (Tradingster)', true);
-    const tenYearYield    = get(yield10yRes,        'Yield 10Y (Yahoo Finance)', true);
-    const dxy             = get(dxyRes,             'Chỉ số DXY (Yahoo Finance)', true);
-    const sp500           = get(sp500Res,           'S&P 500 Index (Yahoo Finance)', true);
-    const vix             = get(vixRes,             'VIX Volatility Index (Yahoo Finance)', true);
-    const qqq             = get(qqqRes,             'Nasdaq 100 Index (Yahoo Finance)', true);
-    const fngData         = get(fngRes,             'Chỉ số Fear & Greed (alternative.me)', true);
+    const globalData      = globalRes.status === 'fulfilled' ? globalRes.value : null;
+    const stablecoins     = stableRes.status === 'fulfilled' ? stableRes.value : null;
+    const news            = newsRes.status === 'fulfilled' ? newsRes.value : [];
+    const onChain         = onChainRes.status === 'fulfilled' ? onChainRes.value : null;
+    const onChainMetrics  = onChainMetricsRes.status === 'fulfilled' ? onChainMetricsRes.value : null;
+    const etfHoldingsVal  = etfHoldingsRes.status === 'fulfilled' ? etfHoldingsRes.value : null;
+    const etfHistoryVal   = etfHistoryRes.status === 'fulfilled' ? etfHistoryRes.value : null;
+    const cotData         = cotRes.status === 'fulfilled' ? cotRes.value : null;
+    const tenYearYield    = yield10yRes.status === 'fulfilled' ? yield10yRes.value : null;
+    const dxy             = dxyRes.status === 'fulfilled' ? dxyRes.value : null;
+    const sp500           = sp500Res.status === 'fulfilled' ? sp500Res.value : null;
+    const vix             = vixRes.status === 'fulfilled' ? vixRes.value : null;
+    const qqq             = qqqRes.status === 'fulfilled' ? qqqRes.value : null;
+    const fngData         = fngRes.status === 'fulfilled' ? fngRes.value : null;
 
     const now = new Date().toLocaleString('vi-VN');
     addLog(`Đồng bộ hoàn tất lúc ${now}`, 'system');
@@ -529,7 +525,7 @@ function App() {
       
       if (currentHour >= 8 && lastAutoSyncDate !== currentDateStr) {
         addLog('[Auto-Sync] Đến giờ đồng bộ hàng ngày (08:00 AM). Đang tự động cập nhật...', 'system');
-        syncData();
+        syncData(true);
         localStorage.setItem('last-auto-sync-date', currentDateStr);
       }
     };
@@ -541,13 +537,13 @@ function App() {
 
   // Initial load + auto-refresh every 5 min
   useEffect(() => {
-    syncData();
-    const timer = setInterval(() => syncData(), 5 * 60 * 1000);
+    syncData(false);
+    const timer = setInterval(() => syncData(false), 5 * 60 * 1000);
     return () => clearInterval(timer);
   }, []); // eslint-disable-line
 
   // ── Derived chart data ──────────────────────────────────────────────────────
-  const btcChartData = {
+  const btcChartData = useMemo(() => ({
     labels: data.klines.map(k => k.time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
     datasets: [{
       data: data.klines.map(k => k.close),
@@ -559,35 +555,26 @@ function App() {
       pointRadius: 0,
       pointHoverRadius: 4,
     }],
-  };
+  }), [data.klines, theme]);
 
-  const lsChartData = {
+  const lsChartData = useMemo(() => ({
     labels: data.lsHistory.map(r => new Date(r.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
     datasets: [
       {
-        label: 'Long %',
-        data: data.lsHistory.map(r => (parseFloat(r.longAccount) * 100).toFixed(2)),
+        label: 'L/S Ratio',
+        data: data.lsHistory.map(r => parseFloat(r.longShortRatio)),
         borderColor: theme === 'light' ? '#047857' : '#10b981',
-        backgroundColor: theme === 'light' ? 'rgba(4, 120, 87, 0.15)' : 'rgba(16,185,129,0.15)',
+        backgroundColor: theme === 'light' ? 'rgba(4, 120, 87, 0.05)' : 'rgba(16,185,129,0.05)',
         borderWidth: 1.5,
         fill: true,
         tension: 0.3,
         pointRadius: 0,
-      },
-      {
-        label: 'Short %',
-        data: data.lsHistory.map(r => (parseFloat(r.shortAccount) * 100).toFixed(2)),
-        borderColor: theme === 'light' ? '#be123c' : '#f43f5e',
-        backgroundColor: theme === 'light' ? 'rgba(190, 18, 60, 0.05)' : 'rgba(244,63,94,0.05)',
-        borderWidth: 1.5,
-        fill: false,
-        tension: 0.3,
-        pointRadius: 0,
+        pointHoverRadius: 4,
       },
     ],
-  };
+  }), [data.lsHistory, theme]);
 
-  const oiChartData = {
+  const oiChartData = useMemo(() => ({
     labels: data.oiHistory.map(r => new Date(r.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
     datasets: [{
       label: 'OI (BTC)',
@@ -606,7 +593,7 @@ function App() {
       borderRadius: 2,
       borderSkipped: false,
     }],
-  };
+  }), [data.oiHistory, theme]);
 
   const currentLS = data.lsHistory[data.lsHistory.length - 1];
   // Use live WebSocket funding rate if available, fallback to REST
@@ -622,7 +609,7 @@ function App() {
   } : data.btc;
 
   // ── ETF Net Flows Bar Chart ────────────────────────────────────────────────
-  const etfFlowChartData = {
+  const etfFlowChartData = useMemo(() => ({
     labels: etfHistory.map(h => h.date),
     datasets: [{
       label: 'Net Flow (M USD)',
@@ -644,9 +631,9 @@ function App() {
       borderWidth: 1,
       borderRadius: 2,
     }]
-  };
+  }), [etfHistory, theme]);
 
-  const etfFlowChartOpts = {
+  const etfFlowChartOpts = useMemo(() => ({
     ...getChartOpts(theme),
     plugins: {
       ...getChartOpts(theme).plugins,
@@ -667,7 +654,7 @@ function App() {
         }
       }
     }
-  };
+  }), [theme]);
 
 
 
@@ -714,7 +701,7 @@ function App() {
               : <><Radio size={10} /> WS OFF</>}
           </div>
           <div className="auto-refresh-badge font-mono">REST ⟳ 5MIN</div>
-          <button className="btn-sync font-mono" onClick={syncData} disabled={isSyncing}>
+          <button className="btn-sync font-mono" onClick={() => syncData(true)} disabled={isSyncing}>
             <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
             {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
           </button>
@@ -729,21 +716,22 @@ function App() {
 
             {/* BTC Price row */}
             <div className="sidebar-top-row">
-              <div className="btc-hero">
+              <div className="btc-hero" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                 <Tooltip content={METRIC_METADATA.btcPrice}>
-                  <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
-                    BITCOIN
-                    {wsStatus === 'connected' && <span className="ws-live-tag font-mono"> ⚡</span>}
+                  <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block', margin: 0 }}>
+                    BITCOIN {wsStatus === 'connected' && <span className="ws-live-tag font-mono">⚡</span>}
                   </span>
                 </Tooltip>
-                <span className={`btc-price font-mono${livePrice ? ' ws-price-live' : ''}`}>
-                  ${btcDisplay?.price ? fmt(btcDisplay.price, 0) : '---'}
-                </span>
-                {btcDisplay?.change != null && (
-                  <span className={`btc-change font-mono ${btcDisplay.change >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                    {btcDisplay.change >= 0 ? '▲' : '▼'} {Math.abs(btcDisplay.change).toFixed(2)}%
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className={`btc-price font-mono${livePrice ? ' ws-price-live' : ''}`} style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
+                    ${btcDisplay?.price ? fmt(btcDisplay.price, 0) : '---'}
                   </span>
-                )}
+                  {btcDisplay?.change != null && (
+                    <span className={`btc-change font-mono ${btcDisplay.change >= 0 ? 'text-emerald' : 'text-rose'}`} style={{ fontSize: '0.65rem', fontWeight: 600, margin: 0 }}>
+                      ({btcDisplay.change >= 0 ? '+' : ''}{btcDisplay.change.toFixed(2)}%)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -969,21 +957,13 @@ function App() {
                       <h3 className="chart-title font-mono text-emerald">
                         <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
                       </h3>
-                      <div className="chart-legend font-mono">
-                        <span className="legend-dot" style={{ background: '#10b981' }} />Long
-                        <span className="legend-dot" style={{ background: '#f43f5e', marginLeft: 8 }} />Short
-                      </div>
+                      <span className="chart-badge font-mono">
+                        {currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
+                      </span>
                     </div>
                     <div className="chart-body">
                       {data.lsHistory.length > 0
-                        ? <Line data={lsChartData} options={{
-                            ...getChartOpts(theme),
-                            plugins: { ...getChartOpts(theme).plugins, legend: { display: false } },
-                            scales: {
-                              ...getChartOpts(theme).scales,
-                              y: { ...getChartOpts(theme).scales.y, ticks: { ...getChartOpts(theme).scales.y.ticks, callback: v => `${v}%` } }
-                            }
-                          }} />
+                        ? <Line data={lsChartData} options={getChartOpts(theme)} />
                         : <div className="chart-empty font-mono">Đang tải...</div>
                       }
                     </div>
@@ -1323,13 +1303,9 @@ function App() {
 
             {activeTab === 'hft' && (
               <HftRadarTab
-                cvd={cvd}
-                buyVolume={buyVolume}
-                sellVolume={sellVolume}
-                cvdHistory={cvdHistory}
-                cvdStatus={cvdStatus}
-                livePrice={livePrice || data.btc?.price}
-                theme={theme}
+                cvd={cvd} buyVolume={buyVolume} sellVolume={sellVolume}
+                cvdHistory={cvdHistory} cvdStatus={cvdStatus} livePrice={livePrice}
+                whaleTrades={whaleTrades} theme={theme}
               />
             )}
 
@@ -1401,7 +1377,7 @@ function App() {
                   localStorage.setItem('app-api-keys', JSON.stringify(apiKeys));
                   setShowSettings(false);
                   addLog('Đã lưu cấu hình API Keys thành công. Đang tải lại dữ liệu...', 'ok');
-                  syncData();
+                  syncData(true);
                 }}
               >
                 LƯU &amp; ĐỒNG BỘ

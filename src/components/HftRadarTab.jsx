@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-import { getOrderBookDepth, getWhaleWalls } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getWhaleKlinesFlow } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 
 
@@ -372,16 +372,158 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
 
 
 
+// ─── PANEL 4: Whale Trades ───────────────────────────────────────────────────
+
+function WhaleTradesPanel({ whaleTrades }) {
+  const [minVolume, setMinVolume] = useState(() => {
+    const saved = localStorage.getItem('hft_whale_min_vol');
+    return saved ? Number(saved) : 100000;
+  });
+
+  const handleVolumeChange = (e) => {
+    const val = Number(e.target.value);
+    setMinVolume(val);
+    localStorage.setItem('hft_whale_min_vol', String(val));
+  };
+
+  const filteredTrades = (whaleTrades || []).filter(t => t.usdtVol >= minVolume);
+
+  let buyVol = 0, buyUsd = 0;
+  let sellVol = 0, sellUsd = 0;
+  
+  filteredTrades.forEach(t => {
+    if (t.side === 'BUY') {
+      buyVol += t.qty;
+      buyUsd += t.usdtVol;
+    } else {
+      sellVol += t.qty;
+      sellUsd += t.usdtVol;
+    }
+  });
+
+  const avgBuyPrice = buyVol > 0 ? buyUsd / buyVol : null;
+  const avgSellPrice = sellVol > 0 ? sellUsd / sellVol : null;
+
+  return (
+    <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
+      <div className="hft-panel-header">
+        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+          <span className="hft-icon">🐋</span> LIVE WHALE TRADES
+        </h3>
+        <select 
+          className="font-mono text-slate-300"
+          value={minVolume}
+          onChange={handleVolumeChange}
+          style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', padding: '2px 6px', borderRadius: '4px', outline: 'none', cursor: 'pointer' }}
+        >
+          <option value={100000}>≥ $100K</option>
+          <option value={500000}>≥ $500K</option>
+          <option value={1000000}>≥ $1M</option>
+          <option value={5000000}>≥ $5M</option>
+        </select>
+      </div>
+
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', background: 'var(--bg-slate-950)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+        <div style={{ flex: 1 }}>
+          <div className="font-mono text-slate-400" style={{ fontSize: '0.65rem', marginBottom: '4px' }}>TRUNG BÌNH GIÁ KHỚP LONG (BUY)</div>
+          <div className="font-mono text-emerald" style={{ fontSize: '1rem', fontWeight: 600 }}>{avgBuyPrice ? fmtPrice(avgBuyPrice) : '---'}</div>
+          <div className="font-mono text-slate-500" style={{ fontSize: '0.65rem' }}>Tổng Vol: {fmtUsd(buyUsd)}</div>
+        </div>
+        <div style={{ width: '1px', background: 'var(--border-panel)' }}></div>
+        <div style={{ flex: 1 }}>
+          <div className="font-mono text-slate-400" style={{ fontSize: '0.65rem', marginBottom: '4px' }}>TRUNG BÌNH GIÁ KHỚP SHORT (SELL)</div>
+          <div className="font-mono text-rose" style={{ fontSize: '1rem', fontWeight: 600 }}>{avgSellPrice ? fmtPrice(avgSellPrice) : '---'}</div>
+          <div className="font-mono text-slate-500" style={{ fontSize: '0.65rem' }}>Tổng Vol: {fmtUsd(sellUsd)}</div>
+        </div>
+      </div>
+      
+      {filteredTrades.length === 0 ? (
+        <div className="hft-empty font-mono">Chưa có lệnh nào khớp với điều kiện lọc...</div>
+      ) : (
+        <div className="whale-table-wrap" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+          <table className="liq-table font-mono" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+            <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-900)', zIndex: 1 }}>
+              <tr>
+                <th style={{ padding: '8px' }}>Thời gian</th>
+                <th style={{ padding: '8px' }}>Side</th>
+                <th style={{ padding: '8px' }}>Giá khớp</th>
+                <th style={{ padding: '8px' }}>Khối lượng (BTC)</th>
+                <th style={{ padding: '8px' }}>Giá trị (USD)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTrades.map((t, i) => (
+                <tr key={`${t.timestamp}-${i}`} style={{ borderBottom: '1px solid var(--border-panel)' }}>
+                  <td style={{ color: 'var(--text-slate-400)', padding: '8px' }}>{t.time}</td>
+                  <td style={{ padding: '8px' }}>
+                    <span className={`liq-side-tag ${t.side === 'BUY' ? 'liq-tag-long' : 'liq-tag-short'}`}>
+                      {t.side}
+                    </span>
+                  </td>
+                  <td style={{ padding: '8px' }}>{fmtPrice(t.price)}</td>
+                  <td style={{ padding: '8px' }}>{t.qty.toFixed(3)}</td>
+                  <td className={t.usdtVol >= 1e6 ? 'whale-mega' : ''} style={{ color: t.side === 'BUY' ? 'var(--color-emerald-400)' : 'var(--color-rose-400)', padding: '8px' }}>
+                    {fmtUsd(t.usdtVol)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PANEL 5: Whale Kline Flow (1m Spikes) ───────────────────────────────────
+
+function WhaleKlineFlowPanel({ whaleFlow }) {
+  if (!whaleFlow) return null;
+
+  const { whaleCvd, whaleBuyVol, whaleSellVol, spikeKlines } = whaleFlow;
+  
+  return (
+    <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
+      <div className="hft-panel-header">
+        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+          <span className="hft-icon">🌊</span> 1M WHALE KLINE FLOW (PAST 16H)
+        </h3>
+      </div>
+      <div className="whale-summary">
+        <div className="whale-sum-card whale-bid-card">
+          <span className="whale-sum-label font-mono">WHALE BUY VOL</span>
+          <span className="whale-sum-value font-mono text-emerald">{fmtUsd(whaleBuyVol)}</span>
+        </div>
+        <div className="whale-sum-card whale-ask-card">
+          <span className="whale-sum-label font-mono">WHALE SELL VOL</span>
+          <span className="whale-sum-value font-mono text-rose">{fmtUsd(whaleSellVol)}</span>
+        </div>
+        <div className="whale-sum-card whale-ratio-card">
+          <span className="whale-sum-label font-mono">SYNTHETIC WHALE CVD</span>
+          <span className={`whale-sum-value font-mono ${whaleCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
+            {whaleCvd >= 0 ? '+' : ''}{fmtUsd(whaleCvd)}
+          </span>
+        </div>
+      </div>
+      <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem' }}>
+        Đã phân tích {spikeKlines.length} nến 1 phút có Vol đột biến (≥ $10M/phút) trong 1000 phút qua.
+        <br />(Nếu Whale CVD tăng nhưng Giá/CVD Thực tế giảm =&gt; Cá mập đang gom hàng bí mật)
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main HFT Radar Tab Component
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function HftRadarTab({
-  cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice, theme,
+  cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice, whaleTrades, theme,
 }) {
   const [orderBook, setOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
+  const [whaleFlow, setWhaleFlow] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [depthLimit, setDepthLimit] = useState(() => {
     const saved = localStorage.getItem('hft-depth-limit');
@@ -419,6 +561,7 @@ export default function HftRadarTab({
       await Promise.allSettled([
         fetchOB(),
         getWhaleWalls().then(d => { if (d) setWhaleData(d); }),
+        getWhaleKlinesFlow('BTCUSDT', 1000, 10000000).then(d => { if (d) setWhaleFlow(d); })
       ]);
       setIsLoading(false);
     };
@@ -462,6 +605,8 @@ export default function HftRadarTab({
           setDepthLimit={setDepthLimit}
         />
 
+        <WhaleTradesPanel whaleTrades={whaleTrades} />
+        <WhaleKlineFlowPanel whaleFlow={whaleFlow} />
 
       </div>
     </div>

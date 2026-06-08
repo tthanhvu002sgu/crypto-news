@@ -80,6 +80,52 @@ export const getDailyCVD = async (symbol = 'BTCUSDT') => {
   }
 };
 
+/**
+ * Lọc nến 1 phút có khối lượng Quote Asset (USD) lớn hơn threshold.
+ * Tính toán Whale CVD dựa trên Taker Buy / Taker Sell của các nến đột biến này.
+ */
+export const getWhaleKlinesFlow = async (symbol = 'BTCUSDT', limit = 1000, volumeThreshold = 10000000) => {
+  try {
+    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+      params: { symbol, interval: '1m', limit },
+    });
+    
+    let whaleCvd = 0;
+    let whaleBuyVol = 0;
+    let whaleSellVol = 0;
+    const spikeKlines = [];
+    
+    res.data.forEach(k => {
+      const quoteVol = parseFloat(k[7]);
+      if (quoteVol >= volumeThreshold) {
+        const takerBuyVol = parseFloat(k[10]);
+        const takerSellVol = quoteVol - takerBuyVol;
+        
+        whaleBuyVol += takerBuyVol;
+        whaleSellVol += takerSellVol;
+        const delta = takerBuyVol - takerSellVol;
+        whaleCvd += delta;
+        
+        spikeKlines.push({
+          time: new Date(k[0]),
+          open: parseFloat(k[1]),
+          close: parseFloat(k[4]),
+          quoteVol,
+          takerBuyVol,
+          takerSellVol,
+          delta,
+          isBullish: takerBuyVol > takerSellVol
+        });
+      }
+    });
+    
+    return { whaleCvd, whaleBuyVol, whaleSellVol, spikeKlines };
+  } catch (e) {
+    console.error('[API] Whale Klines Flow:', e.message);
+    return { whaleCvd: 0, whaleBuyVol: 0, whaleSellVol: 0, spikeKlines: [] };
+  }
+};
+
 /** Global Long/Short Account Ratio — last N periods */
 export const getLongShortRatio = async (symbol = 'BTCUSDT', period = '1h', limit = 24) => {
   try {
