@@ -365,82 +365,47 @@ export const fetchRealtimeFeed = async () => {
 // ─── COINALYZE API — REMOVED ───────────────────────────────────────────────────
 // ─── ORDER BOOK DEPTH — OBI (Order Book Imbalance) ────────────────────────────
 
-/**
- * Lấy order book 100 levels từ Binance Futures.
- * Tính OBI = (ΣBid - ΣAsk) / (ΣBid + ΣAsk)
- * Lấy 100 levels giúp tính toán OBI ổn định hơn (tránh nhiễu của HFT bots trong 20 levels).
- */
-export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
-  try {
-    const res = await axios.get('https://fapi.binance.com/fapi/v1/depth', {
-      params: { symbol, limit },
-      timeout: 5000,
-    });
-
-    const bids = res.data.bids || []; // [[price, qty], ...]
-    const asks = res.data.asks || [];
-
-    // Sum all 100 levels volume (in BTC)
-    const bidVol = bids.reduce((sum, [, q]) => sum + parseFloat(q), 0);
-    const askVol = asks.reduce((sum, [, q]) => sum + parseFloat(q), 0);
-
-    const total = bidVol + askVol;
-    const obi = total > 0 ? ((bidVol - askVol) / total) : 0; // -1 to +1
-
-    // Spread
-    const bestBid = bids.length > 0 ? parseFloat(bids[0][0]) : 0;
-    const bestAsk = asks.length > 0 ? parseFloat(asks[0][0]) : 0;
-    const spread = bestBid > 0 ? ((bestAsk - bestBid) / bestBid * 100) : 0;
-
-    // USDT values for display
-    const midPrice = (bestBid + bestAsk) / 2;
-    const bidVolUsd = bidVol * midPrice;
-    const askVolUsd = askVol * midPrice;
-
-    return {
-      obi: parseFloat(obi.toFixed(4)),           // -1 to +1
-      obiPercent: parseFloat((obi * 100).toFixed(1)), // -100 to +100
-      spread: parseFloat(spread.toFixed(4)),      // %
-      bestBid,
-      bestAsk,
-      bidVolBtc: parseFloat(bidVol.toFixed(2)),
-      askVolBtc: parseFloat(askVol.toFixed(2)),
-      bidVolUsd: Math.round(bidVolUsd),
-      askVolUsd: Math.round(askVolUsd),
-      signal: obi > 0.15 ? 'BUY PRESSURE' : obi < -0.15 ? 'SELL PRESSURE' : 'BALANCED',
-      signalCls: obi > 0.15 ? 'text-emerald' : obi < -0.15 ? 'text-rose' : 'text-slate-400',
-    };
-  } catch (e) {
-    console.error('[API] Order Book:', e.message);
-    return null;
-  }
+// Helper for OKX Contract Sizes (BTC = 0.01, ETH = 0.1, others default to 1.0)
+const getOKXContractSize = (symbol) => {
+  const sym = symbol.toUpperCase();
+  if (sym.startsWith('BTC')) return 0.01;
+  if (sym.startsWith('ETH')) return 0.1;
+  if (sym.startsWith('SOL')) return 1;
+  return 1; // Fallback
 };
 
-// ─── WHALE WALLS — Large Limit Orders ≥ $500K ────────────────────────────────
-
 /**
- * Lấy order book sâu (1000 levels) từ Binance Futures.
- * Lọc các lệnh giới hạn có giá trị ≥ $500K USD.
- * Phân tích tỷ lệ Bid Walls vs Ask Walls.
+ * Lấy order book từ Futures của top 4 sàn lớn nhất (Binance, Bybit, OKX, Bitget).
+ * Tính OBI = (ΣBid - ΣAsk) / (ΣBid + ΣAsk)
  */
-export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 1000000) => {
-  const symbolBinance = symbol.toUpperCase();
-  // Bybit uses the same symbol for linear futures and spot
-  const symbolBybit = symbol.toUpperCase();
+export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
+  const symbolUpper = symbol.toUpperCase();
+  const base = symbolUpper.replace('USDT', '');
+  const symbolOKXFutures = `${base}-USDT-SWAP`;
+
+  const bybitLimit = Math.min(limit, 500);
+  const okxLimit = Math.min(limit, 400);
+
+  let bitgetLimit = 100;
+  if (limit <= 5) bitgetLimit = 5;
+  else if (limit <= 15) bitgetLimit = 15;
+  else if (limit <= 50) bitgetLimit = 50;
+  else if (limit <= 100) bitgetLimit = 100;
+  else bitgetLimit = 'max';
 
   const urls = {
-    binanceFutures: `https://fapi.binance.com/fapi/v1/depth?symbol=${symbolBinance}&limit=1000`,
-    binanceSpot: `https://api.binance.com/api/v3/depth?symbol=${symbolBinance}&limit=1000`,
-    bybitFutures: `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbolBybit}&limit=500`,
-    bybitSpot: `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbolBybit}&limit=500`
+    binance: `https://fapi.binance.com/fapi/v1/depth?symbol=${symbolUpper}&limit=${limit}`,
+    bybit: `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbolUpper}&limit=${bybitLimit}`,
+    okx: `https://www.okx.com/api/v5/market/books?instId=${symbolOKXFutures}&sz=${okxLimit}`,
+    bitget: `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbolUpper}&productType=usdt-futures&limit=${bitgetLimit}`
   };
 
   const fetchSource = async (name, url, parser) => {
     try {
-      const res = await axios.get(url, { timeout: 6000 });
+      const res = await axios.get(url, { timeout: 4000 });
       return parser(res.data);
     } catch (e) {
-      console.warn(`[API - OrderBook] Failed to fetch ${name}:`, e.message);
+      console.warn(`[API - OrderBook] Failed to fetch OBI depth from ${name}:`, e.message);
       return { bids: [], asks: [] };
     }
   };
@@ -455,21 +420,183 @@ export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 1000000) => {
     asks: data.result?.a || []
   });
 
+  const okxParser = (data) => ({
+    bids: data?.data?.[0]?.bids || [],
+    asks: data?.data?.[0]?.asks || []
+  });
+
+  const bitgetParser = (data) => ({
+    bids: data?.data?.bids || [],
+    asks: data?.data?.asks || []
+  });
+
   try {
+    const sourceNames = ['Binance Futures', 'Bybit Futures', 'OKX Futures', 'Bitget Futures'];
+    const parsers = [binanceParser, bybitParser, okxParser, bitgetParser];
+
+    const results = await Promise.all([
+      fetchSource('Binance Futures', urls.binance, binanceParser),
+      fetchSource('Bybit Futures', urls.bybit, bybitParser),
+      fetchSource('OKX Futures', urls.okx, okxParser),
+      fetchSource('Bitget Futures', urls.bitget, bitgetParser)
+    ]);
+
+    let totalBidVol = 0;
+    let totalAskVol = 0;
+    let binanceBestBid = 0;
+    let binanceBestAsk = 0;
+
+    const okxScale = getOKXContractSize(symbol);
+
+    results.forEach((r, idx) => {
+      const sourceName = sourceNames[idx];
+      const bids = r.bids;
+      const asks = r.asks;
+
+      const scale = sourceName === 'OKX Futures' ? okxScale : 1.0;
+
+      const bidVol = bids.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
+      const askVol = asks.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
+
+      totalBidVol += bidVol;
+      totalAskVol += askVol;
+
+      if (sourceName === 'Binance Futures') {
+        binanceBestBid = bids.length > 0 ? parseFloat(bids[0][0]) : 0;
+        binanceBestAsk = asks.length > 0 ? parseFloat(asks[0][0]) : 0;
+      }
+    });
+
+    const total = totalBidVol + totalAskVol;
+    const obi = total > 0 ? ((totalBidVol - totalAskVol) / total) : 0; // -1 to +1
+    const spread = binanceBestBid > 0 ? ((binanceBestAsk - binanceBestBid) / binanceBestBid * 100) : 0;
+
+    const midPrice = (binanceBestBid + binanceBestAsk) / 2 || 60000;
+    const bidVolUsd = totalBidVol * midPrice;
+    const askVolUsd = totalAskVol * midPrice;
+
+    // Calculate OBI for each individual exchange
+    const exchanges = results.map((r, idx) => {
+      const sourceName = sourceNames[idx];
+      const scale = sourceName === 'OKX Futures' ? okxScale : 1.0;
+      const bidVol = r.bids.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
+      const askVol = r.asks.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
+      const tot = bidVol + askVol;
+      const exObi = tot > 0 ? ((bidVol - askVol) / tot) * 100 : 0;
+      return {
+        name: sourceName.replace(' Futures', '').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT'),
+        obi: parseFloat(exObi.toFixed(1))
+      };
+    });
+
+    return {
+      obi: parseFloat(obi.toFixed(4)),           // -1 to +1
+      obiPercent: parseFloat((obi * 100).toFixed(1)), // -100 to +100
+      spread: parseFloat(spread.toFixed(4)),      // %
+      bestBid: binanceBestBid,
+      bestAsk: binanceBestAsk,
+      bidVolBtc: parseFloat(totalBidVol.toFixed(2)),
+      askVolBtc: parseFloat(totalAskVol.toFixed(2)),
+      bidVolUsd: Math.round(bidVolUsd),
+      askVolUsd: Math.round(askVolUsd),
+      signal: obi > 0.15 ? 'BUY PRESSURE' : obi < -0.15 ? 'SELL PRESSURE' : 'BALANCED',
+      signalCls: obi > 0.15 ? 'text-emerald' : obi < -0.15 ? 'text-rose' : 'text-slate-400',
+      exchanges
+    };
+  } catch (e) {
+    console.error('[API] Aggregated Order Book OBI Error:', e.message);
+    return null;
+  }
+};
+
+// ─── WHALE WALLS — Large Limit Orders ≥ $500K ────────────────────────────────
+
+/**
+ * Lấy order book sâu từ top 4 sàn lớn nhất (Binance, Bybit, OKX, Bitget).
+ * Lọc các lệnh giới hạn có giá trị ≥ $500K USD.
+ */
+export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 500000) => {
+  const symbolUpper = symbol.toUpperCase();
+  const base = symbolUpper.replace('USDT', '');
+  const symbolOKXSpot = `${base}-USDT`;
+  const symbolOKXFutures = `${base}-USDT-SWAP`;
+
+  const urls = {
+    binanceFutures: `https://fapi.binance.com/fapi/v1/depth?symbol=${symbolUpper}&limit=1000`,
+    binanceSpot: `https://api.binance.com/api/v3/depth?symbol=${symbolUpper}&limit=1000`,
+    bybitFutures: `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbolUpper}&limit=500`,
+    bybitSpot: `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbolUpper}&limit=500`,
+    okxFutures: `https://www.okx.com/api/v5/market/books?instId=${symbolOKXFutures}&sz=400`,
+    okxSpot: `https://www.okx.com/api/v5/market/books?instId=${symbolOKXSpot}&sz=400`,
+    bitgetFutures: `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbolUpper}&productType=usdt-futures&limit=max`,
+    bitgetSpot: `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbolUpper}&limit=max`
+  };
+
+  const fetchSource = async (name, url, parser) => {
+    try {
+      const res = await axios.get(url, { timeout: 5000 });
+      return parser(res.data);
+    } catch (e) {
+      console.warn(`[API - OrderBook] Failed to fetch whale walls from ${name}:`, e.message);
+      return { bids: [], asks: [] };
+    }
+  };
+
+  const binanceParser = (data) => ({
+    bids: data.bids || [],
+    asks: data.asks || []
+  });
+
+  const bybitParser = (data) => ({
+    bids: data.result?.b || [],
+    asks: data.result?.a || []
+  });
+
+  const okxParser = (data) => ({
+    bids: data?.data?.[0]?.bids || [],
+    asks: data?.data?.[0]?.asks || []
+  });
+
+  const bitgetParser = (data) => ({
+    bids: data?.data?.bids || [],
+    asks: data?.data?.asks || []
+  });
+
+  try {
+    const sourceNames = [
+      'Binance Futures', 'Binance Spot',
+      'Bybit Futures', 'Bybit Spot',
+      'OKX Futures', 'OKX Spot',
+      'Bitget Futures', 'Bitget Spot'
+    ];
+    const parsers = [
+      binanceParser, binanceParser,
+      bybitParser, bybitParser,
+      okxParser, okxParser,
+      bitgetParser, bitgetParser
+    ];
+
     const results = await Promise.all([
       fetchSource('Binance Futures', urls.binanceFutures, binanceParser),
       fetchSource('Binance Spot', urls.binanceSpot, binanceParser),
       fetchSource('Bybit Futures', urls.bybitFutures, bybitParser),
-      fetchSource('Bybit Spot', urls.bybitSpot, bybitParser)
+      fetchSource('Bybit Spot', urls.bybitSpot, bybitParser),
+      fetchSource('OKX Futures', urls.okxFutures, okxParser),
+      fetchSource('OKX Spot', urls.okxSpot, okxParser),
+      fetchSource('Bitget Futures', urls.bitgetFutures, bitgetParser),
+      fetchSource('Bitget Spot', urls.bitgetSpot, bitgetParser)
     ]);
 
     const bidsMap = new Map();
     const asksMap = new Map();
+    const okxScale = getOKXContractSize(symbol);
 
     const processLevels = (levels, map, sourceName) => {
-      for (const [pStr, qStr] of levels) {
-        const price = parseFloat(pStr);
-        const qty = parseFloat(qStr);
+      const scale = sourceName === 'OKX Futures' ? okxScale : 1.0;
+      for (const level of levels) {
+        if (!level || level.length < 2) continue;
+        const price = parseFloat(level[0]);
+        const qty = parseFloat(level[1]) * scale;
         if (isNaN(price) || isNaN(qty) || qty <= 0) continue;
         const usdValue = price * qty;
         const roundedPrice = Math.round(price); // Group by integer USD price level
@@ -485,7 +612,6 @@ export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 1000000) => {
       }
     };
 
-    const sourceNames = ['Binance Futures', 'Binance Spot', 'Bybit Futures', 'Bybit Spot'];
     results.forEach((r, idx) => {
       processLevels(r.bids, bidsMap, sourceNames[idx]);
       processLevels(r.asks, asksMap, sourceNames[idx]);

@@ -102,9 +102,18 @@ function CVDPanel({ cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice
             <span className="hft-icon">📊</span> CVD &amp; ORDER FLOW
           </h3>
         </Tooltip>
-        <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
-          {cvdStatus === 'connected' ? '⚡ aggTrade' : 'WS OFF'}
-        </span>
+        <div className="hft-panel-badges">
+          <span 
+            className="hft-badge badge-api font-mono" 
+            style={{ cursor: 'help' }}
+            title="Binance Futures aggTrade được sử dụng làm chỉ số tham chiếu CVD chuẩn (Benchmark Proxy) vì chiếm hơn 50% thanh khoản phái sinh toàn cầu"
+          >
+            BIN-F PROXY
+          </span>
+          <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
+            {cvdStatus === 'connected' ? '⚡ LIVE' : 'WS OFF'}
+          </span>
+        </div>
       </div>
 
       {/* CVD Value */}
@@ -218,7 +227,33 @@ function TargetLiquidityPanel({ whaleData }) {
                   </td>
                   <td>{fmtPrice(w.price)}</td>
                   <td>{w.qty.toFixed(3)}</td>
-                  <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>{fmtUsd(w.usdValue)}</td>
+                  <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
+                    <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
+                    {w.sources && (
+                      <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
+                        {Object.keys(w.sources).map(src => {
+                          const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
+                          return (
+                            <span 
+                              key={src} 
+                              title={`${src}: ${fmtUsd(w.sources[src])}`} 
+                              style={{ 
+                                fontSize: '0.45rem', 
+                                color: 'var(--text-slate-400)', 
+                                border: '1px solid var(--border-panel)', 
+                                borderRadius: '2px', 
+                                padding: '1px 3px', 
+                                background: 'rgba(15, 23, 42, 0.4)',
+                                fontWeight: 'normal'
+                              }}
+                            >
+                              {shortName}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
               {/* Support second */}
@@ -231,7 +266,33 @@ function TargetLiquidityPanel({ whaleData }) {
                   </td>
                   <td>{fmtPrice(w.price)}</td>
                   <td>{w.qty.toFixed(3)}</td>
-                  <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>{fmtUsd(w.usdValue)}</td>
+                  <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
+                    <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
+                    {w.sources && (
+                      <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
+                        {Object.keys(w.sources).map(src => {
+                          const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
+                          return (
+                            <span 
+                              key={src} 
+                              title={`${src}: ${fmtUsd(w.sources[src])}`} 
+                              style={{ 
+                                fontSize: '0.45rem', 
+                                color: 'var(--text-slate-400)', 
+                                border: '1px solid var(--border-panel)', 
+                                borderRadius: '2px', 
+                                padding: '1px 3px', 
+                                background: 'rgba(15, 23, 42, 0.4)',
+                                fontWeight: 'normal'
+                              }}
+                            >
+                              {shortName}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -333,6 +394,21 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
         <div className="obi-value font-mono" style={{ color: obiPercent > 0 ? '#10b981' : obiPercent < 0 ? '#f43f5e' : '#94a3b8' }}>
           {obiPercent > 0 ? '+' : ''}{obiPercent}%
         </div>
+        {orderBook.exchanges && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+            {orderBook.exchanges.map(ex => {
+              const color = ex.obi > 15 ? 'var(--color-emerald-400)' : ex.obi < -15 ? 'var(--color-rose-400)' : 'var(--text-slate-400)';
+              return (
+                <div key={ex.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '55px', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '3px 4px', background: 'rgba(15, 23, 42, 0.3)' }} title={`Order Book Imbalance tại sàn ${ex.name}`}>
+                  <span style={{ fontSize: '0.48rem', color: 'var(--text-slate-500)', fontWeight: 600 }}>{ex.name}</span>
+                  <span style={{ fontSize: '0.55rem', color: color, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {ex.obi > 0 ? '+' : ''}{ex.obi}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Depth bars */}
@@ -456,9 +532,25 @@ function WhaleTradesPanel({ whaleTrades }) {
                 <tr key={`${t.timestamp}-${i}`} style={{ borderBottom: '1px solid var(--border-panel)' }}>
                   <td style={{ color: 'var(--text-slate-400)', padding: '8px' }}>{t.time}</td>
                   <td style={{ padding: '8px' }}>
-                    <span className={`liq-side-tag ${t.side === 'BUY' ? 'liq-tag-long' : 'liq-tag-short'}`}>
-                      {t.side}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span className={`liq-side-tag ${t.side === 'BUY' ? 'liq-tag-long' : 'liq-tag-short'}`}>
+                        {t.side}
+                      </span>
+                      <span 
+                        style={{ 
+                          fontSize: '0.45rem', 
+                          opacity: 0.6, 
+                          border: '1px solid var(--border-panel)', 
+                          padding: '1px 3px', 
+                          borderRadius: '2px', 
+                          background: 'var(--bg-slate-900)',
+                          color: 'var(--text-slate-300)'
+                        }} 
+                        title="Binance Futures"
+                      >
+                        BIN-F
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '8px' }}>{fmtPrice(t.price)}</td>
                   <td style={{ padding: '8px' }}>{t.qty.toFixed(3)}</td>
