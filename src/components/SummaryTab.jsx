@@ -1,9 +1,8 @@
-import React from 'react';
 import { OpenRouter } from "@openrouter/sdk";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2 } from 'lucide-react';
-import { getOrderBookDepth, getWhaleWalls, getBTCKlines } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD } from '../services/api';
 
 export default function SummaryTab({ 
   data, apiKeys, cvd, buyVolume, sellVolume, etfHoldings, etfHistory,
@@ -24,18 +23,24 @@ export default function SummaryTab({
     let orderBook = null;
     let whaleWalls = null;
     let klines7d = [], klines30d = [], klines90d = [], klines1y = [];
+    let cvd7d = [], cvd30d = [];
     try {
-      [orderBook, whaleWalls, klines7d, klines30d, klines90d, klines1y] = await Promise.all([
+      [orderBook, whaleWalls, klines7d, klines30d, klines90d, klines1y, cvd7d, cvd30d] = await Promise.all([
         getOrderBookDepth('BTCUSDT', 100),
         getWhaleWalls(),
         getBTCKlines('BTCUSDT', '4h', 42),   // 7d  = 42 x 4h candles
         getBTCKlines('BTCUSDT', '1d', 30),   // 30d = 30 x 1d candles
         getBTCKlines('BTCUSDT', '1d', 90),   // 90d = 90 x 1d candles
         getBTCKlines('BTCUSDT', '1w', 52),   // 1y  = 52 x 1w candles
+        getHistoricalCVD('BTCUSDT', '4h', 42),
+        getHistoricalCVD('BTCUSDT', '1d', 30),
       ]);
     } catch (e) {
       console.warn("Lỗi khi lấy dữ liệu cho báo cáo:", e);
     }
+
+    const activeCvd7d = cvd7d.length > 0 ? cvd7d : (data.cvdHistory7d || []);
+    const activeCvd30d = cvd30d.length > 0 ? cvd30d : (data.cvdHistory30d || []);
 
     // --- Historical Data Helpers ---
     const klines48h = data.klines || [];
@@ -161,7 +166,13 @@ ${oiStr}
 - Lịch sử L/S Ratio 24h:
 ${lsStr}
 - CVD (Delta Khối lượng tích lũy trong ngày): ${cvd >= 0 ? '+' : ''}$${(cvd/1000).toFixed(1)}K (Buy: $${(buyVolume/1000).toFixed(1)}K, Sell: $${(sellVolume/1000).toFixed(1)}K)
-- Order Book Imbalance (OBI): ${orderBook ? orderBook.obiPercent + '%' : 'N/A'}
+- Mảng CVD 7 ngày (tích lũy khung 4h): [${activeCvd7d.map(c => c.cvd).join(', ')}]
+- Mảng Giá BTC 7 ngày tương ứng: [${activeCvd7d.map(c => c.price).join(', ')}]
+- Mảng CVD 30 ngày (tích lũy khung 1d): [${activeCvd30d.map(c => c.cvd).join(', ')}]
+- Mảng Giá BTC 30 ngày tương ứng: [${activeCvd30d.map(c => c.price).join(', ')}]
+- Order Book Imbalance (OBI) gộp: ${orderBook ? orderBook.obiPercent + '%' : 'N/A'} (Tín hiệu: ${orderBook?.signal || 'N/A'})
+  Breakdown OBI đa sàn:
+${orderBook?.exchanges ? orderBook.exchanges.map(ex => `  * ${ex.name}: ${ex.obi >= 0 ? '+' : ''}${ex.obi}%`).join('\n') : '  * N/A'}
 - Whale Walls Bid/Ask Ratio: ${whaleWalls ? (whaleWalls.bidRatio * 100).toFixed(1) + '% Bid' : 'N/A'} — Tín hiệu: ${whaleWalls?.signal || 'N/A'}
 - Whale Support Walls (Bid - vùng đỡ giá):
 ${whaleWalls ? fmtWalls(whaleWalls.whaleBids) : '  N/A'}
@@ -200,6 +211,7 @@ CÁC NGUYÊN TẮC PHÂN TÍCH BẮT BUỘC (RÀNG BUỘC CỦA HỆ THỐNG):
    - Phân tích mối tương quan chặt chẽ giữa Long/Short Ratio (đếm theo số tài khoản) và CVD/Volume (tính theo khối lượng tiền) kèm OBI.
    - Ví dụ quan trọng: Nếu lệnh Long chiếm ưu thế tuyệt đối (L/S Ratio cao, > 1.5) nhưng CVD âm nặng và OBI âm, hãy chỉ ra sự xung đột: phe Long chỉ đang đặt lệnh giới hạn (Limit Orders) thụ động để đỡ giá, trong khi phe Short/Bán đang rải lệnh thị trường (Market Orders) ép xuống rất rát. Điều này phản ánh xu hướng giảm chủ động chứ không phải tích cực mua lên.
    - Phân tích kỹ hiện tượng Short Squeeze (Giá tăng + Open Interest giảm) hoặc Long Squeeze (Giá giảm + Open Interest giảm) nếu có.
+   - Phân tích xu hướng CVD lịch sử 7 ngày (khung 4h) và 30 ngày (khung 1d) so với biến động giá BTC. Chỉ ra các phân kỳ (divergences) nếu có: ví dụ, nếu giá tạo đỉnh mới nhưng CVD lại đi ngang/đi xuống (Bán hấp thụ/Cạn kiệt lực mua) hoặc giá tạo đáy mới nhưng CVD tăng dần (Mua hấp thụ/Cá mập gom hàng).
 
 5. THANG ĐO QUY MÔ WHALE WALLS (SỔ LỆNH GỘP):
    - Dữ liệu Whale Walls được cung cấp là sổ lệnh gộp (Aggregated Order Book) từ 4 sàn lớn nhất: Binance Spot, Binance Futures, Bybit Spot, Bybit Futures.
@@ -236,7 +248,7 @@ Hành vi giá BTC so với đỉnh/đáy lịch sử 7d/30d/90d/1y. Phân tích 
 ### 3. DÒNG TIỀN TỔ CHỨC (ETF & CME)
 Dòng tiền ETF 7 ngày qua và sự hấp thụ lực bán. Vị thế CME COT trung-dài hạn và nhấn mạnh tính trễ đối với phân tích ngắn hạn.
 ### 4. PHÁI SINH & DÒNG TIỀN NGẮN HẠN (HFT)
-Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale Walls gộp theo thang đo quy mô (độ mạnh yếu của các bức tường hỗ trợ/kháng cự).
+Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale Walls gộp theo thang đo quy mô (độ mạnh yếu của các bức tường hỗ trợ/kháng cự). Nhận định về xu hướng CVD lịch sử 7 ngày và 30 ngày để tìm kiếm các dấu hiệu phân kỳ hoặc tích lũy/phân phối ngắn-trung hạn.
 ### 5. KẾT LUẬN & DỰ PHÓNG XU HƯỚNG
 - **BIAS**: Ghi rõ 🟢 BULLISH / 🔴 BEARISH / 🟡 NEUTRAL.
 - **ĐIỂM RỦI RO**: Cho điểm từ 1 (rất an toàn) đến 10 (rất rủi ro), giải thích ngắn gọn.
@@ -312,6 +324,67 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
             (Yêu cầu cung cấp OpenRouter API Key trong Cài đặt)
           </div>
         )}
+      </div>
+
+      {/* CVD Array Export / Display Panel */}
+      <div className="cvd-arrays-panel" style={{
+        background: 'var(--bg-slate-900)',
+        border: '1px solid var(--border-panel)',
+        borderRadius: '8px',
+        padding: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
+      }}>
+        <h4 className="font-mono text-emerald" style={{ marginTop: 0, marginBottom: 0, fontSize: '0.8rem' }}>
+          📊 DỮ LIỆU MẢNG CVD LỊCH SỬ (7D &amp; 30D)
+        </h4>
+        <p className="text-xs text-slate-400 font-mono" style={{ margin: 0, lineHeight: 1.4 }}>
+          Dữ liệu này được tự động đính kèm vào Input của AI để phân tích xu hướng. Bạn cũng có thể copy thủ công mảng dưới đây để sử dụng riêng.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div>
+            <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>MẢNG CVD 7 NGÀY (Khung 4h, {data.cvdHistory7d?.length || 0} điểm)</span>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(data.cvdHistory7d?.map(c => c.cvd) || []));
+                  alert("Đã copy mảng CVD 7d!");
+                }}
+                className="text-emerald hover:underline"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.62rem', fontFamily: 'var(--font-mono)' }}
+              >
+                Copy mảng CVD
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={JSON.stringify(data.cvdHistory7d?.map(c => c.cvd) || [])}
+              style={{ width: '100%', height: '50px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '6px', color: 'var(--text-contrast)', fontSize: '0.62rem', fontFamily: 'var(--font-mono)', resize: 'none', outline: 'none' }}
+            />
+          </div>
+
+          <div>
+            <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>MẢNG CVD 30 NGÀY (Khung 1d, {data.cvdHistory30d?.length || 0} điểm)</span>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(data.cvdHistory30d?.map(c => c.cvd) || []));
+                  alert("Đã copy mảng CVD 30d!");
+                }}
+                className="text-emerald hover:underline"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.62rem', fontFamily: 'var(--font-mono)' }}
+              >
+                Copy mảng CVD
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={JSON.stringify(data.cvdHistory30d?.map(c => c.cvd) || [])}
+              style={{ width: '100%', height: '50px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '6px', color: 'var(--text-contrast)', fontSize: '0.62rem', fontFamily: 'var(--font-mono)', resize: 'none', outline: 'none' }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

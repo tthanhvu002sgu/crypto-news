@@ -80,6 +80,38 @@ export const getDailyCVD = async (symbol = 'BTCUSDT') => {
   }
 };
 
+/** Get CVD historical data (7d/30d) based on klines */
+export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limit = 42) => {
+  try {
+    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+      params: { symbol, interval, limit },
+    });
+    
+    let cumulativeCvd = 0;
+    return res.data.map(k => {
+      // k[0]: open time, k[4]: close price, k[7]: quote asset volume, k[10]: taker buy quote asset volume
+      const openTime = k[0];
+      const closePrice = parseFloat(k[4]);
+      const quoteVol = parseFloat(k[7]);
+      const takerBuyVol = parseFloat(k[10]);
+      const takerSellVol = quoteVol - takerBuyVol;
+      const delta = takerBuyVol - takerSellVol;
+      cumulativeCvd += delta;
+      
+      return {
+        time: openTime,
+        cvd: Math.round(cumulativeCvd),
+        price: closePrice,
+        delta: Math.round(delta)
+      };
+    });
+  } catch (e) {
+    console.error(`[API] Historical CVD (${interval}, ${limit}):`, e.message);
+    return [];
+  }
+};
+
+
 /**
  * Lọc nến 1 phút có khối lượng Quote Asset (USD) lớn hơn threshold.
  * Tính toán Whale CVD dựa trên Taker Buy / Taker Sell của các nến đột biến này.
@@ -402,7 +434,8 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
 
   const fetchSource = async (name, url, parser) => {
     try {
-      const res = await axios.get(url, { timeout: 4000 });
+      const headers = name === 'Coinbase Spot' ? { 'User-Agent': 'Node.js' } : {};
+      const res = await axios.get(url, { headers, timeout: 4000 });
       return parser(res.data);
     } catch (e) {
       console.warn(`[API - OrderBook] Failed to fetch OBI depth from ${name}:`, e.message);
@@ -430,15 +463,21 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
     asks: data?.data?.asks || []
   });
 
+  const coinbaseParser = (data) => ({
+    bids: data.bids || [],
+    asks: data.asks || []
+  });
+
   try {
-    const sourceNames = ['Binance Futures', 'Bybit Futures', 'OKX Futures', 'Bitget Futures'];
-    const parsers = [binanceParser, bybitParser, okxParser, bitgetParser];
+    const sourceNames = ['Binance Futures', 'Bybit Futures', 'OKX Futures', 'Bitget Futures', 'Coinbase Spot'];
+    const parsers = [binanceParser, bybitParser, okxParser, bitgetParser, coinbaseParser];
 
     const results = await Promise.all([
       fetchSource('Binance Futures', urls.binance, binanceParser),
       fetchSource('Bybit Futures', urls.bybit, bybitParser),
       fetchSource('OKX Futures', urls.okx, okxParser),
-      fetchSource('Bitget Futures', urls.bitget, bitgetParser)
+      fetchSource('Bitget Futures', urls.bitget, bitgetParser),
+      fetchSource('Coinbase Spot', `https://api.exchange.coinbase.com/products/${base}-USD/book?level=2`, coinbaseParser)
     ]);
 
     let totalBidVol = 0;
@@ -484,7 +523,7 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
       const tot = bidVol + askVol;
       const exObi = tot > 0 ? ((bidVol - askVol) / tot) * 100 : 0;
       return {
-        name: sourceName.replace(' Futures', '').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT'),
+        name: sourceName.replace(' Futures', '').replace(' Spot', '').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT').replace('Coinbase', 'COIN'),
         obi: parseFloat(exObi.toFixed(1))
       };
     });

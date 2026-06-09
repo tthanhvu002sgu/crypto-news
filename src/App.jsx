@@ -7,7 +7,7 @@ import {
   fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics,
   getFREDMetric, getAlphaVantageQuote, getFREDStockQuote,
   getETFHoldings, getETFFlowHistory, getCMECot, getDXYQuote,
-  getFearAndGreed,
+  getFearAndGreed, getHistoricalCVD,
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import {
@@ -241,6 +241,8 @@ const INIT = {
   netLiquidity: 6050.25, // default baseline
   cotData: null,
   fngData: null,
+  cvdHistory7d: [],
+  cvdHistory30d: [],
 };
 
 // US Spot Bitcoin ETFs Baseline Holdings (Fallback)
@@ -404,7 +406,8 @@ function App() {
       onChainRes, onChainMetricsRes,
       etfHoldingsRes, etfHistoryRes,
       cotRes,
-      yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes
+      yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes,
+      cvd7dRes, cvd30dRes
     ] = await Promise.allSettled([
       getBTCTicker24h('BTCUSDT'),
       getBTCKlines('BTCUSDT', '1h', 48),
@@ -425,7 +428,9 @@ function App() {
       fetchCached('sp500Quote', () => getFREDStockQuote('SP500'), 30 * 60 * 1000, addLog, 'S&P 500 Index (Yahoo Finance)', force),
       fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS'), 30 * 60 * 1000, addLog, 'VIX Volatility Index (Yahoo Finance)', force),
       fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100'), 30 * 60 * 1000, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force),
-      fetchCached('fearAndGreed', () => getFearAndGreed(), 4 * 60 * 60 * 1000, addLog, 'Chỉ số Fear & Greed (alternative.me)', force)
+      fetchCached('fearAndGreed', () => getFearAndGreed(), 4 * 60 * 60 * 1000, addLog, 'Chỉ số Fear & Greed (alternative.me)', force),
+      fetchCached('cvdHistory7d', () => getHistoricalCVD('BTCUSDT', '4h', 42), 30 * 60 * 1000, addLog, 'Lịch sử CVD 7d (Binance)', force),
+      fetchCached('cvdHistory30d', () => getHistoricalCVD('BTCUSDT', '1d', 30), 2 * 60 * 60 * 1000, addLog, 'Lịch sử CVD 30d (Binance)', force)
     ]);
 
     const get = (res, label, hasKey) => {
@@ -462,6 +467,8 @@ function App() {
     const vix             = vixRes.status === 'fulfilled' ? vixRes.value : null;
     const qqq             = qqqRes.status === 'fulfilled' ? qqqRes.value : null;
     const fngData         = fngRes.status === 'fulfilled' ? fngRes.value : null;
+    const cvdHistory7d    = cvd7dRes.status === 'fulfilled' ? cvd7dRes.value : null;
+    const cvdHistory30d   = cvd30dRes.status === 'fulfilled' ? cvd30dRes.value : null;
 
     const now = new Date().toLocaleString('vi-VN');
     addLog(`Đồng bộ hoàn tất lúc ${now}`, 'system');
@@ -507,6 +514,8 @@ function App() {
       netLiquidity:   netLiquidity    ?? prev.netLiquidity,
       cotData:        cotData         ?? prev.cotData,
       fngData:        fngData         ?? prev.fngData,
+      cvdHistory7d:   cvdHistory7d?.length > 0 ? cvdHistory7d : prev.cvdHistory7d,
+      cvdHistory30d:  cvdHistory30d?.length > 0 ? cvdHistory30d : prev.cvdHistory30d,
     }));
 
     setLastSync(now);
