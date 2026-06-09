@@ -1,31 +1,53 @@
-import { OpenRouter } from "@openrouter/sdk";
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2 } from 'lucide-react';
-import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
+
+const cleanLatex = (text) => {
+  if (!text) return text;
+  return text
+    .replace(/\$?\\ref\$?/gi, '')
+    .replace(/\$?\\rightarrow\$?/gi, '->')
+    .replace(/\$?\\delta\$?/gi, 'delta')
+    .replace(/\$?\\Delta\$?/gi, 'Delta')
+    .replace(/\\text\{([^}]+)\}/gi, '$1')
+    .replace(/\\mathrm\{([^}]+)\}/gi, '$1')
+    .replace(/\$([-+0-9.,]+)\$/g, '$1');
+};
 
 export default function SummaryTab({ 
   data, apiKeys, cvd, buyVolume, sellVolume, etfHoldings, etfHistory,
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading
 }) {
 
+  const provider = 'openrouter';
+  const selectedModel = 'google/gemma-4-31b-it:free';
+
   const generateReport = async () => {
-    const apiKey = apiKeys?.openRouter?.trim();
-    if (!apiKey) {
+    const openRouterKey = apiKeys?.openRouter?.trim();
+    const geminiKey = apiKeys?.gemini?.trim();
+
+    if (provider === 'openrouter' && !openRouterKey) {
       alert("Vui lòng nhập OpenRouter API Key trong phần Cài đặt API!");
+      return;
+    }
+    if (provider === 'gemini' && !geminiKey) {
+      alert("Vui lòng nhập Google AI Studio (Gemini) API Key trong phần Cài đặt API!");
       return;
     }
 
     setIsAiLoading(true);
     setAiSummary('');
 
-    // Fetch HFT Data + multi-timeframe klines for the report
+    // Fetch HFT Data + multi-timeframe klines + latest calendar/news for the report
     let orderBook = null;
     let whaleWalls = null;
     let klines7d = [], klines30d = [], klines90d = [], klines1y = [];
     let cvd7d = [], cvd30d = [];
+    let latestNews = [];
     try {
-      [orderBook, whaleWalls, klines7d, klines30d, klines90d, klines1y, cvd7d, cvd30d] = await Promise.all([
+      [orderBook, whaleWalls, klines7d, klines30d, klines90d, klines1y, cvd7d, cvd30d, latestNews] = await Promise.all([
         getOrderBookDepth('BTCUSDT', 100),
         getWhaleWalls(),
         getBTCKlines('BTCUSDT', '4h', 42),   // 7d  = 42 x 4h candles
@@ -34,6 +56,7 @@ export default function SummaryTab({
         getBTCKlines('BTCUSDT', '1w', 52),   // 1y  = 52 x 1w candles
         getHistoricalCVD('BTCUSDT', '4h', 42),
         getHistoricalCVD('BTCUSDT', '1d', 30),
+        fetchRealtimeFeed(),
       ]);
     } catch (e) {
       console.warn("Lỗi khi lấy dữ liệu cho báo cáo:", e);
@@ -41,6 +64,7 @@ export default function SummaryTab({
 
     const activeCvd7d = cvd7d.length > 0 ? cvd7d : (data.cvdHistory7d || []);
     const activeCvd30d = cvd30d.length > 0 ? cvd30d : (data.cvdHistory30d || []);
+    const activeNews = latestNews && latestNews.length > 0 ? latestNews : (data.news || []);
 
     // --- Historical Data Helpers ---
     const klines48h = data.klines || [];
@@ -179,13 +203,11 @@ ${whaleWalls ? fmtWalls(whaleWalls.whaleBids) : '  N/A'}
 - Whale Resistance Walls (Ask - vùng chặn giá):
 ${whaleWalls ? fmtWalls(whaleWalls.whaleAsks) : '  N/A'}
 
-## 5. TIN TỨC NỔI BẬT
-${data.news.slice(0, 4).map(n => '- ' + n.title + ' (' + n.tag + ')').join('\n')}
+## 5. TIN TỨC NỔI BẬT & LỊCH SỰ KIỆN VĨ MÔ HÔM NAY (MỚI NHẤT TRONG NGÀY)
+${activeNews.slice(0, 15).map(n => '- ' + n.title + ' (' + n.tag + ')').join('\n')}
     `;
 
     try {
-      const openrouter = new OpenRouter({ apiKey: apiKey });
-
       const systemPrompt = `Bạn là chuyên gia phân tích vĩ mô và giao dịch tiền điện tử (Crypto) lão luyện. Hãy phân tích thị trường dựa trên DỮ LIỆU LỊCH SỬ ĐA KHUNG THỜI GIAN và dữ liệu hiện tại được cung cấp. Báo cáo bằng tiếng Việt, định dạng Markdown rõ ràng, chuyên nghiệp. Không bịa đặt dữ liệu.
 
 CÁC NGUYÊN TẮC PHÂN TÍCH BẮT BUỘC (RÀNG BUỘC CỦA HỆ THỐNG):
@@ -258,34 +280,55 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
 
 ⚠️ Báo cáo phải khách quan, logic chặt chẽ, dựa hoàn toàn trên các con số thực tế được cung cấp. Cuối báo cáo thêm cảnh báo: "Báo cáo này chỉ mang tính chất tham khảo, không phải lời khuyên đầu tư. Hãy tự nghiên cứu (DYOR) trước khi ra quyết định."`;
 
-      const modelsToTry = [
-        "google/gemma-4-31b-it:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-4-26b-a4b-it:free",
-        "qwen/qwen3-coder:free"
+      let url = "";
+      let headers = { "Content-Type": "application/json" };
+
+      if (provider === 'openrouter') {
+        url = "https://openrouter.ai/api/v1/chat/completions";
+        headers["Authorization"] = `Bearer ${openRouterKey}`;
+      } else {
+        url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+        headers["Authorization"] = `Bearer ${geminiKey}`;
+      }
+
+      const modelsToTry = provider === 'openrouter' ? [
+        selectedModel,
+        ...["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free", "google/gemma-4-26b-a4b-it:free", "qwen/qwen3-coder:free"].filter(m => m !== selectedModel)
+      ] : [
+        selectedModel,
+        ...["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"].filter(m => m !== selectedModel)
       ];
 
-      let stream = null;
-      let errorMsg = "";
+      let response = null;
       let successfulModel = "";
+      let errorMsg = "";
 
       for (const modelName of modelsToTry) {
         try {
-          console.log(`[AI] Đang thử model: ${modelName}`);
-          stream = await openrouter.chat.send({
-            chatRequest: {
+          console.log(`[AI] Đang thử model: ${modelName} (${provider})`);
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
               model: modelName,
-              temperature: 0.3,
-              max_tokens: 3000,
               messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: promptData }
               ],
+              temperature: 0.3,
+              max_tokens: 3000,
               stream: true
-            }
+            })
           });
-          console.log(`[AI] Thành công với model: ${modelName}`);
+
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(errText || `HTTP status ${res.status}`);
+          }
+
+          response = res;
           successfulModel = modelName;
+          console.log(`[AI] Thành công với model: ${modelName}`);
           break;
         } catch (e) {
           console.warn(`[AI] Thất bại với model ${modelName}:`, e.message);
@@ -293,18 +336,60 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
         }
       }
 
-      if (!stream) {
-        throw new Error(errorMsg || "Tất cả các model miễn phí đều lỗi.");
+      if (!response) {
+        throw new Error(errorMsg || "Không thể kết nối đến nhà cung cấp AI.");
       }
 
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          setAiSummary(prev => prev + content);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Split by either \r\n, \n, or \r
+        const lines = buffer.split(/\r?\n|\r/);
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const cleaned = line.trim();
+          if (!cleaned) continue;
+          if (cleaned === "data: [DONE]") continue;
+
+          let dataStr = "";
+          if (cleaned.startsWith("data: ")) {
+            dataStr = cleaned.slice(6);
+          } else if (cleaned.startsWith("data:")) {
+            dataStr = cleaned.slice(5);
+          }
+
+          if (dataStr) {
+            dataStr = dataStr.trim();
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.error) {
+                throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+              }
+              const choice = parsed.choices?.[0];
+              if (choice) {
+                if (choice.finish_reason === "safety") {
+                  setAiSummary(prev => prev + "\n\n**[Báo cáo bị dừng do bộ lọc an toàn của AI (Safety Filter)]**");
+                }
+                const text = choice.delta?.content || "";
+                if (text) {
+                  setAiSummary(prev => cleanLatex(prev + text));
+                }
+              }
+            } catch (e) {
+              console.warn("[AI Stream Parse Error]", e, "Line:", cleaned);
+            }
+          }
         }
       }
-      setAiSummary(prev => prev + `\n\n---\n*Báo cáo được tạo bởi model: **${successfulModel}** qua OpenRouter.*`);
+
+      setAiSummary(prev => prev + `\n\n---\n*Báo cáo được tạo bởi model: **${successfulModel}** (${provider === 'openrouter' ? 'OpenRouter' : 'Google AI Studio'})*`);
     } catch (err) {
       console.error(err);
       setAiSummary(prev => prev + "\n\n**Lỗi khi tạo báo cáo:** " + err.message);
@@ -329,6 +414,7 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
           {isAiLoading ? 'ĐANG TẠO BÁO CÁO...' : 'TẠO BÁO CÁO AI'}
         </button>
       </div>
+
 
       <div className="summary-content font-mono" style={{ 
         background: 'var(--bg-slate-950)', 

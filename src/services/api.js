@@ -355,40 +355,71 @@ export const fetchWithJina = async (url, format = 'text') => {
   }
 };
 
-// ─── NEWS RSS (multi-source with fallback) ─────────────────────────────────────
-
-const RSS_API_BASE = 'https://api.rss2json.com/v1/api.json?rss_url=';
-
-const NEWS_SOURCES = [
-  { url: 'https://cointelegraph.com/rss',                  tag: 'CoinTelegraph', cat: 'crypto' },
-  { url: 'https://decrypt.co/feed',                        tag: 'Decrypt',       cat: 'crypto' },
-  { url: 'https://www.theblock.co/rss.xml',                tag: 'The Block',     cat: 'crypto' },
-  { url: 'https://medium.com/feed/coinshares',             tag: 'CoinShares',    cat: 'crypto' },
-  { url: 'https://feeds.reuters.com/reuters/businessNews', tag: 'Reuters',       cat: 'macro'  },
-  { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', tag: 'WSJ Markets',   cat: 'macro'  },
-];
-
-const fetchRSS = async (src) => {
-  try {
-    const res = await axios.get(`${RSS_API_BASE}${encodeURIComponent(src.url)}`, { timeout: 6000 });
-    if (res.data?.status !== 'ok') return [];
-    return (res.data.items || []).slice(0, 5).map(item => ({
-      time: new Date(item.pubDate),
-      tag: src.tag,
-      cat: src.cat,
-      title: item.title || '',
-      snippet: (item.description || '').replace(/<[^>]+>/g, '').trim().substring(0, 130),
-      link: item.link,
-    }));
-  } catch {
-    return [];
-  }
-};
+// ─── NEWS RSS & ECONOMIC CALENDAR (Today/Real-time Macro Events) ──────────────────
 
 export const fetchRealtimeFeed = async () => {
-  const results = await Promise.allSettled(NEWS_SOURCES.map(fetchRSS));
+  const now = new Date();
   let combined = [];
-  results.forEach(r => { if (r.status === 'fulfilled') combined = [...combined, ...r.value]; });
+
+  // 1. Fetch economic calendar events from FairEconomy
+  try {
+    const rawData = await fetchWithJina('https://nfs.faireconomy.media/ff_calendar_thisweek.json', 'text');
+    if (rawData) {
+      const events = JSON.parse(rawData);
+      if (Array.isArray(events)) {
+        events.forEach(e => {
+          if (!e.date) return;
+          const eventTime = new Date(e.date);
+          const t = eventTime.getTime();
+          
+          // Filter: within 24 hours of now + high impact + target countries (USD, EUR, JPY)
+          const isNear = Math.abs(now.getTime() - t) <= 24 * 60 * 60 * 1000;
+          const isHighImpact = e.impact?.toLowerCase() === 'high';
+          const isTargetCountry = ['USD', 'JPY', 'EUR'].includes(e.country?.toUpperCase());
+          
+          if (isNear && isHighImpact && isTargetCountry) {
+            combined.push({
+              time: eventTime,
+              tag: `Calendar (${e.country})`,
+              cat: 'macro',
+              title: `[LỊCH SỰ KIỆN] ${e.title} (Dự báo: ${e.forecast || 'N/A'}, Trước đó: ${e.previous || 'N/A'})`,
+              link: 'https://www.forexfactory.com/calendar',
+            });
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[API] Error fetching economic calendar:', e.message);
+  }
+
+  // 2. Fetch geopolitical, war, and interest rate news from Google News search
+  try {
+    const query = encodeURIComponent('war OR conflict OR military OR geopolitics OR "interest rate" OR "lãi suất" OR Fed OR BOJ OR ECB');
+    const googleNewsUrl = `https://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`;
+    const res = await axios.get(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(googleNewsUrl)}`, { timeout: 8000 });
+    
+    if (res.data?.status === 'ok' && Array.isArray(res.data.items)) {
+      res.data.items.forEach(item => {
+        if (!item.pubDate) return;
+        const pubDate = new Date(item.pubDate);
+        
+        // Filter: within the last 24 hours
+        if (now.getTime() - pubDate.getTime() <= 24 * 60 * 60 * 1000) {
+          combined.push({
+            time: pubDate,
+            tag: 'Geopolitics/Macro',
+            cat: 'macro',
+            title: item.title || '',
+            link: item.link || '',
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.error('[API] Error fetching geopolitical news:', e.message);
+  }
+
   return combined
     .sort((a, b) => b.time - a.time)
     .map(item => ({ ...item, timeStr: item.time.toLocaleString('vi-VN') }));

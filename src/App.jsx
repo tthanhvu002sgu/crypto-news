@@ -349,9 +349,13 @@ function App() {
   const [apiKeys, setApiKeys] = useState(() => {
     try {
       const saved = localStorage.getItem('app-api-keys');
-      return saved ? JSON.parse(saved) : { fred: '', alphaVantage: '', openRouter: '' };
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { fred: '', alphaVantage: '', openRouter: '', gemini: '', ...parsed };
+      }
+      return { fred: '', alphaVantage: '', openRouter: '', gemini: '' };
     } catch {
-      return { fred: '', alphaVantage: '', openRouter: '' };
+      return { fred: '', alphaVantage: '', openRouter: '', gemini: '' };
     }
   });
   const [showSettings, setShowSettings] = useState(false);
@@ -884,21 +888,7 @@ function App() {
               />
             </div>
 
-            <div className="sidebar-divider" />
 
-            {/* News Feed */}
-            <h3 className="widget-title font-mono">
-              <LiveDot /> DÒNG TIN VĨ MÔ &amp; CRYPTO
-            </h3>
-            <div className="news-feed">
-              {data.news.length === 0 ? (
-                <div className="news-empty font-mono">
-                  {isSyncing ? 'Đang tải tin tức...' : 'Nhấn SYNC để tải tin tức'}
-                </div>
-              ) : (
-                data.news.map((item, i) => <NewsItem key={i} item={item} />)
-              )}
-            </div>
 
           </div>
         </aside>
@@ -1375,6 +1365,20 @@ function App() {
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
                 Lấy miễn phí tại: <a href="https://openrouter.ai/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>openrouter.ai</a>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>GEMINI API KEY (GOOGLE AI STUDIO)</label>
+              <input
+                type="password"
+                placeholder="Nhập Gemini API key..."
+                value={apiKeys.gemini || ''}
+                onChange={(e) => setApiKeys(p => ({ ...p, gemini: e.target.value }))}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '8px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
+              />
+              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
+                Lấy miễn phí tại: <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>aistudio.google.com</a>
               </span>
             </div>
 
