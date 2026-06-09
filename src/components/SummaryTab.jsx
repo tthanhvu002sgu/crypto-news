@@ -29,11 +29,11 @@ export default function SummaryTab({
     const geminiKey = apiKeys?.gemini?.trim();
 
     if (provider === 'openrouter' && !openRouterKey) {
-      alert("Vui lòng nhập OpenRouter API Key trong phần Cài đặt API!");
+      alert("Please enter your OpenRouter API Key in the API Settings!");
       return;
     }
     if (provider === 'gemini' && !geminiKey) {
-      alert("Vui lòng nhập Google AI Studio (Gemini) API Key trong phần Cài đặt API!");
+      alert("Please enter your Google AI Studio (Gemini) API Key in the API Settings!");
       return;
     }
 
@@ -59,7 +59,7 @@ export default function SummaryTab({
         fetchRealtimeFeed(),
       ]);
     } catch (e) {
-      console.warn("Lỗi khi lấy dữ liệu cho báo cáo:", e);
+      console.warn("Error fetching data for report:", e);
     }
 
     const activeCvd7d = cvd7d.length > 0 ? cvd7d : (data.cvdHistory7d || []);
@@ -71,7 +71,7 @@ export default function SummaryTab({
     // Sample every 4 candles (1h each = every 4h) to reduce tokens
     const klinesSampled = klines48h.filter((_, i) => i % 4 === 0).slice(-12);
     const klinesStr = klinesSampled.length > 0
-      ? klinesSampled.map(k => `  ${new Date(k.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}: ${k.close.toFixed(0)}`).join('\n')
+      ? klinesSampled.map(k => `  ${new Date(k.time).toLocaleString('en-US', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}: ${k.close.toFixed(0)}`).join('\n')
       : 'N/A';
 
     const priceNow = data.btc?.price || klines48h[klines48h.length - 1]?.close || 0;
@@ -85,17 +85,17 @@ export default function SummaryTab({
     // Sample every 4 records (1h each = every 4h)
     const lsSampled = lsHistory24h.filter((_, i) => i % 4 === 0).slice(-6);
     const lsStr = lsSampled.length > 0
-      ? lsSampled.map(r => `  ${new Date(r.timestamp).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit' })}: Ratio=${parseFloat(r.longShortRatio).toFixed(2)} (Long ${(parseFloat(r.longAccount)*100).toFixed(1)}% / Short ${(parseFloat(r.shortAccount)*100).toFixed(1)}%)`).join('\n')
+      ? lsSampled.map(r => `  ${new Date(r.timestamp).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })}: Ratio=${parseFloat(r.longShortRatio).toFixed(2)} (Long ${(parseFloat(r.longAccount)*100).toFixed(1)}% / Short ${(parseFloat(r.shortAccount)*100).toFixed(1)}%)`).join('\n')
       : 'N/A';
 
     const oiHistory24h = data.oiHistory || [];
     const oiSampled = oiHistory24h.filter((_, i) => i % 4 === 0).slice(-6);
     const oiStr = oiSampled.length > 0
-      ? oiSampled.map(r => `  ${new Date(r.timestamp).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit' })}: ${parseFloat(r.sumOpenInterest).toFixed(0)} BTC ($${parseFloat(r.sumOpenInterestValue).toFixed(0)})`).join('\n')
+      ? oiSampled.map(r => `  ${new Date(r.timestamp).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })}: ${parseFloat(r.sumOpenInterest).toFixed(0)} BTC ($${parseFloat(r.sumOpenInterestValue).toFixed(0)})`).join('\n')
       : 'N/A';
     const oiFirst = oiSampled[0] ? parseFloat(oiSampled[0].sumOpenInterest) : null;
     const oiLast = oiSampled[oiSampled.length - 1] ? parseFloat(oiSampled[oiSampled.length - 1].sumOpenInterest) : null;
-    const oiTrend = oiFirst && oiLast ? (oiLast > oiFirst ? 'TĂNG' : 'GIẢM') : 'N/A';
+    const oiTrend = oiFirst && oiLast ? (oiLast > oiFirst ? 'UP' : 'DOWN') : 'N/A';
 
     const etfFlow7d = etfHistory?.slice(-7) || [];
     const etfFlowStr = etfFlow7d.length > 0
@@ -111,174 +111,174 @@ export default function SummaryTab({
       const high = Math.max(...candles.map(k => k.high));
       const low  = Math.min(...candles.map(k => k.low));
       const chg  = first > 0 ? (((last - first) / first) * 100).toFixed(2) : '?';
-      const startDate = new Date(candles[0].time).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' });
-      return `${label}: Giá đầu kỳ ${startDate}: $${first.toFixed(0)} → Hiện tại: $${last.toFixed(0)} (${chg > 0 ? '+' : ''}${chg}%) | High: $${high.toFixed(0)} | Low: $${low.toFixed(0)}`;
+      const startDate = new Date(candles[0].time).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      return `${label}: Initial Price on ${startDate}: $${first.toFixed(0)} → Current: $${last.toFixed(0)} (${chg > 0 ? '+' : ''}${chg}%) | High: $${high.toFixed(0)} | Low: $${low.toFixed(0)}`;
     };
 
     // --- Sampled candles for 7d trend line (sample every 2 of 42 = 21 points) ---
     const klines7dSampled = klines7d.filter((_, i) => i % 2 === 0);
     const klines7dStr = klines7dSampled.length > 0
-      ? klines7dSampled.map(k => `  ${new Date(k.time).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}: $${k.close.toFixed(0)}`).join('\n')
+      ? klines7dSampled.map(k => `  ${new Date(k.time).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' })}: $${k.close.toFixed(0)}`).join('\n')
       : 'N/A';
 
     // --- Whale Walls price-level details ---
     const fmtWalls = (walls) => {
-      if (!walls || walls.length === 0) return '  Không có dữ liệu';
+      if (!walls || walls.length === 0) return '  No data';
       return walls.slice(0, 5).map(w => {
         const srcStr = Object.entries(w.sources || {})
           .map(([name, val]) => `${name}: $${(val/1e6).toFixed(1)}M`)
           .join(', ');
-        return `  $${w.price.toFixed(0)} — ${(w.usdValue/1e6).toFixed(2)}M USD (${w.qty.toFixed(2)} BTC) [Gộp từ: ${srcStr}]`;
+        return `  $${w.price.toFixed(0)} — ${(w.usdValue/1e6).toFixed(2)}M USD (${w.qty.toFixed(2)} BTC) [Aggregated from: ${srcStr}]`;
       }).join('\n');
     };
 
     // Format Data for Prompt
     const promptData = `
-# DỮ LIỆU THỊ TRƯỜNG
+# MARKET DATA
 
-## 1. VĨ MÔ (MACRO)
-- Thanh khoản ròng Mỹ: ${data.netLiquidity ? '$' + data.netLiquidity + 'B' : 'N/A'}
-- Lãi suất Fed: ${data.fedFundsRate ? data.fedFundsRate + '%' : 'N/A'}
-- Lợi suất trái phiếu 10 năm (10Y Yield): ${data.tenYearYield ? data.tenYearYield + '%' : 'N/A'}
-- Chỉ số DXY: ${data.dxy ? data.dxy.toFixed(2) : 'N/A'}
-- VIX (Chỉ số biến động/hoảng loạn): ${data.vix?.price != null ? data.vix.price.toFixed(2) : 'N/A'}
-- High Yield Spread (Rủi ro vỡ nợ): ${data.highYield ? data.highYield + '%' : 'N/A'}
-- Lạm phát (CPI): ${data.cpi ? data.cpi : 'N/A'}
-- Thất nghiệp Mỹ: ${data.unrate ? data.unrate + '%' : 'N/A'}
-- Chứng khoán: S&P 500 (${data.sp500?.price || 'N/A'}), Nasdaq 100 (${data.qqq?.price || 'N/A'})
+## 1. MACRO
+- US Net Liquidity: ${data.netLiquidity ? '$' + data.netLiquidity + 'B' : 'N/A'}
+- Fed Funds Rate: ${data.fedFundsRate ? data.fedFundsRate + '%' : 'N/A'}
+- 10Y Bond Yield: ${data.tenYearYield ? data.tenYearYield + '%' : 'N/A'}
+- DXY Index: ${data.dxy ? data.dxy.toFixed(2) : 'N/A'}
+- VIX (Volatility Index): ${data.vix?.price != null ? data.vix.price.toFixed(2) : 'N/A'}
+- High Yield Spread (Default Risk): ${data.highYield ? data.highYield + '%' : 'N/A'}
+- Inflation (CPI): ${data.cpi ? data.cpi : 'N/A'}
+- US Unemployment: ${data.unrate ? data.unrate + '%' : 'N/A'}
+- Equities: S&P 500 (${data.sp500?.price || 'N/A'}), Nasdaq 100 (${data.qqq?.price || 'N/A'})
 - M2 Supply: ${data.m2Supply ? '$' + data.m2Supply + 'B' : 'N/A'}
 
 ## 2. CRYPTO GLOBAL & ON-CHAIN
-### Giá BTC Hiện tại & Biến động 48 giờ qua
-- Giá hiện tại: ${data.btc?.price ? '$' + data.btc.price : 'N/A'} | 24h Change: ${data.btc?.change ? data.btc.change + '%' : 'N/A'} | Volume 24h: ${data.btc?.volume ? '$' + (data.btc.volume/1e9).toFixed(2) + 'B' : 'N/A'}
-- Biến động 48h: ${price48hChange !== 'N/A' ? price48hChange + '%' : 'N/A'} | High: $${priceHigh48h} | Low: $${priceLow48h}
-- Lịch sử giá BTC (mẫu mỗi 4 giờ trong 48h gần nhất):
+### Current BTC Price & 48h Volatility
+- Current Price: ${data.btc?.price ? '$' + data.btc.price : 'N/A'} | 24h Change: ${data.btc?.change ? data.btc.change + '%' : 'N/A'} | 24h Volume: ${data.btc?.volume ? '$' + (data.btc.volume/1e9).toFixed(2) + 'B' : 'N/A'}
+- 48h Change: ${price48hChange !== 'N/A' ? price48hChange + '%' : 'N/A'} | High: $${priceHigh48h} | Low: $${priceLow48h}
+- BTC Price History (sampled every 4 hours in the last 48h):
 ${klinesStr}
 
-### So sánh giá BTC đa khung thời gian
-- ${tfStats(klines7d,  '7 ngày  ')}
-- ${tfStats(klines30d, '30 ngày ')}
-- ${tfStats(klines90d, '90 ngày ')}
-- ${tfStats(klines1y,  '1 năm   ')}
-- Diễn biến giá 7 ngày (mẫu mỗi 8 giờ):
+### BTC Price Multi-timeframe Comparison
+- ${tfStats(klines7d,  '7 days ')}
+- ${tfStats(klines30d, '30 days')}
+- ${tfStats(klines90d, '90 days')}
+- ${tfStats(klines1y,  '1 year ')}
+- 7-day price trend (sampled every 8 hours):
 ${klines7dStr}
 
 
-### Altcoin chính (đo risk appetite)
+### Major Altcoins (Risk Appetite)
 - ETH: ${data.ethPrice?.price ? '$' + data.ethPrice.price + ' (' + (data.ethPrice.change || 'N/A') + '%)' : 'N/A'}
 - SOL: ${data.solPrice?.price ? '$' + data.solPrice.price + ' (' + (data.solPrice.change || 'N/A') + '%)' : 'N/A'}
 
-### Dữ liệu On-chain
+### On-chain Data
 - Dominance: BTC (${data.globalData?.btcDominance || 'N/A'}%), ETH (${data.globalData?.ethDominance || 'N/A'}%)
-- Tổng vốn hóa thị trường: ${data.globalData?.totalMarketCap ? '$' + (data.globalData.totalMarketCap/1e9).toFixed(0) + 'B' : 'N/A'}
-- Nguồn cung Stablecoin (Sức mua): USDT (${data.stablecoins?.usdt ? '$' + (data.stablecoins.usdt/1e9).toFixed(1) + 'B' : 'N/A'})
+- Total Market Cap: ${data.globalData?.totalMarketCap ? '$' + (data.globalData.totalMarketCap/1e9).toFixed(0) + 'B' : 'N/A'}
+- Stablecoin Supply (Purchasing Power): USDT (${data.stablecoins?.usdt ? '$' + (data.stablecoins.usdt/1e9).toFixed(1) + 'B' : 'N/A'})
 - BTC Hashrate: ${data.onChain?.hashRate || 'N/A'} EH/s
-- Ví đang hoạt động (Active Addresses): ${data.onChainMetrics?.activeAddresses || 'N/A'}
+- Active Addresses: ${data.onChainMetrics?.activeAddresses || 'N/A'}
 
-## 3. DÒNG TIỀN TỔ CHỨC (CME & ETF)
-- Tổng BTC ETF đang nắm giữ: ${etfHoldings?.total ? etfHoldings.total.toLocaleString() + ' BTC (~$' + ((etfHoldings.total * (data.btc?.price || 0)) / 1e9).toFixed(1) + 'B)' : 'N/A'}
-- Net Flow ETF 7 ngày qua (tổng: ${etfNetTotal > 0 ? '+' : ''}${etfNetTotal.toFixed(0)}M USD):
+## 3. INSTITUTIONAL FLOWS (CME & ETF)
+- Total BTC ETF Holdings: ${etfHoldings?.total ? etfHoldings.total.toLocaleString() + ' BTC (~$' + ((etfHoldings.total * (data.btc?.price || 0)) / 1e9).toFixed(1) + 'B)' : 'N/A'}
+- 7-day ETF Net Flow (Total: ${etfNetTotal > 0 ? '+' : ''}${etfNetTotal.toFixed(0)}M USD):
 ${etfFlowStr}
-- CME COT (Vị thế các quỹ): Asset Managers Net (${data.cotData?.assetManager?.net || 'N/A'}), Leveraged Funds Net (${data.cotData?.leveragedFunds?.net || 'N/A'})
+- CME COT (Fund Positions): Asset Managers Net (${data.cotData?.assetManager?.net || 'N/A'}), Leveraged Funds Net (${data.cotData?.leveragedFunds?.net || 'N/A'})
 
-## 4. PHÁI SINH & NGẮN HẠN (HFT)
+## 4. DERIVATIVES & HIGH-FREQUENCY TRADING (HFT)
 - Funding Rate: ${data.fundingRate != null ? (data.fundingRate * 100).toFixed(4) + '%' : 'N/A'}
-- Open Interest hiện tại: ${data.openInterest ? (data.openInterest / 1000).toFixed(1) + 'K BTC' : 'N/A'} (Xu hướng 24h: ${oiTrend})
-- Lịch sử Open Interest 24h (mẫu mỗi 4 giờ):
+- Current Open Interest: ${data.openInterest ? (data.openInterest / 1000).toFixed(1) + 'K BTC' : 'N/A'} (24h Trend: ${oiTrend})
+- 24h Open Interest History (sampled every 4 hours):
 ${oiStr}
-- Long/Short Ratio hiện tại: ${lsHistory24h.length > 0 ? parseFloat(lsHistory24h[lsHistory24h.length - 1].longShortRatio).toFixed(3) : 'N/A'}
-- Lịch sử L/S Ratio 24h:
+- Current Long/Short Ratio: ${lsHistory24h.length > 0 ? parseFloat(lsHistory24h[lsHistory24h.length - 1].longShortRatio).toFixed(3) : 'N/A'}
+- 24h L/S Ratio History:
 ${lsStr}
-- CVD (Delta Khối lượng tích lũy trong ngày): ${cvd >= 0 ? '+' : ''}$${(cvd/1000).toFixed(1)}K (Buy: $${(buyVolume/1000).toFixed(1)}K, Sell: $${(sellVolume/1000).toFixed(1)}K)
-- Mảng CVD 7 ngày (tích lũy khung 4h): [${activeCvd7d.map(c => c.cvd).join(', ')}]
-- Mảng Giá BTC 7 ngày tương ứng: [${activeCvd7d.map(c => c.price).join(', ')}]
-- Mảng CVD 30 ngày (tích lũy khung 1d): [${activeCvd30d.map(c => c.cvd).join(', ')}]
-- Mảng Giá BTC 30 ngày tương ứng: [${activeCvd30d.map(c => c.price).join(', ')}]
-- Order Book Imbalance (OBI) gộp: ${orderBook ? orderBook.obiPercent + '%' : 'N/A'} (Tín hiệu: ${orderBook?.signal || 'N/A'})
-  Breakdown OBI đa sàn:
+- CVD (Cumulative Volume Delta Intraday): ${cvd >= 0 ? '+' : ''}$${(cvd/1000).toFixed(1)}K (Buy: $${(buyVolume/1000).toFixed(1)}K, Sell: $${(sellVolume/1000).toFixed(1)}K)
+- 7-day CVD Array (4h TF accumulation): [${activeCvd7d.map(c => c.cvd).join(', ')}]
+- 7-day BTC Price Array corresponding: [${activeCvd7d.map(c => c.price).join(', ')}]
+- 30-day CVD Array (1d TF accumulation): [${activeCvd30d.map(c => c.cvd).join(', ')}]
+- 30-day BTC Price Array corresponding: [${activeCvd30d.map(c => c.price).join(', ')}]
+- Aggregated Order Book Imbalance (OBI): ${orderBook ? orderBook.obiPercent + '%' : 'N/A'} (Signal: ${orderBook?.signal || 'N/A'})
+  Multi-exchange OBI Breakdown:
 ${orderBook?.exchanges ? orderBook.exchanges.map(ex => `  * ${ex.name}: ${ex.obi >= 0 ? '+' : ''}${ex.obi}%`).join('\n') : '  * N/A'}
-- Whale Walls Bid/Ask Ratio: ${whaleWalls ? (whaleWalls.bidRatio * 100).toFixed(1) + '% Bid' : 'N/A'} — Tín hiệu: ${whaleWalls?.signal || 'N/A'}
-- Whale Support Walls (Bid - vùng đỡ giá):
+- Whale Walls Bid/Ask Ratio: ${whaleWalls ? (whaleWalls.bidRatio * 100).toFixed(1) + '% Bid' : 'N/A'} — Signal: ${whaleWalls?.signal || 'N/A'}
+- Whale Support Walls (Bids):
 ${whaleWalls ? fmtWalls(whaleWalls.whaleBids) : '  N/A'}
-- Whale Resistance Walls (Ask - vùng chặn giá):
+- Whale Resistance Walls (Asks):
 ${whaleWalls ? fmtWalls(whaleWalls.whaleAsks) : '  N/A'}
 
-## 5. TIN TỨC NỔI BẬT & LỊCH SỰ KIỆN VĨ MÔ HÔM NAY (MỚI NHẤT TRONG NGÀY)
+## 5. TOP NEWS & MACRO EVENTS TODAY (LATEST)
 ${activeNews.slice(0, 15).map(n => '- ' + n.title + ' (' + n.tag + ')').join('\n')}
     `;
 
     try {
-      const systemPrompt = `Bạn là chuyên gia phân tích vĩ mô và giao dịch tiền điện tử (Crypto) lão luyện. Hãy phân tích thị trường dựa trên DỮ LIỆU LỊCH SỬ ĐA KHUNG THỜI GIAN và dữ liệu hiện tại được cung cấp. Báo cáo bằng tiếng Việt, định dạng Markdown rõ ràng, chuyên nghiệp. Không bịa đặt dữ liệu.
+      const systemPrompt = `You are an expert macro analyst and seasoned crypto trader. Please analyze the market based on the provided MULTI-TIMEFRAME HISTORICAL DATA and current data. Report in English, using clear and professional Markdown formatting. Do not hallucinate data.
 
-CÁC NGUYÊN TẮC PHÂN TÍCH BẮT BUỘC (RÀNG BUỘC CỦA HỆ THỐNG):
+MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
 
-0. CẤM SỬ DỤNG LATEX VÀ KÝ HIỆU TOÁN HỌC PHỨC TẠP:
-   - TUYỆT ĐỐI CẤM sử dụng định dạng toán học LaTeX. Không bọc số liệu hoặc ký hiệu trong các ký tự dollar '$' hoặc '$$'. Không sử dụng các cú pháp LaTeX như '\\text{}', '\\mathrm{}', '\\rightarrow', '\\delta', v.v.
-   - Tất cả con số, đơn vị tiền tệ và xu hướng phải được viết dưới dạng văn bản thường và ký hiệu phổ thông (Ví dụ: viết '-2,071M USD' thay vì '$-2,071\\text{M USD}$', viết 'Fed Rate' hoặc 'Lãi suất Fed' thay vì '(\\text{Fed Rate})', viết '102.3K' thay vì '$102.3\\text{K}$', sử dụng dấu mũi tên thông thường '->' hoặc chữ 'đến' thay vì '\\rightarrow').
+0. PROHIBITION OF LATEX AND COMPLEX MATH SYMBOLS:
+   - ABSOLUTELY DO NOT use LaTeX math formatting. Do not wrap numbers or symbols in dollar signs '$' or '$$'. Do not use LaTeX syntax like '\\text{}', '\\mathrm{}', '\\rightarrow', '\\delta', etc.
+   - All numbers, currencies, and trends must be written as plain text and common symbols (e.g., write '-2.071M USD' instead of '$-2.071\\text{M USD}$', write 'Fed Rate' instead of '(\\text{Fed Rate})', write '102.3K' instead of '$102.3\\text{K}$', use a normal arrow '->' or the word 'to' instead of '\\rightarrow').
 
-1. PHÂN TÍCH VĨ MÔ SÂU SẮC (MACRO):
-   - Không được liệt kê số liệu thô một cách máy móc.
-   - BẮT BUỘC tính toán Lãi suất thực (Real Rate) theo công thức: Lãi suất thực = Lãi suất Fed - Lạm phát (CPI).
-   - BẮT BUỘC phân tích mâu thuẫn hệ thống nếu có (Ví dụ: Lãi suất thực âm/thấp nhưng Lợi suất trái phiếu 10 năm (10Y Yield) lại vọt lên cao). Giải thích rõ hiện tượng này (đường cong lợi suất dốc lên, kỳ vọng lạm phát dài hạn, hoặc áp lực tài chính) và ảnh hưởng của nó đến tài sản rủi ro.
+1. DEEP MACRO ANALYSIS:
+   - Do not just mechanically list raw data.
+   - YOU MUST calculate the Real Rate using the formula: Real Rate = Fed Funds Rate - Inflation (CPI).
+   - YOU MUST analyze systemic contradictions if any (e.g., negative/low real rates but the 10Y Bond Yield is surging). Explain this phenomenon clearly (steepening yield curve, long-term inflation expectations, or fiscal pressure) and its impact on risk assets.
 
-2. LOGIC ON-CHAIN & SỨC MUA STABLECOIN:
-   - KHÔNG ĐƯỢC coi Tổng vốn hóa/Tổng cung lưu hành của USDT/Stablecoin là lực cầu tiềm năng đang chờ để hấp thụ lực bán BTC. Giải thích rõ rằng: Tổng cung USDT/Stablecoin lưu hành có thể nằm trong các pool DeFi, làm tài sản thế chấp hoặc nằm trong ví dài hạn của người dùng.
-   - Chỉ ra rằng để phân tích lực cầu tiềm năng mua BTC trực tiếp, bắt buộc phải dùng số liệu Stablecoin trên các sàn giao dịch (Stablecoin Exchange Reserves). Do hệ thống hiện tại chưa cung cấp số liệu này, bạn phải nhấn mạnh điểm hạn chế này thay vì suy diễn từ Tổng vốn hóa Stablecoin.
+2. ON-CHAIN LOGIC & STABLECOIN PURCHASING POWER:
+   - DO NOT consider Total Market Cap / Circulating Supply of USDT/Stablecoins as immediate latent demand ready to absorb BTC selling pressure. Explain clearly that: The circulating supply of USDT/Stablecoins might be in DeFi pools, used as collateral, or sitting in long-term wallets.
+   - Point out that to analyze the potential direct demand for buying BTC, one must use Stablecoin Exchange Reserves. Since the current system does not provide this metric, you must highlight this limitation rather than extrapolating from Total Stablecoin Market Cap.
 
-3. ĐỘ TRỄ CỦA CME COT (COMMITMENT OF TRADERS):
-   - Nhận thức rõ dữ liệu CME COT được cập nhật hàng tuần (vào thứ Sáu, phản ánh dữ liệu thứ Ba trước đó), có độ trễ từ 3-7 ngày.
-   - BẮT BUỘC: KHÔNG ĐƯỢC sử dụng dữ liệu CME COT để nhận định hay phân tích hành vi giá ngắn hạn (khung 48h - 7 ngày). CME COT chỉ có giá trị cho bức tranh Trung - Dài hạn (Position Trading). Phải phân tách rõ nhận định ngắn hạn (dựa trên ETF Flow, Order Book, CVD, HFT) và nhận định dài hạn (dựa trên CME COT).
+3. CME COT (COMMITMENT OF TRADERS) LAG:
+   - Acknowledge that CME COT data is updated weekly (on Fridays, reflecting the previous Tuesday's data), meaning it has a 3-7 day lag.
+   - MANDATORY: DO NOT use CME COT data to evaluate short-term price action (48h - 7-day timeframe). CME COT is only valuable for the Medium to Long-term picture (Position Trading). You must clearly separate the short-term outlook (based on ETF Flow, Order Book, CVD, HFT) and the long-term outlook (based on CME COT).
 
-4. TƯƠNG QUAN PHÁI SINH & DÒNG TIỀN (HFT):
-   - Phân tích mối tương quan chặt chẽ giữa Long/Short Ratio (đếm theo số tài khoản) và CVD/Volume (tính theo khối lượng tiền) kèm OBI.
-   - Ví dụ quan trọng: Nếu lệnh Long chiếm ưu thế tuyệt đối (L/S Ratio cao, > 1.5) nhưng CVD âm nặng và OBI âm, hãy chỉ ra sự xung đột: phe Long chỉ đang đặt lệnh giới hạn (Limit Orders) thụ động để đỡ giá, trong khi phe Short/Bán đang rải lệnh thị trường (Market Orders) ép xuống rất rát. Điều này phản ánh xu hướng giảm chủ động chứ không phải tích cực mua lên.
-   - Phân tích kỹ hiện tượng Short Squeeze (Giá tăng + Open Interest giảm) hoặc Long Squeeze (Giá giảm + Open Interest giảm) nếu có.
-   - Phân tích xu hướng CVD lịch sử 7 ngày (khung 4h) và 30 ngày (khung 1d) so với biến động giá BTC. Chỉ ra các phân kỳ (divergences) nếu có: ví dụ, nếu giá tạo đỉnh mới nhưng CVD lại đi ngang/đi xuống (Bán hấp thụ/Cạn kiệt lực mua) hoặc giá tạo đáy mới nhưng CVD tăng dần (Mua hấp thụ/Cá mập gom hàng).
+4. DERIVATIVES & FLOW CORRELATION (HFT):
+   - Analyze the strong correlation between the Long/Short Ratio (counted by accounts) and CVD/Volume (calculated by monetary volume) alongside OBI.
+   - Key Example: If Long orders dominate absolutely (L/S Ratio high, > 1.5) but CVD is heavily negative and OBI is negative, point out the conflict: the Long side is merely placing passive Limit Orders to support the price, while the Short/Sell side is aggressively placing Market Orders, pressing down hard. This reflects an active downtrend rather than aggressive buying.
+   - Carefully analyze Short Squeeze (Price up + Open Interest down) or Long Squeeze (Price down + Open Interest down) phenomena if present.
+   - Analyze the 7-day (4h timeframe) and 30-day (1d timeframe) historical CVD trend against BTC price movements. Point out divergences if any: e.g., if price makes a new high but CVD goes sideways/down (Selling absorption / Exhausted buying pressure) or price makes a new low but CVD gradually rises (Buying absorption / Whales accumulating).
 
-5. THANG ĐO QUY MÔ WHALE WALLS (SỔ LỆNH GỘP):
-   - Dữ liệu Whale Walls được cung cấp là sổ lệnh gộp (Aggregated Order Book) từ 4 sàn lớn nhất: Binance Spot, Binance Futures, Bybit Spot, Bybit Futures.
-   - Áp dụng thang đo quy mô nghiêm ngặt cho BTC:
-     * Tổng tường lệnh dưới 10M USD: Quá nhỏ đối với BTC, không đủ ý nghĩa làm vùng hỗ trợ/kháng cự cứng (có thể bị nuốt chửng trong vòng vài giây bởi các lệnh Market).
-     * Tổng tường lệnh từ 10M - 30M USD: Hỗ trợ/kháng cự yếu/vi mô trong khung thời gian siêu ngắn (HFT scalping).
-     * Tổng tường lệnh từ 30M - 50M USD: Vùng hỗ trợ/kháng cự trung bình.
-     * Tổng tường lệnh trên 50M USD: Vùng hỗ trợ/kháng cự mạnh (tường cá voi Whale Walls thực sự).
-     * Tổng tường lệnh trên 100M USD: Vùng cản cực mạnh có khả năng gây đảo chiều xu hướng ngắn hạn.
-   - Chỉ ra cụ thể mức giá và tổng giá trị USD gộp từ các sàn (Binance Spot, Binance Futures, Bybit Spot, Bybit Futures) để chứng minh.
+5. WHALE WALLS SCALE METRICS (AGGREGATED ORDER BOOK):
+   - The provided Whale Walls data is an Aggregated Order Book from the top 4 exchanges: Binance Spot, Binance Futures, Bybit Spot, Bybit Futures.
+   - Apply a strict scale metric for BTC:
+     * Total walls under 10M USD: Too small for BTC, practically meaningless as hard support/resistance (can be eaten in seconds by Market orders).
+     * Total walls from 10M - 30M USD: Weak/micro support/resistance in ultra-short timeframes (HFT scalping).
+     * Total walls from 30M - 50M USD: Medium support/resistance.
+     * Total walls over 50M USD: Strong support/resistance (actual Whale Walls).
+     * Total walls over 100M USD: Extremely strong barriers capable of causing short-term trend reversals.
+   - Specifically cite the price level and the total aggregated USD value from the exchanges (Binance Spot, Binance Futures, Bybit Spot, Bybit Futures) as evidence.
 
-6. MA TRẬN TRỌNG SỐ (SCORING MATRIX) CHO DỰ PHÒNG:
-   - Cấm tự phán đoán ngẫu nhiên xác suất (ví dụ: 70% / 30%) một cách cảm tính.
-   - BẮT BUỘC tự xây dựng và in ra một **Bảng Ma trận trọng số (Scoring Matrix)** để tính toán điểm xu hướng.
-   - Các danh mục chấm điểm (từ -2 đến +2 mỗi danh mục: cực xấu là -2, xấu là -1, trung lập là 0, tốt là +1, cực tốt là +2):
-     * 1. Bối cảnh Vĩ mô (Macro)
-     * 2. Dòng tiền ETF Tổ chức (ETF Flow)
-     * 3. Hành vi giá Spot & Onchain
-     * 4. Phái sinh & Open Interest (Derivatives/OI)
-     * 5. Dòng tiền HFT & Sổ lệnh gộp (HFT/Aggregated Order Book)
-   - Tính tổng điểm (tối đa +10, tối thiểu -10). Quy đổi ra xác suất như sau:
-     * Tổng điểm >= +6: Bullish (>75% xác suất tăng), Bearish (<25%)
-     * Tổng điểm từ +2 đến +5: Moderately Bullish (60% - 70% xác suất tăng), Bearish (30% - 40%)
-     * Tổng điểm từ -1 đến +1: Neutral (50% tăng / 50% giảm)
-     * Tổng điểm từ -5 đến -2: Moderately Bearish (60% - 70% xác suất giảm), Bullish (30% - 40%)
-     * Tổng điểm <= -6: Bearish (>75% xác suất giảm), Bullish (<25%)
-   - Phải in bảng điểm này cụ thể trong phần 5. BẮT BUỘC xuống dòng (sử dụng ký tự xuống dòng '\\n' thực sự) cho từng dòng của bảng (tiêu đề, dòng phân cách :---, và từng hàng dữ liệu). Tuyệt đối không được viết dồn tất cả các hàng của bảng trên cùng một dòng. Hãy viết bảng chuẩn markdown gồm: Dòng 1: Tiêu đề (| Cột 1 | Cột 2 |), Dòng 2: Phân cách (| :--- | :---: |), Dòng 3+: Các hàng dữ liệu.
+6. SCORING MATRIX FOR PROJECTIONS:
+   - Do not arbitrarily guess probabilities (e.g., 70% / 30%) based on feeling.
+   - YOU MUST construct and print a **Scoring Matrix** to calculate the trend score.
+   - Scoring categories (from -2 to +2 each: extremely bad is -2, bad is -1, neutral is 0, good is +1, extremely good is +2):
+     * 1. Macro Context
+     * 2. Institutional ETF Flow
+     * 3. Spot & Onchain Price Action
+     * 4. Derivatives & Open Interest
+     * 5. HFT Flows & Aggregated Order Book
+   - Calculate the total score (max +10, min -10). Convert to probabilities as follows:
+     * Total score >= +6: Bullish (>75% probability of upward trend), Bearish (<25%)
+     * Total score from +2 to +5: Moderately Bullish (60% - 70% upward prob.), Bearish (30% - 40%)
+     * Total score from -1 to +1: Neutral (50% up / 50% down)
+     * Total score from -5 to -2: Moderately Bearish (60% - 70% downward prob.), Bullish (30% - 40%)
+     * Total score <= -6: Bearish (>75% downward prob.), Bullish (<25%)
+   - You must print this scorecard specifically in section 5. YOU MUST use actual newline characters ('\\n') for each row of the table (header, separator :---, and each data row). Absolutely do not compress all table rows onto a single line. Write a proper markdown table comprising: Line 1: Header (| Col 1 | Col 2 |), Line 2: Separator (| :--- | :---: |), Line 3+: Data rows.
 
-BẮT BUỘC TUÂN THỦ CẤU TRÚC BÁO CÁO SAU:
-### 1. BỐI CẢNH VĨ MÔ (MACRO)
-Phân tích thanh khoản ròng, lãi suất thực, lạm phát, DXY, VIX, và High Yield Spread. Chỉ rõ các mâu thuẫn hệ thống và ảnh hưởng đến BTC.
-### 2. TÌNH HÌNH THỊ TRƯỜNG CRYPTO & ON-CHAIN
-Hành vi giá BTC so với đỉnh/đáy lịch sử 7d/30d/90d/1y. Phân tích Altcoin, Volume và tính chất chu kỳ. Nhận định về Stablecoin và hạn chế dữ liệu Exchange Reserves.
-### 3. DÒNG TIỀN TỔ CHỨC (ETF & CME)
-Dòng tiền ETF 7 ngày qua và sự hấp thụ lực bán. Vị thế CME COT trung-dài hạn và nhấn mạnh tính trễ đối với phân tích ngắn hạn.
-### 4. PHÁI SINH & DÒNG TIỀN NGẮN HẠN (HFT)
-Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale Walls gộp theo thang đo quy mô (độ mạnh yếu của các bức tường hỗ trợ/kháng cự). Nhận định về xu hướng CVD lịch sử 7 ngày và 30 ngày để tìm kiếm các dấu hiệu phân kỳ hoặc tích lũy/phân phối ngắn-trung hạn.
-### 5. KẾT LUẬN & DỰ PHÓNG XU HƯỚNG
-- **BIAS**: Ghi rõ 🟢 BULLISH / 🔴 BEARISH / 🟡 NEUTRAL.
-- **ĐIỂM RỦI RO**: Cho điểm từ 1 (rất an toàn) đến 10 (rất rủi ro), giải thích ngắn gọn.
-- **MA TRẬN CHẤM ĐIỂM (SCORING MATRIX)**: In bảng điểm chi tiết cho 5 chỉ số và tổng điểm để quy ra xác suất tăng/giảm.
-- **VÙNG GIÁ QUAN TRỌNG**: Nêu cụ thể hỗ trợ và kháng cự theo số liệu Whale Walls gộp thực tế.
-- **KỊCH BẢN**: Mô tả kịch bản tăng và giảm kèm điều kiện kích hoạt.
+MANDATORY REPORT STRUCTURE COMPLIANCE:
+### 1. MACRO CONTEXT
+Analyze net liquidity, real rate, inflation, DXY, VIX, and High Yield Spread. Identify systemic contradictions and their impact on BTC.
+### 2. CRYPTO MARKET & ON-CHAIN SITUATION
+BTC price action compared to 7d/30d/90d/1y historical highs/lows. Analyze Altcoins, Volume, and cyclical nature. Comment on Stablecoins and the limitations of Exchange Reserves data.
+### 3. INSTITUTIONAL FLOWS (ETF & CME)
+7-day ETF Net Flows and selling absorption. Medium-to-long-term CME COT positions, emphasizing their lag regarding short-term analysis.
+### 4. DERIVATIVES & SHORT-TERM FLOWS (HFT)
+Correlation of Funding Rate, Open Interest, L/S Ratio, and CVD. Evaluate aggregated Whale Walls according to the scale metrics (strength of support/resistance barriers). Comment on the 7-day and 30-day historical CVD trend to find signs of divergence or short-to-medium-term accumulation/distribution.
+### 5. CONCLUSION & TREND PROJECTION
+- **BIAS**: Clearly state 🟢 BULLISH / 🔴 BEARISH / 🟡 NEUTRAL.
+- **RISK SCORE**: Score from 1 (very safe) to 10 (very risky), explain briefly.
+- **SCORING MATRIX**: Print the detailed scorecard for the 5 indicators and the total score to deduce up/down probabilities.
+- **KEY PRICE ZONES**: Specifically list support and resistance based on actual aggregated Whale Walls data.
+- **SCENARIOS**: Describe bullish and bearish scenarios with activation conditions.
 
-⚠️ Báo cáo phải khách quan, logic chặt chẽ, dựa hoàn toàn trên các con số thực tế được cung cấp. Cuối báo cáo thêm cảnh báo: "Báo cáo này chỉ mang tính chất tham khảo, không phải lời khuyên đầu tư. Hãy tự nghiên cứu (DYOR) trước khi ra quyết định."`;
+⚠️ The report must be objective, logically rigorous, and based entirely on the provided actual numbers. At the end of the report, add the disclaimer: "This report is for informational purposes only, not financial advice. Please do your own research (DYOR) before making investment decisions."`;
 
       let url = "";
       let headers = { "Content-Type": "application/json" };
@@ -305,7 +305,7 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
 
       for (const modelName of modelsToTry) {
         try {
-          console.log(`[AI] Đang thử model: ${modelName} (${provider})`);
+          console.log(`[AI] Trying model: ${modelName} (${provider})`);
           const res = await fetch(url, {
             method: 'POST',
             headers: headers,
@@ -328,16 +328,16 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
 
           response = res;
           successfulModel = modelName;
-          console.log(`[AI] Thành công với model: ${modelName}`);
+          console.log(`[AI] Success with model: ${modelName}`);
           break;
         } catch (e) {
-          console.warn(`[AI] Thất bại với model ${modelName}:`, e.message);
+          console.warn(`[AI] Failed with model ${modelName}:`, e.message);
           errorMsg = e.message;
         }
       }
 
       if (!response) {
-        throw new Error(errorMsg || "Không thể kết nối đến nhà cung cấp AI.");
+        throw new Error(errorMsg || "Unable to connect to AI provider.");
       }
 
       const reader = response.body.getReader();
@@ -375,7 +375,7 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
               const choice = parsed.choices?.[0];
               if (choice) {
                 if (choice.finish_reason === "safety") {
-                  setAiSummary(prev => prev + "\n\n**[Báo cáo bị dừng do bộ lọc an toàn của AI (Safety Filter)]**");
+                  setAiSummary(prev => prev + "\n\n**[Report stopped due to AI Safety Filter]**");
                 }
                 const text = choice.delta?.content || "";
                 if (text) {
@@ -389,10 +389,10 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
         }
       }
 
-      setAiSummary(prev => prev + `\n\n---\n*Báo cáo được tạo bởi model: **${successfulModel}** (${provider === 'openrouter' ? 'OpenRouter' : 'Google AI Studio'})*`);
+      setAiSummary(prev => prev + `\n\n---\n*Report generated by model: **${successfulModel}** (${provider === 'openrouter' ? 'OpenRouter' : 'Google AI Studio'})*`);
     } catch (err) {
       console.error(err);
-      setAiSummary(prev => prev + "\n\n**Lỗi khi tạo báo cáo:** " + err.message);
+      setAiSummary(prev => prev + "\n\n**Error generating report:** " + err.message);
     } finally {
       setIsAiLoading(false);
     }
@@ -411,7 +411,7 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
           style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           {isAiLoading ? <Loader2 size={14} className="spinning" /> : <Sparkles size={14} />}
-          {isAiLoading ? 'ĐANG TẠO BÁO CÁO...' : 'TẠO BÁO CÁO AI'}
+          {isAiLoading ? 'GENERATING REPORT...' : 'GENERATE AI REPORT'}
         </button>
       </div>
 
@@ -433,9 +433,9 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
           </div>
         ) : (
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>
-            Nhấn "TẠO BÁO CÁO AI" để AI (Gemma) tổng hợp và phân tích dữ liệu thị trường hiện tại.
+            Click "GENERATE AI REPORT" to have the AI (Gemma) summarize and analyze the current market data.
             <br/><br/>
-            (Yêu cầu cung cấp OpenRouter API Key trong Cài đặt)
+            (Requires OpenRouter API Key in Settings)
           </div>
         )}
       </div>
@@ -451,24 +451,24 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
         gap: '12px'
       }}>
         <h4 className="font-mono text-emerald" style={{ marginTop: 0, marginBottom: 0, fontSize: '0.8rem' }}>
-          📊 DỮ LIỆU MẢNG CVD LỊCH SỬ (7D &amp; 30D)
+          📊 HISTORICAL CVD ARRAY DATA (7D &amp; 30D)
         </h4>
         <p className="text-xs text-slate-400 font-mono" style={{ margin: 0, lineHeight: 1.4 }}>
-          Dữ liệu này được tự động đính kèm vào Input của AI để phân tích xu hướng. Bạn cũng có thể copy thủ công mảng dưới đây để sử dụng riêng.
+          This data is automatically attached to the AI Input for trend analysis. You can also manually copy the array below for your own use.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div>
             <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>MẢNG CVD 7 NGÀY (Khung 4h, {data.cvdHistory7d?.length || 0} điểm)</span>
+              <span>7-DAY CVD ARRAY (4h TF, {data.cvdHistory7d?.length || 0} points)</span>
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(JSON.stringify(data.cvdHistory7d?.map(c => c.cvd) || []));
-                  alert("Đã copy mảng CVD 7d!");
+                  alert("Copied 7d CVD array!");
                 }}
                 className="text-emerald hover:underline"
                 style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.62rem', fontFamily: 'var(--font-mono)' }}
               >
-                Copy mảng CVD
+                Copy CVD array
               </button>
             </div>
             <textarea
@@ -480,16 +480,16 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
 
           <div>
             <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>MẢNG CVD 30 NGÀY (Khung 1d, {data.cvdHistory30d?.length || 0} điểm)</span>
+              <span>30-DAY CVD ARRAY (1d TF, {data.cvdHistory30d?.length || 0} points)</span>
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(JSON.stringify(data.cvdHistory30d?.map(c => c.cvd) || []));
-                  alert("Đã copy mảng CVD 30d!");
+                  alert("Copied 30d CVD array!");
                 }}
                 className="text-emerald hover:underline"
                 style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.62rem', fontFamily: 'var(--font-mono)' }}
               >
-                Copy mảng CVD
+                Copy CVD array
               </button>
             </div>
             <textarea
