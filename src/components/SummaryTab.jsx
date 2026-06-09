@@ -258,18 +258,43 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
 
 ⚠️ Báo cáo phải khách quan, logic chặt chẽ, dựa hoàn toàn trên các con số thực tế được cung cấp. Cuối báo cáo thêm cảnh báo: "Báo cáo này chỉ mang tính chất tham khảo, không phải lời khuyên đầu tư. Hãy tự nghiên cứu (DYOR) trước khi ra quyết định."`;
 
-      const stream = await openrouter.chat.send({
-        chatRequest: {
-          model: "google/gemma-4-31b-it:free",
-          temperature: 0.3,
-          max_tokens: 3000,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: promptData }
-          ],
-          stream: true
+      const modelsToTry = [
+        "google/gemma-4-31b-it:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "qwen/qwen3-coder:free"
+      ];
+
+      let stream = null;
+      let errorMsg = "";
+
+      for (const modelName of modelsToTry) {
+        try {
+          console.log(`[AI] Đang thử model: ${modelName}`);
+          stream = await openrouter.chat.send({
+            chatRequest: {
+              model: modelName,
+              temperature: 0.3,
+              max_tokens: 3000,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: promptData }
+              ],
+              stream: true
+            }
+          });
+          console.log(`[AI] Thành công với model: ${modelName}`);
+          break;
+        } catch (e) {
+          console.warn(`[AI] Thất bại với model ${modelName}:`, e.message);
+          errorMsg = e.message;
         }
-      });
+      }
+
+      if (!stream) {
+        throw new Error(errorMsg || "Tất cả các model miễn phí đều lỗi.");
+      }
+
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content;
