@@ -267,6 +267,7 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
 
       let stream = null;
       let errorMsg = "";
+      let successfulModel = "";
 
       for (const modelName of modelsToTry) {
         try {
@@ -284,6 +285,7 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
             }
           });
           console.log(`[AI] Thành công với model: ${modelName}`);
+          successfulModel = modelName;
           break;
         } catch (e) {
           console.warn(`[AI] Thất bại với model ${modelName}:`, e.message);
@@ -302,6 +304,7 @@ Tương quan Funding Rate, Open Interest, L/S Ratio và CVD. Đánh giá Whale W
           setAiSummary(prev => prev + content);
         }
       }
+      setAiSummary(prev => prev + `\n\n---\n*Báo cáo được tạo bởi model: **${successfulModel}** qua OpenRouter.*`);
     } catch (err) {
       console.error(err);
       setAiSummary(prev => prev + "\n\n**Lỗi khi tạo báo cáo:** " + err.message);
