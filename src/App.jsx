@@ -276,7 +276,7 @@ const BASELINE_CME_COT = {
 };
 
 function App() {
-  const { tooltipsEnabled, setTooltipsEnabled } = useTooltipSettings();
+  const { tooltipsEnabled, setTooltipsEnabled, setLastSyncTime } = useTooltipSettings();
   const [data, setData] = useState(INIT);
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
@@ -523,9 +523,11 @@ function App() {
     }));
 
     setLastSync(now);
+    window.appLastSync = now;
+    setLastSyncTime(now);
     setIsOnline(btc != null || klines.length > 0);
     setIsSyncing(false);
-  }, [isSyncing, addLog, apiKeys]);
+  }, [isSyncing, addLog, apiKeys, setLastSyncTime]);
 
   // Tự động đồng bộ hàng ngày lúc 08:00 AM
   useEffect(() => {
@@ -1293,6 +1295,7 @@ function App() {
               setAiSummary={setAiSummary}
               isAiLoading={isAiLoading}
               setIsAiLoading={setIsAiLoading}
+              lastSync={lastSync}
             />
           )}
 

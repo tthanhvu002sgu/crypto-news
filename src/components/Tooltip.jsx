@@ -132,13 +132,16 @@ export const METRIC_METADATA = {
 
 const TooltipContext = createContext({
   tooltipsEnabled: true,
-  setTooltipsEnabled: () => {}
+  setTooltipsEnabled: () => {},
+  lastSyncTime: null,
+  setLastSyncTime: () => {}
 });
 
 export function TooltipProvider({ children }) {
   const [enabled, setEnabled] = useState(() => {
     return localStorage.getItem('tooltips-enabled') !== 'false';
   });
+  const [lastSyncTime, setLastSyncTime] = useState(null);
 
   useEffect(() => {
     localStorage.setItem('tooltips-enabled', String(enabled));
@@ -157,7 +160,12 @@ export function TooltipProvider({ children }) {
   }, []);
 
   return (
-    <TooltipContext.Provider value={{ tooltipsEnabled: enabled, setTooltipsEnabled: setEnabled }}>
+    <TooltipContext.Provider value={{ 
+      tooltipsEnabled: enabled, 
+      setTooltipsEnabled: setEnabled,
+      lastSyncTime,
+      setLastSyncTime
+    }}>
       {children}
     </TooltipContext.Provider>
   );
@@ -167,9 +175,9 @@ export function useTooltipSettings() {
   return useContext(TooltipContext);
 }
 
-export default function Tooltip({ content, children }) {
+export default function Tooltip({ content, lastUpdated, children }) {
   const [visible, setVisible] = useState(false);
-  const { tooltipsEnabled } = useTooltipSettings();
+  const { tooltipsEnabled, lastSyncTime } = useTooltipSettings();
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
 
@@ -204,6 +212,13 @@ export default function Tooltip({ content, children }) {
   if (leftPos + halfWidth > window.innerWidth - 10) {
     leftPos = window.innerWidth - halfWidth - 10;
   }
+
+  const isRealTime = content.api && (
+    content.api.toLowerCase().includes('websocket') || 
+    content.api.toLowerCase().includes('realtime') || 
+    content.api.toLowerCase().includes('real-time')
+  );
+  const displayTime = lastUpdated || (isRealTime ? 'Thời gian thực' : lastSyncTime);
 
   return (
     <div 
@@ -245,6 +260,12 @@ export default function Tooltip({ content, children }) {
             </div>
           )}
           <p style={{ margin: 0 }}>{content.def}</p>
+          {displayTime && (
+            <div style={{ borderTop: '1px solid var(--border-panel)', paddingTop: '6px', marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'var(--text-tooltip-title)' }}>Cập nhật:</span>
+              <span className="text-emerald" style={{ fontWeight: 700 }}>{displayTime}</span>
+            </div>
+          )}
         </div>,
         document.body
       )}
