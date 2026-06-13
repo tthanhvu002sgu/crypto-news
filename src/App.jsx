@@ -243,6 +243,7 @@ const INIT = {
   fngData: null,
   cvdHistory7d: [],
   cvdHistory30d: [],
+  btcDailyKlinesAll: [],
 };
 
 // US Spot Bitcoin ETFs Baseline Holdings (Fallback)
@@ -257,15 +258,15 @@ const BASELINE_ETF_HOLDINGS = {
 };
 
 const BASELINE_ETF_FLOWS = [
-  { date: '26/05', flow: -333.6 },
-  { date: '27/05', flow: -733.4 },
-  { date: '28/05', flow: -223.3 },
-  { date: '29/05', flow: -125.3 },
-  { date: '01/06', flow: -483.8 },
-  { date: '02/06', flow: -519.1 },
-  { date: '03/06', flow: -396.6 },
-  { date: '04/06', flow: 3.2 },
-  { date: '05/06', flow: -325.7 },
+  { date: '26/05/26', flow: -333.6 },
+  { date: '27/05/26', flow: -733.4 },
+  { date: '28/05/26', flow: -223.3 },
+  { date: '29/05/26', flow: -125.3 },
+  { date: '01/06/26', flow: -483.8 },
+  { date: '02/06/26', flow: -519.1 },
+  { date: '03/06/26', flow: -396.6 },
+  { date: '04/06/26', flow: 3.2 },
+  { date: '05/06/26', flow: -325.7 },
 ];
 
 const BASELINE_CME_COT = {
@@ -310,6 +311,9 @@ function App() {
       return BASELINE_ETF_FLOWS;
     }
   });
+
+  const [etfChartType, setEtfChartType] = useState('flows');
+  const [etfAumTimeframe, setEtfAumTimeframe] = useState('ALL'); // '30D', '90D', 'ALL'
 
   useEffect(() => {
     window.location.hash = activeTab;
@@ -411,7 +415,7 @@ function App() {
       etfHoldingsRes, etfHistoryRes,
       cotRes,
       yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes,
-      cvd7dRes, cvd30dRes
+      cvd7dRes, cvd30dRes, btcDailyKlinesAllRes
     ] = await Promise.allSettled([
       getBTCTicker24h('BTCUSDT'),
       getBTCKlines('BTCUSDT', '1h', 48),
@@ -425,7 +429,7 @@ function App() {
       fetchCached('btcOnChain', () => getBTCOnChain(), 6 * 60 * 60 * 1000, addLog, 'BTC Network (blockchain.info)', force),
       fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), 6 * 60 * 60 * 1000, addLog, 'On-chain Metrics (CoinMetrics)', force),
       fetchCached('etfHoldings', () => getETFHoldings(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Holdings (Bitbo)', force),
-      fetchCached('etfFlowHistory', () => getETFFlowHistory(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Flow History (Farside)', force),
+      fetchCached('etfFlowHistory_v3', () => getETFFlowHistory(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Flow History (Farside)', force),
       fetchCached('cmeCot', () => getCMECot(), 12 * 60 * 60 * 1000, addLog, 'Báo cáo CME COT (Tradingster)', force),
       fetchCached('yield10y', () => getFREDMetric('DGS10'), 30 * 60 * 1000, addLog, 'Yield 10Y (Yahoo Finance)', force),
       fetchCached('dxyQuote', () => getDXYQuote(), 30 * 60 * 1000, addLog, 'Chỉ số DXY (Yahoo Finance)', force),
@@ -434,7 +438,8 @@ function App() {
       fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100'), 30 * 60 * 1000, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force),
       fetchCached('fearAndGreed', () => getFearAndGreed(), 4 * 60 * 60 * 1000, addLog, 'Chỉ số Fear & Greed (alternative.me)', force),
       fetchCached('cvdHistory7d', () => getHistoricalCVD('BTCUSDT', '4h', 42), 30 * 60 * 1000, addLog, 'Lịch sử CVD 7d (Binance)', force),
-      fetchCached('cvdHistory30d', () => getHistoricalCVD('BTCUSDT', '1d', 30), 2 * 60 * 60 * 1000, addLog, 'Lịch sử CVD 30d (Binance)', force)
+      fetchCached('cvdHistory30d', () => getHistoricalCVD('BTCUSDT', '1d', 30), 2 * 60 * 60 * 1000, addLog, 'Lịch sử CVD 30d (Binance)', force),
+      fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), 2 * 60 * 60 * 1000, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force)
     ]);
 
     const get = (res, label, hasKey) => {
@@ -473,6 +478,7 @@ function App() {
     const fngData         = fngRes.status === 'fulfilled' ? fngRes.value : null;
     const cvdHistory7d    = cvd7dRes.status === 'fulfilled' ? cvd7dRes.value : null;
     const cvdHistory30d   = cvd30dRes.status === 'fulfilled' ? cvd30dRes.value : null;
+    const btcDailyKlinesAll = btcDailyKlinesAllRes.status === 'fulfilled' ? btcDailyKlinesAllRes.value : null;
 
     const now = new Date().toLocaleString('vi-VN');
     addLog(`Đồng bộ hoàn tất lúc ${now}`, 'system');
@@ -520,6 +526,7 @@ function App() {
       fngData:        fngData         ?? prev.fngData,
       cvdHistory7d:   cvdHistory7d?.length > 0 ? cvdHistory7d : prev.cvdHistory7d,
       cvdHistory30d:  cvdHistory30d?.length > 0 ? cvdHistory30d : prev.cvdHistory30d,
+      btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
     }));
 
     setLastSync(now);
@@ -623,30 +630,163 @@ function App() {
     volume: liveVolume ?? data.btc?.volume,
   } : data.btc;
 
-  // ── ETF Net Flows Bar Chart ────────────────────────────────────────────────
-  const etfFlowChartData = useMemo(() => ({
-    labels: etfHistory.map(h => h.date),
+  // ── ETF AUM & Holdings History Calculations ─────────────────────────────────
+  const holdingsHistory = useMemo(() => {
+    if (!etfHistory || etfHistory.length === 0) return [];
+    
+    // Create a map of formatted date "DD/MM/YY" -> BTC Close Price
+    const priceMap = {};
+    
+    // 1. Populate from community data (30d)
+    if (data.cvdHistory30d && data.cvdHistory30d.length > 0) {
+      data.cvdHistory30d.forEach(h => {
+        const d = new Date(h.time);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = String(d.getFullYear()).substring(2);
+        const key = `${day}/${month}/${year}`;
+        priceMap[key] = h.price;
+      });
+    }
+
+    // 2. Populate from daily klines (up to 1000d for full historical coverage)
+    if (data.btcDailyKlinesAll && data.btcDailyKlinesAll.length > 0) {
+      data.btcDailyKlinesAll.forEach(h => {
+        const d = new Date(h.time);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = String(d.getFullYear()).substring(2);
+        const key = `${day}/${month}/${year}`;
+        priceMap[key] = h.close;
+      });
+    }
+
+    // 3. Include today's date key
+    const today = new Date();
+    const todayKey = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getFullYear()).substring(2)}`;
+    priceMap[todayKey] = btcDisplay?.price || 60000;
+
+    const history = [];
+    let tempHoldings = etfHoldings.total;
+
+    // Iterate backwards to compute holdings and AUM history
+    for (let i = etfHistory.length - 1; i >= 0; i--) {
+      const item = etfHistory[i];
+      let dateStr = item.date;
+      // Handle legacy dd/mm format by appending /26 (default baseline year)
+      if (dateStr.length === 5) {
+        dateStr = `${dateStr}/26`;
+      }
+      const flowUsd = item.flow; // Flow in millions USD
+      
+      const btcPrice = priceMap[dateStr] || btcDisplay?.price || 60000;
+      const flowBtc = (flowUsd * 1e6) / btcPrice;
+      
+      history.unshift({
+        date: dateStr,
+        holdings: tempHoldings,
+        aum: (tempHoldings * btcPrice) / 1e9, // AUM in billions USD
+        price: btcPrice,
+        flow: flowUsd
+      });
+      
+      tempHoldings -= flowBtc;
+    }
+    
+    return history;
+  }, [etfHistory, etfHoldings.total, data.cvdHistory30d, data.btcDailyKlinesAll, btcDisplay?.price]);
+
+  const aumChangeStats = useMemo(() => {
+    if (holdingsHistory.length < 2) return { diffUsd: 0, diffPct: 0, direction: 'flat', oldestDate: '---' };
+    
+    const oldest = holdingsHistory[0];
+    const latest = holdingsHistory[holdingsHistory.length - 1];
+    
+    const diffUsd = latest.aum - oldest.aum; // in billions USD
+    const diffPct = oldest.aum > 0 ? (diffUsd / oldest.aum) * 100 : 0;
+    const direction = diffUsd > 0 ? 'up' : diffUsd < 0 ? 'down' : 'flat';
+    
+    return {
+      diffUsd,
+      diffPct,
+      direction,
+      oldestDate: oldest.date,
+      oldestAum: oldest.aum,
+      latestAum: latest.aum
+    };
+  }, [holdingsHistory]);
+
+  const filteredAumHistory = useMemo(() => {
+    if (etfAumTimeframe === '30D') return holdingsHistory.slice(-30);
+    if (etfAumTimeframe === '90D') return holdingsHistory.slice(-90);
+    return holdingsHistory;
+  }, [holdingsHistory, etfAumTimeframe]);
+
+  const etfAumChartData = useMemo(() => ({
+    labels: filteredAumHistory.map(h => h.date),
     datasets: [{
-      label: 'Net Flow (M USD)',
-      data: etfHistory.map(h => h.flow),
-      backgroundColor: etfHistory.map(h => {
-        if (h.flow >= 0) {
-          return theme === 'light' ? '#047857' : '#10b981';
-        } else {
-          return theme === 'light' ? '#be123c' : '#f43f5e';
-        }
-      }),
-      borderColor: etfHistory.map(h => {
-        if (h.flow >= 0) {
-          return theme === 'light' ? '#064e3b' : '#059669';
-        } else {
-          return theme === 'light' ? '#881337' : '#e11d48';
-        }
-      }),
-      borderWidth: 1,
-      borderRadius: 2,
+      label: 'Tổng AUM (B USD)',
+      data: filteredAumHistory.map(h => h.aum),
+      borderColor: theme === 'light' ? '#6366f1' : '#818cf8',
+      backgroundColor: theme === 'light' ? 'rgba(99, 102, 241, 0.05)' : 'rgba(129, 140, 248, 0.05)',
+      borderWidth: 1.5,
+      fill: true,
+      tension: 0.3,
+      pointRadius: 0,
+      pointHoverRadius: 4,
     }]
-  }), [etfHistory, theme]);
+  }), [filteredAumHistory, theme]);
+
+  const etfAumChartOpts = useMemo(() => ({
+    ...getChartOpts(theme),
+    plugins: {
+      ...getChartOpts(theme).plugins,
+      tooltip: {
+        ...getChartOpts(theme).plugins.tooltip,
+        callbacks: {
+          label: (context) => ` Tổng AUM: ${context.parsed.y.toFixed(2)}B USD`
+        }
+      }
+    },
+    scales: {
+      ...getChartOpts(theme).scales,
+      y: {
+        ...getChartOpts(theme).scales.y,
+        ticks: {
+          ...getChartOpts(theme).scales.y.ticks,
+          callback: (v) => `$${v.toFixed(1)}B`
+        }
+      }
+    }
+  }), [theme]);
+
+  // ── ETF Net Flows Bar Chart ────────────────────────────────────────────────
+  const etfFlowChartData = useMemo(() => {
+    const recentHistory = etfHistory.slice(-15);
+    return {
+      labels: recentHistory.map(h => h.date),
+      datasets: [{
+        label: 'Net Flow (M USD)',
+        data: recentHistory.map(h => h.flow),
+        backgroundColor: recentHistory.map(h => {
+          if (h.flow >= 0) {
+            return theme === 'light' ? '#047857' : '#10b981';
+          } else {
+            return theme === 'light' ? '#be123c' : '#f43f5e';
+          }
+        }),
+        borderColor: recentHistory.map(h => {
+          if (h.flow >= 0) {
+            return theme === 'light' ? '#064e3b' : '#059669';
+          } else {
+            return theme === 'light' ? '#881337' : '#e11d48';
+          }
+        }),
+        borderWidth: 1,
+        borderRadius: 2,
+      }]
+    };
+  }, [etfHistory, theme]);
 
   const etfFlowChartOpts = useMemo(() => ({
     ...getChartOpts(theme),
@@ -1013,6 +1153,15 @@ function App() {
                           ~{((etfHoldings.total / (data.node?.circulatingSupply || 20039293.75)) * 100).toFixed(1)}%
                         </span>
                       </div>
+                      <div className="etf-sum-card">
+                        <span className="etf-sum-label">AUM TREND ({aumChangeStats.oldestDate} → NAY)</span>
+                        <span className={`etf-sum-val ${aumChangeStats.direction === 'up' ? 'text-emerald' : aumChangeStats.direction === 'down' ? 'text-rose' : 'text-slate-300'}`}>
+                          {aumChangeStats.direction === 'up' ? '▲' : aumChangeStats.direction === 'down' ? '▼' : ''} {Math.abs(aumChangeStats.diffPct).toFixed(1)}% 
+                          <span style={{ fontSize: '0.55rem', marginLeft: '4px', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>
+                            ({aumChangeStats.diffUsd >= 0 ? '+' : ''}{aumChangeStats.diffUsd.toFixed(2)}B)
+                          </span>
+                        </span>
+                      </div>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                       <table className="whale-table font-mono" style={{ width: '100%', fontSize: '0.62rem' }}>
@@ -1040,14 +1189,49 @@ function App() {
 
                   {/* Spot ETFs Net Flow History Chart Panel */}
                   <div className="glass-panel whale-panel">
-                    <h3 className="chart-title font-mono text-emerald" style={{ marginBottom: 16 }}>
-                      <span className="dot dot-emerald" /> LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)
-                    </h3>
+                    <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
+                        <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
+                      </h3>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {etfChartType === 'aum' && (
+                          <div className="etf-timeframe-toggle font-mono">
+                            {['30D', '90D', 'ALL'].map(tf => (
+                              <button
+                                key={tf}
+                                onClick={() => setEtfAumTimeframe(tf)}
+                                className={`toggle-btn ${etfAumTimeframe === tf ? 'active' : ''}`}
+                              >
+                                {tf}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="etf-chart-toggle font-mono">
+                          <button 
+                            onClick={() => setEtfChartType('flows')} 
+                            className={`toggle-btn ${etfChartType === 'flows' ? 'active' : ''}`}
+                          >
+                            DÒNG TIỀN
+                          </button>
+                          <button 
+                            onClick={() => setEtfChartType('aum')} 
+                            className={`toggle-btn ${etfChartType === 'aum' ? 'active' : ''}`}
+                          >
+                            XU HƯỚNG AUM
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                     <div className="chart-body" style={{ height: '220px' }}>
                       {etfHistory.length > 0 ? (
-                        <Bar data={etfFlowChartData} options={etfFlowChartOpts} />
+                        etfChartType === 'flows' ? (
+                          <Bar data={etfFlowChartData} options={etfFlowChartOpts} />
+                        ) : (
+                          <Line data={etfAumChartData} options={etfAumChartOpts} />
+                        )
                       ) : (
-                        <div className="chart-empty font-mono">Đang tải biểu đồ dòng tiền...</div>
+                        <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
                       )}
                     </div>
                   </div>

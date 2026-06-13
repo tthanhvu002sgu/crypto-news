@@ -1310,57 +1310,98 @@ const parseETFHoldingsFromMarkdown = (markdown) => {
  * Lấy lịch sử dòng tiền ETF từ Farside Investors qua Jina Reader
  */
 export const getETFFlowHistory = async () => {
+  let content = null;
+  let isMarkdown = false;
+  
+  // 1. Try Jina Reader first (returns markdown)
   try {
-    const url = 'https://farside.co.uk/btc/';
-    const markdown = await fetchWithJina(url, 'text');
-    if (!markdown) return null;
-    
-    const lines = markdown.split('\n');
-    const flowHistory = [];
+    const url = 'https://farside.co.uk/bitcoin-etf-flow-all-data/';
+    content = await fetchWithJina(url, 'text');
+    if (content) isMarkdown = true;
+  } catch (e) {
+    console.warn('[API] getETFFlowHistory Jina failed, trying CORS proxies...', e.message);
+  }
+  
+  // 2. If Jina fails, try CORS proxy (returns HTML)
+  if (!content) {
+    try {
+      content = await fetchTextWithProxyFallback('https://farside.co.uk/bitcoin-etf-flow-all-data/');
+      if (content) isMarkdown = false;
+    } catch (e) {
+      console.error('[API] getETFFlowHistory all CORS proxies failed:', e.message);
+      return null;
+    }
+  }
+
+  if (!content) return null;
+
+  const flowHistory = [];
+  const months = {
+    Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+    Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
+  };
+
+  const parseFlowValue = (str) => {
+    if (!str) return NaN;
+    let clean = str.replace(/,/g, '').trim();
+    if (clean.includes('(') && clean.includes(')')) {
+      return -parseFloat(clean.replace(/[()]/g, ''));
+    }
+    return parseFloat(clean);
+  };
+
+  if (isMarkdown) {
+    const lines = content.split('\n');
     const dateRegex = /^\s*\|\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s*\|/;
-    
     for (const line of lines) {
       const match = line.match(dateRegex);
       if (match) {
         const dateStr = match[1];
         const cells = line.split('|').map(c => c.trim());
         const totalStr = cells[cells.length - 2];
-        
-        let flowVal = 0;
-        if (totalStr) {
-          let clean = totalStr.replace(/,/g, '');
-          if (clean.includes('(') && clean.includes(')')) {
-            flowVal = -parseFloat(clean.replace(/[()]/g, ''));
-          } else {
-            flowVal = parseFloat(clean);
-          }
-        }
+        const flowVal = parseFlowValue(totalStr);
         
         if (!isNaN(flowVal)) {
-          const [day, monthStr] = dateStr.split(/\s+/);
-          const months = {
-            Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
-            Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
-          };
+          const [day, monthStr, year] = dateStr.split(/\s+/);
           const month = months[monthStr.substring(0, 3)] || '01';
-          const formattedDate = `${day}/${month}`;
-          
-          flowHistory.push({
-            date: formattedDate,
-            flow: flowVal
-          });
+          const formattedDate = `${day}/${month}/${year ? year.substring(2) : '24'}`;
+          flowHistory.push({ date: formattedDate, flow: flowVal });
         }
       }
     }
-    
-    if (flowHistory.length > 0) {
-      return flowHistory.slice(-9);
+  } else {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(content, 'text/html');
+      const rows = doc.querySelectorAll('table tr');
+      
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td, th');
+        if (cells.length > 2) {
+          const firstCellText = cells[0].textContent.trim();
+          const dateMatch = firstCellText.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+          if (dateMatch) {
+            const day = dateMatch[1].padStart(2, '0');
+            const monthStr = dateMatch[2];
+            const year = dateMatch[3];
+            const month = months[monthStr.substring(0, 3)] || '01';
+            const formattedDate = `${day}/${month}/${year.substring(2)}`;
+            
+            const totalText = cells[cells.length - 2].textContent.trim();
+            const flowVal = parseFlowValue(totalText);
+            
+            if (!isNaN(flowVal)) {
+              flowHistory.push({ date: formattedDate, flow: flowVal });
+            }
+          }
+        }
+      });
+    } catch (e) {
+      console.error('[API] HTML parsing failed:', e.message);
     }
-    return null;
-  } catch (e) {
-    console.error('[API] ETF Flow History error:', e.message);
-    return null;
   }
+
+  return flowHistory.length > 0 ? flowHistory : null;
 };
 
 /**

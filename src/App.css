@@ -863,9 +863,35 @@
 }
 .etf-summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 8px;
   margin-bottom: 12px;
+}
+.etf-chart-toggle, .etf-timeframe-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  padding: 2px;
+  border-radius: 4px;
+}
+.etf-chart-toggle .toggle-btn, .etf-timeframe-toggle .toggle-btn {
+  background: transparent;
+  color: var(--text-slate-500);
+  border: none;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.etf-chart-toggle .toggle-btn:hover, .etf-timeframe-toggle .toggle-btn:hover {
+  color: var(--text-slate-300);
+}
+.etf-chart-toggle .toggle-btn.active, .etf-timeframe-toggle .toggle-btn.active {
+  background: var(--color-emerald-500);
+  color: var(--bg-slate-950);
 }
 .etf-sum-card {
   padding: 8px;
