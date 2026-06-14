@@ -184,6 +184,12 @@ MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
    - You must print this scorecard specifically in section 5. YOU MUST use actual newline characters ('
 ') for each row of the table (header, separator :---, and each data row). Absolutely do not compress all table rows onto a single line. Write a proper markdown table comprising: Line 1: Header (| Col 1 | Col 2 |), Line 2: Separator (| :--- | :---: |), Line 3+: Data rows.
 
+8. FINANCIAL CAUSALITY PRINCIPLES (REAL CAUSAL FACTORS IN FINANCE):
+   - You MUST analyze the market and explain price action using the following real causal factors from financial science:
+     * Mechanical Supply-Demand Imbalance (Order Flow Imbalance): Asset price increases are the direct result of active buy volume fully matching passive limit sell orders and pushing prices to higher levels. This is a direct, mechanical causal relationship.
+     * Information Asymmetry: Accurate analysis of macroeconomic data and capital flows helps traders discover the underlying causes of asset mispricing before the market self-corrects toward its intrinsic value.
+     * Forced Dynamics from Market Structure: Understanding why a specific group of investor positions is forced to stop out or get liquidated (Liquidation) at a particular price zone helps traders identify high-probability reversal or trend continuation areas, driven by this forced liquidity.
+
 MANDATORY REPORT STRUCTURE COMPLIANCE:
 You MUST follow this exact template structure, including headers, list patterns, and bullet descriptions. Just fill in the brackets [like this] with actual metrics analysis and numbers from the input data:
 
