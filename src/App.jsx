@@ -355,11 +355,11 @@ function App() {
       const saved = localStorage.getItem('app-api-keys');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { fred: '', alphaVantage: '', openRouter: '', gemini: '', ...parsed };
+        return { fred: '', alphaVantage: '', openRouter: '', gemini: '', groq: '', ...parsed };
       }
-      return { fred: '', alphaVantage: '', openRouter: '', gemini: '' };
+      return { fred: '', alphaVantage: '', openRouter: '', gemini: '', groq: '' };
     } catch {
-      return { fred: '', alphaVantage: '', openRouter: '', gemini: '' };
+      return { fred: '', alphaVantage: '', openRouter: '', gemini: '', groq: '' };
     }
   });
   const [showSettings, setShowSettings] = useState(false);
@@ -1566,6 +1566,20 @@ function App() {
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
                 Lấy miễn phí tại: <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>aistudio.google.com</a>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>GROQ API KEY</label>
+              <input
+                type="password"
+                placeholder="Nhập Groq API key..."
+                value={apiKeys.groq || ''}
+                onChange={(e) => setApiKeys(p => ({ ...p, groq: e.target.value }))}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '8px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
+              />
+              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
+                Lấy miễn phí tại: <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>console.groq.com/keys</a>
               </span>
             </div>
 
