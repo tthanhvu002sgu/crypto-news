@@ -465,8 +465,7 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
 
   const fetchSource = async (name, url, parser) => {
     try {
-      const headers = name === 'Coinbase Spot' ? { 'User-Agent': 'Node.js' } : {};
-      const res = await axios.get(url, { headers, timeout: 4000 });
+      const res = await axios.get(url, { timeout: 4000 });
       return parser(res.data);
     } catch (e) {
       console.warn(`[API - OrderBook] Failed to fetch OBI depth from ${name}:`, e.message);
@@ -494,21 +493,15 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
     asks: data?.data?.asks || []
   });
 
-  const coinbaseParser = (data) => ({
-    bids: data.bids || [],
-    asks: data.asks || []
-  });
-
   try {
-    const sourceNames = ['Binance Futures', 'Bybit Futures', 'OKX Futures', 'Bitget Futures', 'Coinbase Spot'];
-    const parsers = [binanceParser, bybitParser, okxParser, bitgetParser, coinbaseParser];
+    const sourceNames = ['Binance Futures', 'Bybit Futures', 'OKX Futures', 'Bitget Futures'];
+    const parsers = [binanceParser, bybitParser, okxParser, bitgetParser];
 
     const results = await Promise.all([
       fetchSource('Binance Futures', urls.binance, binanceParser),
       fetchSource('Bybit Futures', urls.bybit, bybitParser),
       fetchSource('OKX Futures', urls.okx, okxParser),
-      fetchSource('Bitget Futures', urls.bitget, bitgetParser),
-      fetchSource('Coinbase Spot', `https://api.exchange.coinbase.com/products/${base}-USD/book?level=2`, coinbaseParser)
+      fetchSource('Bitget Futures', urls.bitget, bitgetParser)
     ]);
 
     let totalBidVol = 0;

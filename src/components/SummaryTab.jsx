@@ -22,41 +22,10 @@ export default function SummaryTab({
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync
 }) {
 
-  const [provider, setProvider] = useState(() => {
-    return localStorage.getItem('ai-provider') || 'openrouter';
-  });
+  const provider = 'openrouter';
   const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem('ai-model') || (localStorage.getItem('ai-provider') === 'gemini' ? 'gemini-2.5-flash' : localStorage.getItem('ai-provider') === 'groq' ? 'llama-3.3-70b-versatile' : 'google/gemma-4-31b-it:free');
+    return localStorage.getItem('ai-model') || 'google/gemma-4-31b-it:free';
   });
-  const [groqModels, setGroqModels] = useState([]);
-
-  useEffect(() => {
-    if (provider === 'groq' && apiKeys?.groq) {
-      fetch('https://api.groq.com/openai/v1/models', {
-        headers: {
-          'Authorization': `Bearer ${apiKeys.groq}`
-        }
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.data) {
-          const models = data.data
-            .filter(m => !m.id.includes('whisper'))
-            .map(m => m.id);
-          setGroqModels(models);
-        }
-      })
-      .catch(err => console.error("Error fetching groq models", err));
-    }
-  }, [provider, apiKeys?.groq]);
-
-  const handleProviderChange = (newProvider) => {
-    setProvider(newProvider);
-    localStorage.setItem('ai-provider', newProvider);
-    const defaultModel = newProvider === 'openrouter' ? 'google/gemma-4-31b-it:free' : newProvider === 'groq' ? 'llama-3.3-70b-versatile' : 'gemini-2.5-flash';
-    setSelectedModel(defaultModel);
-    localStorage.setItem('ai-model', defaultModel);
-  };
 
   const handleModelChange = (newModel) => {
     setSelectedModel(newModel);
@@ -369,24 +338,41 @@ High-frequency and derivatives metrics reveal [describe derivatives market struc
 * **Immediate Support**: $[Price] ([Value] USD aggregated support; [weak/strong] structural defense). Critical macro support remains at $[Price].
 * **Immediate Resistance**: $[Price] ([Value] USD aggregated resistance). Stronger macro resistance sits at $[Price].
 
+#### FINANCIAL CAUSALITY OF CURRENT TREND
+* **Mechanical Supply-Demand Imbalance (Order Flow Imbalance)**: [Analyze how current price movements are the direct mechanical result of active buy/sell volume fully matching passive limit sell/buy orders and pushing prices to new levels].
+* **Information Asymmetry**: [Explain how macroeconomic data and capital flows are causing the market to misprice BTC, before self-correction toward intrinsic value].
+* **Forced Dynamics from Market Structure**: [Explain which specific group of investor positions is forced to cut losses or be liquidated at specific price zones, and how this forced liquidity creates reversal/continuation zones].
+
 #### SCENARIO ANALYSIS BASED ON TRIGGER EVENTS
 * **Scenario A: Continuation of the Structural Downtrend (Primary Path)** [or alternative path]
   * **Trigger Events**:
     1. [Condition 1, e.g. price breaks support]
     2. [Condition 2, e.g. ETF outflow exceeds -100M]
     3. [Condition 3, e.g. CVD keeps falling while L/S > 2.0]
+  * **Financial Causality**:
+    * *Mechanical Imbalance*: [How order flow imbalance will drive this scenario].
+    * *Information Asymmetry*: [How macro/flow mismatch drives this scenario].
+    * *Forced Dynamics*: [Where liquidations/stop-outs will trigger forced liquidity in this scenario].
   * **Market Impact**: [Market behavior outcome, price targets].
 * **Scenario B: Low-Volume Sideways Consolidation**
   * **Trigger Events**:
     1. [Condition 1]
     2. [Condition 2]
     3. [Condition 3]
+  * **Financial Causality**:
+    * *Mechanical Imbalance*: [How order flow balance/imbalance drives this scenario].
+    * *Information Asymmetry*: [How macro/flow factors drive this scenario].
+    * *Forced Dynamics*: [How lack of liquidations/stop-outs drives this scenario].
   * **Market Impact**: [Market behavior outcome, HFT scalping environment].
 * **Scenario C: Short-Squeeze & Local Invalidation (Reversal Path)**
   * **Trigger Events**:
     1. [Condition 1]
     2. [Condition 2]
     3. [Condition 3]
+  * **Financial Causality**:
+    * *Mechanical Imbalance*: [How order flow imbalance will drive this scenario].
+    * *Information Asymmetry*: [How macro/flow mismatch drives this scenario].
+    * *Forced Dynamics*: [Where liquidations/stop-outs will trigger forced liquidity in this scenario].
   * **Market Impact**: [Market behavior outcome, price targets].
 
 ---
@@ -444,19 +430,9 @@ ${promptData}
 
   const generateReport = async () => {
     const openRouterKey = apiKeys?.openRouter?.trim();
-    const geminiKey = apiKeys?.gemini?.trim();
-    const groqKey = apiKeys?.groq?.trim();
 
-    if (provider === 'openrouter' && !openRouterKey) {
+    if (!openRouterKey) {
       alert("Please enter your OpenRouter API Key in the API Settings!");
-      return;
-    }
-    if (provider === 'gemini' && !geminiKey) {
-      alert("Please enter your Google AI Studio (Gemini) API Key in the API Settings!");
-      return;
-    }
-    if (provider === 'groq' && !groqKey) {
-      alert("Please enter your Groq API Key in the API Settings!");
       return;
     }
 
@@ -466,29 +442,15 @@ ${promptData}
     try {
       const { promptData, systemPrompt } = await preparePromptAndData();
 
-      let url = "";
-      let headers = { "Content-Type": "application/json" };
+      const url = "https://openrouter.ai/api/v1/chat/completions";
+      const headers = { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${openRouterKey}`
+      };
 
-      if (provider === 'openrouter') {
-        url = "https://openrouter.ai/api/v1/chat/completions";
-        headers["Authorization"] = `Bearer ${openRouterKey}`;
-      } else if (provider === 'groq') {
-        url = "https://api.groq.com/openai/v1/chat/completions";
-        headers["Authorization"] = `Bearer ${groqKey}`;
-      } else {
-        url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-        headers["Authorization"] = `Bearer ${geminiKey}`;
-      }
-
-      const modelsToTry = provider === 'openrouter' ? [
+      const modelsToTry = [
         selectedModel,
         ...["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free", "google/gemma-4-26b-a4b-it:free", "qwen/qwen3-coder:free"].filter(m => m !== selectedModel)
-      ] : provider === 'groq' ? [
-        selectedModel,
-        ...(groqModels.length > 0 ? groqModels : ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it", "deepseek-r1-distill-llama-70b"]).filter(m => m !== selectedModel)
-      ] : [
-        selectedModel,
-        ...["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"].filter(m => m !== selectedModel)
       ];
 
       let response = null;
@@ -581,7 +543,7 @@ ${promptData}
         }
       }
 
-      setAiSummary(prev => prev + `\n\n---\n*Report generated by model: **${successfulModel}** (${provider === 'openrouter' ? 'OpenRouter' : provider === 'groq' ? 'Groq' : 'Google AI Studio'})*`);
+      setAiSummary(prev => prev + `\n\n---\n*Report generated by model: **${successfulModel}** (OpenRouter)*`);
     } catch (err) {
       console.error(err);
       let friendlyError = err.message;
@@ -589,8 +551,7 @@ ${promptData}
         friendlyError = `Rate Limit (Error 429) hoặc OpenRouter Free Tier đang bị quá tải.\n\n` +
           `**Hướng khắc phục đề xuất:**\n` +
           `1. Đợi khoảng 10-15 giây rồi bấm "GENERATE AI REPORT" thử lại.\n` +
-          `2. Sử dụng API key OpenRouter cá nhân của bạn trong phần Settings để tránh dùng chung giới hạn miễn phí.\n` +
-          `3. **Khuyên dùng:** Đổi Provider sang **Google Gemini** (góc trên bên phải bảng này) và nhập API Key Gemini của bạn (miễn phí từ Google AI Studio) vào phần cài đặt API để chạy ổn định hơn.`;
+          `2. Sử dụng API key OpenRouter cá nhân của bạn trong phần Settings để tránh dùng chung giới hạn miễn phí.`;
       }
       setAiSummary(prev => prev + "\n\n**Error generating report:** " + friendlyError);
     } finally {
@@ -605,30 +566,6 @@ ${promptData}
           <Sparkles size={18} /> AI MACRO & HFT SUMMARY
         </h3>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Provider Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
-            <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>PROVIDER:</span>
-            <select
-              value={provider}
-              onChange={(e) => handleProviderChange(e.target.value)}
-              disabled={isAiLoading || isExporting}
-              className="text-slate-300 font-mono"
-              style={{
-                background: 'var(--bg-slate-900)',
-                border: '1px solid var(--border-panel)',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontSize: '0.65rem',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="openrouter">OpenRouter</option>
-              <option value="gemini">Google Gemini</option>
-              <option value="groq">Groq</option>
-            </select>
-          </div>
-
           {/* Model Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
             <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>MODEL:</span>
@@ -647,39 +584,11 @@ ${promptData}
                 cursor: 'pointer'
               }}
             >
-              {provider === 'openrouter' ? (
-                <>
-                  <option value="google/gemma-4-31b-it:free">Gemma 4 31B (Free)</option>
-                  <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Free)</option>
-                  <option value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B (Free)</option>
-                  <option value="qwen/qwen3-coder:free">Qwen 3 Coder (Free)</option>
-                  <option value="qwen/qwen-2.5-72b-instruct:free">Qwen 2.5 72B (Free)</option>
-                </>
-              ) : provider === 'groq' ? (
-                <>
-                  {groqModels.length > 0 ? (
-                    groqModels.map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
-                      <option value="llama-3.1-8b-instant">Llama 3.1 8B</option>
-                      <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                      <option value="gemma2-9b-it">Gemma 2 9B</option>
-                      <option value="deepseek-r1-distill-llama-70b">DeepSeek R1 Llama 70B</option>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                </>
-              )}
+              <option value="google/gemma-4-31b-it:free">Gemma 4 31B (Free)</option>
+              <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Free)</option>
+              <option value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B (Free)</option>
+              <option value="qwen/qwen3-coder:free">Qwen 3 Coder (Free)</option>
+              <option value="qwen/qwen-2.5-72b-instruct:free">Qwen 2.5 72B (Free)</option>
             </select>
           </div>
 
@@ -725,7 +634,7 @@ ${promptData}
             </button>
           </Tooltip>
           <Tooltip content={{
-            api: 'Google AI / OpenRouter',
+            api: 'OpenRouter',
             def: 'Yêu cầu AI (Gemma/Llama...) đọc dữ liệu hiện có và tự động lập báo cáo tóm tắt vĩ mô & HFT theo cấu trúc nghiêm ngặt của hệ thống.'
           }} lastUpdated={lastSync}>
             <button 
@@ -767,66 +676,7 @@ ${promptData}
         )}
       </div>
 
-      {/* CVD Array Export / Display Panel */}
-      <div className="cvd-arrays-panel" style={{
-        background: 'var(--bg-slate-900)',
-        border: '1px solid var(--border-panel)',
-        borderRadius: '8px',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
-      }}>
-        <h4 className="font-mono text-emerald" style={{ marginTop: 0, marginBottom: 0, fontSize: '0.8rem' }}>
-          📊 HISTORICAL CVD ARRAY DATA (7D &amp; 30D)
-        </h4>
-        <p className="text-xs text-slate-400 font-mono" style={{ margin: 0, lineHeight: 1.4 }}>
-          This data is automatically attached to the AI Input for trend analysis. You can also manually copy the array below for your own use.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div>
-            <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>7-DAY CVD ARRAY (4h TF, {data.cvdHistory7d?.length || 0} points)</span>
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(data.cvdHistory7d?.map(c => c.cvd) || []));
-                  alert("Copied 7d CVD array!");
-                }}
-                className="text-emerald hover:underline"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.62rem', fontFamily: 'var(--font-mono)' }}
-              >
-                Copy CVD array
-              </button>
-            </div>
-            <textarea
-              readOnly
-              value={JSON.stringify(data.cvdHistory7d?.map(c => c.cvd) || [])}
-              style={{ width: '100%', height: '50px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '6px', color: 'var(--text-contrast)', fontSize: '0.62rem', fontFamily: 'var(--font-mono)', resize: 'none', outline: 'none' }}
-            />
-          </div>
 
-          <div>
-            <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>30-DAY CVD ARRAY (1d TF, {data.cvdHistory30d?.length || 0} points)</span>
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(data.cvdHistory30d?.map(c => c.cvd) || []));
-                  alert("Copied 30d CVD array!");
-                }}
-                className="text-emerald hover:underline"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.62rem', fontFamily: 'var(--font-mono)' }}
-              >
-                Copy CVD array
-              </button>
-            </div>
-            <textarea
-              readOnly
-              value={JSON.stringify(data.cvdHistory30d?.map(c => c.cvd) || [])}
-              style={{ width: '100%', height: '50px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '6px', color: 'var(--text-contrast)', fontSize: '0.62rem', fontFamily: 'var(--font-mono)', resize: 'none', outline: 'none' }}
-            />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
