@@ -935,7 +935,7 @@ export const getFredCSVMetric = async (seriesId, units = 'lin') => {
 export const getYahooStockQuote = async (ticker) => {
   const url = isLocal 
     ? `/api-yahoo/v8/finance/chart/${ticker}` 
-    : `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
+    : `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}`;
   const params = {
     interval: '1d',
     range: '1d',
@@ -976,7 +976,7 @@ export const getYahooStockQuote = async (ticker) => {
 
   // 2. Try Jina Reader CORS proxy fallback
   try {
-    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+    const targetUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
     const jinaUrl = `https://r.jina.ai/${targetUrl}`;
     const res = await axios.get(jinaUrl, {
       headers: {

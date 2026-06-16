@@ -36,7 +36,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api-bitbo/, '')
       },
       '/api-yahoo': {
-        target: 'https://query1.finance.yahoo.com',
+        target: 'https://query2.finance.yahoo.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-yahoo/, ''),
         headers: {
