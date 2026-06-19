@@ -355,11 +355,11 @@ function App() {
       const saved = localStorage.getItem('app-api-keys');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { fred: '', alphaVantage: '', openRouter: '', ...parsed };
+        return { fred: '', alphaVantage: '', gemini: '', ...parsed };
       }
-      return { fred: '', alphaVantage: '', openRouter: '' };
+      return { fred: '', alphaVantage: '', gemini: '' };
     } catch {
-      return { fred: '', alphaVantage: '', openRouter: '' };
+      return { fred: '', alphaVantage: '', gemini: '' };
     }
   });
   const [showSettings, setShowSettings] = useState(false);
@@ -833,14 +833,14 @@ function App() {
           </div>
         </div>
         <div className="header-right">
-          <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <HelpCircle size={16} />
+          <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: tooltipsEnabled ? 'rgba(16,185,129,0.1)' : 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
+            <HelpCircle size={15} />
           </button>
-          <button className="btn-icon" onClick={() => setShowSettings(true)} title="API Settings" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-300)', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Settings size={16} />
+          <button className="btn-icon" onClick={() => setShowSettings(true)} title="API Settings" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
+            <Settings size={15} />
           </button>
-          <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-300)', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
+            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>
           <div className="status-box font-mono">
             <LiveDot active={isOnline} />
@@ -1500,12 +1500,12 @@ function App() {
       </div>
 
       {showSettings && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="glass-panel" style={{ width: '400px', padding: '20px', background: 'var(--bg-panel-solid)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div className="glass-panel" style={{ width: '420px', padding: '24px', background: 'var(--bg-panel-solid)', display: 'flex', flexDirection: 'column', gap: '18px', borderRadius: 'var(--card-radius)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 className="font-mono text-emerald" style={{ margin: 0, fontSize: '0.8rem' }}>📟 CÀI ĐẶT API KEYS</h3>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-slate-400)', cursor: 'pointer' }}>
-                <X size={16} />
+              <h3 className="font-mono" style={{ margin: 0, fontSize: '0.8rem', background: 'var(--gradient-aurora)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>⚙️ CÀI ĐẶT API KEYS</h3>
+              <button onClick={() => setShowSettings(false)} style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', cursor: 'pointer', padding: '4px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}>
+                <X size={14} />
               </button>
             </div>
             
@@ -1520,7 +1520,7 @@ function App() {
                 placeholder="Nhập FRED API key..."
                 value={apiKeys.fred}
                 onChange={(e) => setApiKeys(p => ({ ...p, fred: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '8px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
                 Lấy miễn phí tại: <a href="https://fred.stlouisfed.org/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>fred.stlouisfed.org</a>
@@ -1534,7 +1534,7 @@ function App() {
                 placeholder="Nhập Alpha Vantage key..."
                 value={apiKeys.alphaVantage}
                 onChange={(e) => setApiKeys(p => ({ ...p, alphaVantage: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '8px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
                 Lấy miễn phí tại: <a href="https://www.alphavantage.co/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>alphavantage.co</a>
@@ -1542,16 +1542,16 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>OPENROUTER API KEY</label>
+              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>GEMINI API KEY</label>
               <input
                 type="password"
-                placeholder="Nhập OpenRouter API key..."
-                value={apiKeys.openRouter || ''}
-                onChange={(e) => setApiKeys(p => ({ ...p, openRouter: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '8px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
+                placeholder="Nhập Gemini API key..."
+                value={apiKeys.gemini || ''}
+                onChange={(e) => setApiKeys(p => ({ ...p, gemini: e.target.value }))}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
-                Lấy miễn phí tại: <a href="https://openrouter.ai/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>openrouter.ai</a>
+                Lấy miễn phí tại: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>Google AI Studio</a>
               </span>
             </div>
 

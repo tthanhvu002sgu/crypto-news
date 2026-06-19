@@ -13,7 +13,6 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
-    "@openrouter/sdk": "^0.12.79",
     "axios": "^1.17.0",
     "chart.js": "^4.5.1",
     "framer-motion": "^12.40.0",

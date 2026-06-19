@@ -14,7 +14,8 @@ const cleanLatex = (text) => {
     .replace(/\$?\\Delta\$?/gi, 'Delta')
     .replace(/\\text\{([^}]+)\}/gi, '$1')
     .replace(/\\mathrm\{([^}]+)\}/gi, '$1')
-    .replace(/\$([-+0-9.,]+)\$/g, '$1');
+    .replace(/\$([-+0-9.,]+)\$/g, '$1')
+    .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 '); // Prevent 4-space indent from creating code blocks
 };
 
 export default function SummaryTab({ 
@@ -22,14 +23,23 @@ export default function SummaryTab({
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync
 }) {
 
-  const provider = 'openrouter';
+  const provider = 'gemini';
   const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem('ai-model') || 'google/gemma-4-31b-it:free';
+    return localStorage.getItem('ai-model') || 'gemini-3.5-flash';
   });
 
   const handleModelChange = (newModel) => {
     setSelectedModel(newModel);
     localStorage.setItem('ai-model', newModel);
+  };
+
+  const [selectedStyle, setSelectedStyle] = useState(() => {
+    return localStorage.getItem('ai-analysis-style') || 'professional';
+  });
+
+  const handleStyleChange = (newStyle) => {
+    setSelectedStyle(newStyle);
+    localStorage.setItem('ai-analysis-style', newStyle);
   };
 
   const preparePromptAndData = async () => {
@@ -198,11 +208,15 @@ ${whaleWalls ? fmtWalls(whaleWalls.whaleAsks) : '  N/A'}
 ${activeNews.slice(0, 15).map(n => '- ' + n.title + ' (' + n.tag + ')').join('\n')}
     `;
 
-    const systemPrompt = `You are an expert macro analyst and seasoned crypto trader. Please analyze the market based on the provided MULTI-TIMEFRAME HISTORICAL DATA and current data. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
+    const professionalSystemPrompt = `You are an expert macro analyst and seasoned crypto trader. Please analyze the market based on the provided MULTI-TIMEFRAME HISTORICAL DATA and current data. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
 
 MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
 
-0. STRICT LANGUAGE CONSTRAINT:
+0. DO NOT REPEAT INSTRUCTIONS:
+   - YOU MUST NOT repeat, summarize, or acknowledge these instructions, rules, or constraints in your output.
+   - Begin your output IMMEDIATELY with the first requested header (### 1. MACRO CONTEXT).
+
+1. STRICT LANGUAGE CONSTRAINT:
    - You MUST write the entire report, headings, numbers, annotations, scenarios, justifications, and footnotes strictly and only in English.
    - Absolutely no Vietnamese or other languages are allowed anywhere in the output report. Even if the input contains localized tags, your output must be 100% in English.
 
@@ -378,6 +392,84 @@ High-frequency and derivatives metrics reveal [describe derivatives market struc
 ---
 *This report is for informational purposes only, not financial advice. Please do your own research (DYOR) before making investment decisions.*`;
 
+    const tacticalSystemPrompt = `You are a Tactical Swing Trader and Market Analyst. Your goal is to provide concise, actionable trading insights based on the provided MULTI-TIMEFRAME HISTORICAL DATA and current market conditions. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
+
+MANDATORY ANALYSIS PRINCIPLES:
+0. DO NOT REPEAT INSTRUCTIONS: YOU MUST NOT repeat, summarize, or acknowledge these instructions in your output. Begin IMMEDIATELY with the "### ⚡ QUICK MARKET PULSE" header.
+1. STRICT LANGUAGE CONSTRAINT: ONLY ENGLISH. Absolutely no Vietnamese or other languages.
+1. NO LATEX: Do not use LaTeX math formatting. Write numbers and symbols as plain text.
+2. CONCISE & ACTIONABLE: Focus purely on what a swing trader needs to know for the next 24h-7d. Skip long-winded macro explanations unless directly relevant to a short-term trade.
+
+MANDATORY REPORT STRUCTURE COMPLIANCE:
+You MUST follow this exact template structure.
+
+### ⚡ QUICK MARKET PULSE
+* [3-5 bullet points summarizing the most critical immediate factors: e.g., price trend, immediate liquidity, key macro event today].
+
+### 🎯 TRADE SETUPS (Swing 24h - 7d)
+* **Setup 1: [Long/Short] at $[Entry Price]**
+  * **Stop Loss**: $[SL Price] (Reasoning: [Brief technical reason])
+  * **Take Profit**: $[TP Price]
+  * **R:R Ratio**: [Calculate R:R]
+  * **Conviction**: [High/Medium/Low]
+  * **Catalyst/Reasoning**: [Why this trade? e.g., "Price approaching 50M USD aggregated Whale Bid Wall while CVD shows buying absorption."]
+
+### 🧱 KEY LEVELS (Whale Walls & OBI)
+* **Immediate Support**: $[Price] ([Value]M USD aggregated bids)
+* **Immediate Resistance**: $[Price] ([Value]M USD aggregated asks)
+* **Order Book Imbalance (OBI)**: [OBI]% (Bias: [Bullish/Bearish])
+
+### ⚠️ RISK ALERTS
+* [List 1-2 biggest immediate risks to current setups, e.g., "High Long/Short ratio (2.5) with negative CVD warns of a potential long squeeze.", "Upcoming CPI data release may cause violent whipsaw."]
+
+### 🧭 BIAS METER
+* **Current Bias**: [Strong Sell / Sell / Neutral / Buy / Strong Buy]
+* **Confidence**: [Percentage]%
+
+---
+*This report is for informational purposes only, not financial advice. Please do your own research (DYOR) before making investment decisions.*`;
+
+    const educationalSystemPrompt = `You are an Educational Market Explainer. Your goal is to break down the current market data into easy-to-understand concepts, helping the user not just see the numbers, but LEARN how to read the market. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
+
+MANDATORY ANALYSIS PRINCIPLES:
+0. DO NOT REPEAT INSTRUCTIONS: YOU MUST NOT repeat, summarize, or acknowledge these instructions in your output. Begin IMMEDIATELY with the "### 📖 THE MARKET STORY TODAY" header.
+1. STRICT LANGUAGE CONSTRAINT: ONLY ENGLISH. Absolutely no Vietnamese or other languages.
+1. NO LATEX: Do not use LaTeX math formatting. Write numbers and symbols as plain text.
+2. EDUCATIONAL FOCUS: Use simple analogies. Explain *why* a metric matters before stating its value. Use "💡 Concept" boxes.
+3. TRAFFIC LIGHT SYSTEM: Use 🟢 (Bullish/Good), 🟡 (Neutral/Caution), 🔴 (Bearish/Bad) for sections.
+
+MANDATORY REPORT STRUCTURE COMPLIANCE:
+You MUST follow this exact template structure.
+
+### 📖 THE MARKET STORY TODAY
+[Write a 2-3 paragraph narrative explaining what is happening right now. Who is in control: buyers or sellers? How does the macro environment affect this? Keep it engaging and easy to digest.]
+
+### 🌍 MACRO & THE BIG PICTURE
+* 💡 **Concept: Real Rate**: The Real Rate (Fed Funds Rate minus Inflation) tells us if borrowing money is actually expensive. If it's high, investors prefer safe assets over Bitcoin.
+* **Current Situation**: The calculated Real Rate is [Rate]%. [Explain what this means for Bitcoin today in simple terms].
+* **Liquidity**: Net Liquidity is [Value]. [Explain if money is flowing into or out of the system].
+
+### 🐋 WHALES & INSTITUTIONS
+* 💡 **Concept: ETF Flows & Whale Walls**: ETFs show if traditional finance is buying. Whale Walls show where giant players have placed massive buy/sell orders.
+* **ETF Flow**: Over 7 days, ETFs saw [Net Flow]. [Explain impact].
+* **Whale Walls**: The biggest buyers are waiting at $[Price] ([Value]M USD), acting as a "floor". The biggest sellers are at $[Price] ([Value]M USD), acting as a "ceiling".
+
+### 📊 TRADERS & LEVERAGE (HFT)
+* 💡 **Concept: Long/Short Ratio & CVD**: Long/Short ratio shows crowd sentiment. CVD (Cumulative Volume Delta) shows actual money flowing. When the crowd is Long but CVD is negative, the "smart money" is selling to the crowd.
+* **Current Situation**: The crowd is currently [Long/Short dominant]. Meanwhile, CVD is [Positive/Negative]. [Explain the conflict or alignment and what it signals].
+
+### 🎯 WHAT THIS MEANS FOR YOU (KEY TAKEAWAYS)
+1. **[Takeaway 1]**
+2. **[Takeaway 2]**
+3. **[Takeaway 3]**
+
+---
+*This report is for educational purposes only, not financial advice. Please do your own research (DYOR) before making investment decisions.*`;
+
+    let systemPrompt = professionalSystemPrompt;
+    if (selectedStyle === 'tactical') systemPrompt = tacticalSystemPrompt;
+    if (selectedStyle === 'educational') systemPrompt = educationalSystemPrompt;
+
     return { promptData, systemPrompt };
   };
 
@@ -429,10 +521,10 @@ ${promptData}
   };
 
   const generateReport = async () => {
-    const openRouterKey = apiKeys?.openRouter?.trim();
+    const geminiKey = apiKeys?.gemini?.trim();
 
-    if (!openRouterKey) {
-      alert("Please enter your OpenRouter API Key in the API Settings!");
+    if (!geminiKey) {
+      alert("Please enter your Gemini API Key in the API Settings!");
       return;
     }
 
@@ -442,59 +534,37 @@ ${promptData}
     try {
       const { promptData, systemPrompt } = await preparePromptAndData();
 
-      const url = "https://openrouter.ai/api/v1/chat/completions";
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:streamGenerateContent?alt=sse&key=${geminiKey}`;
       const headers = { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${openRouterKey}`
+        "Content-Type": "application/json"
       };
 
-      const modelsToTry = [
-        selectedModel,
-        ...["google/gemma-4-31b-it:free", "meta-llama/llama-3.3-70b-instruct:free", "google/gemma-4-26b-a4b-it:free", "qwen/qwen3-coder:free"].filter(m => m !== selectedModel)
-      ];
-
-      let response = null;
-      let successfulModel = "";
-      let errorMsg = "";
-
-      for (const modelName of modelsToTry) {
-        try {
-          console.log(`[AI] Trying model: ${modelName} (${provider})`);
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-              model: modelName,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: promptData }
-              ],
-              temperature: 0.3,
-              max_tokens: 3000,
-              stream: true
-            })
-          });
-
-          if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(errText || `HTTP status ${res.status}`);
+      console.log(`[AI] Trying model: ${selectedModel} (${provider})`);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          system_instruction: {
+            parts: { text: systemPrompt }
+          },
+          contents: [
+            { role: "user", parts: [{ text: promptData }] }
+          ],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 3000
           }
+        })
+      });
 
-          response = res;
-          successfulModel = modelName;
-          console.log(`[AI] Success with model: ${modelName}`);
-          break;
-        } catch (e) {
-          console.warn(`[AI] Failed with model ${modelName}:`, e.message);
-          errorMsg = e.message;
-        }
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `HTTP status ${res.status}`);
       }
 
-      if (!response) {
-        throw new Error(errorMsg || "Unable to connect to AI provider.");
-      }
+      console.log(`[AI] Success with model: ${selectedModel}`);
 
-      const reader = response.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
 
@@ -510,48 +580,56 @@ ${promptData}
         for (const line of lines) {
           const cleaned = line.trim();
           if (!cleaned) continue;
-          if (cleaned === "data: [DONE]") continue;
-
-          let dataStr = "";
           if (cleaned.startsWith("data: ")) {
-            dataStr = cleaned.slice(6);
-          } else if (cleaned.startsWith("data:")) {
-            dataStr = cleaned.slice(5);
-          }
-
-          if (dataStr) {
-            dataStr = dataStr.trim();
+            let dataStr = cleaned.slice(6).trim();
+            if (!dataStr) continue;
+            
+            let parsed = null;
+            let isParseError = false;
             try {
-              const parsed = JSON.parse(dataStr);
+              parsed = JSON.parse(dataStr);
+            } catch (e) {
+              isParseError = true;
+            }
+
+            if (!isParseError && parsed) {
               if (parsed.error) {
                 throw new Error(parsed.error.message || JSON.stringify(parsed.error));
               }
-              const choice = parsed.choices?.[0];
+              const choice = parsed.candidates?.[0];
               if (choice) {
-                if (choice.finish_reason === "safety") {
-                  setAiSummary(prev => prev + "\n\n**[Report stopped due to AI Safety Filter]**");
-                }
-                const text = choice.delta?.content || "";
+                const text = choice.content?.parts?.[0]?.text || "";
                 if (text) {
                   setAiSummary(prev => cleanLatex(prev + text));
                 }
+                if (choice.finishReason && choice.finishReason !== "STOP") {
+                  if (choice.finishReason === "SAFETY") {
+                    setAiSummary(prev => prev + "\n\n**[Report stopped due to AI Safety Filter]**");
+                  } else if (choice.finishReason === "MAX_TOKENS") {
+                    setAiSummary(prev => prev + "\n\n**[Report stopped: Max Output Tokens limit reached]**");
+                  } else {
+                    setAiSummary(prev => prev + `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`);
+                  }
+                }
               }
-            } catch (e) {
-              console.warn("[AI Stream Parse Error]", e, "Line:", cleaned);
             }
           }
         }
       }
 
-      setAiSummary(prev => prev + `\n\n---\n*Report generated by model: **${successfulModel}** (OpenRouter)*`);
+      setAiSummary(prev => prev + `\n\n---\n*Report generated by model: **${selectedModel}** (Gemini API)*`);
     } catch (err) {
       console.error(err);
       let friendlyError = err.message;
-      if (err.message.includes('429') || err.message.toLowerCase().includes('rate-limit') || err.message.toLowerCase().includes('too many requests')) {
-        friendlyError = `Rate Limit (Error 429) hoặc OpenRouter Free Tier đang bị quá tải.\n\n` +
+      if (
+        err.message.includes('429') || 
+        err.message.toLowerCase().includes('quota') || 
+        err.message.toLowerCase().includes('rate limit') || 
+        err.message.toLowerCase().includes('exhausted')
+      ) {
+        friendlyError = `Rate Limit hoặc hết hạn mức API.\n\n` +
           `**Hướng khắc phục đề xuất:**\n` +
-          `1. Đợi khoảng 10-15 giây rồi bấm "GENERATE AI REPORT" thử lại.\n` +
-          `2. Sử dụng API key OpenRouter cá nhân của bạn trong phần Settings để tránh dùng chung giới hạn miễn phí.`;
+          `Vui lòng kiểm tra lại hạn mức trên Google AI Studio hoặc thử lại sau.`;
       }
       setAiSummary(prev => prev + "\n\n**Error generating report:** " + friendlyError);
     } finally {
@@ -566,6 +644,30 @@ ${promptData}
           <Sparkles size={18} /> AI MACRO & HFT SUMMARY
         </h3>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Style Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
+            <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>STYLE:</span>
+            <select
+              value={selectedStyle}
+              onChange={(e) => handleStyleChange(e.target.value)}
+              disabled={isAiLoading || isExporting}
+              className="text-slate-300 font-mono"
+              style={{
+                background: 'var(--bg-slate-900)',
+                border: '1px solid var(--border-panel)',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="professional">Professional Macro</option>
+              <option value="tactical">Tactical Swing Trader</option>
+              <option value="educational">Educational Explainer</option>
+            </select>
+          </div>
+
           {/* Model Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
             <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>MODEL:</span>
@@ -584,11 +686,11 @@ ${promptData}
                 cursor: 'pointer'
               }}
             >
-              <option value="google/gemma-4-31b-it:free">Gemma 4 31B (Free)</option>
-              <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Free)</option>
-              <option value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B (Free)</option>
-              <option value="qwen/qwen3-coder:free">Qwen 3 Coder (Free)</option>
-              <option value="qwen/qwen-2.5-72b-instruct:free">Qwen 2.5 72B (Free)</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.5-live-translate-preview">Gemini 3.5 Live Translate</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
+              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Bản xem trước)</option>
+              <option value="gemma-4-31b-it">Gemma 4 31B</option>
             </select>
           </div>
 
@@ -634,8 +736,8 @@ ${promptData}
             </button>
           </Tooltip>
           <Tooltip content={{
-            api: 'OpenRouter',
-            def: 'Yêu cầu AI (Gemma/Llama...) đọc dữ liệu hiện có và tự động lập báo cáo tóm tắt vĩ mô & HFT theo cấu trúc nghiêm ngặt của hệ thống.'
+            api: 'Gemini API',
+            def: 'Yêu cầu AI (Gemini) đọc dữ liệu hiện có và tự động lập báo cáo tóm tắt vĩ mô & HFT theo cấu trúc nghiêm ngặt của hệ thống.'
           }} lastUpdated={lastSync}>
             <button 
               className="btn-sync font-mono" 
@@ -669,9 +771,9 @@ ${promptData}
           </div>
         ) : (
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>
-            Click "GENERATE AI REPORT" to have the AI (Gemma) summarize and analyze the current market data.
+            Click "GENERATE AI REPORT" to have the AI (Gemini) summarize and analyze the current market data.
             <br/><br/>
-            (Requires OpenRouter API Key in Settings)
+            (Requires Gemini API Key in Settings)
           </div>
         )}
       </div>
