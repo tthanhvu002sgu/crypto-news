@@ -370,6 +370,85 @@
 
 .dashboard-layout { display: flex; flex-direction: column; gap: 16px; }
 
+/* ─── News Slider ──────────────────────────────────────────────────────────── */
+.news-slider-wrapper {
+  overflow: hidden;
+  padding: 12px 18px;
+  position: relative;
+}
+
+.news-slider {
+  display: flex;
+  overflow-x: auto;
+  gap: 16px;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 8px; /* For scrollbar */
+}
+
+/* Hide scrollbar for cleaner look */
+.news-slider::-webkit-scrollbar {
+  height: 4px;
+}
+.news-slider::-webkit-scrollbar-thumb {
+  background: var(--border-panel);
+  border-radius: 4px;
+}
+.news-slider::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.news-slide-item {
+  min-width: 280px;
+  max-width: 280px;
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  border-radius: var(--card-radius-sm);
+  padding: 12px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.news-slide-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.news-slide-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.news-slide-title {
+  font-size: 0.65rem;
+  color: var(--text-slate-200);
+  line-height: 1.4;
+  font-weight: 600;
+  margin-bottom: 4px;
+  transition: color 0.15s;
+}
+
+.news-link:hover .news-slide-title {
+  color: var(--color-indigo-400);
+}
+
+.news-slide-snippet {
+  font-size: 0.58rem;
+  color: var(--text-slate-500);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
 .chart-panel {
   padding: 16px 18px;
   position: relative;
@@ -965,6 +1044,7 @@
 .hft-radar-title {
   font-size: 0.85rem; font-weight: 700; color: var(--text-contrast);
   display: flex; align-items: center; gap: 8px; margin: 0 0 4px 0;
+  line-height: 1.5; padding-top: 4px;
 }
 .hft-icon-lg { font-size: 1.1rem; }
 .hft-icon { font-size: 0.8rem; opacity: 0.8; }

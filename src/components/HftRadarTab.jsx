@@ -98,7 +98,7 @@ function CVDPanel({ cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header">
         <Tooltip content={METRIC_METADATA.cvd}>
-          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
             <span className="hft-icon">📊</span> CVD &amp; ORDER FLOW
           </h3>
         </Tooltip>
@@ -161,7 +161,7 @@ function TargetLiquidityPanel({ whaleData }) {
       <div className="hft-panel glass-panel">
         <div className="hft-panel-header">
           <Tooltip content={METRIC_METADATA.whaleWalls}>
-            <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+            <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
               <span className="hft-icon">🎯</span> TARGET LIQUIDITY (WHALE WALLS)
             </h3>
           </Tooltip>
@@ -179,7 +179,7 @@ function TargetLiquidityPanel({ whaleData }) {
     <div className="hft-panel glass-panel">
       <div className="hft-panel-header">
         <Tooltip content={METRIC_METADATA.whaleWalls}>
-          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
             <span className="hft-icon">🎯</span> TARGET LIQUIDITY (≥$500K)
           </h3>
         </Tooltip>
@@ -349,7 +349,7 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
       <div className="hft-panel glass-panel">
         <div className="hft-panel-header">
           <Tooltip content={METRIC_METADATA.obi}>
-            <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+            <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
               <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE
             </h3>
           </Tooltip>
@@ -368,7 +368,7 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
     <div className="hft-panel glass-panel">
       <div className="hft-panel-header">
         <Tooltip content={METRIC_METADATA.obi}>
-          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
             <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE
           </h3>
         </Tooltip>
@@ -483,7 +483,7 @@ function WhaleTradesPanel({ whaleTrades }) {
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header">
-        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">🐋</span> LIVE WHALE TRADES
         </h3>
         <select 
@@ -577,7 +577,7 @@ function WhaleKlineFlowPanel({ whaleFlow }) {
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header">
-        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">🌊</span> 1M WHALE KLINE FLOW (PAST 16H)
         </h3>
       </div>

@@ -276,7 +276,72 @@ const BASELINE_CME_COT = {
   leveragedFunds: { long: 6269, longChange: 1603, short: 12827, shortChange: -473, net: -6558, netChange: 2076 }
 };
 
+function useDraggableScroll() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const slider = ref.current;
+    if (!slider) return;
+    
+    let isDown = false;
+    let startX;
+    let scrollLeft;
+    let isDragging = false;
+
+    const onMouseDown = (e) => {
+      isDown = true;
+      isDragging = false;
+      slider.style.cursor = 'grabbing';
+      startX = e.pageX - slider.offsetLeft;
+      scrollLeft = slider.scrollLeft;
+    };
+    
+    const onMouseLeave = () => {
+      isDown = false;
+      slider.style.cursor = 'grab';
+    };
+    
+    const onMouseUp = () => {
+      isDown = false;
+      slider.style.cursor = 'grab';
+    };
+    
+    const onMouseMove = (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      isDragging = true;
+      const x = e.pageX - slider.offsetLeft;
+      const walk = (x - startX) * 2; // Scroll-fast
+      slider.scrollLeft = scrollLeft - walk;
+    };
+    
+    const onClick = (e) => {
+      if (isDragging) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    slider.style.cursor = 'grab';
+    slider.addEventListener('mousedown', onMouseDown);
+    slider.addEventListener('mouseleave', onMouseLeave);
+    slider.addEventListener('mouseup', onMouseUp);
+    slider.addEventListener('mousemove', onMouseMove);
+    slider.addEventListener('click', onClick, true); // capture phase
+
+    return () => {
+      slider.removeEventListener('mousedown', onMouseDown);
+      slider.removeEventListener('mouseleave', onMouseLeave);
+      slider.removeEventListener('mouseup', onMouseUp);
+      slider.removeEventListener('mousemove', onMouseMove);
+      slider.removeEventListener('click', onClick, true);
+    };
+  }, []);
+  
+  return ref;
+}
+
 function App() {
+  const newsSliderRef = useDraggableScroll();
   const { tooltipsEnabled, setTooltipsEnabled, setLastSyncTime } = useTooltipSettings();
   const [data, setData] = useState(INIT);
   const [activeTab, setActiveTab] = useState(() => {
@@ -1022,6 +1087,13 @@ function App() {
                 tooltipId="activeAddr"
               />
               <MetricCard
+                label="PRODUCTION COST"
+                value={data.onChain?.productionCost ? `$${parseInt(data.onChain.productionCost).toLocaleString()}` : '---'}
+                sub="1 BTC (Est.)"
+                subCls="text-slate-400"
+                tooltipId="productionCost"
+              />
+              <MetricCard
                 label="MVRV RATIO"
                 value={data.onChainMetrics?.mvrv || '---'}
                 sub={data.onChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.onChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
@@ -1061,6 +1133,31 @@ function App() {
             {/* ══ DASHBOARD TAB ══════════════════════════════════════════════ */}
             {activeTab === 'dashboard' && (
               <div className="dashboard-layout">
+
+                {/* News Slider */}
+                {data.news && data.news.length > 0 && (
+                  <div className="news-slider-wrapper glass-panel">
+                    <div className="news-slider" ref={newsSliderRef}>
+                      {data.news.map((item, idx) => {
+                        const catColor = item.cat === 'macro' ? 'var(--color-amber-400)' : 'var(--color-emerald-400)';
+                        const catBg = item.cat === 'macro' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)';
+                        const catBorder = item.cat === 'macro' ? 'rgba(245,158,11,0.25)' : 'rgba(16,185,129,0.25)';
+                        return (
+                          <div key={idx} className="news-slide-item" onDragStart={(e) => e.preventDefault()}>
+                            <div className="news-slide-meta font-mono">
+                              <span className="news-tag" style={{ color: catColor, background: catBg, borderColor: catBorder }}>{item.tag}</span>
+                              <span className="news-time">{item.timeStr}</span>
+                            </div>
+                            <a href={item.link} target="_blank" rel="noreferrer" className="news-link">
+                              <p className="news-slide-title">{item.title}</p>
+                              {item.snippet && <p className="news-slide-snippet">{item.snippet}</p>}
+                            </a>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* BTC Price Chart */}
                 <div className="glass-panel chart-panel">
@@ -1239,46 +1336,85 @@ function App() {
 
                 {/* CME COT Table Row */}
                 <div className="fng-cot-row">
-                    {/* CME Bitcoin COT positions table */}
-                    <div className="glass-panel whale-panel" style={{ height: '100%' }}>
+                    <div className="glass-panel whale-panel" style={{ height: '100%', overflow: 'hidden' }}>
                       <h3 className="chart-title font-mono text-amber" style={{ marginBottom: 16 }}>
                         <span className="dot dot-amber" /> CME BITCOIN FUTURES COT (AS OF {data.cotData?.date || 'N/A'})
                       </h3>
                       <div style={{ overflowX: 'auto' }}>
-                        <table className="whale-table font-mono" style={{ width: '100%', fontSize: '0.62rem' }}>
+                        <table className="whale-table font-mono" style={{ width: '100%', fontSize: '0.62rem', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
-                              <th style={{ textAlign: 'left', padding: '6px 4px' }}>TRADER GROUP</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px' }}>LONG</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px' }}>SHORT</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px' }}>NET POS</th>
+                              <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}></th>
+                              <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Long</th>
+                              <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Short</th>
+                              <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Spread</th>
+                            </tr>
+                            <tr style={{ color: 'var(--text-contrast)' }}>
+                              <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}></th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
+                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
                             </tr>
                           </thead>
                           <tbody>
-                            <tr style={{ borderBottom: '1px solid var(--border-panel)' }}>
-                              <td style={{ padding: '8px 4px', color: 'var(--text-contrast)', fontWeight: 'bold' }}>Asset Managers</td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right' }}>
-                                {data.cotData?.assetManager ? `${data.cotData.assetManager.long.toLocaleString()} (${data.cotData.assetManager.longChange >= 0 ? '+' : ''}${data.cotData.assetManager.longChange})` : '---'}
-                              </td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right' }}>
-                                {data.cotData?.assetManager ? `${data.cotData.assetManager.short.toLocaleString()} (${data.cotData.assetManager.shortChange >= 0 ? '+' : ''}${data.cotData.assetManager.shortChange})` : '---'}
-                              </td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right', color: (data.cotData?.assetManager?.net >= 0) ? 'var(--color-emerald-400)' : 'var(--color-rose-400)', fontWeight: 600 }}>
-                                {data.cotData?.assetManager ? `${data.cotData.assetManager.net >= 0 ? '+' : ''}${data.cotData.assetManager.net.toLocaleString()} (${data.cotData.assetManager.netChange >= 0 ? '+' : ''}${data.cotData.assetManager.netChange})` : '---'}
-                              </td>
-                            </tr>
-                            <tr style={{ borderBottom: '1px solid var(--border-panel)' }}>
-                              <td style={{ padding: '8px 4px', color: 'var(--text-contrast)', fontWeight: 'bold' }}>Leveraged Funds</td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right' }}>
-                                {data.cotData?.leveragedFunds ? `${data.cotData.leveragedFunds.long.toLocaleString()} (${data.cotData.leveragedFunds.longChange >= 0 ? '+' : ''}${data.cotData.leveragedFunds.longChange})` : '---'}
-                              </td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right' }}>
-                                {data.cotData?.leveragedFunds ? `${data.cotData.leveragedFunds.short.toLocaleString()} (${data.cotData.leveragedFunds.shortChange >= 0 ? '+' : ''}${data.cotData.leveragedFunds.shortChange})` : '---'}
-                              </td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right', color: (data.cotData?.leveragedFunds?.net >= 0) ? 'var(--color-emerald-400)' : 'var(--color-rose-400)', fontWeight: 600 }}>
-                                {data.cotData?.leveragedFunds ? `${data.cotData.leveragedFunds.net >= 0 ? '+' : ''}${data.cotData.leveragedFunds.net.toLocaleString()} (${data.cotData.leveragedFunds.netChange >= 0 ? '+' : ''}${data.cotData.leveragedFunds.netChange})` : '---'}
-                              </td>
-                            </tr>
+                            {[
+                              { label: 'Dealer Intermediary', key: 'dealerIntermediary' },
+                              { label: 'Asset Manager/ Institutional', key: 'assetManager' },
+                              { label: 'Leveraged Funds', key: 'leveragedFunds' },
+                              { label: 'Other Reportables', key: 'otherReportables' },
+                              { label: 'Nonreportable Positions', key: 'nonReportable' }
+                            ].map(row => {
+                              const rData = data.cotData?.[row.key];
+                              if (!rData) return null;
+                              
+                              const renderCell = (pos, change) => {
+                                if (pos == null) return '---';
+                                if (pos === 0 && change === 0) return '0';
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                    <span>{pos.toLocaleString()}</span>
+                                    {change !== 0 && change != null && (
+                                      <span style={{ 
+                                        color: 'white', 
+                                        backgroundColor: change > 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)', 
+                                        padding: '1px 3px', 
+                                        borderRadius: '2px', 
+                                        fontSize: '0.55rem' 
+                                      }}>
+                                        {change > 0 ? '+' : ''}{change.toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              };
+
+                              return (
+                                <tr key={row.key} style={{ borderBottom: '1px solid var(--border-panel)', backgroundColor: row.key === 'nonReportable' ? 'rgba(0,0,0,0.1)' : 'transparent' }}>
+                                  <td style={{ padding: '8px 4px', color: 'var(--text-contrast)', fontWeight: 'bold' }}>{row.label}</td>
+                                  
+                                  {/* Long */}
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{renderCell(rData.long, rData.longChange)}</td>
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{typeof rData.longOi === 'number' ? `${rData.longOi.toFixed(1)}%` : '---'}</td>
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{rData.longTraders != null ? rData.longTraders : '---'}</td>
+                                  
+                                  {/* Short */}
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{renderCell(rData.short, rData.shortChange)}</td>
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{typeof rData.shortOi === 'number' ? `${rData.shortOi.toFixed(1)}%` : '---'}</td>
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{rData.shortTraders != null ? rData.shortTraders : '---'}</td>
+                                  
+                                  {/* Spread */}
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? renderCell(rData.spread, rData.spreadChange) : ''}</td>
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? (typeof rData.spreadOi === 'number' ? `${rData.spreadOi.toFixed(1)}%` : '---') : ''}</td>
+                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? (rData.spreadTraders != null ? rData.spreadTraders : '---') : ''}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

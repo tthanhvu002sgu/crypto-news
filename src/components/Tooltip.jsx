@@ -63,6 +63,10 @@ export const METRIC_METADATA = {
     api: 'CoinMetrics Community API (REST)',
     def: 'Số lượng địa chỉ ví độc nhất có phát sinh giao dịch gửi hoặc nhận BTC trên mạng lưới blockchain trong ngày.'
   },
+  productionCost: {
+    api: 'Blockchain.info (Tính toán dựa trên Độ khó Mạng lưới)',
+    def: 'Ước tính chi phí trung bình để khai thác 1 Bitcoin hiện tại, dựa trên công thức năng lượng (giả định điện $0.05/kWh và hiệu suất máy đào 26 J/TH) cộng thêm 10% hao mòn thiết bị.'
+  },
   mvrv: {
     api: 'CoinMetrics Community API (REST)',
     def: 'Tỷ lệ giữa Vốn hóa thị trường vs Vốn hóa thực tế. MVRV > 3.5 báo hiệu đỉnh bong bóng; MVRV < 1.0 báo hiệu vùng tích lũy đáy rẻ.',

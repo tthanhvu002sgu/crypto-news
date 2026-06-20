@@ -25,7 +25,7 @@ export default function SummaryTab({
 
   const provider = 'gemini';
   const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem('ai-model') || 'gemini-3.5-flash';
+    return localStorage.getItem('ai-model') || 'gemini-2.5-flash';
   });
 
   const handleModelChange = (newModel) => {
@@ -134,6 +134,13 @@ export default function SummaryTab({
       }).join('\n');
     };
 
+    const formatCotRow = (name, r) => {
+      if (!r) return '';
+      return `  * ${name}: Long ${r.long} (${r.longChange}), Short ${r.short} (${r.shortChange}), Spread ${r.spread || 0} (${r.spreadChange || 0}), Net ${r.net} (${r.netChange})`;
+    };
+    const cotStr = data.cotData ? 
+      `Date: ${data.cotData.date}\n${formatCotRow('Dealer Intermediary', data.cotData.dealerIntermediary)}\n${formatCotRow('Asset Manager/Institutional', data.cotData.assetManager)}\n${formatCotRow('Leveraged Funds', data.cotData.leveragedFunds)}\n${formatCotRow('Other Reportables', data.cotData.otherReportables)}\n${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}` : 'N/A';
+
     // Format Data for Prompt
     const promptData = `
 # MARKET DATA
@@ -180,7 +187,8 @@ ${klines7dStr}
 - Total BTC ETF Holdings: ${etfHoldings?.total ? etfHoldings.total.toLocaleString() + ' BTC (~$' + ((etfHoldings.total * (data.btc?.price || 0)) / 1e9).toFixed(1) + 'B)' : 'N/A'}
 - 7-day ETF Net Flow (Total: ${etfNetTotal > 0 ? '+' : ''}${etfNetTotal.toFixed(0)}M USD):
 ${etfFlowStr}
-- CME COT (Fund Positions): Asset Managers Net (${data.cotData?.assetManager?.net || 'N/A'}), Leveraged Funds Net (${data.cotData?.leveragedFunds?.net || 'N/A'})
+- CME COT (Futures Only):
+${cotStr}
 
 ## 4. DERIVATIVES & HIGH-FREQUENCY TRADING (HFT)
 - Funding Rate: ${data.fundingRate != null ? (data.fundingRate * 100).toFixed(4) + '%' : 'N/A'}
@@ -205,7 +213,7 @@ ${whaleWalls ? fmtWalls(whaleWalls.whaleBids) : '  N/A'}
 ${whaleWalls ? fmtWalls(whaleWalls.whaleAsks) : '  N/A'}
 
 ## 5. TOP NEWS & MACRO EVENTS TODAY (LATEST)
-${activeNews.slice(0, 15).map(n => '- ' + n.title + ' (' + n.tag + ')').join('\n')}
+${activeNews.slice(0, 30).map(n => '- [' + (n.timeStr || new Date(n.time).toLocaleString('en-US')) + '] ' + n.title + ' (' + n.tag + ')').join('\n')}
     `;
 
     const professionalSystemPrompt = `You are an expert macro analyst and seasoned crypto trader. Please analyze the market based on the provided MULTI-TIMEFRAME HISTORICAL DATA and current data. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
@@ -280,7 +288,7 @@ MANDATORY REPORT STRUCTURE COMPLIANCE:
 You MUST follow this exact template structure, including headers, list patterns, and bullet descriptions. Just fill in the brackets [like this] with actual metrics analysis and numbers from the input data:
 
 ### 1. MACRO CONTEXT
-The global macroeconomic framework is [describe general macro climate based on VIX, DXY, and geopolitical inflation].
+The global macroeconomic framework is [describe general macro climate based on VIX, DXY, and geopolitical inflation]. When analyzing news, ALWAYS explicitly state the date of the news being referenced.
 
 * **Real Rate Calculation**: The Real Rate is calculated using the formula:
 Real Rate = Fed Funds Rate - Inflation (CPI)
@@ -313,7 +321,7 @@ Institutional sentiment shows [describe overall sentiment, e.g., divergence, sel
 [List the 7 dates and flows, e.g., Date: Flow M USD]
 [Conclude if spot price failed/succeeded to absorb this].
 
-* **CME COT Assessment**: Asset Managers Net [Long/Short] is [Net Positions] contracts, while Leveraged Funds Net [Long/Short] is [Net Positions] contracts.
+* **CME COT Assessment**: [Summarize the positioning and changes of major groups: Dealer Intermediary, Asset Managers, Leveraged Funds, Other Reportables, and Nonreportable. Highlight key shifts in Net positions and what they signal].
 * **CME COT Lag Acknowledgement**: It must be explicitly acknowledged that CME COT data is updated weekly on Fridays (reflecting the previous Tuesday's data), establishing a 3-7 day lag. Consequently, this data cannot be utilized to evaluate short-term price action (48h - 7-day timeframe). While ETF flows track immediate spot demand shifts, the lagged CME COT metrics are strictly valuable for the medium-to-long-term position trading outlook.
 
 ---
@@ -404,7 +412,7 @@ MANDATORY REPORT STRUCTURE COMPLIANCE:
 You MUST follow this exact template structure.
 
 ### ⚡ QUICK MARKET PULSE
-* [3-5 bullet points summarizing the most critical immediate factors: e.g., price trend, immediate liquidity, key macro event today].
+* [3-5 bullet points summarizing the most critical immediate factors: e.g., price trend, immediate liquidity, key macro event today. When referencing news, ALWAYS explicitly state the date of the news].
 
 ### 🎯 TRADE SETUPS (Swing 24h - 7d)
 * **Setup 1: [Long/Short] at $[Entry Price]**
@@ -442,7 +450,7 @@ MANDATORY REPORT STRUCTURE COMPLIANCE:
 You MUST follow this exact template structure.
 
 ### 📖 THE MARKET STORY TODAY
-[Write a 2-3 paragraph narrative explaining what is happening right now. Who is in control: buyers or sellers? How does the macro environment affect this? Keep it engaging and easy to digest.]
+[Write a 2-3 paragraph narrative explaining what is happening right now. Who is in control: buyers or sellers? How does the macro environment affect this? Keep it engaging and easy to digest. When referencing news, ALWAYS explicitly state the date of the news].
 
 ### 🌍 MACRO & THE BIG PICTURE
 * 💡 **Concept: Real Rate**: The Real Rate (Fed Funds Rate minus Inflation) tells us if borrowing money is actually expensive. If it's high, investors prefer safe assets over Bitcoin.
@@ -686,10 +694,9 @@ ${promptData}
                 cursor: 'pointer'
               }}
             >
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-              <option value="gemini-3.5-live-translate-preview">Gemini 3.5 Live Translate</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
               <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
-              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Bản xem trước)</option>
               <option value="gemma-4-31b-it">Gemma 4 31B</option>
             </select>
           </div>

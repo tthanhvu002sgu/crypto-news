@@ -278,6 +278,7 @@ export const getBTCOnChain = async () => {
         ? parseFloat(d.minutes_between_blocks).toFixed(1) : null,
       // Mempool: trung bình fee (satoshi/byte) từ estimated_transaction_volume
       avgTxSizeBytes: d.median_fee || null,
+      productionCost: d.difficulty ? ((d.difficulty * 4294967296 * 26.0e-12 * 0.05) / (3.6e6 * 3.125) * 1.1).toFixed(0) : null,
     };
   } catch (e) {
     console.error('[API] Blockchain.info:', e.message);
@@ -341,8 +342,8 @@ export const getBTCOnChainMetrics = async () => {
 export const fetchWithJina = async (url, format = 'text') => {
   try {
     const headers = format === 'json'
-      ? { 'Accept': 'application/json', 'X-Return-Format': 'json' }
-      : { 'Accept': 'text/plain' };
+      ? { 'Accept': 'application/json', 'X-Return-Format': 'json', 'x-no-cache': 'true' }
+      : { 'Accept': 'text/plain', 'x-no-cache': 'true' };
 
     const res = await axios.get(`https://r.jina.ai/${url}`, {
       headers,
@@ -418,6 +419,33 @@ export const fetchRealtimeFeed = async () => {
     }
   } catch (e) {
     console.error('[API] Error fetching geopolitical news:', e.message);
+  }
+
+  // 3. Fetch specific crypto news from Google News search
+  try {
+    const cryptoQuery = encodeURIComponent('(site:coindesk.com OR site:bloomberg.com/crypto OR site:reuters.com OR site:theblock.co OR site:glassnode.com) AND (bitcoin OR crypto OR cryptocurrency)');
+    const cryptoNewsUrl = `https://news.google.com/rss/search?q=${cryptoQuery}&hl=en-US&gl=US&ceid=US:en&_cb=${now.getTime()}`;
+    const res = await axios.get(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cryptoNewsUrl)}&api_key=`, { timeout: 8000 });
+    
+    if (res.data?.status === 'ok' && Array.isArray(res.data.items)) {
+      res.data.items.forEach(item => {
+        if (!item.pubDate) return;
+        const pubDate = new Date(item.pubDate);
+        
+        // Filter: within the last 48 hours to get enough crypto news
+        if (now.getTime() - pubDate.getTime() <= 48 * 60 * 60 * 1000) {
+          combined.push({
+            time: pubDate,
+            tag: 'Crypto News',
+            cat: 'crypto',
+            title: item.title || '',
+            link: item.link || '',
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.error('[API] Error fetching crypto news:', e.message);
   }
 
   return combined
@@ -1308,7 +1336,7 @@ export const getETFFlowHistory = async () => {
   
   // 1. Try Jina Reader first (returns markdown)
   try {
-    const url = 'https://farside.co.uk/bitcoin-etf-flow-all-data/';
+    const url = 'https://farside.co.uk/btc/';
     content = await fetchWithJina(url, 'text');
     if (content) isMarkdown = true;
   } catch (e) {
@@ -1318,7 +1346,7 @@ export const getETFFlowHistory = async () => {
   // 2. If Jina fails, try CORS proxy (returns HTML)
   if (!content) {
     try {
-      content = await fetchTextWithProxyFallback('https://farside.co.uk/bitcoin-etf-flow-all-data/');
+      content = await fetchTextWithProxyFallback('https://farside.co.uk/btc/');
       if (content) isMarkdown = false;
     } catch (e) {
       console.error('[API] getETFFlowHistory all CORS proxies failed:', e.message);
@@ -1429,8 +1457,12 @@ export const getCMECot = async () => {
     if (!markdown) return null;
     
     const lines = markdown.split('\n');
+    let dealerIntermediary = null;
     let assetManager = null;
     let leveragedFunds = null;
+    let otherReportables = null;
+    let nonReportable = null;
+    
     let dateStr = 'N/A';
     let openInterest = 0;
     
@@ -1445,40 +1477,58 @@ export const getCMECot = async () => {
       }
     }
 
-    const parseCell = (cell) => {
-      if (!cell) return { pos: 0, change: 0 };
+    const parseFullCell = (cell) => {
+      if (!cell || cell.trim() === '') return { pos: 0, change: 0 };
       const parts = cell.trim().split(/\s+/);
       const pos = parseInt(parts[0].replace(/,/g, '')) || 0;
       const change = parts[1] ? parseInt(parts[1].replace(/,/g, '')) : 0;
       return { pos, change };
     };
 
+    const parseTraderCell = (cell) => {
+      if (!cell || cell.trim() === '' || cell.trim() === 'N/A') return null;
+      return parseInt(cell.trim().replace(/,/g, '')) || 0;
+    };
+
+    const parsePercentCell = (cell) => {
+      if (!cell || cell.trim() === '') return null;
+      return parseFloat(cell.trim().replace('%', '')) || 0;
+    };
+
+    const parseRow = (line) => {
+      const cells = line.split('|').map(c => c.trim());
+      const longData = parseFullCell(cells[2]);
+      const longOi = parsePercentCell(cells[3]);
+      const longTraders = parseTraderCell(cells[4]);
+      
+      const shortData = parseFullCell(cells[5]);
+      const shortOi = parsePercentCell(cells[6]);
+      const shortTraders = parseTraderCell(cells[7]);
+      
+      const spreadData = parseFullCell(cells[8]);
+      const spreadOi = parsePercentCell(cells[9]);
+      const spreadTraders = parseTraderCell(cells[10]);
+      
+      return {
+        long: longData.pos, longChange: longData.change, longOi, longTraders,
+        short: shortData.pos, shortChange: shortData.change, shortOi, shortTraders,
+        spread: spreadData.pos, spreadChange: spreadData.change, spreadOi, spreadTraders,
+        net: longData.pos - shortData.pos,
+        netChange: longData.change - shortData.change
+      };
+    };
+
     for (const line of lines) {
-      if (line.includes('**Asset Manager/ Institutional**')) {
-        const cells = line.split('|').map(c => c.trim());
-        const longData = parseCell(cells[2]);
-        const shortData = parseCell(cells[5]);
-        assetManager = {
-          long: longData.pos,
-          longChange: longData.change,
-          short: shortData.pos,
-          shortChange: shortData.change,
-          net: longData.pos - shortData.pos,
-          netChange: longData.change - shortData.change
-        };
-      }
-      if (line.includes('**Leveraged Funds**')) {
-        const cells = line.split('|').map(c => c.trim());
-        const longData = parseCell(cells[2]);
-        const shortData = parseCell(cells[5]);
-        leveragedFunds = {
-          long: longData.pos,
-          longChange: longData.change,
-          short: shortData.pos,
-          shortChange: shortData.change,
-          net: longData.pos - shortData.pos,
-          netChange: longData.change - shortData.change
-        };
+      if (line.includes('**Dealer Intermediary**')) {
+        dealerIntermediary = parseRow(line);
+      } else if (line.includes('**Asset Manager/ Institutional**')) {
+        assetManager = parseRow(line);
+      } else if (line.includes('**Leveraged Funds**')) {
+        leveragedFunds = parseRow(line);
+      } else if (line.includes('**Other Reportables**')) {
+        otherReportables = parseRow(line);
+      } else if (line.includes('**Nonreportable Positions**')) {
+        nonReportable = parseRow(line);
       }
     }
     
@@ -1492,8 +1542,11 @@ export const getCMECot = async () => {
       return {
         date: formattedDate,
         openInterest,
+        dealerIntermediary,
         assetManager,
-        leveragedFunds
+        leveragedFunds,
+        otherReportables,
+        nonReportable
       };
     }
     return null;
