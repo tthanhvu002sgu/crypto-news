@@ -383,6 +383,8 @@
   gap: 16px;
   scroll-snap-type: x mandatory;
   padding-bottom: 8px; /* For scrollbar */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Hide scrollbar for cleaner look */

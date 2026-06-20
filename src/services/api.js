@@ -1,4 +1,5 @@
 import axios from 'axios';
+import staticFlowHistory from '../data/etfFlowHistoryStatic.json';
 
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -347,7 +348,7 @@ export const fetchWithJina = async (url, format = 'text') => {
 
     const res = await axios.get(`https://r.jina.ai/${url}`, {
       headers,
-      timeout: 15000,
+      timeout: 30000,
     });
     return res.data || null;
   } catch (e) {
@@ -794,7 +795,7 @@ const fetchTextWithProxyFallback = async (targetUrlStr) => {
 
   for (const proxyUrl of proxies) {
     try {
-      const res = await axios.get(proxyUrl, { timeout: 8000 });
+      const res = await axios.get(proxyUrl, { timeout: 15000 });
       let data = res.data;
       if (data && typeof data === 'object' && data.contents) {
         data = data.contents;
@@ -1328,35 +1329,11 @@ const parseETFHoldingsFromMarkdown = (markdown) => {
 };
 
 /**
- * Lấy lịch sử dòng tiền ETF từ Farside Investors qua Jina Reader
+ * Lấy lịch sử dòng tiền ETF từ Farside Investors
+ * - Sử dụng dữ liệu tĩnh đã bundled sẵn (đến 18/06/26) làm base
+ * - Thử fetch trang /btc/ (hiện tại) để bổ sung các ngày mới nhất
  */
 export const getETFFlowHistory = async () => {
-  let content = null;
-  let isMarkdown = false;
-  
-  // 1. Try Jina Reader first (returns markdown)
-  try {
-    const url = 'https://farside.co.uk/btc/';
-    content = await fetchWithJina(url, 'text');
-    if (content) isMarkdown = true;
-  } catch (e) {
-    console.warn('[API] getETFFlowHistory Jina failed, trying CORS proxies...', e.message);
-  }
-  
-  // 2. If Jina fails, try CORS proxy (returns HTML)
-  if (!content) {
-    try {
-      content = await fetchTextWithProxyFallback('https://farside.co.uk/btc/');
-      if (content) isMarkdown = false;
-    } catch (e) {
-      console.error('[API] getETFFlowHistory all CORS proxies failed:', e.message);
-      return null;
-    }
-  }
-
-  if (!content) return null;
-
-  const flowHistory = [];
   const months = {
     Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
     Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
@@ -1371,58 +1348,49 @@ export const getETFFlowHistory = async () => {
     return parseFloat(clean);
   };
 
-  if (isMarkdown) {
-    const lines = content.split('\n');
-    const dateRegex = /^\s*\|\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s*\|/;
-    for (const line of lines) {
-      const match = line.match(dateRegex);
-      if (match) {
-        const dateStr = match[1];
-        const cells = line.split('|').map(c => c.trim());
-        const totalStr = cells[cells.length - 2];
-        const flowVal = parseFlowValue(totalStr);
-        
-        if (!isNaN(flowVal)) {
-          const [day, monthStr, year] = dateStr.split(/\s+/);
-          const month = months[monthStr.substring(0, 3)] || '01';
-          const formattedDate = `${day}/${month}/${year ? year.substring(2) : '24'}`;
-          flowHistory.push({ date: formattedDate, flow: flowVal });
-        }
-      }
-    }
-  } else {
-    try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(content, 'text/html');
-      const rows = doc.querySelectorAll('table tr');
-      
-      rows.forEach(row => {
-        const cells = row.querySelectorAll('td, th');
-        if (cells.length > 2) {
-          const firstCellText = cells[0].textContent.trim();
-          const dateMatch = firstCellText.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
-          if (dateMatch) {
-            const day = dateMatch[1].padStart(2, '0');
-            const monthStr = dateMatch[2];
-            const year = dateMatch[3];
-            const month = months[monthStr.substring(0, 3)] || '01';
-            const formattedDate = `${day}/${month}/${year.substring(2)}`;
-            
-            const totalText = cells[cells.length - 2].textContent.trim();
-            const flowVal = parseFlowValue(totalText);
-            
-            if (!isNaN(flowVal)) {
-              flowHistory.push({ date: formattedDate, flow: flowVal });
+  // Start with bundled static data (Jan 2024 → Jun 2026)
+  const baseHistory = [...staticFlowHistory];
+  const lastStaticDate = baseHistory.length > 0 ? baseHistory[baseHistory.length - 1].date : null;
+  
+  // Try to fetch new rows from /btc/ (current month page - less protected)
+  try {
+    const content = await fetchWithJina('https://farside.co.uk/btc/', 'text');
+    if (content && content.includes('|')) {
+      const newRows = [];
+      const lines = content.split('\n');
+      const dateRegex = /^\s*\|\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s*\|/;
+      for (const line of lines) {
+        const match = line.match(dateRegex);
+        if (match) {
+          const dateStr = match[1];
+          const cells = line.split('|').map(c => c.trim());
+          const totalStr = cells[cells.length - 2];
+          const flowVal = parseFlowValue(totalStr);
+          if (!isNaN(flowVal)) {
+            const parts = dateStr.trim().split(/\s+/);
+            const day = parts[0].padStart(2, '0');
+            const monthStr = parts[1].substring(0, 3);
+            const year = parts[2];
+            const month = months[monthStr] || '01';
+            const formattedDate = `${day}/${month}/${year ? year.substring(2) : '26'}`;
+            // Only add rows newer than last static date
+            if (!lastStaticDate || formattedDate > lastStaticDate) {
+              newRows.push({ date: formattedDate, flow: flowVal });
             }
           }
         }
-      });
-    } catch (e) {
-      console.error('[API] HTML parsing failed:', e.message);
+      }
+      if (newRows.length > 0) {
+        console.log(`[API] ETF Flow: appended ${newRows.length} new rows from /btc/`);
+        return [...baseHistory, ...newRows];
+      }
     }
+  } catch (e) {
+    console.warn('[API] ETF Flow /btc/ fetch failed, using static data only:', e.message);
   }
 
-  return flowHistory.length > 0 ? flowHistory : null;
+  // Return static data as fallback (always valid)
+  return baseHistory.length > 0 ? baseHistory : null;
 };
 
 /**

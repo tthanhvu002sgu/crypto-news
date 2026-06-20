@@ -1,0 +1,43 @@
+Title: Farside Investors
+
+URL Source: https://farside.co.uk/btc/
+
+Markdown Content:
+|  | [![Image 1: Blackrock](https://farside.co.uk/images/etf/blackrock.jpg)](https://farside.co.uk/btc/) | [![Image 2: Fidelity](https://farside.co.uk/images/etf/fidelity.jpg)](https://farside.co.uk/btc/) | [![Image 3: Bitwise](https://farside.co.uk/images/etf/bitwise.jpg)](https://farside.co.uk/btc/) | [![Image 4: Ark](https://farside.co.uk/images/etf/ark.jpg)](https://farside.co.uk/btc/) | [![Image 5: Invesco](https://farside.co.uk/images/etf/invesco.jpg)](https://farside.co.uk/btc/) | [![Image 6: Franklin](https://farside.co.uk/images/etf/franklin.jpg)](https://farside.co.uk/btc/) | [![Image 7: Valkyrie](https://farside.co.uk/images/etf/valkyrie.jpg)](https://farside.co.uk/btc/) | [![Image 8: VanEck](https://farside.co.uk/images/etf/vaneck.jpg)](https://farside.co.uk/btc/) | [![Image 9: WTree](https://farside.co.uk/images/etf/wtree.jpg)](https://farside.co.uk/btc/) | [![Image 10: MS](https://farside.co.uk/images/etf/ms.jpg)](https://farside.co.uk/btc/) | [![Image 11: Grayscale](https://farside.co.uk/images/etf/grayscale.jpg)](https://farside.co.uk/btc/) | [![Image 12: Grayscale](https://farside.co.uk/images/etf/grayscale.jpg)](https://farside.co.uk/btc/) | Total |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+|  | IBIT | FBTC | BITB | ARKB | BTCO | EZBC | BRRR | HODL | BTCW | MSBT | GBTC | BTC |  |
+| Fee | 0.25% | 0.25% | 0.20% | 0.21% | 0.25% | 0.19% | 0.25% | 0.20% | 0.25% | 0.14% | 1.50% | 0.15% |  |
+| 01 Jun 2026 | (440.3) | (37.3) | 0.0 | (12.3) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 6.1 | 0.0 | 0.0 | (483.8) |
+| 02 Jun 2026 | (388.6) | (45.1) | 0.0 | (16.7) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 14.8 | (83.5) | 0.0 | (519.1) |
+| 03 Jun 2026 | (342.3) | (54.3) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | (396.6) |
+| 04 Jun 2026 | 47.7 | (5.5) | (15.6) | (20.7) | (12.6) | 0.0 | 0.0 | 0.0 | 0.0 | 9.9 | 0.0 | 0.0 | 3.2 |
+| 05 Jun 2026 | (213.7) | (59.7) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 4.2 | 0.0 | 4.3 | (60.8) | 0.0 | (325.7) |
+| 08 Jun 2026 | (232.9) | 59.4 | 14.1 | 63.1 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 4.9 | 0.0 | 0.0 | (91.4) |
+| 09 Jun 2026 | (61.6) | (20.2) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 4.4 | (77.4) |
+| 10 Jun 2026 | (148.5) | 4.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 0.0 | (87.9) | 17.5 | (213.9) |
+| 11 Jun 2026 | 30.3 | (5.5) | (13.1) | (27.2) | 0.0 | 0.0 | 0.0 | (14.8) | 0.0 | 2.2 | 0.0 | 5.6 | (22.5) |
+| 12 Jun 2026 | 57.7 | 18.0 | 5.2 | 3.2 | 0.0 | 0.0 | 0.0 | 1.8 | 0.0 | 0.0 | 0.0 | 0.0 | 85.9 |
+| 15 Jun 2026 | 66.4 | (8.7) | 0.0 | (6.6) | 0.0 | (5.8) | 0.0 | (6.1) | 0.0 | 9.4 | (124.0) | 10.6 | (64.8) |
+| 16 Jun 2026 | 16.4 | 4.3 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.9 | (16.8) | 4.4 | 10.2 |
+| 17 Jun 2026 | (30.8) | 14.0 | 0.0 | (43.5) | (6.4) | 0.0 | 0.0 | (4.1) | 0.0 | 4.1 | (15.5) | 0.0 | (82.2) |
+| 18 Jun 2026 | (96.7) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | (4.4) | 0.0 | 10.4 | 0.0 | 0.0 | (90.7) |
+| Total | 62,070 | 10,467 | 2,007 | 1,202 | 213 | 328 | 328 | 1,123 | 93 | 331 | (27,008) | 2,291 | 53,445 |
+| Average | 101.6 | 17.1 | 3.3 | 2.0 | 0.3 | 0.5 | 0.5 | 1.8 | 0.2 | 6.5 | (44.2) | 4.9 | 87.5 |
+| Maximum | 1,119.9 | 473.4 | 237.9 | 268.7 | 63.4 | 60.9 | 43.4 | 118.8 | 118.5 | 30.6 | 102.5 | 191.1 | 1,373.8 |
+| Minimum | (528.3) | (356.6) | (280.7) | (327.9) | (62.0) | (74.1) | (74.8) | (38.4) | (53.8) | (5.3) | (642.5) | (318.2) | (1,113.7) |
+
+Source: Farside Investors
+
+Note: The above table is generated automatically. Farside Investors is not liable for any errors or inaccuracies in the data. To see an alternative table with all the daily flow data, [click here](https://farside.co.uk/bitcoin-etf-flow-all-data/).
+
+Discover more
+
+Mutual fund comparison
+
+Retirement planning tools
+
+Fund performance reports
+
+Source: Farside Investors
+
+Note: These charts are updated automatically in real time

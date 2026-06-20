@@ -277,10 +277,15 @@ const BASELINE_CME_COT = {
 };
 
 function useDraggableScroll() {
-  const ref = useRef(null);
+  const [node, setNode] = useState(null);
+  
+  const ref = useCallback(nodeEle => {
+    setNode(nodeEle);
+  }, []);
+
   useEffect(() => {
-    const slider = ref.current;
-    if (!slider) return;
+    if (!node) return;
+    const slider = node;
     
     let isDown = false;
     let startX;
@@ -291,6 +296,7 @@ function useDraggableScroll() {
       isDown = true;
       isDragging = false;
       slider.style.cursor = 'grabbing';
+      slider.style.scrollSnapType = 'none';
       startX = e.pageX - slider.offsetLeft;
       scrollLeft = slider.scrollLeft;
     };
@@ -298,11 +304,13 @@ function useDraggableScroll() {
     const onMouseLeave = () => {
       isDown = false;
       slider.style.cursor = 'grab';
+      slider.style.scrollSnapType = '';
     };
     
     const onMouseUp = () => {
       isDown = false;
       slider.style.cursor = 'grab';
+      slider.style.scrollSnapType = '';
     };
     
     const onMouseMove = (e) => {
@@ -335,7 +343,7 @@ function useDraggableScroll() {
       slider.removeEventListener('mousemove', onMouseMove);
       slider.removeEventListener('click', onClick, true);
     };
-  }, []);
+  }, [node]);
   
   return ref;
 }
@@ -494,7 +502,7 @@ function App() {
       fetchCached('btcOnChain', () => getBTCOnChain(), 6 * 60 * 60 * 1000, addLog, 'BTC Network (blockchain.info)', force),
       fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), 6 * 60 * 60 * 1000, addLog, 'On-chain Metrics (CoinMetrics)', force),
       fetchCached('etfHoldings', () => getETFHoldings(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Holdings (Bitbo)', force),
-      fetchCached('etfFlowHistory_v3', () => getETFFlowHistory(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Flow History (Farside)', force),
+      fetchCached('etfFlowHistory_v4', () => getETFFlowHistory(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Flow History (Farside)', force),
       fetchCached('cmeCot', () => getCMECot(), 12 * 60 * 60 * 1000, addLog, 'Báo cáo CME COT (Tradingster)', force),
       fetchCached('yield10y', () => getFREDMetric('DGS10'), 30 * 60 * 1000, addLog, 'Yield 10Y (Yahoo Finance)', force),
       fetchCached('dxyQuote', () => getDXYQuote(), 30 * 60 * 1000, addLog, 'Chỉ số DXY (Yahoo Finance)', force),
