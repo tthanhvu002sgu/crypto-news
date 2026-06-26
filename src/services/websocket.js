@@ -112,6 +112,7 @@ export function useBinanceWebSocket() {
 
 export function useCVDStream() {
   const [cvd, setCvd]                   = useState(0);
+  const [sessionCvd, setSessionCvd]     = useState(0);
   const [buyVolume, setBuyVolume]       = useState(0);
   const [sellVolume, setSellVolume]     = useState(0);
   const [cvdHistory, setCvdHistory]     = useState([]);
@@ -121,6 +122,7 @@ export function useCVDStream() {
 
   // Internal accumulators (no re-render per trade)
   const cvdRef        = useRef(0);
+  const sessionRef    = useRef(0);
   const buyRef        = useRef(0);
   const sellRef       = useRef(0);
   const historyRef    = useRef([]); // [{time, cvd}]
@@ -196,9 +198,11 @@ export function useCVDStream() {
         // m=false → seller is maker → taker BUYS → bullish → CVD increases
         if (data.m) {
           cvdRef.current -= usdtVol;
+          sessionRef.current -= usdtVol;
           sellRef.current += usdtVol;
         } else {
           cvdRef.current += usdtVol;
+          sessionRef.current += usdtVol;
           buyRef.current += usdtVol;
         }
 
@@ -222,6 +226,10 @@ export function useCVDStream() {
             ...historyRef.current.slice(-59),
             { time: timeStr, cvd: cvdRef.current, price, timestamp: data.T }
           ];
+        } else if (historyRef.current.length > 0) {
+          // Update current active candle real-time on every trade
+          historyRef.current[historyRef.current.length - 1].cvd = cvdRef.current;
+          historyRef.current[historyRef.current.length - 1].price = price;
         }
 
         // Throttle React state updates to every 500ms
@@ -229,6 +237,7 @@ export function useCVDStream() {
           throttleRef.current = setTimeout(() => {
             if (mountedRef.current) {
               setCvd(cvdRef.current);
+              setSessionCvd(sessionRef.current);
               setBuyVolume(buyRef.current);
               setSellVolume(sellRef.current);
               setCvdHistory([...historyRef.current]);
@@ -253,7 +262,7 @@ export function useCVDStream() {
     ? buyRef.current / (buyRef.current + sellRef.current)
     : 0.5;
 
-  return { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus };
+  return { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus };
 }
 
 

@@ -1029,10 +1029,9 @@
 .hft-radar-header {
   padding: 14px 18px; border-radius: var(--card-radius-sm);
   background: var(--bg-panel);
-  border-left: 3px solid;
-  border-image: var(--gradient-aurora) 1;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .hft-radar-header::before {

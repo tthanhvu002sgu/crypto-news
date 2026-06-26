@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Line } from 'react-chartjs-2';
 
 import { getOrderBookDepth, getWhaleWalls, getWhaleKlinesFlow } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
@@ -12,6 +13,16 @@ const fmtUsd = (n) => {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
+};
+
+const fmtCvdUsd = (n) => {
+  if (n == null) return '---';
+  const sign = n < 0 ? '-' : (n > 0 ? '+' : '');
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
 };
 
 const fmtPrice = (n) => n ? `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '---';
@@ -55,15 +66,154 @@ const getChartOptsBase = (theme) => {
 
 // ─── PANEL 1: CVD & Order Flow ────────────────────────────────────────────────
 
-function CVDPanel({ cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice, theme }) {
+function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, theme }) {
+  const [cvdTf, setCvdTf] = useState('1H');
   const totalVol = buyVolume + sellVolume;
   const buyPct = totalVol > 0 ? (buyVolume / totalVol * 100) : 50;
   const sellPct = 100 - buyPct;
 
+  const baseSession24hRef = useRef(sessionCvd || 0);
+  const prevList24hRef = useRef(cvdHistory24h);
+  if (prevList24hRef.current !== cvdHistory24h) {
+    prevList24hRef.current = cvdHistory24h;
+    baseSession24hRef.current = sessionCvd || 0;
+  }
+  const delta24h = (sessionCvd || 0) - baseSession24hRef.current;
+
+  const baseSession7dRef = useRef(sessionCvd || 0);
+  const prevList7dRef = useRef(cvdHistory7d);
+  if (prevList7dRef.current !== cvdHistory7d) {
+    prevList7dRef.current = cvdHistory7d;
+    baseSession7dRef.current = sessionCvd || 0;
+  }
+  const delta7d = (sessionCvd || 0) - baseSession7dRef.current;
+
+  const baseSession30dRef = useRef(sessionCvd || 0);
+  const prevList30dRef = useRef(cvdHistory30d);
+  if (prevList30dRef.current !== cvdHistory30d) {
+    prevList30dRef.current = cvdHistory30d;
+    baseSession30dRef.current = sessionCvd || 0;
+  }
+  const delta30d = (sessionCvd || 0) - baseSession30dRef.current;
+
+  // Normalize 1H rolling window so Net CVD delta starts from baseline 60 mins ago
+  const list1h = useMemo(() => {
+    if (!cvdHistory || cvdHistory.length === 0) return [];
+    const base1h = cvdHistory[0]?.cvd || 0;
+    return cvdHistory.map((item, idx) => {
+      const isLast = idx === cvdHistory.length - 1;
+      return {
+        ...item,
+        cvd: (isLast ? cvd : item.cvd) - base1h,
+        price: isLast ? (livePrice || item.price) : item.price
+      };
+    });
+  }, [cvdHistory, cvd, livePrice]);
+
+  const chartList = useMemo(() => {
+    if (cvdTf === '1H') return list1h;
+    if (cvdTf === '24H') {
+      if (!cvdHistory24h || cvdHistory24h.length === 0) return [];
+      const list = [...cvdHistory24h];
+      const last = list[list.length - 1];
+      list[list.length - 1] = { ...last, cvd: last.cvd + delta24h, price: livePrice || last.price };
+      return list;
+    }
+    if (cvdTf === '7D') {
+      if (!cvdHistory7d || cvdHistory7d.length === 0) return [];
+      const list = [...cvdHistory7d];
+      const last = list[list.length - 1];
+      list[list.length - 1] = { ...last, cvd: last.cvd + delta7d, price: livePrice || last.price };
+      return list;
+    }
+    if (cvdTf === '30D') {
+      if (!cvdHistory30d || cvdHistory30d.length === 0) return [];
+      const list = [...cvdHistory30d];
+      const last = list[list.length - 1];
+      list[list.length - 1] = { ...last, cvd: last.cvd + delta30d, price: livePrice || last.price };
+      return list;
+    }
+    return [];
+  }, [cvdTf, list1h, cvdHistory24h, cvdHistory7d, cvdHistory30d, delta24h, delta7d, delta30d, livePrice]);
+
+  const latestCvd = chartList.length > 0 ? chartList[chartList.length - 1].cvd : 0;
+
+  const chartOpts = useMemo(() => {
+    const base = getChartOptsBase(theme);
+    return {
+      ...base,
+      plugins: {
+        ...base.plugins,
+        tooltip: {
+          ...base.plugins.tooltip,
+          callbacks: {
+            label: (ctx) => {
+              const item = chartList[ctx.dataIndex];
+              const btcStr = item?.price ? ` (BTC: $${Number(item.price).toLocaleString()})` : '';
+              return ` CVD: ${fmtCvdUsd(ctx.parsed.y)}${btcStr}`;
+            }
+          }
+        }
+      },
+      scales: {
+        ...base.scales,
+        y: {
+          ...base.scales.y,
+          ticks: {
+            ...base.scales.y.ticks,
+            callback: (val) => fmtCvdUsd(val)
+          }
+        }
+      }
+    };
+  }, [theme, chartList]);
+
+  const chartData = useMemo(() => {
+    const labels = chartList.map(item => {
+      if (typeof item.time === 'string') return item.time;
+      if (item.time == null) return '';
+      const d = new Date(item.time);
+      if (cvdTf === '24H') {
+        return `${String(d.getHours()).padStart(2, '0')}:00`;
+      }
+      if (cvdTf === '7D') {
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:00`;
+      }
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+    });
+
+    const cvdVals = chartList.map(item => item.cvd);
+    const lastVal = cvdVals.length > 0 ? cvdVals[cvdVals.length - 1] : cvd;
+    const isPos = lastVal >= 0;
+    const lineColor = isPos ? '#10b981' : '#f43f5e';
+    const isLight = theme === 'light';
+    const bgColor = isPos 
+      ? (isLight ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.15)') 
+      : (isLight ? 'rgba(244, 63, 94, 0.1)' : 'rgba(244, 63, 94, 0.15)');
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'CVD',
+          data: cvdVals,
+          borderColor: lineColor,
+          backgroundColor: bgColor,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: true,
+          tension: 0.25,
+        }
+      ]
+    };
+  }, [chartList, cvdTf, cvd, theme]);
+
   // Divergence detection: compares CVD trend against Price trend
   const detectDivergence = () => {
-    if (cvdHistory.length < 5) return null;
-    const recent = cvdHistory.slice(-5);
+    const listToAnalyze = chartList.length >= 5 ? chartList : cvdHistory;
+    if (!listToAnalyze || listToAnalyze.length < 5) return null;
+    const recent = listToAnalyze.slice(-5);
     const cvdDelta = recent[recent.length - 1].cvd - recent[0].cvd;
     
     // Fallback if price is not tracked inside history object
@@ -96,41 +246,67 @@ function CVDPanel({ cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice
 
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
-      <div className="hft-panel-header">
-        <Tooltip content={METRIC_METADATA.cvd}>
-          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-            <span className="hft-icon">📊</span> CVD &amp; ORDER FLOW
-          </h3>
-        </Tooltip>
-        <div className="hft-panel-badges">
-          <span 
-            className="hft-badge badge-api font-mono" 
-            style={{ cursor: 'help' }}
-            title="Binance Futures aggTrade được sử dụng làm chỉ số tham chiếu CVD chuẩn (Benchmark Proxy) vì chiếm hơn 50% thanh khoản phái sinh toàn cầu"
-          >
-            BIN-F PROXY
-          </span>
-          <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
-            {cvdStatus === 'connected' ? '⚡ LIVE' : 'WS OFF'}
-          </span>
+      <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Tooltip content={METRIC_METADATA.cvd}>
+            <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, margin: 0 }}>
+              <span className="hft-icon">📊</span> CVD &amp; ORDER FLOW
+            </h3>
+          </Tooltip>
+          <div className="hft-panel-badges">
+            <span 
+              className="hft-badge badge-api font-mono" 
+              style={{ cursor: 'help' }}
+              title="Binance Futures aggTrade được sử dụng làm chỉ số tham chiếu CVD chuẩn (Benchmark Proxy) vì chiếm hơn 50% thanh khoản phái sinh toàn cầu"
+            >
+              BIN-F PROXY
+            </span>
+            <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
+              {cvdStatus === 'connected' ? '⚡ LIVE' : 'WS OFF'}
+            </span>
+          </div>
+        </div>
+        <div className="etf-timeframe-toggle font-mono">
+          {['1H', '24H', '7D', '30D'].map(t => (
+            <button
+              key={t}
+              onClick={() => setCvdTf(t)}
+              className={`toggle-btn ${cvdTf === t ? 'active' : ''}`}
+            >
+              {t === '1H' ? '1H (LIVE)' : t}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* CVD Value */}
-      <div className="cvd-hero">
+      <div className="cvd-hero" style={{ paddingBottom: '8px' }}>
         <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title="CVD tích lũy từ đầu ngày (00:00)">CVD TRONG NGÀY (INTRADAY CVD)</span>
-          <span className={`cvd-value font-mono ${cvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {cvd >= 0 ? '+' : ''}{fmtUsd(cvd)}
+          <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian">
+            {`CVD RÒNG (${cvdTf === '1H' ? '1 GIỜ QUA' : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA'})`}
+          </span>
+          <span className={`cvd-value font-mono ${latestCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
+            {fmtCvdUsd(latestCvd)}
           </span>
         </div>
+      </div>
+
+      {/* CVD Line Chart */}
+      <div className="cvd-chart-container" style={{ height: '180px', width: '100%', marginBottom: '16px' }}>
+        {chartList.length > 1 ? (
+          <Line data={chartData} options={chartOpts} />
+        ) : (
+          <div className="hft-empty font-mono" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>
+            {cvdTf === '1H' ? '⚡ Đang tích lũy dữ liệu CVD realtime theo phút...' : 'Đang tải dữ liệu biểu đồ CVD...'}
+          </div>
+        )}
       </div>
 
       {/* Volume Gauge */}
       <div className="vol-gauge-container">
         <div className="vol-gauge-labels font-mono">
           <span className="text-emerald">BUY {buyPct.toFixed(1)}%</span>
-          <span className="text-slate-400">Volume Ratio</span>
+          <span className="text-slate-400">Volume Ratio (Realtime)</span>
           <span className="text-rose">SELL {sellPct.toFixed(1)}%</span>
         </div>
         <div className="vol-gauge-bar">
@@ -611,7 +787,7 @@ function WhaleKlineFlowPanel({ whaleFlow }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function HftRadarTab({
-  cvd, buyVolume, sellVolume, cvdHistory, cvdStatus, livePrice, whaleTrades, theme,
+  cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, whaleTrades, theme,
 }) {
   const [orderBook, setOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
@@ -681,9 +857,13 @@ export default function HftRadarTab({
       <div className="hft-grid">
         <CVDPanel
           cvd={cvd}
+          sessionCvd={sessionCvd}
           buyVolume={buyVolume}
           sellVolume={sellVolume}
           cvdHistory={cvdHistory}
+          cvdHistory24h={cvdHistory24h}
+          cvdHistory7d={cvdHistory7d}
+          cvdHistory30d={cvdHistory30d}
           cvdStatus={cvdStatus}
           livePrice={livePrice}
           theme={theme}

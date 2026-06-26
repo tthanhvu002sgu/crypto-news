@@ -112,6 +112,44 @@ export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limi
   }
 };
 
+/**
+ * Get intraday CVD chart data — same baseline as 1H LIVE mode.
+ * Fetches 1H klines from LOCAL MIDNIGHT → now, accumulates CVD from 0.
+ * Each point = one hourly candle, so the 24H chart matches the live WebSocket view.
+ */
+export const getIntradayCVD = async (symbol = 'BTCUSDT') => {
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0); // Local midnight (same as getDailyCVD)
+    const startTime = startOfDay.getTime();
+
+    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+      params: { symbol, interval: '1h', startTime, limit: 25 }, // max 25 = covers full day
+    });
+
+    let cumulativeCvd = 0;
+    return res.data.map(k => {
+      const openTime = k[0];
+      const closePrice = parseFloat(k[4]);
+      const quoteVol = parseFloat(k[7]);
+      const takerBuyVol = parseFloat(k[10]);
+      const takerSellVol = quoteVol - takerBuyVol;
+      const delta = takerBuyVol - takerSellVol;
+      cumulativeCvd += delta;
+
+      return {
+        time: openTime,
+        cvd: Math.round(cumulativeCvd),
+        price: closePrice,
+        delta: Math.round(delta),
+      };
+    });
+  } catch (e) {
+    console.error('[API] Intraday CVD:', e.message);
+    return [];
+  }
+};
+
 
 /**
  * Lọc nến 1 phút có khối lượng Quote Asset (USD) lớn hơn threshold.

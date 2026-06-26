@@ -7,7 +7,7 @@ import {
   fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics,
   getFREDMetric, getAlphaVantageQuote, getFREDStockQuote,
   getETFHoldings, getETFFlowHistory, getCMECot, getDXYQuote,
-  getFearAndGreed, getHistoricalCVD,
+  getFearAndGreed, getHistoricalCVD, getIntradayCVD,
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import {
@@ -32,6 +32,16 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, C
 const fmt = (n, decimals = 2) => n != null ? Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : '---';
 const fmtB = (n) => n != null ? `$${(n / 1e9).toFixed(1)}B` : '---';
 const fmtT = (n) => n != null ? `$${(n / 1e12).toFixed(2)}T` : '---';
+
+const fmtCvdUsd = (n) => {
+  if (n == null) return '---';
+  const sign = n < 0 ? '-' : (n > 0 ? '+' : '');
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+};
 
 
 const fundingLabel = (r) => {
@@ -241,6 +251,7 @@ const INIT = {
   netLiquidity: 6050.25, // default baseline
   cotData: null,
   fngData: null,
+  cvdHistory24h: [],
   cvdHistory7d: [],
   cvdHistory30d: [],
   btcDailyKlinesAll: [],
@@ -351,7 +362,25 @@ function useDraggableScroll() {
 function App() {
   const newsSliderRef = useDraggableScroll();
   const { tooltipsEnabled, setTooltipsEnabled, setLastSyncTime } = useTooltipSettings();
-  const [data, setData] = useState(INIT);
+  const [data, setData] = useState(() => {
+    // Preload CVD history from localStorage cache for immediate display
+    const readCache = (key) => {
+      try {
+        const raw = localStorage.getItem(`cache_${key}`);
+        if (raw) {
+          const { val } = JSON.parse(raw);
+          return Array.isArray(val) && val.length > 0 ? val : [];
+        }
+      } catch {}
+      return [];
+    };
+    return {
+      ...INIT,
+      cvdHistory24h: readCache('cvdHistory24h_v2'),
+      cvdHistory7d:  readCache('cvdHistory7d'),
+      cvdHistory30d: readCache('cvdHistory30d'),
+    };
+  });
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
     const validTabs = ['dashboard', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
@@ -387,6 +416,7 @@ function App() {
 
   const [etfChartType, setEtfChartType] = useState('flows');
   const [etfAumTimeframe, setEtfAumTimeframe] = useState('ALL'); // '30D', '90D', 'ALL'
+  const [cvdDashTf, setCvdDashTf] = useState('7D');
 
   useEffect(() => {
     window.location.hash = activeTab;
@@ -442,7 +472,7 @@ function App() {
     useBinanceWebSocket();
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
-  const { cvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus } = useCVDStream();
+  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus } = useCVDStream();
 
 
   const addLog = useCallback((msg, type = 'info') => {
@@ -488,7 +518,7 @@ function App() {
       etfHoldingsRes, etfHistoryRes,
       cotRes,
       yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes,
-      cvd7dRes, cvd30dRes, btcDailyKlinesAllRes
+      cvd24hRes, cvd7dRes, cvd30dRes, btcDailyKlinesAllRes
     ] = await Promise.allSettled([
       getBTCTicker24h('BTCUSDT'),
       getBTCKlines('BTCUSDT', '1h', 48),
@@ -510,6 +540,7 @@ function App() {
       fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS'), 30 * 60 * 1000, addLog, 'VIX Volatility Index (Yahoo Finance)', force),
       fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100'), 30 * 60 * 1000, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force),
       fetchCached('fearAndGreed', () => getFearAndGreed(), 4 * 60 * 60 * 1000, addLog, 'Chỉ số Fear & Greed (alternative.me)', force),
+      fetchCached('cvdHistory24h_v2', () => getHistoricalCVD('BTCUSDT', '1h', 24), 10 * 60 * 1000, addLog, 'Lịch sử CVD 24h (Binance)', force),
       fetchCached('cvdHistory7d', () => getHistoricalCVD('BTCUSDT', '4h', 42), 30 * 60 * 1000, addLog, 'Lịch sử CVD 7d (Binance)', force),
       fetchCached('cvdHistory30d', () => getHistoricalCVD('BTCUSDT', '1d', 30), 2 * 60 * 60 * 1000, addLog, 'Lịch sử CVD 30d (Binance)', force),
       fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), 2 * 60 * 60 * 1000, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force)
@@ -549,6 +580,7 @@ function App() {
     const vix             = vixRes.status === 'fulfilled' ? vixRes.value : null;
     const qqq             = qqqRes.status === 'fulfilled' ? qqqRes.value : null;
     const fngData         = fngRes.status === 'fulfilled' ? fngRes.value : null;
+    const cvdHistory24h   = cvd24hRes.status === 'fulfilled' ? cvd24hRes.value : null;
     const cvdHistory7d    = cvd7dRes.status === 'fulfilled' ? cvd7dRes.value : null;
     const cvdHistory30d   = cvd30dRes.status === 'fulfilled' ? cvd30dRes.value : null;
     const btcDailyKlinesAll = btcDailyKlinesAllRes.status === 'fulfilled' ? btcDailyKlinesAllRes.value : null;
@@ -597,6 +629,7 @@ function App() {
       netLiquidity:   netLiquidity    ?? prev.netLiquidity,
       cotData:        cotData         ?? prev.cotData,
       fngData:        fngData         ?? prev.fngData,
+      cvdHistory24h:  cvdHistory24h?.length > 0 ? cvdHistory24h : prev.cvdHistory24h,
       cvdHistory7d:   cvdHistory7d?.length > 0 ? cvdHistory7d : prev.cvdHistory7d,
       cvdHistory30d:  cvdHistory30d?.length > 0 ? cvdHistory30d : prev.cvdHistory30d,
       btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
@@ -689,6 +722,84 @@ function App() {
       borderSkipped: false,
     }],
   }), [data.oiHistory, theme]);
+
+  const dashCvdList = useMemo(() => {
+    if (cvdDashTf === '1H') return cvdHistory || [];
+    if (cvdDashTf === '24H') return data.cvdHistory24h || [];
+    if (cvdDashTf === '7D') return data.cvdHistory7d || [];
+    if (cvdDashTf === '30D') return data.cvdHistory30d || [];
+    return [];
+  }, [cvdDashTf, cvdHistory, data.cvdHistory24h, data.cvdHistory7d, data.cvdHistory30d]);
+
+  const dashCvdChartOpts = useMemo(() => {
+    const base = getChartOpts(theme);
+    return {
+      ...base,
+      plugins: {
+        ...base.plugins,
+        tooltip: {
+          ...base.plugins?.tooltip,
+          callbacks: {
+            label: (ctx) => {
+              const item = dashCvdList[ctx.dataIndex];
+              const btcStr = item?.price ? ` (BTC: $${Number(item.price).toLocaleString()})` : '';
+              return ` CVD: ${fmtCvdUsd(ctx.parsed.y)}${btcStr}`;
+            }
+          }
+        }
+      },
+      scales: {
+        ...base.scales,
+        y: {
+          ...base.scales?.y,
+          ticks: {
+            ...base.scales?.y?.ticks,
+            callback: (val) => fmtCvdUsd(val)
+          }
+        }
+      }
+    };
+  }, [theme, dashCvdList]);
+
+  const dashCvdChartData = useMemo(() => {
+    const labels = dashCvdList.map(item => {
+      if (typeof item.time === 'string') return item.time;
+      if (item.time == null) return '';
+      const d = new Date(item.time);
+      if (cvdDashTf === '24H') {
+        return `${String(d.getHours()).padStart(2, '0')}:00`;
+      }
+      if (cvdDashTf === '7D') {
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:00`;
+      }
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+    });
+
+    const cvdVals = dashCvdList.map(item => item.cvd);
+    const lastVal = cvdVals.length > 0 ? cvdVals[cvdVals.length - 1] : cvd;
+    const isPos = lastVal >= 0;
+    const lineColor = isPos ? '#10b981' : '#f43f5e';
+    const bgColor = isPos 
+      ? (theme === 'light' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.15)') 
+      : (theme === 'light' ? 'rgba(244, 63, 94, 0.08)' : 'rgba(244, 63, 94, 0.15)');
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'CVD',
+          data: cvdVals,
+          borderColor: lineColor,
+          backgroundColor: bgColor,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: true,
+          tension: 0.25,
+        }
+      ]
+    };
+  }, [dashCvdList, cvdDashTf, cvd, theme]);
 
   const currentLS = data.lsHistory[data.lsHistory.length - 1];
   // Use live WebSocket funding rate if available, fallback to REST
@@ -1233,6 +1344,39 @@ function App() {
                   </div>
                 </div>
 
+                {/* Cumulative Volume Delta (CVD) Trend Chart Panel */}
+                <div className="glass-panel main-chart-panel" style={{ marginTop: 16 }}>
+                  <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
+                        <span className="dot dot-emerald" /> CUMULATIVE VOLUME DELTA (CVD) — XU HƯỚNG DÒNG TIỀN
+                      </h3>
+                      <span className={`chart-badge font-mono ${cvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                        {fmtCvdUsd(dashCvdList.length > 0 ? dashCvdList[dashCvdList.length - 1].cvd : cvd)}
+                      </span>
+                    </div>
+                    <div className="etf-timeframe-toggle font-mono">
+                      {['1H', '24H', '7D', '30D'].map(tf => (
+                        <button
+                          key={tf}
+                          onClick={() => setCvdDashTf(tf)}
+                          className={`toggle-btn ${cvdDashTf === tf ? 'active' : ''}`}
+                        >
+                          {tf === '1H' ? '1H (LIVE)' : tf}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="chart-body" style={{ height: '220px', marginTop: 12 }}>
+                    {dashCvdList.length > 1 ? (
+                      <Line data={dashCvdChartData} options={dashCvdChartOpts} />
+                    ) : (
+                      <div className="chart-empty font-mono">
+                        {cvdDashTf === '1H' ? '⚡ Đang tích lũy dữ liệu CVD realtime theo phút...' : 'Đang tải dữ liệu CVD...'}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* US Spot Bitcoin ETFs Row */}
                 <div className="whales-row">
@@ -1631,10 +1775,11 @@ function App() {
               <GlossaryTab />
             )}
 
-            {activeTab === 'hft' && (
+             {activeTab === 'hft' && (
               <HftRadarTab
-                cvd={cvd} buyVolume={buyVolume} sellVolume={sellVolume}
-                cvdHistory={cvdHistory} cvdStatus={cvdStatus} livePrice={livePrice}
+                cvd={cvd} sessionCvd={sessionCvd} buyVolume={buyVolume} sellVolume={sellVolume}
+                cvdHistory={cvdHistory} cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
+                cvdStatus={cvdStatus} livePrice={livePrice}
                 whaleTrades={whaleTrades} theme={theme}
               />
             )}
