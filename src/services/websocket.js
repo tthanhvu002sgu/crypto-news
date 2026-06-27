@@ -213,7 +213,7 @@ export function useCVDStream() {
           whaleRef.current = [
             { time: timeStr, price, qty, usdtVol, side, timestamp: data.T },
             ...whaleRef.current
-          ].slice(0, 50); // Keep last 50 large trades
+          ].slice(0, 5000); // Keep last 5000 large trades of the day
           localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
         }
 

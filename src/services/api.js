@@ -368,6 +368,44 @@ export const getBTCOnChainMetrics = async () => {
   }
 };
 
+/**
+ * Lấy on-chain metrics của Ethereum từ CoinMetrics Community API
+ */
+export const getETHOnChainMetrics = async () => {
+  try {
+    const res = await axios.get(
+      getCoinMetricsUrl(),
+      {
+        params: {
+          assets: 'eth',
+          metrics: 'AdrActCnt,TxCnt,CapMVRVCur',
+          frequency: '1d',
+          page_size: 2,
+        },
+        timeout: 10000,
+      }
+    );
+
+    const items = res.data?.data;
+    if (!items || items.length === 0) return null;
+
+    const latest = [...items].reverse().find(
+      d => d.CapMVRVCur || (d.AdrActCnt && d.TxCnt)
+    );
+    if (!latest) return null;
+
+    return {
+      activeAddresses: latest.AdrActCnt ? parseInt(latest.AdrActCnt).toLocaleString('en-US') : null,
+      txCount: latest.TxCnt ? parseInt(latest.TxCnt).toLocaleString('en-US') : null,
+      mvrv: latest.CapMVRVCur ? parseFloat(latest.CapMVRVCur).toFixed(2) : null,
+      date: latest.time ? latest.time.split('T')[0] : null,
+    };
+  } catch (e) {
+    console.error('[API] CoinMetrics ETH:', e.message);
+    return null;
+  }
+};
+
 // ─── JINA READER — Đọc bất kỳ URL nào, không bị CORS (No API key required) ───
 
 /**

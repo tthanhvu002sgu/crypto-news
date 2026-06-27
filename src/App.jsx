@@ -4,7 +4,7 @@ import {
   getBTCTicker24h, getBTCKlines, getLongShortRatio,
   getFundingRate, getOpenInterest, getOIHistory,
   getGlobalCryptoData, getStablecoinData,
-  fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics,
+  fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics, getETHOnChainMetrics,
   getFREDMetric, getAlphaVantageQuote, getFREDStockQuote,
   getETFHoldings, getETFFlowHistory, getCMECot, getDXYQuote,
   getFearAndGreed, getHistoricalCVD, getIntradayCVD,
@@ -17,6 +17,9 @@ import {
 import GlossaryTab from './components/GlossaryTab';
 import HftRadarTab from './components/HftRadarTab';
 import SummaryTab from './components/SummaryTab';
+import DashboardTab from './components/DashboardTab';
+import CascadeTab from './components/CascadeTab';
+import TerminalTab from './components/TerminalTab';
 import Tooltip, { METRIC_METADATA, useTooltipSettings } from './components/Tooltip';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
@@ -119,6 +122,7 @@ const CASCADE_KEY_MAP = {
   'M2 Supply (Billion $)': 'm2Supply',
   'Funding Rate': 'funding',
   'US Net Liquidity (Billion $)': 'netLiquidity',
+  'Economic Cycle Phase': 'econCycle',
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -234,7 +238,8 @@ const INIT = {
   news: [],
   logs: [],
   onChain: null,      // Blockchain.info network stats
-  onChainMetrics: null, // CoinMetrics community data
+  onChainMetrics: null, // CoinMetrics community data for BTC
+  ethOnChainMetrics: null, // CoinMetrics community data for ETH
   fedFundsRate: null,
   cpi: null,
   unrate: null,
@@ -416,7 +421,6 @@ function App() {
 
   const [etfChartType, setEtfChartType] = useState('flows');
   const [etfAumTimeframe, setEtfAumTimeframe] = useState('ALL'); // '30D', '90D', 'ALL'
-  const [cvdDashTf, setCvdDashTf] = useState('7D');
 
   useEffect(() => {
     window.location.hash = activeTab;
@@ -514,7 +518,7 @@ function App() {
     const [
       btcRes, klinesRes, lsRes, fundRes, oiRes, oiHistRes,
       globalRes, stableRes, newsRes,
-      onChainRes, onChainMetricsRes,
+      onChainRes, onChainMetricsRes, ethOnChainMetricsRes,
       etfHoldingsRes, etfHistoryRes,
       cotRes,
       yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes,
@@ -531,6 +535,7 @@ function App() {
       fetchCached('realtimeFeed', () => fetchRealtimeFeed(), 15 * 60 * 1000, addLog, 'News RSS (rss2json)', force),
       fetchCached('btcOnChain', () => getBTCOnChain(), 6 * 60 * 60 * 1000, addLog, 'BTC Network (blockchain.info)', force),
       fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), 6 * 60 * 60 * 1000, addLog, 'On-chain Metrics (CoinMetrics)', force),
+      fetchCached('ethOnChainMetrics', () => getETHOnChainMetrics(), 6 * 60 * 60 * 1000, addLog, 'ETH On-chain Metrics (CoinMetrics)', force),
       fetchCached('etfHoldings', () => getETFHoldings(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Holdings (Bitbo)', force),
       fetchCached('etfFlowHistory_v4', () => getETFFlowHistory(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Flow History (Farside)', force),
       fetchCached('cmeCot', () => getCMECot(), 12 * 60 * 60 * 1000, addLog, 'Báo cáo CME COT (Tradingster)', force),
@@ -571,6 +576,7 @@ function App() {
     const news            = newsRes.status === 'fulfilled' ? newsRes.value : [];
     const onChain         = onChainRes.status === 'fulfilled' ? onChainRes.value : null;
     const onChainMetrics  = onChainMetricsRes.status === 'fulfilled' ? onChainMetricsRes.value : null;
+    const ethOnChainMetrics = ethOnChainMetricsRes.status === 'fulfilled' ? ethOnChainMetricsRes.value : null;
     const etfHoldingsVal  = etfHoldingsRes.status === 'fulfilled' ? etfHoldingsRes.value : null;
     const etfHistoryVal   = etfHistoryRes.status === 'fulfilled' ? etfHistoryRes.value : null;
     const cotData         = cotRes.status === 'fulfilled' ? cotRes.value : null;
@@ -616,6 +622,7 @@ function App() {
       logs:           [...logsRef.current],
       onChain:        onChain      ?? prev.onChain,
       onChainMetrics: onChainMetrics ?? prev.onChainMetrics,
+      ethOnChainMetrics: ethOnChainMetrics ?? prev.ethOnChainMetrics,
       fedFundsRate:   fedFundsRateVal ?? prev.fedFundsRate,
       cpi:            cpiVal          ?? prev.cpi,
       unrate:         unrateVal       ?? prev.unrate,
@@ -670,6 +677,8 @@ function App() {
     return () => clearInterval(timer);
   }, []); // eslint-disable-line
 
+
+
   // ── Derived chart data ──────────────────────────────────────────────────────
   const btcChartData = useMemo(() => ({
     labels: data.klines.map(k => k.time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
@@ -723,84 +732,6 @@ function App() {
     }],
   }), [data.oiHistory, theme]);
 
-  const dashCvdList = useMemo(() => {
-    if (cvdDashTf === '1H') return cvdHistory || [];
-    if (cvdDashTf === '24H') return data.cvdHistory24h || [];
-    if (cvdDashTf === '7D') return data.cvdHistory7d || [];
-    if (cvdDashTf === '30D') return data.cvdHistory30d || [];
-    return [];
-  }, [cvdDashTf, cvdHistory, data.cvdHistory24h, data.cvdHistory7d, data.cvdHistory30d]);
-
-  const dashCvdChartOpts = useMemo(() => {
-    const base = getChartOpts(theme);
-    return {
-      ...base,
-      plugins: {
-        ...base.plugins,
-        tooltip: {
-          ...base.plugins?.tooltip,
-          callbacks: {
-            label: (ctx) => {
-              const item = dashCvdList[ctx.dataIndex];
-              const btcStr = item?.price ? ` (BTC: $${Number(item.price).toLocaleString()})` : '';
-              return ` CVD: ${fmtCvdUsd(ctx.parsed.y)}${btcStr}`;
-            }
-          }
-        }
-      },
-      scales: {
-        ...base.scales,
-        y: {
-          ...base.scales?.y,
-          ticks: {
-            ...base.scales?.y?.ticks,
-            callback: (val) => fmtCvdUsd(val)
-          }
-        }
-      }
-    };
-  }, [theme, dashCvdList]);
-
-  const dashCvdChartData = useMemo(() => {
-    const labels = dashCvdList.map(item => {
-      if (typeof item.time === 'string') return item.time;
-      if (item.time == null) return '';
-      const d = new Date(item.time);
-      if (cvdDashTf === '24H') {
-        return `${String(d.getHours()).padStart(2, '0')}:00`;
-      }
-      if (cvdDashTf === '7D') {
-        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:00`;
-      }
-      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-    });
-
-    const cvdVals = dashCvdList.map(item => item.cvd);
-    const lastVal = cvdVals.length > 0 ? cvdVals[cvdVals.length - 1] : cvd;
-    const isPos = lastVal >= 0;
-    const lineColor = isPos ? '#10b981' : '#f43f5e';
-    const bgColor = isPos 
-      ? (theme === 'light' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.15)') 
-      : (theme === 'light' ? 'rgba(244, 63, 94, 0.08)' : 'rgba(244, 63, 94, 0.15)');
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: 'CVD',
-          data: cvdVals,
-          borderColor: lineColor,
-          backgroundColor: bgColor,
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 4,
-          fill: true,
-          tension: 0.25,
-        }
-      ]
-    };
-  }, [dashCvdList, cvdDashTf, cvd, theme]);
-
   const currentLS = data.lsHistory[data.lsHistory.length - 1];
   // Use live WebSocket funding rate if available, fallback to REST
   const fund = liveFunding ?? data.fundingRate;
@@ -813,6 +744,34 @@ function App() {
     low: liveLow ?? data.btc?.low,
     volume: liveVolume ?? data.btc?.volume,
   } : data.btc;
+
+  // Cập nhật Document Title và Dynamic Favicon theo giá Bitcoin (Trực tiếp từ WebSocket & REST)
+  useEffect(() => {
+    if (!btcDisplay?.price) return;
+    const price = parseFloat(btcDisplay.price);
+    const change = parseFloat(btcDisplay.change || 0);
+    const priceFormatted = price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    
+    // Cập nhật Title tab trình duyệt
+    document.title = `$${priceFormatted} | BTC ${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+
+    // Cập nhật Favicon SVG động
+    const shortPrice = price >= 1000 ? `${(price / 1000).toFixed(price >= 100000 ? 0 : 1)}k` : `$${Math.round(price)}`;
+    const bgColor = change >= 0 ? '#10b981' : '#ef4444'; // Xanh lá nếu tăng, Đỏ nếu giảm
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="14" fill="${bgColor}"/>
+      <text x="50%" y="54%" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="800" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${shortPrice}</text>
+    </svg>`;
+    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = dataUrl;
+  }, [btcDisplay?.price, btcDisplay?.change]);
 
   // ── ETF AUM & Holdings History Calculations ─────────────────────────────────
   const holdingsHistory = useMemo(() => {
@@ -995,8 +954,53 @@ function App() {
     }
   }), [theme]);
 
+  const btcNuplVal = useMemo(() => {
+    const mvrv = parseFloat(data.onChainMetrics?.mvrv);
+    if (!mvrv || isNaN(mvrv) || mvrv === 0) return null;
+    const raw = 1 - (1 / mvrv);
+    return {
+      percentStr: `${raw >= 0 ? '+' : ''}${(raw * 100).toFixed(1)}%`,
+      subStr: `Ratio ${raw.toFixed(2)} • ${raw > 0.75 ? 'Hưng phấn ⚠' : raw < 0 ? 'Đầu hàng ✓' : 'Lạc quan ✓'}`,
+      cls: raw > 0.75 ? 'text-rose' : raw < 0 ? 'text-emerald' : 'text-slate-400',
+      aiStr: `${raw.toFixed(2)} (${raw >= 0 ? '+' : ''}${(raw * 100).toFixed(1)}% net profit)`
+    };
+  }, [data.onChainMetrics?.mvrv]);
 
+  const ethNuplVal = useMemo(() => {
+    const mvrv = parseFloat(data.ethOnChainMetrics?.mvrv);
+    if (!mvrv || isNaN(mvrv) || mvrv === 0) return null;
+    const raw = 1 - (1 / mvrv);
+    return {
+      percentStr: `${raw >= 0 ? '+' : ''}${(raw * 100).toFixed(1)}%`,
+      subStr: `Ratio ${raw.toFixed(2)} • ${raw > 0.75 ? 'Hưng phấn ⚠' : raw < 0 ? 'Đầu hàng ✓' : 'Lạc quan ✓'}`,
+      cls: raw > 0.75 ? 'text-rose' : raw < 0 ? 'text-emerald' : 'text-slate-400',
+      aiStr: `${raw.toFixed(2)} (${raw >= 0 ? '+' : ''}${(raw * 100).toFixed(1)}% net profit)`
+    };
+  }, [data.ethOnChainMetrics?.mvrv]);
 
+  const btcSupplyProfitEst = useMemo(() => {
+    const mvrv = parseFloat(data.onChainMetrics?.mvrv);
+    if (!mvrv || isNaN(mvrv) || mvrv === 0) return null;
+    const est = Math.min(99.5, Math.max(20, -10 + 52 * mvrv - 1.5 * mvrv * mvrv));
+    return {
+      valStr: `${est.toFixed(1)}%`,
+      subStr: `Mô hình từ MVRV`,
+      cls: est > 95 ? 'text-rose' : est < 50 ? 'text-emerald' : 'text-slate-400',
+      aiStr: `${est.toFixed(1)}% (Estimated)`
+    };
+  }, [data.onChainMetrics?.mvrv]);
+
+  const ethSupplyProfitEst = useMemo(() => {
+    const mvrv = parseFloat(data.ethOnChainMetrics?.mvrv);
+    if (!mvrv || isNaN(mvrv) || mvrv === 0) return null;
+    const est = Math.min(99.5, Math.max(20, -10 + 52 * mvrv - 1.5 * mvrv * mvrv));
+    return {
+      valStr: `${est.toFixed(1)}%`,
+      subStr: `Mô hình từ MVRV`,
+      cls: est > 95 ? 'text-rose' : est < 50 ? 'text-emerald' : 'text-slate-400',
+      aiStr: `${est.toFixed(1)}% (Estimated)`
+    };
+  }, [data.ethOnChainMetrics?.mvrv]);
 
   return (
     <div className="app-container">
@@ -1213,11 +1217,46 @@ function App() {
                 tooltipId="productionCost"
               />
               <MetricCard
-                label="MVRV RATIO"
+                label="BTC MVRV"
                 value={data.onChainMetrics?.mvrv || '---'}
                 sub={data.onChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.onChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
                 subCls={data.onChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.onChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
                 tooltipId="mvrv"
+              />
+              <MetricCard
+                label="ETH MVRV"
+                value={data.ethOnChainMetrics?.mvrv || '---'}
+                sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
+                tooltipId="ethMvrv"
+              />
+              <MetricCard
+                label="BTC NUPL (LÃI/LỖ)"
+                value={btcNuplVal?.percentStr || '---'}
+                sub={btcNuplVal?.subStr || 'Net Unrealized Profit'}
+                subCls={btcNuplVal?.cls || 'text-slate-400'}
+                tooltipId="btcNupl"
+              />
+              <MetricCard
+                label="ETH NUPL (LÃI/LỖ)"
+                value={ethNuplVal?.percentStr || '---'}
+                sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
+                subCls={ethNuplVal?.cls || 'text-slate-400'}
+                tooltipId="ethNupl"
+              />
+              <MetricCard
+                label="BTC COIN LỜI (EST)"
+                value={btcSupplyProfitEst?.valStr || '---'}
+                sub={btcSupplyProfitEst?.subStr || 'Supply in Profit'}
+                subCls={btcSupplyProfitEst?.cls || 'text-slate-400'}
+                tooltipId="btcSupplyProfit"
+              />
+              <MetricCard
+                label="ETH COIN LỜI (EST)"
+                value={ethSupplyProfitEst?.valStr || '---'}
+                sub={ethSupplyProfitEst?.subStr || 'Supply in Profit'}
+                subCls={ethSupplyProfitEst?.cls || 'text-slate-400'}
+                tooltipId="ethSupplyProfit"
               />
             </div>
 
@@ -1251,536 +1290,92 @@ function App() {
 
             {/* ══ DASHBOARD TAB ══════════════════════════════════════════════ */}
             {activeTab === 'dashboard' && (
-              <div className="dashboard-layout">
-
-                {/* News Slider */}
-                {data.news && data.news.length > 0 && (
-                  <div className="news-slider-wrapper glass-panel">
-                    <div className="news-slider" ref={newsSliderRef}>
-                      {data.news.map((item, idx) => {
-                        const catColor = item.cat === 'macro' ? 'var(--color-amber-400)' : 'var(--color-emerald-400)';
-                        const catBg = item.cat === 'macro' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)';
-                        const catBorder = item.cat === 'macro' ? 'rgba(245,158,11,0.25)' : 'rgba(16,185,129,0.25)';
-                        return (
-                          <div key={idx} className="news-slide-item" onDragStart={(e) => e.preventDefault()}>
-                            <div className="news-slide-meta font-mono">
-                              <span className="news-tag" style={{ color: catColor, background: catBg, borderColor: catBorder }}>{item.tag}</span>
-                              <span className="news-time">{item.timeStr}</span>
-                            </div>
-                            <a href={item.link} target="_blank" rel="noreferrer" className="news-link">
-                              <p className="news-slide-title">{item.title}</p>
-                              {item.snippet && <p className="news-slide-snippet">{item.snippet}</p>}
-                            </a>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* BTC Price Chart */}
-                <div className="glass-panel chart-panel">
-                  <div className="chart-header">
-                    <h3 className="chart-title font-mono text-emerald">
-                      <span className="dot dot-emerald" /> BTC/USDT — GIÁ 48 GIỜ GẦN NHẤT (1H)
-                    </h3>
-                    <span className="chart-badge font-mono">
-                      {data.btc ? `$${fmt(data.btc.price, 0)}` : '---'}
-                      {data.btc?.change != null && (
-                        <span className={data.btc.change >= 0 ? 'text-emerald' : 'text-rose'}>
-                          {' '}{data.btc.change >= 0 ? '+' : ''}{data.btc.change.toFixed(2)}%
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="chart-body">
-                    {data.klines.length > 0
-                      ? <Line data={btcChartData} options={{
-                          ...getChartOpts(theme),
-                          scales: {
-                            ...getChartOpts(theme).scales,
-                            y: { ...getChartOpts(theme).scales.y, ticks: { ...getChartOpts(theme).scales.y.ticks, callback: v => `$${(v/1000).toFixed(1)}k` } }
-                          }
-                        }} />
-                      : <div className="chart-empty font-mono">Đang tải dữ liệu biểu đồ...</div>
-                    }
-                  </div>
-                </div>
-
-                {/* L/S Ratio & OI Charts */}
-                <div className="charts-row">
-                  <div className="glass-panel chart-panel">
-                    <div className="chart-header">
-                      <h3 className="chart-title font-mono text-emerald">
-                        <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
-                      </h3>
-                      <span className="chart-badge font-mono">
-                        {currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
-                      </span>
-                    </div>
-                    <div className="chart-body">
-                      {data.lsHistory.length > 0
-                        ? <Line data={lsChartData} options={getChartOpts(theme)} />
-                        : <div className="chart-empty font-mono">Đang tải...</div>
-                      }
-                    </div>
-                  </div>
-
-                  <div className="glass-panel chart-panel">
-                    <div className="chart-header">
-                      <h3 className="chart-title font-mono text-amber">
-                        <span className="dot dot-amber" /> OPEN INTEREST — 24H (BTC)
-                      </h3>
-                      <span className="chart-badge font-mono">
-                        {data.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
-                      </span>
-                    </div>
-                    <div className="chart-body">
-                      {data.oiHistory.length > 0
-                        ? <Bar data={oiChartData} options={getChartOpts(theme)} />
-                        : <div className="chart-empty font-mono">Đang tải...</div>
-                      }
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cumulative Volume Delta (CVD) Trend Chart Panel */}
-                <div className="glass-panel main-chart-panel" style={{ marginTop: 16 }}>
-                  <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                        <span className="dot dot-emerald" /> CUMULATIVE VOLUME DELTA (CVD) — XU HƯỚNG DÒNG TIỀN
-                      </h3>
-                      <span className={`chart-badge font-mono ${cvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                        {fmtCvdUsd(dashCvdList.length > 0 ? dashCvdList[dashCvdList.length - 1].cvd : cvd)}
-                      </span>
-                    </div>
-                    <div className="etf-timeframe-toggle font-mono">
-                      {['1H', '24H', '7D', '30D'].map(tf => (
-                        <button
-                          key={tf}
-                          onClick={() => setCvdDashTf(tf)}
-                          className={`toggle-btn ${cvdDashTf === tf ? 'active' : ''}`}
-                        >
-                          {tf === '1H' ? '1H (LIVE)' : tf}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="chart-body" style={{ height: '220px', marginTop: 12 }}>
-                    {dashCvdList.length > 1 ? (
-                      <Line data={dashCvdChartData} options={dashCvdChartOpts} />
-                    ) : (
-                      <div className="chart-empty font-mono">
-                        {cvdDashTf === '1H' ? '⚡ Đang tích lũy dữ liệu CVD realtime theo phút...' : 'Đang tải dữ liệu CVD...'}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* US Spot Bitcoin ETFs Row */}
-                <div className="whales-row">
-                  {/* Spot ETFs Holdings Panel */}
-                  <div className="glass-panel whale-panel">
-                    <h3 className="chart-title font-mono text-emerald" style={{ marginBottom: 16 }}>
-                      <span className="dot dot-emerald" /> US SPOT BITCOIN ETFS (TOTAL: {fmt(etfHoldings.total, 0)} BTC)
-                    </h3>
-                    <div className="etf-summary font-mono">
-                      <div className="etf-sum-card">
-                        <span className="etf-sum-label">TOTAL AUM</span>
-                        <span className="etf-sum-val text-emerald">${fmt((etfHoldings.total * (btcDisplay?.price || 60000)) / 1e9, 2)}B</span>
-                      </div>
-                      <div className="etf-sum-card">
-                        <span className="etf-sum-label">NET FLOWS (24H)</span>
-                        <span className={`etf-sum-val ${etfHistory[etfHistory.length - 1]?.flow >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                          {etfHistory[etfHistory.length - 1]?.flow >= 0 ? '+' : ''}{etfHistory[etfHistory.length - 1]?.flow}M
-                        </span>
-                      </div>
-                      <div className="etf-sum-card">
-                        <span className="etf-sum-label">% SUPPLY HELD</span>
-                        <span className="etf-sum-val text-slate-300">
-                          ~{((etfHoldings.total / (data.node?.circulatingSupply || 20039293.75)) * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="etf-sum-card">
-                        <span className="etf-sum-label">AUM TREND ({aumChangeStats.oldestDate} → NAY)</span>
-                        <span className={`etf-sum-val ${aumChangeStats.direction === 'up' ? 'text-emerald' : aumChangeStats.direction === 'down' ? 'text-rose' : 'text-slate-300'}`}>
-                          {aumChangeStats.direction === 'up' ? '▲' : aumChangeStats.direction === 'down' ? '▼' : ''} {Math.abs(aumChangeStats.diffPct).toFixed(1)}% 
-                          <span style={{ fontSize: '0.55rem', marginLeft: '4px', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>
-                            ({aumChangeStats.diffUsd >= 0 ? '+' : ''}{aumChangeStats.diffUsd.toFixed(2)}B)
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="whale-table font-mono" style={{ width: '100%', fontSize: '0.62rem' }}>
-                        <thead>
-                          <tr>
-                            <th style={{ textAlign: 'left', padding: '6px 4px' }}>ETF FUND</th>
-                            <th style={{ textAlign: 'right', padding: '6px 4px' }}>HOLDINGS</th>
-                            <th style={{ textAlign: 'right', padding: '6px 4px' }}>VALUE</th>
-                            <th style={{ textAlign: 'right', padding: '6px 4px' }}>SHARE</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {etfHoldings.funds.map((e, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid var(--border-panel)' }}>
-                              <td style={{ padding: '8px 4px', color: 'var(--text-contrast)' }}>{e.name}</td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right' }}>{e.holdings.toLocaleString()} BTC</td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right', color: 'var(--text-contrast)' }}>${fmt((e.holdings * (btcDisplay?.price || 60000)) / 1e9, 2)}B</td>
-                              <td style={{ padding: '8px 4px', textAlign: 'right', color: 'var(--text-slate-400)' }}>{e.marketShare}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Spot ETFs Net Flow History Chart Panel */}
-                  <div className="glass-panel whale-panel">
-                    <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                        <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
-                      </h3>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        {etfChartType === 'aum' && (
-                          <div className="etf-timeframe-toggle font-mono">
-                            {['30D', '90D', 'ALL'].map(tf => (
-                              <button
-                                key={tf}
-                                onClick={() => setEtfAumTimeframe(tf)}
-                                className={`toggle-btn ${etfAumTimeframe === tf ? 'active' : ''}`}
-                              >
-                                {tf}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        <div className="etf-chart-toggle font-mono">
-                          <button 
-                            onClick={() => setEtfChartType('flows')} 
-                            className={`toggle-btn ${etfChartType === 'flows' ? 'active' : ''}`}
-                          >
-                            DÒNG TIỀN
-                          </button>
-                          <button 
-                            onClick={() => setEtfChartType('aum')} 
-                            className={`toggle-btn ${etfChartType === 'aum' ? 'active' : ''}`}
-                          >
-                            XU HƯỚNG AUM
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="chart-body" style={{ height: '220px' }}>
-                      {etfHistory.length > 0 ? (
-                        etfChartType === 'flows' ? (
-                          <Bar data={etfFlowChartData} options={etfFlowChartOpts} />
-                        ) : (
-                          <Line data={etfAumChartData} options={etfAumChartOpts} />
-                        )
-                      ) : (
-                        <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* CME COT Table Row */}
-                <div className="fng-cot-row">
-                    <div className="glass-panel whale-panel" style={{ height: '100%', overflow: 'hidden' }}>
-                      <h3 className="chart-title font-mono text-amber" style={{ marginBottom: 16 }}>
-                        <span className="dot dot-amber" /> CME BITCOIN FUTURES COT (AS OF {data.cotData?.date || 'N/A'})
-                      </h3>
-                      <div style={{ overflowX: 'auto' }}>
-                        <table className="whale-table font-mono" style={{ width: '100%', fontSize: '0.62rem', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr>
-                              <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}></th>
-                              <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Long</th>
-                              <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Short</th>
-                              <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Spread</th>
-                            </tr>
-                            <tr style={{ color: 'var(--text-contrast)' }}>
-                              <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}></th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
-                              <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {[
-                              { label: 'Dealer Intermediary', key: 'dealerIntermediary' },
-                              { label: 'Asset Manager/ Institutional', key: 'assetManager' },
-                              { label: 'Leveraged Funds', key: 'leveragedFunds' },
-                              { label: 'Other Reportables', key: 'otherReportables' },
-                              { label: 'Nonreportable Positions', key: 'nonReportable' }
-                            ].map(row => {
-                              const rData = data.cotData?.[row.key];
-                              if (!rData) return null;
-                              
-                              const renderCell = (pos, change) => {
-                                if (pos == null) return '---';
-                                if (pos === 0 && change === 0) return '0';
-                                return (
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                                    <span>{pos.toLocaleString()}</span>
-                                    {change !== 0 && change != null && (
-                                      <span style={{ 
-                                        color: 'white', 
-                                        backgroundColor: change > 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)', 
-                                        padding: '1px 3px', 
-                                        borderRadius: '2px', 
-                                        fontSize: '0.55rem' 
-                                      }}>
-                                        {change > 0 ? '+' : ''}{change.toLocaleString()}
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              };
-
-                              return (
-                                <tr key={row.key} style={{ borderBottom: '1px solid var(--border-panel)', backgroundColor: row.key === 'nonReportable' ? 'rgba(0,0,0,0.1)' : 'transparent' }}>
-                                  <td style={{ padding: '8px 4px', color: 'var(--text-contrast)', fontWeight: 'bold' }}>{row.label}</td>
-                                  
-                                  {/* Long */}
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{renderCell(rData.long, rData.longChange)}</td>
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{typeof rData.longOi === 'number' ? `${rData.longOi.toFixed(1)}%` : '---'}</td>
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{rData.longTraders != null ? rData.longTraders : '---'}</td>
-                                  
-                                  {/* Short */}
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{renderCell(rData.short, rData.shortChange)}</td>
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{typeof rData.shortOi === 'number' ? `${rData.shortOi.toFixed(1)}%` : '---'}</td>
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{rData.shortTraders != null ? rData.shortTraders : '---'}</td>
-                                  
-                                  {/* Spread */}
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? renderCell(rData.spread, rData.spreadChange) : ''}</td>
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? (typeof rData.spreadOi === 'number' ? `${rData.spreadOi.toFixed(1)}%` : '---') : ''}</td>
-                                  <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? (rData.spreadTraders != null ? rData.spreadTraders : '---') : ''}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="font-mono text-slate-500" style={{ fontSize: '0.52rem', marginTop: '10px', textAlign: 'right' }}>
-                        Open Interest: {data.cotData?.openInterest ? data.cotData.openInterest.toLocaleString() : '---'} contracts
-                      </div>
-                    </div>
-                  </div>
-
-              </div>
+              <DashboardTab
+                data={data}
+                theme={theme}
+                newsSliderRef={newsSliderRef}
+                btcChartData={btcChartData}
+                getChartOpts={getChartOpts}
+                currentLS={currentLS}
+                lsChartData={lsChartData}
+                oiChartData={oiChartData}
+                etfHoldings={etfHoldings}
+                fmt={fmt}
+                btcDisplay={btcDisplay}
+                etfHistory={etfHistory}
+                aumChangeStats={aumChangeStats}
+                etfChartType={etfChartType}
+                setEtfChartType={setEtfChartType}
+                etfAumTimeframe={etfAumTimeframe}
+                setEtfAumTimeframe={setEtfAumTimeframe}
+                etfFlowChartData={etfFlowChartData}
+                etfFlowChartOpts={etfFlowChartOpts}
+                etfAumChartData={etfAumChartData}
+                etfAumChartOpts={etfAumChartOpts}
+              />
             )}
 
-
-
-            {/* ══ CASCADE TAB ════════════════════════════════════════════════ */}
-            {activeTab === 'cascade' && (
-              <motion.div 
-                className="cascade-layout"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-              >
-                <div className="glass-panel panel-section">
-                  <div className="panel-header">
-                    <h3 className="panel-title font-mono text-emerald">
-                      [BƯỚC 3] THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN
-                    </h3>
-                  </div>
-                  <p className="text-xs text-slate-400 mb-6" style={{ lineHeight: 1.7, textAlign: 'center' }}>
-                    Tiền bắt đầu từ FED → chảy vào các thị trường theo thứ tự ưu tiên rủi ro. Sơ đồ minh họa phân bổ dòng tiền cơ sở.
-                  </p>
-
-                  <div className="cascade-flow">
-                    {[
-                      {
-                        tier: 'TIER 0',
-                        label: 'THƯỢNG NGUỒN VĨ MÔ',
-                        desc: 'FED & Chính sách tiền tệ',
-                        status: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? '[🔴 RESTRICTIVE]' : '[🟢 ACCOMMODATIVE]') : '[🔴 RESTRICTIVE]',
-                        statusColor: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? '#f43f5e' : '#10b981') : '#f43f5e',
-                        items: [
-                          { k: 'Fed Funds Rate', v: data.fedFundsRate ? `${data.fedFundsRate}%` : '4.25–4.50%', note: 'Lãi suất điều hành' },
-                          { k: 'CPI Inflation', v: data.cpi ? data.cpi.toFixed(2) : '---', note: 'Chỉ số giá tiêu dùng' },
-                          { k: 'Unemployment Rate', v: data.unrate ? `${data.unrate}%` : '---', note: 'Tỷ lệ thất nghiệp' },
-                          { k: 'M2 Supply (Billion $)', v: data.m2Supply ? `$${fmt(data.m2Supply, 0)}` : '---', note: 'Tổng cung tiền M2' },
-                          { k: 'US Net Liquidity (Billion $)', v: data.netLiquidity ? `$${fmt(data.netLiquidity, 0)}B` : '---', note: 'WALCL - TGA - RRP' },
-                        ],
-                        color: '#6366f1',
-                      },
-                      {
-                        tier: 'TIER 1',
-                        label: 'CHI PHÍ VỐN & USD',
-                        desc: 'Khóa van thanh khoản',
-                        status: data.dxy > 103 ? '[🔴 TIGHTENING]' : '[🟢 EASING]',
-                        statusColor: data.dxy > 103 ? '#f43f5e' : '#10b981',
-                        items: [
-                          { k: 'DXY (Dollar Index)', v: data.dxy ? fmt(data.dxy, 2) : '---', note: 'Sức mạnh USD' },
-                          { k: '10Y Treasury Yield', v: data.tenYearYield ? `${data.tenYearYield}%` : '---', note: 'Lợi suất TP 10 năm' },
-                          { k: 'VIX Volatility', v: data.vix ? `${fmt(data.vix.price, 2)}` : '---', note: 'Chỉ số hoảng loạn' },
-                        ],
-                        color: '#f59e0b',
-                      },
-                      {
-                        tier: 'TIER 2',
-                        label: 'TÀI SẢN RỦI RO',
-                        desc: 'Dòng vốn Equity & Credit',
-                        status: data.sp500?.changePercent > 0 ? '[🟢 EXPANDING]' : '[🔴 CONTRACTING]',
-                        statusColor: data.sp500?.changePercent > 0 ? '#10b981' : '#f43f5e',
-                        items: [
-                          { k: 'S&P 500 Index', v: data.sp500 ? `${fmt(data.sp500.price, 2)} (${data.sp500.changePercent >= 0 ? '+' : ''}${data.sp500.changePercent.toFixed(2)}%)` : '---', note: 'Chứng khoán Mỹ' },
-                          { k: 'Nasdaq 100 Index', v: data.qqq ? `${fmt(data.qqq.price, 2)} (${data.qqq.changePercent >= 0 ? '+' : ''}${data.qqq.changePercent.toFixed(2)}%)` : '---', note: 'Cổ phiếu công nghệ' },
-                          { k: 'High Yield Credit', v: data.highYield ? `${data.highYield}%` : '---', note: 'Rủi ro vỡ nợ' },
-                        ],
-                        color: '#10b981',
-                      },
-                      {
-                        tier: 'TIER 3',
-                        label: 'HẠ NGUỒN CRYPTO',
-                        desc: 'On-chain & Phái sinh',
-                        status: btcDisplay?.change >= 0 ? '[🟢 INFLOW]' : '[🔴 OUTFLOW]',
-                        statusColor: btcDisplay?.change >= 0 ? '#10b981' : '#f43f5e',
-                        items: [
-                          { k: 'Stablecoin Supply', v: data.stablecoins ? fmtB(data.stablecoins.total) : '---', note: 'Sức mua cơ sở' },
-                          { k: 'BTC Dominance', v: data.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---', note: 'Dòng vốn Altcoin' },
-                          { k: 'Funding Rate', v: fund != null ? `${(fund * 100).toFixed(4)}%` : '---', note: 'Lệch pha phái sinh' },
-                          { k: 'MVRV Ratio', v: data.onChainMetrics?.mvrv || '---', note: 'Định giá On-chain' },
-                        ],
-                        color: '#f43f5e',
-                      },
-                    ].map((tier, idx) => (
-                      <React.Fragment key={idx}>
-                        <motion.div 
-                          className="cascade-tier" 
-                          style={{ '--tier-color': tier.color }}
-                          initial={{ opacity: 0, y: -20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.15, duration: 0.5 }}
-                        >
-                          <div className="cascade-tier-header">
-                            <span className="cascade-tier-badge font-mono" style={{ color: tier.color, borderColor: tier.color }}>{tier.tier}</span>
-                            <div className="cascade-tier-label font-mono" style={{ color: tier.color }}>{tier.label}</div>
-                            <div className="cascade-tier-desc font-mono">{tier.desc}</div>
-                            <div className="cascade-tier-status font-mono" style={{ color: tier.statusColor, border: `1px solid ${tier.statusColor}40`, background: `${tier.statusColor}10` }}>
-                              {tier.status}
-                            </div>
-                          </div>
-                          <div className="tree-nodes-row">
-                            {tier.items.map((item, j) => {
-                              const tooltipId = CASCADE_KEY_MAP[item.k];
-                              const metadata = tooltipId ? METRIC_METADATA[tooltipId] : null;
-                              return (
-                                <div key={j} className="tree-node font-mono">
-                                  {metadata ? (
-                                    <Tooltip content={metadata}>
-                                      <span className="tree-node-key" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)' }}>
-                                        {item.k}
-                                      </span>
-                                    </Tooltip>
-                                  ) : (
-                                    <span className="tree-node-key">{item.k}</span>
-                                  )}
-                                  <span className="tree-node-val" style={{ color: 'var(--text-contrast)' }}>{item.v}</span>
-                                  <span className="tree-node-note">{item.note}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </motion.div>
-                        {idx < 3 && (
-                          <motion.div 
-                            className="cascade-arrow" 
-                            style={{ color: tier.color }}
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: '40px' }}
-                            transition={{ delay: idx * 0.15 + 0.1, duration: 0.4 }}
-                          >
-                            <div className="flow-line">
-                               <div className="flow-dot"></div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* ══ TERMINAL TAB ═══════════════════════════════════════════════ */}
-            {activeTab === 'terminal' && (
-              <div className="glass-panel panel-section">
-                <div className="panel-header">
-                  <h3 className="panel-title font-mono text-emerald">
-                    📟 SOVEREIGN CRAWLER — ACTIVITY LOG
-                  </h3>
-                  <span className="panel-badge font-mono">{data.logs.length} entries</span>
-                </div>
-                <div className="terminal-log font-mono">
-                  {data.logs.length === 0
-                    ? <div className="text-slate-500">Nhấn SYNC để xem log hoạt động...</div>
-                    : data.logs.map((l, i) => (
-                        <div key={i} className={`log-line log-${l.type}`}>
-                          <span className="log-time">[{l.time}]</span>
-                          <span className="log-msg">{l.msg}</span>
-                        </div>
-                      ))
-                  }
-                </div>
-                <div className="terminal-summary font-mono">
-                  <div className="summary-row">
-                    <span className="text-slate-400">BTC:</span>
-                    <span>${btcDisplay ? fmt(btcDisplay.price, 0) : '---'} {wsStatus === 'connected' ? '⚡' : ''}</span>
-                    <span className="text-slate-400">Funding:</span>
-                    <span className={fundInfo.cls}>{fund != null ? `${(fund * 100).toFixed(4)}%` : '---'}</span>
-                    <span className="text-slate-400">OI:</span>
-                    <span>{data.openInterest ? `${(data.openInterest/1000).toFixed(1)}K BTC` : '---'}</span>
-                    <span className="text-slate-400">F&G:</span>
-                    <span style={{ color: fngColor(data.fngData?.value, theme === 'light') }}>{data.fngData?.value || '---'}</span>
-                    <span className="text-slate-400">HashRate:</span>
-                    <span>{data.onChain?.hashRate ? `${data.onChain.hashRate}EH/s` : '---'}</span>
-                    <span className="text-slate-400">WS:</span>
-                    <span className={wsStatus === 'connected' ? 'text-emerald' : 'text-rose'}>{wsStatus.toUpperCase()}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'summary' && (
-            <SummaryTab 
-              data={data} 
-              apiKeys={apiKeys} 
-              cvd={cvd}
-              buyVolume={buyVolume}
-              sellVolume={sellVolume}
-              etfHoldings={etfHoldings}
-              etfHistory={etfHistory}
-              aiSummary={aiSummary}
-              setAiSummary={setAiSummary}
-              isAiLoading={isAiLoading}
-              setIsAiLoading={setIsAiLoading}
-              lastSync={lastSync}
-            />
-          )}
-
-            {activeTab === 'glossary' && (
-              <GlossaryTab />
-            )}
-
-             {activeTab === 'hft' && (
+            {/* ══ HFT RADAR TAB ══════════════════════════════════════════════ */}
+            {activeTab === 'hft' && (
               <HftRadarTab
                 cvd={cvd} sessionCvd={sessionCvd} buyVolume={buyVolume} sellVolume={sellVolume}
                 cvdHistory={cvdHistory} cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
                 cvdStatus={cvdStatus} livePrice={livePrice}
                 whaleTrades={whaleTrades} theme={theme}
+              />
+            )}
+
+            {/* ══ CASCADE TAB ════════════════════════════════════════════════ */}
+            {activeTab === 'cascade' && (
+              <CascadeTab
+                data={data}
+                fmt={fmt}
+                fmtB={fmtB}
+                btcDisplay={btcDisplay}
+                fund={fund}
+                CASCADE_KEY_MAP={CASCADE_KEY_MAP}
+                METRIC_METADATA={METRIC_METADATA}
+              />
+            )}
+
+            {/* ══ AI SUMMARY TAB ═════════════════════════════════════════════ */}
+            {activeTab === 'summary' && (
+              <SummaryTab 
+                data={data} 
+                apiKeys={apiKeys} 
+                cvd={cvd}
+                buyVolume={buyVolume}
+                sellVolume={sellVolume}
+                etfHoldings={etfHoldings}
+                etfHistory={etfHistory}
+                aiSummary={aiSummary}
+                setAiSummary={setAiSummary}
+                isAiLoading={isAiLoading}
+                setIsAiLoading={setIsAiLoading}
+                lastSync={lastSync}
+                btcNupl={btcNuplVal?.aiStr || 'N/A'}
+                ethNupl={ethNuplVal?.aiStr || 'N/A'}
+                btcSupplyProfit={btcSupplyProfitEst?.aiStr || 'N/A'}
+                ethSupplyProfit={ethSupplyProfitEst?.aiStr || 'N/A'}
+              />
+            )}
+
+            {/* ══ GLOSSARY TAB ═══════════════════════════════════════════════ */}
+            {activeTab === 'glossary' && (
+              <GlossaryTab />
+            )}
+
+            {/* ══ TERMINAL TAB ═══════════════════════════════════════════════ */}
+            {activeTab === 'terminal' && (
+              <TerminalTab
+                data={data}
+                btcDisplay={btcDisplay}
+                wsStatus={wsStatus}
+                fundInfo={fundInfo}
+                fund={fund}
+                fmt={fmt}
+                fngColor={fngColor}
+                theme={theme}
               />
             )}
 

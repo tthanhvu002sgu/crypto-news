@@ -20,7 +20,8 @@ const cleanLatex = (text) => {
 
 export default function SummaryTab({ 
   data, apiKeys, cvd, buyVolume, sellVolume, etfHoldings, etfHistory,
-  aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync
+  aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
+  btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit
 }) {
 
   const provider = 'gemini';
@@ -176,12 +177,13 @@ ${klines7dStr}
 - ETH: ${data.ethPrice?.price ? '$' + data.ethPrice.price + ' (' + (data.ethPrice.change || 'N/A') + '%)' : 'N/A'}
 - SOL: ${data.solPrice?.price ? '$' + data.solPrice.price + ' (' + (data.solPrice.change || 'N/A') + '%)' : 'N/A'}
 
-### On-chain Data
+### On-chain Valuation & Network Data
 - Dominance: BTC (${data.globalData?.btcDominance || 'N/A'}%), ETH (${data.globalData?.ethDominance || 'N/A'}%)
 - Total Market Cap: ${data.globalData?.totalMarketCap ? '$' + (data.globalData.totalMarketCap/1e9).toFixed(0) + 'B' : 'N/A'}
 - Stablecoin Supply (Purchasing Power): USDT (${data.stablecoins?.usdt ? '$' + (data.stablecoins.usdt/1e9).toFixed(1) + 'B' : 'N/A'})
-- BTC Hashrate: ${data.onChain?.hashRate || 'N/A'} EH/s
-- Active Addresses: ${data.onChainMetrics?.activeAddresses || 'N/A'}
+- BTC Hashrate: ${data.onChain?.hashRate || 'N/A'} EH/s | Active Addresses: ${data.onChainMetrics?.activeAddresses || 'N/A'}
+- BTC MVRV: ${data.onChainMetrics?.mvrv || 'N/A'} | BTC NUPL: ${btcNupl || 'N/A'} | BTC Supply in Profit (Est): ${btcSupplyProfit || 'N/A'}
+- ETH MVRV: ${data.ethOnChainMetrics?.mvrv || 'N/A'} | ETH NUPL: ${ethNupl || 'N/A'} | ETH Supply in Profit (Est): ${ethSupplyProfit || 'N/A'}
 
 ## 3. INSTITUTIONAL FLOWS (CME & ETF)
 - Total BTC ETF Holdings: ${etfHoldings?.total ? etfHoldings.total.toLocaleString() + ' BTC (~$' + ((etfHoldings.total * (data.btc?.price || 0)) / 1e9).toFixed(1) + 'B)' : 'N/A'}
@@ -232,12 +234,14 @@ MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
    - ABSOLUTELY DO NOT use LaTeX math formatting. Do not wrap numbers or symbols in dollar signs '$' or '$$'. Do not use LaTeX syntax like '\\text{}', '\\mathrm{}', '\\rightarrow', '\\delta', etc.
    - All numbers, currencies, and trends must be written as plain text and common symbols (e.g., write '-2.071M USD' instead of '$-2.071\\text{M USD}$', write 'Fed Rate' instead of '(\\text{Fed Rate})', write '102.3K' instead of '$102.3\\text{K}$', use a normal arrow '->' or the word 'to' instead of '\\rightarrow').
 
-2. DEEP MACRO ANALYSIS:
+2. DEEP MACRO ANALYSIS & ECONOMIC CYCLE POSITIONING:
    - Do not just mechanically list raw data.
    - YOU MUST calculate the Real Rate using the formula: Real Rate = Fed Funds Rate - Inflation (CPI).
    - YOU MUST analyze systemic contradictions if any (e.g., negative/low real rates but the 10Y Bond Yield is surging). Explain this phenomenon clearly (steepening yield curve, long-term inflation expectations, or fiscal pressure) and its impact on risk assets.
+   - YOU MUST map the current macroeconomic variables (Interest Rates, M2 Supply, CPI Inflation, Unemployment/GDP context) into one of the 4 Business Cycle Phases: (1) Monetary Easing (low rates, expansionary liquidity), (2) Economic Expansion (capital flowing to assets, high GDP, late-cycle inflation), (3) Monetary Tightening (raising rates/credit contraction to curb inflation), or (4) Economic Recession/Contraction (prolonged high rates, asset discounting, declining inflation signaling cycle bottom). Advise investor positioning accordingly (avoiding crowd FOMO during late expansion vs accumulating undervalued assets during recession/tightening).
 
-3. ON-CHAIN LOGIC & STABLECOIN PURCHASING POWER:
+3. ON-CHAIN VALUATION & STABLECOIN PURCHASING POWER:
+   - Evaluate Network Valuation using MVRV (Market Value to Realized Value) and NUPL (Net Unrealized Profit/Loss) for both BTC and ETH. Highlight if MVRV indicates an overvalued (> 3.5) or undervalued (< 1.0) zone, and interpret NUPL zones (Capitulation < 0, Belief/Optimism > 0, Euphoria > 0.75) to assess market cycle positioning.
    - DO NOT consider Total Market Cap / Circulating Supply of USDT/Stablecoins as immediate latent demand ready to absorb BTC selling pressure. Explain clearly that: The circulating supply of USDT/Stablecoins might be in DeFi pools, used as collateral, or sitting in long-term wallets.
    - Point out that to analyze the potential direct demand for buying BTC, one must use Stablecoin Exchange Reserves. Since the current system does not provide this metric, you must highlight this limitation rather than extrapolating from Total Stablecoin Market Cap.
 
@@ -295,6 +299,7 @@ Real Rate = Fed Funds Rate - Inflation (CPI)
 Real Rate = [Fed Funds Rate]% - [Inflation (CPI)]% = [Calculated Real Rate]%
 
 * **Systemic Contradictions**: [Analyze contradiction between Real Rate and 10Y Yield, long-term expectations, fiscal pressure].
+* **Economic Cycle Positioning**: [Map the global economy into one of the 4 Business Cycle Phases: Monetary Easing / Expansion / Tightening / Recession based on rates, CPI, M2, and employment data. Provide strategic cycle-based investment positioning advice, such as observing patiently or preparing capital to accumulate discounted assets instead of following crowd FOMO].
 * **Liquidity and Market Volatility**: U.S. Net Liquidity stands at [Net Liquidity]B USD, M2 Supply is [M2 Supply]B USD. Broad market anxiety is [VIX level] (VIX). High Yield Spread is [Spread]%, indicating [credit conditions]. Equities: S&P 500 at [S&P 500 Price] and Nasdaq 100 at [Nasdaq 100 Price]. [Conclude how this affects appetite for high-beta risk assets like Bitcoin].
 
 ---
@@ -453,8 +458,9 @@ You MUST follow this exact template structure.
 [Write a 2-3 paragraph narrative explaining what is happening right now. Who is in control: buyers or sellers? How does the macro environment affect this? Keep it engaging and easy to digest. When referencing news, ALWAYS explicitly state the date of the news].
 
 ### 🌍 MACRO & THE BIG PICTURE
+* 💡 **Concept: The 4-Phase Economic Cycle**: Markets move in recurring cycles: (1) Monetary Easing -> (2) Expansion -> (3) Tightening -> (4) Recession. Understanding which phase we are in helps investors avoid crowd FOMO at market tops and prepare capital/knowledge to accumulate discounted assets during economic downturns.
 * 💡 **Concept: Real Rate**: The Real Rate (Fed Funds Rate minus Inflation) tells us if borrowing money is actually expensive. If it's high, investors prefer safe assets over Bitcoin.
-* **Current Situation**: The calculated Real Rate is [Rate]%. [Explain what this means for Bitcoin today in simple terms].
+* **Current Situation**: The calculated Real Rate is [Rate]%. [Explain what this means for Bitcoin today in simple terms and state which phase of the Economic Cycle we are currently navigating].
 * **Liquidity**: Net Liquidity is [Value]. [Explain if money is flowing into or out of the system].
 
 ### 🐋 WHALES & INSTITUTIONS
@@ -722,19 +728,19 @@ ${promptData}
                 color: (isExporting || isAiLoading) ? 'var(--text-slate-500)' : 'var(--color-emerald-400)',
                 border: (isExporting || isAiLoading) ? '1px solid var(--border-panel)' : '1px solid var(--border-emerald-500)',
                 cursor: (isExporting || isAiLoading) ? 'not-allowed' : 'pointer',
-                boxShadow: (isExporting || isAiLoading) ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.1)',
+                boxShadow: 'none',
                 transition: 'all 0.2s ease'
               }}
               onMouseOver={(e) => {
                 if (!isExporting && !isAiLoading) {
                   e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.25)';
+                  e.currentTarget.style.borderColor = 'var(--text-contrast)';
                 }
               }}
               onMouseOut={(e) => {
                 if (!isExporting && !isAiLoading) {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.1)';
+                  e.currentTarget.style.borderColor = 'var(--border-emerald-500)';
                 }
               }}
             >

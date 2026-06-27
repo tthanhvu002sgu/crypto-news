@@ -1,119 +1,119 @@
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* ── Base Surfaces ──────────────────────────────────────── */
-  --bg-slate-950: #0a0e1a;
-  --bg-slate-900: #111827;
-  --bg-slate-800: #1e293b;
-  --bg-slate-700: #1a2035;
+  /* ── Base Surfaces (Minimalist Off-Black Dark Mode) ────────── */
+  --bg-slate-950: #0a0a0c;
+  --bg-slate-900: #121214;
+  --bg-slate-800: #1a1a1e;
+  --bg-slate-700: #24242a;
 
   /* ── Text Colors ────────────────────────────────────────── */
-  --text-slate-100: #f1f5f9;
-  --text-slate-200: #e2e8f0;
-  --text-slate-300: #cbd5e1;
-  --text-slate-400: #94a3b8;
-  --text-slate-500: #64748b;
+  --text-slate-100: #f4f4f6;
+  --text-slate-200: #e2e2e6;
+  --text-slate-300: #bebec6;
+  --text-slate-400: #888892;
+  --text-slate-500: #5a5a64;
 
-  /* ── Accent Colors ──────────────────────────────────────── */
-  --color-emerald-400: #34d399;
-  --color-emerald-500: #10b981;
-  --color-rose-400: #fb7185;
-  --color-rose-500: #f43f5e;
-  --color-amber-400: #fbbf24;
-  --color-amber-500: #f59e0b;
-  --color-cyan-400: #22d3ee;
-  --color-cyan-500: #06b6d4;
-  --color-indigo-400: #818cf8;
-  --color-indigo-500: #6366f1;
-  --color-violet-400: #a78bfa;
-  --color-violet-500: #8b5cf6;
+  /* ── Muted Editorial Accent Colors ──────────────────────── */
+  --color-emerald-400: #10b981;
+  --color-emerald-500: #059669;
+  --color-rose-400: #f43f5e;
+  --color-rose-500: #e11d48;
+  --color-amber-400: #f59e0b;
+  --color-amber-500: #d97706;
+  --color-cyan-400: #06b6d4;
+  --color-cyan-500: #0891b2;
+  --color-indigo-400: #6366f1;
+  --color-indigo-500: #4f46e5;
+  --color-violet-400: #8b5cf6;
+  --color-violet-500: #7c3aed;
 
-  /* ── Aurora Gradient ────────────────────────────────────── */
-  --gradient-aurora: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6);
-  --gradient-aurora-subtle: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(59,130,246,0.15), rgba(139,92,246,0.15));
-  --gradient-aurora-border: linear-gradient(135deg, rgba(6,182,212,0.4), rgba(59,130,246,0.3), rgba(139,92,246,0.4));
+  /* ── Refined Subtle Gradients ───────────────────────────── */
+  --gradient-aurora: linear-gradient(135deg, #10b981, #3b82f6);
+  --gradient-aurora-subtle: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.08));
+  --gradient-aurora-border: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
   --gradient-success: linear-gradient(135deg, #10b981, #059669);
   --gradient-danger: linear-gradient(135deg, #f43f5e, #e11d48);
 
-  /* ── Borders ────────────────────────────────────────────── */
-  --border-slate-800: rgba(99, 102, 241, 0.12);
-  --border-emerald-500: rgba(16, 185, 129, 0.25);
-  --border-rose-500: rgba(244, 63, 94, 0.25);
+  /* ── Structural Borders (Minimalist 1px Rule) ───────────── */
+  --border-slate-800: rgba(255, 255, 255, 0.08);
+  --border-emerald-500: rgba(16, 185, 129, 0.3);
+  --border-rose-500: rgba(244, 63, 94, 0.3);
 
-  /* ── Typography ─────────────────────────────────────────── */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Fira Code', 'Consolas', monospace;
+  /* ── Typography Stack ───────────────────────────────────── */
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 
   /* ── Layout Theme Variables ─────────────────────────────── */
-  --bg-header: rgba(10, 14, 26, 0.92);
-  --bg-panel: rgba(17, 24, 39, 0.65);
-  --bg-panel-solid: #0f1629;
-  --bg-active-tab: rgba(99, 102, 241, 0.1);
+  --bg-header: rgba(10, 10, 12, 0.9);
+  --bg-panel: rgba(18, 18, 20, 0.8);
+  --bg-panel-solid: #121214;
+  --bg-active-tab: rgba(255, 255, 255, 0.06);
   --text-contrast: #ffffff;
-  --border-panel: rgba(99, 102, 241, 0.12);
-  --shadow-panel: 0 4px 32px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.08);
+  --border-panel: rgba(255, 255, 255, 0.08);
+  --shadow-panel: 0 4px 24px rgba(0, 0, 0, 0.25);
+  --shadow-glow: none;
 
   /* ── Tooltip ────────────────────────────────────────────── */
-  --bg-tooltip: rgba(15, 22, 41, 0.97);
-  --border-tooltip: rgba(99, 102, 241, 0.2);
-  --text-tooltip-title: #94a3b8;
-  --text-tooltip-body: #e2e8f0;
+  --bg-tooltip: rgba(18, 18, 20, 0.98);
+  --border-tooltip: rgba(255, 255, 255, 0.12);
+  --text-tooltip-title: #888892;
+  --text-tooltip-body: #e2e2e6;
 
   /* ── Sentiment Colors ───────────────────────────────────── */
-  --color-sentiment-400: #a78bfa;
-  --bg-sentiment-badge: rgba(167, 139, 250, 0.1);
-  --border-sentiment-500: rgba(167, 139, 250, 0.25);
+  --color-sentiment-400: #8b5cf6;
+  --bg-sentiment-badge: rgba(139, 92, 246, 0.1);
+  --border-sentiment-500: rgba(139, 92, 246, 0.25);
 
-  /* ── Badge Colors ───────────────────────────────────────── */
+  /* ── Badge Colors (Spot Pastels) ────────────────────────── */
   --color-badge-api: #818cf8;
-  --bg-badge-api: rgba(99, 102, 241, 0.1);
-  --border-badge-api: rgba(99, 102, 241, 0.25);
+  --bg-badge-api: rgba(99, 102, 241, 0.08);
+  --border-badge-api: rgba(99, 102, 241, 0.2);
 
   --color-badge-live: #10b981;
-  --bg-badge-live: rgba(16, 185, 129, 0.1);
-  --border-badge-live: rgba(16, 185, 129, 0.25);
+  --bg-badge-live: rgba(16, 185, 129, 0.08);
+  --border-badge-live: rgba(16, 185, 129, 0.2);
 
   --color-badge-warn: #f59e0b;
-  --bg-badge-warn: rgba(245, 158, 11, 0.1);
-  --border-badge-warn: rgba(245, 158, 11, 0.25);
+  --bg-badge-warn: rgba(245, 158, 11, 0.08);
+  --border-badge-warn: rgba(245, 158, 11, 0.2);
 
-  --bg-rose-badge: rgba(244, 63, 94, 0.12);
-  --bg-emerald-badge: rgba(16, 185, 129, 0.12);
-  --bg-amber-badge: rgba(245, 158, 11, 0.12);
+  --bg-rose-badge: rgba(244, 63, 94, 0.08);
+  --bg-emerald-badge: rgba(16, 185, 129, 0.08);
+  --bg-amber-badge: rgba(245, 158, 11, 0.08);
 
   /* ── Hover / Interactive ────────────────────────────────── */
-  --color-tab-hover: #e2e8f0;
-  --bg-tab-hover: rgba(99, 102, 241, 0.08);
-  --bg-table-hover: rgba(99, 102, 241, 0.06);
+  --color-tab-hover: #ffffff;
+  --bg-tab-hover: rgba(255, 255, 255, 0.04);
+  --bg-table-hover: rgba(255, 255, 255, 0.03);
 
   /* ── Cascade Tier Colors ────────────────────────────────── */
-  --color-tier-0: #818cf8;
-  --color-tier-1: #fbbf24;
-  --color-tier-2: #34d399;
-  --color-tier-3: #fb7185;
+  --color-tier-0: #6366f1;
+  --color-tier-1: #f59e0b;
+  --color-tier-2: #10b981;
+  --color-tier-3: #f43f5e;
 
-  /* ── Card ────────────────────────────────────────────────── */
-  --card-radius: 12px;
-  --card-radius-sm: 8px;
-  --card-radius-xs: 6px;
+  /* ── Crisp Card Radii ───────────────────────────────────── */
+  --card-radius: 10px;
+  --card-radius-sm: 6px;
+  --card-radius-xs: 4px;
 }
 
 /* ═══════════════════════════════════════════════════════════ */
-/* ── LIGHT THEME ────────────────────────────────────────── */
+/* ── LIGHT THEME (Warm Monochrome Bone Palette) ─────────── */
 /* ═══════════════════════════════════════════════════════════ */
 
 [data-theme='light'] {
-  --bg-slate-950: #f8fafc;
+  --bg-slate-950: #f7f6f3;
   --bg-slate-900: #ffffff;
-  --bg-slate-800: #e2e8f0;
-  --bg-slate-700: #f1f5f9;
+  --bg-slate-800: #eaeaea;
+  --bg-slate-700: #dfdfdf;
 
-  --text-slate-100: #0f172a;
-  --text-slate-200: #1e293b;
-  --text-slate-300: #334155;
-  --text-slate-400: #475569;
-  --text-slate-500: #64748b;
+  --text-slate-100: #111111;
+  --text-slate-200: #2f3437;
+  --text-slate-300: #555555;
+  --text-slate-400: #787774;
+  --text-slate-500: #999999;
 
   --color-emerald-400: #059669;
   --color-emerald-500: #047857;
@@ -128,51 +128,51 @@
   --color-violet-400: #7c3aed;
   --color-violet-500: #6d28d9;
 
-  --gradient-aurora: linear-gradient(135deg, #0891b2, #2563eb, #7c3aed);
-  --gradient-aurora-subtle: linear-gradient(135deg, rgba(8,145,178,0.08), rgba(37,99,235,0.08), rgba(124,58,237,0.08));
-  --gradient-aurora-border: linear-gradient(135deg, rgba(8,145,178,0.3), rgba(37,99,235,0.2), rgba(124,58,237,0.3));
+  --gradient-aurora: linear-gradient(135deg, #059669, #2563eb);
+  --gradient-aurora-subtle: linear-gradient(135deg, rgba(5, 150, 105, 0.05), rgba(37, 99, 235, 0.05));
+  --gradient-aurora-border: linear-gradient(135deg, #eaeaea, #dfdfdf);
 
-  --border-slate-800: rgba(99, 102, 241, 0.15);
-  --border-emerald-500: rgba(4, 120, 87, 0.3);
-  --border-rose-500: rgba(190, 18, 60, 0.3);
+  --border-slate-800: #eaeaea;
+  --border-emerald-500: rgba(4, 120, 87, 0.25);
+  --border-rose-500: rgba(190, 18, 60, 0.25);
 
-  --bg-header: rgba(255, 255, 255, 0.95);
-  --bg-panel: rgba(255, 255, 255, 0.85);
+  --bg-header: rgba(247, 246, 243, 0.92);
+  --bg-panel: #ffffff;
   --bg-panel-solid: #ffffff;
-  --bg-active-tab: rgba(99, 102, 241, 0.08);
-  --text-contrast: #0f172a;
-  --border-panel: rgba(99, 102, 241, 0.15);
-  --shadow-panel: 0 4px 32px rgba(99, 102, 241, 0.08);
-  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.05);
+  --bg-active-tab: #eaeaea;
+  --text-contrast: #111111;
+  --border-panel: #eaeaea;
+  --shadow-panel: 0 2px 12px rgba(0, 0, 0, 0.03);
+  --shadow-glow: none;
 
   --bg-tooltip: rgba(255, 255, 255, 0.98);
-  --border-tooltip: rgba(99, 102, 241, 0.2);
-  --text-tooltip-title: #475569;
-  --text-tooltip-body: #0f172a;
+  --border-tooltip: #eaeaea;
+  --text-tooltip-title: #787774;
+  --text-tooltip-body: #111111;
 
-  --color-sentiment-400: #7c3aed;
-  --bg-sentiment-badge: rgba(124, 58, 237, 0.06);
-  --border-sentiment-500: rgba(124, 58, 237, 0.25);
+  --color-sentiment-400: #6d28d9;
+  --bg-sentiment-badge: rgba(109, 40, 217, 0.05);
+  --border-sentiment-500: rgba(109, 40, 217, 0.2);
 
   --color-badge-api: #4f46e5;
-  --bg-badge-api: rgba(79, 70, 229, 0.06);
-  --border-badge-api: rgba(79, 70, 229, 0.25);
+  --bg-badge-api: rgba(79, 70, 229, 0.05);
+  --border-badge-api: rgba(79, 70, 229, 0.2);
 
   --color-badge-live: #059669;
-  --bg-badge-live: rgba(5, 150, 105, 0.06);
-  --border-badge-live: rgba(5, 150, 105, 0.25);
+  --bg-badge-live: rgba(5, 150, 105, 0.05);
+  --border-badge-live: rgba(5, 150, 105, 0.2);
 
   --color-badge-warn: #d97706;
-  --bg-badge-warn: rgba(217, 119, 6, 0.06);
-  --border-badge-warn: rgba(217, 119, 6, 0.06);
+  --bg-badge-warn: rgba(217, 119, 6, 0.05);
+  --border-badge-warn: rgba(217, 119, 6, 0.2);
 
-  --bg-rose-badge: rgba(225, 29, 72, 0.06);
-  --bg-emerald-badge: rgba(5, 150, 105, 0.06);
-  --bg-amber-badge: rgba(217, 119, 6, 0.06);
+  --bg-rose-badge: rgba(225, 29, 72, 0.05);
+  --bg-emerald-badge: rgba(5, 150, 105, 0.05);
+  --bg-amber-badge: rgba(217, 119, 6, 0.05);
 
-  --color-tab-hover: #0f172a;
-  --bg-tab-hover: rgba(99, 102, 241, 0.06);
-  --bg-table-hover: rgba(99, 102, 241, 0.04);
+  --color-tab-hover: #111111;
+  --bg-tab-hover: #eaeaea;
+  --bg-table-hover: #f9f9f8;
 
   --color-tier-0: #4f46e5;
   --color-tier-1: #d97706;
@@ -201,9 +201,10 @@ body {
   flex-direction: column;
   overflow-x: hidden;
   position: relative;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ── Animated Background ──────────────────────────────────── */
+/* ── Subtle Ambient Background (Minimalist UI Section 6 & 7) ── */
 body::before {
   content: '';
   position: fixed;
@@ -214,47 +215,17 @@ body::before {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(6, 182, 212, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 80% at 85% 75%, rgba(139, 92, 246, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 50% at 50% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 70%);
-  animation: aurora-drift 20s ease-in-out infinite alternate;
+    radial-gradient(circle 800px at 15% 20%, rgba(16, 185, 129, 0.025) 0%, transparent 70%),
+    radial-gradient(circle 600px at 85% 75%, rgba(99, 102, 241, 0.025) 0%, transparent 70%);
 }
 
 [data-theme='light'] body::before {
   background:
-    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(6, 182, 212, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 80% at 85% 75%, rgba(139, 92, 246, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 50% at 50% 50%, rgba(59, 130, 246, 0.02) 0%, transparent 70%);
+    radial-gradient(circle 800px at 15% 20%, rgba(5, 150, 105, 0.02) 0%, transparent 70%),
+    radial-gradient(circle 600px at 85% 75%, rgba(79, 70, 229, 0.02) 0%, transparent 70%);
 }
 
-@keyframes aurora-drift {
-  0% {
-    background:
-      radial-gradient(ellipse 80% 60% at 10% 20%, rgba(6, 182, 212, 0.06) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 80% at 85% 75%, rgba(139, 92, 246, 0.06) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 50% at 50% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 70%);
-  }
-  33% {
-    background:
-      radial-gradient(ellipse 70% 70% at 30% 60%, rgba(139, 92, 246, 0.07) 0%, transparent 60%),
-      radial-gradient(ellipse 80% 50% at 70% 20%, rgba(6, 182, 212, 0.05) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 60% at 50% 80%, rgba(59, 130, 246, 0.04) 0%, transparent 70%);
-  }
-  66% {
-    background:
-      radial-gradient(ellipse 60% 80% at 80% 40%, rgba(59, 130, 246, 0.06) 0%, transparent 60%),
-      radial-gradient(ellipse 80% 60% at 20% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 50% at 60% 30%, rgba(139, 92, 246, 0.04) 0%, transparent 70%);
-  }
-  100% {
-    background:
-      radial-gradient(ellipse 80% 60% at 15% 30%, rgba(6, 182, 212, 0.07) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 80% at 80% 70%, rgba(139, 92, 246, 0.05) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 50% at 45% 45%, rgba(59, 130, 246, 0.03) 0%, transparent 70%);
-  }
-}
-
-/* ── Grid Overlay (subtle) ────────────────────────────────── */
+/* ── Grid Overlay (ultra-subtle) ──────────────────────────── */
 body::after {
   content: '';
   position: fixed;
@@ -265,17 +236,17 @@ body::after {
   pointer-events: none;
   z-index: 0;
   background-image:
-    linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
-  background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 70%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 70%);
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 80%);
 }
 
 [data-theme='light'] body::after {
   background-image:
-    linear-gradient(rgba(99, 102, 241, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px);
 }
 
 #root {
@@ -290,18 +261,18 @@ body::after {
 
 /* ── Scrollbar ────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.2);
-  border-radius: 10px;
+  background: var(--border-panel);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.35);
+  background: var(--text-slate-500);
 }
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -310,22 +281,22 @@ body::after {
 
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.4; }
 }
 
 @keyframes ping-slow {
   0% { transform: scale(1); opacity: 1; }
-  75%, 100% { transform: scale(2.2); opacity: 0; }
+  75%, 100% { transform: scale(2); opacity: 0; }
 }
 
 @keyframes glow-up {
-  0% { border-color: rgba(16, 185, 129, 0.6); box-shadow: 0 0 16px rgba(16, 185, 129, 0.2); }
-  100% { border-color: var(--border-panel); box-shadow: none; }
+  0% { border-color: var(--color-emerald-400); background-color: rgba(16, 185, 129, 0.06); }
+  100% { border-color: var(--border-panel); background-color: var(--bg-panel); }
 }
 
 @keyframes glow-down {
-  0% { border-color: rgba(244, 63, 94, 0.6); box-shadow: 0 0 16px rgba(244, 63, 94, 0.2); }
-  100% { border-color: var(--border-panel); box-shadow: none; }
+  0% { border-color: var(--color-rose-400); background-color: rgba(244, 63, 94, 0.06); }
+  100% { border-color: var(--border-panel); background-color: var(--bg-panel); }
 }
 
 @keyframes shimmer {
@@ -333,14 +304,8 @@ body::after {
   100% { background-position: 200% 0; }
 }
 
-@keyframes gradient-shift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
 @keyframes float-up {
-  0% { opacity: 0; transform: translateY(12px); }
+  0% { opacity: 0; transform: translateY(8px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
@@ -353,11 +318,11 @@ body::after {
 }
 
 .flash-up {
-  animation: glow-up 1.2s ease-out;
+  animation: glow-up 1s ease-out;
 }
 
 .flash-down {
-  animation: glow-down 1.2s ease-out;
+  animation: glow-down 1s ease-out;
 }
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -366,20 +331,25 @@ body::after {
 
 .glass-panel {
   background: var(--bg-panel);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-panel);
   border-radius: var(--card-radius);
   box-shadow: var(--shadow-panel);
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 .glass-panel:hover {
-  box-shadow: var(--shadow-panel), var(--shadow-glow);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+[data-theme='light'] .glass-panel:hover {
+  border-color: #cccccc;
 }
 
 .font-mono {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .text-xs { font-size: 0.75rem; line-height: 1rem; }
@@ -405,7 +375,7 @@ body::after {
 
 /* Shimmer loading effect */
 .shimmer {
-  background: linear-gradient(90deg, transparent 25%, rgba(99, 102, 241, 0.08) 50%, transparent 75%);
+  background: linear-gradient(90deg, transparent 25%, rgba(255, 255, 255, 0.04) 50%, transparent 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }

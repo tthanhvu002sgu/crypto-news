@@ -72,6 +72,31 @@ export const METRIC_METADATA = {
     def: 'Tỷ lệ giữa Vốn hóa thị trường vs Vốn hóa thực tế. MVRV > 3.5 báo hiệu đỉnh bong bóng; MVRV < 1.0 báo hiệu vùng tích lũy đáy rẻ.',
     formula: 'MVRV = Market Cap / Realized Cap'
   },
+  ethMvrv: {
+    api: 'CoinMetrics Community API (REST)',
+    def: 'MVRV Ratio của Ethereum. Tương tự BTC, phản ánh mức độ định giá quá cao hoặc quá thấp của mạng lưới ETH so với giá trị thực tế.',
+    formula: 'MVRV = Market Cap / Realized Cap'
+  },
+  btcNupl: {
+    api: 'CoinMetrics (Tính toán từ MVRV)',
+    def: 'Net Unrealized Profit/Loss của Bitcoin. Đo lường tỷ lệ phần trăm vốn hóa thị trường đang ở trạng thái lãi hoặc lỗ chưa thực hiện. NUPL < 0: Đầu hàng; > 0.75: Hưng phấn tột độ.',
+    formula: 'NUPL = 1 - (1 / MVRV)'
+  },
+  ethNupl: {
+    api: 'CoinMetrics (Tính toán từ MVRV)',
+    def: 'Net Unrealized Profit/Loss của Ethereum. Đo lường tỷ lệ phần trăm vốn hóa ETH đang ở trạng thái lãi hoặc lỗ chưa thực hiện.',
+    formula: 'NUPL = 1 - (1 / MVRV)'
+  },
+  btcSupplyProfit: {
+    api: 'Mô hình giả lập từ MVRV',
+    def: 'Ước tính Tỷ lệ % nguồn cung Bitcoin đang có lời (Percent Supply in Profit). Do CoinMetrics khóa chỉ số này ở gói Pro ($500+/tháng), hệ thống sử dụng mô hình hồi quy toán học bậc 2 từ MVRV được hiệu chỉnh khớp tuyệt đối với số liệu thực tế.',
+    formula: 'SupplyInProfit ≈ -10 + 52 × MVRV - 1.5 × MVRV²'
+  },
+  ethSupplyProfit: {
+    api: 'Mô hình giả lập từ MVRV',
+    def: 'Ước tính Tỷ lệ % nguồn cung Ethereum đang có lời (Percent Supply in Profit) dựa trên mô hình hồi quy toán học từ MVRV.',
+    formula: 'SupplyInProfit ≈ -10 + 52 × MVRV - 1.5 × MVRV²'
+  },
   cvd: {
     api: 'Binance WebSocket (btcusdt@aggTrade)',
     def: 'Chênh lệch tích lũy giữa volume lệnh Mua chủ động (Taker Buy) và lệnh Bán chủ động (Taker Sell) từ thời điểm mở trang.',
@@ -131,6 +156,10 @@ export const METRIC_METADATA = {
     api: 'FRED API (REST)',
     def: 'Hệ thống thanh khoản ròng của Hoa Kỳ, đo lường lượng đô la thực tế lưu thông trong hệ thống tài chính sau khi loại trừ các tài khoản hút thanh khoản của Kho bạc và Fed.',
     formula: 'Net Liquidity = WALCL (Fed Assets) - WDTGAL (TGA) - RRPONTSYD (Reverse Repo)'
+  },
+  econCycle: {
+    api: 'Khung lý thuyết Chu kỳ kinh tế (Macro Cycle Framework)',
+    def: 'Kinh tế vận hành theo chu kỳ 4 giai đoạn: Nới lỏng -> Tăng trưởng -> Thắt chặt -> Suy thoái. Xác định đúng chu kỳ giúp nhà đầu tư chuẩn bị vốn, kiến thức và hạn chế tâm lý FOMO mua theo đám đông.'
   }
 };
 

@@ -30,12 +30,12 @@ const fmtPrice = (n) => n ? `$${Number(n).toLocaleString('en-US', { maximumFract
 // Helper to get Chart Options based on current Theme
 const getChartOptsBase = (theme) => {
   const isLight = theme === 'light';
-  const gridColor = isLight ? 'rgba(71, 85, 105, 0.4)' : 'rgba(30, 41, 59, 0.4)';
-  const tickColor = isLight ? '#000000' : '#94a3b8';
-  const tooltipBg = isLight ? '#ffffff' : 'rgba(15, 23, 42, 0.95)';
-  const tooltipBorder = isLight ? '#334155' : 'rgba(30, 41, 59, 0.8)';
-  const tooltipTitle = isLight ? '#000000' : '#94a3b8';
-  const tooltipBody = isLight ? '#000000' : '#e2e8f0';
+  const gridColor = isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)';
+  const tickColor = isLight ? '#555555' : '#888888';
+  const tooltipBg = isLight ? '#ffffff' : '#121214';
+  const tooltipBorder = isLight ? '#eaeaea' : 'rgba(255, 255, 255, 0.1)';
+  const tooltipTitle = isLight ? '#111111' : '#f3f4f6';
+  const tooltipBody = isLight ? '#333333' : '#d1d5db';
 
   return {
     responsive: true,
@@ -54,11 +54,11 @@ const getChartOptsBase = (theme) => {
     scales: {
       x: {
         grid: { color: gridColor },
-        ticks: { color: tickColor, maxTicksLimit: 12, font: { family: 'JetBrains Mono', size: 9 } },
+        ticks: { color: tickColor, maxTicksLimit: 12, font: { family: 'Outfit, JetBrains Mono', size: 10 } },
       },
       y: {
         grid: { color: gridColor },
-        ticks: { color: tickColor, font: { family: 'JetBrains Mono', size: 9 } },
+        ticks: { color: tickColor, font: { family: 'Outfit, JetBrains Mono', size: 10 } },
       },
     },
   };
@@ -209,40 +209,7 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
     };
   }, [chartList, cvdTf, cvd, theme]);
 
-  // Divergence detection: compares CVD trend against Price trend
-  const detectDivergence = () => {
-    const listToAnalyze = chartList.length >= 5 ? chartList : cvdHistory;
-    if (!listToAnalyze || listToAnalyze.length < 5) return null;
-    const recent = listToAnalyze.slice(-5);
-    const cvdDelta = recent[recent.length - 1].cvd - recent[0].cvd;
-    
-    // Fallback if price is not tracked inside history object
-    const pStart = recent[0].price || livePrice;
-    const pEnd = recent[recent.length - 1].price || livePrice;
-    const priceDelta = pEnd - pStart;
 
-    if (!pStart || !pEnd) return null;
-
-    // Bullish Absorption: Price goes down, CVD goes up
-    if (priceDelta < -10 && cvdDelta > 300000) {
-      return { type: 'bullish', text: '✓ Phân kỳ BULLISH (MUA HẤP THỤ): Giá giảm nhưng CVD tăng (Taker đang hấp thụ lực bán)' };
-    }
-    // Bearish Absorption: Price goes up, CVD goes down
-    if (priceDelta > 10 && cvdDelta < -300000) {
-      return { type: 'bearish', text: '⚠ Phân kỳ BEARISH (BÁN HẤP THỤ): Giá tăng nhưng CVD giảm (Taker đang xả hàng hấp thụ lực mua)' };
-    }
-    // Aggressive buying momentum
-    if (priceDelta > 20 && cvdDelta > 500000) {
-      return { type: 'bullish-trend', text: '✓ Momentum Tăng: Lực mua chủ động áp đảo đẩy giá lên' };
-    }
-    // Aggressive selling momentum
-    if (priceDelta < -20 && cvdDelta < -500000) {
-      return { type: 'bearish-trend', text: '⚠ Momentum Giảm: Lực bán chủ động áp đảo đè giá xuống' };
-    }
-    return null;
-  };
-
-  const divergence = detectDivergence();
 
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
@@ -319,12 +286,6 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
         </div>
       </div>
 
-      {/* Divergence Alert */}
-      {divergence && (
-        <div className={`divergence-alert ${divergence.type.startsWith('bearish') ? 'alert-bearish' : 'alert-bullish'}`}>
-          <span className="font-mono">{divergence.text}</span>
-        </div>
-      )}
     </div>
   );
 }
