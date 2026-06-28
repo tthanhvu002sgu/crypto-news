@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 
-import { getOrderBookDepth, getWhaleWalls, getWhaleKlinesFlow } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
+import AdvancedChart from './AdvancedChart';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -704,43 +705,7 @@ function WhaleTradesPanel({ whaleTrades }) {
   );
 }
 
-// ─── PANEL 5: Whale Kline Flow (1m Spikes) ───────────────────────────────────
 
-function WhaleKlineFlowPanel({ whaleFlow }) {
-  if (!whaleFlow) return null;
-
-  const { whaleCvd, whaleBuyVol, whaleSellVol, spikeKlines } = whaleFlow;
-  
-  return (
-    <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
-      <div className="hft-panel-header">
-        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-          <span className="hft-icon">🌊</span> 1M WHALE KLINE FLOW (PAST 16H)
-        </h3>
-      </div>
-      <div className="whale-summary">
-        <div className="whale-sum-card whale-bid-card">
-          <span className="whale-sum-label font-mono">WHALE BUY VOL</span>
-          <span className="whale-sum-value font-mono text-emerald">{fmtUsd(whaleBuyVol)}</span>
-        </div>
-        <div className="whale-sum-card whale-ask-card">
-          <span className="whale-sum-label font-mono">WHALE SELL VOL</span>
-          <span className="whale-sum-value font-mono text-rose">{fmtUsd(whaleSellVol)}</span>
-        </div>
-        <div className="whale-sum-card whale-ratio-card">
-          <span className="whale-sum-label font-mono">SYNTHETIC WHALE CVD</span>
-          <span className={`whale-sum-value font-mono ${whaleCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {whaleCvd >= 0 ? '+' : ''}{fmtUsd(whaleCvd)}
-          </span>
-        </div>
-      </div>
-      <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem' }}>
-        Đã phân tích {spikeKlines.length} nến 1 phút có Vol đột biến (≥ $10M/phút) trong 1000 phút qua.
-        <br />(Nếu Whale CVD tăng nhưng Giá/CVD Thực tế giảm =&gt; Cá mập đang gom hàng bí mật)
-      </div>
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main HFT Radar Tab Component
@@ -752,7 +717,6 @@ export default function HftRadarTab({
 }) {
   const [orderBook, setOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
-  const [whaleFlow, setWhaleFlow] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [depthLimit, setDepthLimit] = useState(() => {
     const saved = localStorage.getItem('hft-depth-limit');
@@ -789,8 +753,7 @@ export default function HftRadarTab({
       setIsLoading(true);
       await Promise.allSettled([
         fetchOB(),
-        getWhaleWalls().then(d => { if (d) setWhaleData(d); }),
-        getWhaleKlinesFlow('BTCUSDT', 1000, 10000000).then(d => { if (d) setWhaleFlow(d); })
+        getWhaleWalls().then(d => { if (d) setWhaleData(d); })
       ]);
       setIsLoading(false);
     };
@@ -838,8 +801,9 @@ export default function HftRadarTab({
           setDepthLimit={setDepthLimit}
         />
 
+        <AdvancedChart theme={theme} />
+
         <WhaleTradesPanel whaleTrades={whaleTrades} />
-        <WhaleKlineFlowPanel whaleFlow={whaleFlow} />
 
       </div>
     </div>
