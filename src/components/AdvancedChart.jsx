@@ -122,7 +122,7 @@ function calculateLiqZones(klines) {
   return zones;
 }
 
-export default function AdvancedChart({ theme = 'dark' }) {
+export default function AdvancedChart({ theme = 'dark', whaleData }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -131,10 +131,14 @@ export default function AdvancedChart({ theme = 'dark' }) {
   const vahLineRef = useRef(null);
   const valLineRef = useRef(null);
   const liqLinesRef = useRef([]);
+  const wallLinesRef = useRef([]);
   const wsRef = useRef(null);
   
   const [loading, setLoading] = useState(true);
   const [vpData, setVpData] = useState(null);
+  const [klines, setKlines] = useState(null);
+  const [showWalls, setShowWalls] = useState(true);
+  const [showLiq, setShowLiq] = useState(true);
 
   useEffect(() => {
     const isLight = theme === 'light';
@@ -227,61 +231,10 @@ export default function AdvancedChart({ theme = 'dark' }) {
         volumeSeriesRef.current.setData(volumeData);
       }
 
-      // Compute VP and Liq
+      // Compute VP
       const vp = calculateVolumeProfile(rawKlines);
       setVpData(vp);
-      
-      const liqZones = calculateLiqZones(rawKlines);
-
-      // Draw lines
-      if (seriesRef.current && vp) {
-        if (pocLineRef.current) seriesRef.current.removePriceLine(pocLineRef.current);
-        if (vahLineRef.current) seriesRef.current.removePriceLine(vahLineRef.current);
-        if (valLineRef.current) seriesRef.current.removePriceLine(valLineRef.current);
-        
-        liqLinesRef.current.forEach(l => seriesRef.current.removePriceLine(l));
-        liqLinesRef.current = [];
-
-        pocLineRef.current = seriesRef.current.createPriceLine({
-          price: vp.pocPrice,
-          color: '#fbbf24',
-          lineWidth: 2,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: true,
-          title: 'POC',
-        });
-
-        vahLineRef.current = seriesRef.current.createPriceLine({
-          price: vp.vahPrice,
-          color: 'rgba(251, 191, 36, 0.5)',
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: false,
-          title: 'VAH',
-        });
-
-        valLineRef.current = seriesRef.current.createPriceLine({
-          price: vp.valPrice,
-          color: 'rgba(251, 191, 36, 0.5)',
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: false,
-          title: 'VAL',
-        });
-
-        liqZones.forEach(z => {
-          const line = seriesRef.current.createPriceLine({
-            price: z.price,
-            color: z.color,
-            lineWidth: 1,
-            lineStyle: LineStyle.SparseDotted,
-            axisLabelVisible: true,
-            title: z.label,
-          });
-          liqLinesRef.current.push(line);
-        });
-      }
-
+      setKlines(rawKlines);
       setLoading(false);
 
       // Start realtime WebSocket updates
@@ -317,12 +270,146 @@ export default function AdvancedChart({ theme = 'dark' }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!seriesRef.current || !klines) return;
+
+    // Clean up existing lines
+    if (pocLineRef.current) { seriesRef.current.removePriceLine(pocLineRef.current); pocLineRef.current = null; }
+    if (vahLineRef.current) { seriesRef.current.removePriceLine(vahLineRef.current); vahLineRef.current = null; }
+    if (valLineRef.current) { seriesRef.current.removePriceLine(valLineRef.current); valLineRef.current = null; }
+    
+    liqLinesRef.current.forEach(l => seriesRef.current.removePriceLine(l));
+    liqLinesRef.current = [];
+
+    wallLinesRef.current.forEach(l => seriesRef.current.removePriceLine(l));
+    wallLinesRef.current = [];
+
+    const vp = calculateVolumeProfile(klines);
+    if (vp) {
+      pocLineRef.current = seriesRef.current.createPriceLine({
+        price: vp.pocPrice,
+        color: '#fbbf24',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: 'POC',
+      });
+
+      vahLineRef.current = seriesRef.current.createPriceLine({
+        price: vp.vahPrice,
+        color: 'rgba(251, 191, 36, 0.5)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: false,
+        title: 'VAH',
+      });
+
+      valLineRef.current = seriesRef.current.createPriceLine({
+        price: vp.valPrice,
+        color: 'rgba(251, 191, 36, 0.5)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: false,
+        title: 'VAL',
+      });
+    }
+
+    if (showLiq) {
+      const liqZones = calculateLiqZones(klines);
+      liqZones.forEach(z => {
+        const line = seriesRef.current.createPriceLine({
+          price: z.price,
+          color: z.color,
+          lineWidth: 1,
+          lineStyle: LineStyle.SparseDotted,
+          axisLabelVisible: true,
+          title: z.label,
+        });
+        liqLinesRef.current.push(line);
+      });
+    }
+
+    if (showWalls && whaleData) {
+      const fmtWallUsd = (val) => {
+        if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+        if (val >= 1e3) return `$${(val / 1e3).toFixed(0)}K`;
+        return `$${val.toFixed(0)}`;
+      };
+
+      const currentPrice = klines[klines.length - 1]?.close || 0;
+      const topBids = (whaleData.whaleBids || [])
+        .filter(w => !currentPrice || w.price <= currentPrice)
+        .slice(0, 3);
+      const topAsks = (whaleData.whaleAsks || [])
+        .filter(w => !currentPrice || w.price >= currentPrice)
+        .slice(0, 3);
+
+      topBids.forEach(w => {
+        const line = seriesRef.current.createPriceLine({
+          price: w.price,
+          color: '#38bdf8',
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `🛡️ Bid Wall (${fmtWallUsd(w.usdValue)})`,
+        });
+        wallLinesRef.current.push(line);
+      });
+
+      topAsks.forEach(w => {
+        const line = seriesRef.current.createPriceLine({
+          price: w.price,
+          color: '#c084fc',
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `🛡️ Ask Wall (${fmtWallUsd(w.usdValue)})`,
+        });
+        wallLinesRef.current.push(line);
+      });
+    }
+  }, [klines, whaleData, showWalls, showLiq]);
+
   return (
-    <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2', position: 'relative', height: '500px', display: 'flex', flexDirection: 'column' }}>
-      <div className="hft-panel-header">
+    <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2', position: 'relative', height: '520px', display: 'flex', flexDirection: 'column' }}>
+      <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-          <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC & LIQUIDATIONS
+          <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
         </h3>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button
+            onClick={() => setShowWalls(!showWalls)}
+            className="font-mono"
+            style={{
+              padding: '2px 8px',
+              fontSize: '0.7rem',
+              borderRadius: '4px',
+              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: showWalls ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+              color: showWalls ? '#38bdf8' : 'var(--text-slate-400)',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            🎯 Limit Walls {showWalls ? 'ON' : 'OFF'}
+          </button>
+          <button
+            onClick={() => setShowLiq(!showLiq)}
+            className="font-mono"
+            style={{
+              padding: '2px 8px',
+              fontSize: '0.7rem',
+              borderRadius: '4px',
+              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: showLiq ? 'rgba(244, 63, 94, 0.2)' : 'transparent',
+              color: showLiq ? '#f43f5e' : 'var(--text-slate-400)',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
+          </button>
+        </div>
       </div>
       
       {loading && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>Loading...</div>}
@@ -331,9 +418,10 @@ export default function AdvancedChart({ theme = 'dark' }) {
         <div ref={chartContainerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
       </div>
 
-      <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem' }}>
-        <span style={{color: '#fbbf24'}}>POC (Point of Control)</span>: Mức giá có khối lượng giao dịch lớn nhất. <br/>
-        <span style={{color: '#f43f5e'}}>Short Liq</span> / <span style={{color: '#10b981'}}>Long Liq</span>: Vùng ước tính quét thanh lý dựa trên đòn bẩy 50x/100x từ các đỉnh đáy gần nhất.
+      <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem', lineHeight: 1.6 }}>
+        <span style={{color: '#fbbf24'}}>POC</span>: Khối lượng lớn nhất |{' '}
+        <span style={{color: '#38bdf8'}}>🛡️ Bid Wall</span> / <span style={{color: '#c084fc'}}>🛡️ Ask Wall</span>: Top tường mua/bán khủng ($\ge \$500K$) |{' '}
+        <span style={{color: '#f43f5e'}}>Short Liq</span> / <span style={{color: '#10b981'}}>Long Liq</span>: Vùng ước tính quét thanh lý đòn bẩy cao.
       </div>
     </div>
   );

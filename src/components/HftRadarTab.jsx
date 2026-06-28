@@ -728,9 +728,10 @@ export default function HftRadarTab({
   }, [depthLimit]);
 
   const obIntervalRef = useRef(null);
+  const whaleIntervalRef = useRef(null);
   const smoothedObiRef = useRef(null);
 
-  // Fetch Order Book every 3s + Whale Walls on mount
+  // Fetch Order Book every 3s + Whale Walls every 12s
   useEffect(() => {
     const fetchOB = async () => {
       const data = await getOrderBookDepth('BTCUSDT', depthLimit);
@@ -748,12 +749,17 @@ export default function HftRadarTab({
       }
     };
 
+    const fetchWhales = async () => {
+      const d = await getWhaleWalls();
+      if (d) setWhaleData(d);
+    };
+
     // Initial fetch all
     const fetchAll = async () => {
       setIsLoading(true);
       await Promise.allSettled([
         fetchOB(),
-        getWhaleWalls().then(d => { if (d) setWhaleData(d); })
+        fetchWhales()
       ]);
       setIsLoading(false);
     };
@@ -761,9 +767,12 @@ export default function HftRadarTab({
 
     // Order book polling every 3s
     obIntervalRef.current = setInterval(fetchOB, 3000);
+    // Whale walls polling every 12s
+    whaleIntervalRef.current = setInterval(fetchWhales, 12000);
 
     return () => {
       if (obIntervalRef.current) clearInterval(obIntervalRef.current);
+      if (whaleIntervalRef.current) clearInterval(whaleIntervalRef.current);
     };
   }, [depthLimit]);
 
@@ -801,7 +810,7 @@ export default function HftRadarTab({
           setDepthLimit={setDepthLimit}
         />
 
-        <AdvancedChart theme={theme} />
+        <AdvancedChart theme={theme} whaleData={whaleData} />
 
         <WhaleTradesPanel whaleTrades={whaleTrades} />
 
