@@ -338,32 +338,32 @@ export default function AdvancedChart({ theme = 'dark', whaleData }) {
 
       const currentPrice = klines[klines.length - 1]?.close || 0;
       const topBids = (whaleData.whaleBids || [])
-        .filter(w => !currentPrice || w.price <= currentPrice)
+        .filter(w => !currentPrice || (w.avgPrice || w.price) <= currentPrice)
         .slice(0, 3);
       const topAsks = (whaleData.whaleAsks || [])
-        .filter(w => !currentPrice || w.price >= currentPrice)
+        .filter(w => !currentPrice || (w.avgPrice || w.price) >= currentPrice)
         .slice(0, 3);
 
       topBids.forEach(w => {
         const line = seriesRef.current.createPriceLine({
-          price: w.price,
+          price: w.avgPrice || w.price,
           color: '#38bdf8',
           lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `🛡️ Bid Wall (${fmtWallUsd(w.usdValue)})`,
+          title: w.count > 1 ? `🛡️ Bid Wall (${fmtWallUsd(w.usdValue)} ⚡${w.count})` : `🛡️ Bid Wall (${fmtWallUsd(w.usdValue)})`,
         });
         wallLinesRef.current.push(line);
       });
 
       topAsks.forEach(w => {
         const line = seriesRef.current.createPriceLine({
-          price: w.price,
+          price: w.avgPrice || w.price,
           color: '#c084fc',
           lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `🛡️ Ask Wall (${fmtWallUsd(w.usdValue)})`,
+          title: w.count > 1 ? `🛡️ Ask Wall (${fmtWallUsd(w.usdValue)} ⚡${w.count})` : `🛡️ Ask Wall (${fmtWallUsd(w.usdValue)})`,
         });
         wallLinesRef.current.push(line);
       });

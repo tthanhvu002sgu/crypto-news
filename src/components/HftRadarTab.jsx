@@ -293,8 +293,63 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
 
 // ─── PANEL 2: Target Liquidity (Whale Walls) ──────────────────────────────────
 
-function TargetLiquidityPanel({ whaleData }) {
-  if (!whaleData) {
+const clusterOrders = (orders, gap) => {
+  if (!orders || !orders.length) return [];
+  if (!gap || gap <= 1) return orders;
+
+  const map = new Map();
+  for (let i = 0; i < orders.length; i++) {
+    const o = orders[i];
+    const binPrice = Math.floor(o.price / gap) * gap;
+    let entry = map.get(binPrice);
+    if (!entry) {
+      entry = {
+        price: binPrice,
+        priceHigh: binPrice + gap - 1,
+        weightedPriceSum: 0,
+        qty: 0,
+        usdValue: 0,
+        side: o.side,
+        count: 0,
+        sources: {}
+      };
+      map.set(binPrice, entry);
+    }
+    entry.qty += o.qty;
+    entry.usdValue += o.usdValue;
+    entry.weightedPriceSum += o.price * o.usdValue;
+    entry.count += (o.count || 1);
+    if (o.sources) {
+      const keys = Object.keys(o.sources);
+      for (let j = 0; j < keys.length; j++) {
+        const k = keys[j];
+        entry.sources[k] = (entry.sources[k] || 0) + o.sources[k];
+      }
+    }
+  }
+  const result = Array.from(map.values());
+  for (let i = 0; i < result.length; i++) {
+    const e = result[i];
+    if (e.usdValue > 0) {
+      e.avgPrice = Math.round(e.weightedPriceSum / e.usdValue);
+    } else {
+      e.avgPrice = e.price;
+    }
+  }
+  return result.sort((a, b) => b.usdValue - a.usdValue);
+};
+
+function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls, gap, setGap }) {
+  const handleGapChange = (e) => {
+    const val = Number(e.target.value);
+    setGap(val);
+    localStorage.setItem('hft_whale_gap', String(val));
+  };
+
+  const sortedAsks = useMemo(() => clusteredAsks.slice(0, 10), [clusteredAsks]);
+  const sortedBids = useMemo(() => clusteredBids.slice(0, 10), [clusteredBids]);
+
+  if (!clusteredBids.length && !clusteredAsks.length && !bidRatio) {
     return (
       <div className="hft-panel glass-panel">
         <div className="hft-panel-header">
@@ -309,10 +364,6 @@ function TargetLiquidityPanel({ whaleData }) {
     );
   }
 
-  const { whaleBids, whaleAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls } = whaleData;
-  const sortedAsks = [...whaleAsks].sort((a, b) => b.usdValue - a.usdValue).slice(0, 10);
-  const sortedBids = [...whaleBids].sort((a, b) => b.usdValue - a.usdValue).slice(0, 10);
-
   return (
     <div className="hft-panel glass-panel">
       <div className="hft-panel-header">
@@ -324,14 +375,52 @@ function TargetLiquidityPanel({ whaleData }) {
         <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
       </div>
 
+      {/* Gap Cluster Control */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>GOM CỤM LỆNH LIMIT (CLUSTER GAP)</span>
+          <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${gap} USD</span>
+        </div>
+        <input
+          type="range"
+          min="10"
+          max="1000"
+          step="10"
+          value={gap}
+          onChange={handleGapChange}
+          style={{
+            width: '100%',
+            accentColor: 'var(--color-emerald-500)',
+            cursor: 'pointer',
+            height: '4px',
+            background: 'var(--bg-slate-800)',
+            borderRadius: '2px',
+            outline: 'none',
+            border: 'none',
+            margin: '4px 0'
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.45rem', color: 'var(--text-slate-500)', cursor: 'pointer' }} className="font-mono">
+          {[10, 50, 100, 250, 500, 1000].map(g => (
+            <span 
+              key={g} 
+              onClick={() => { setGap(g); localStorage.setItem('hft_whale_gap', String(g)); }}
+              style={{ color: gap === g ? 'var(--color-emerald-400)' : 'inherit', fontWeight: gap === g ? 700 : 400 }}
+            >
+              ${g}
+            </span>
+          ))}
+        </div>
+      </div>
+
       {/* Summary */}
       <div className="whale-summary">
         <div className="whale-sum-card whale-bid-card">
-          <span className="whale-sum-label font-mono">SUPPORT WALLS ({whaleBids.length})</span>
+          <span className="whale-sum-label font-mono">SUPPORT WALLS ({clusteredBids.length} cụm)</span>
           <span className="whale-sum-value font-mono text-emerald">{fmtUsd(bidWallTotal)}</span>
         </div>
         <div className="whale-sum-card whale-ask-card">
-          <span className="whale-sum-label font-mono">RESISTANCE WALLS ({whaleAsks.length})</span>
+          <span className="whale-sum-label font-mono">RESISTANCE WALLS ({clusteredAsks.length} cụm)</span>
           <span className="whale-sum-value font-mono text-rose">{fmtUsd(askWallTotal)}</span>
         </div>
         <div className="whale-sum-card whale-ratio-card">
@@ -363,7 +452,26 @@ function TargetLiquidityPanel({ whaleData }) {
                       RESISTANCE
                     </span>
                   </td>
-                  <td>{fmtPrice(w.price)}</td>
+                  <td>
+                    {w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price)}
+                    {w.count > 1 && (
+                      <span 
+                        style={{ 
+                          fontSize: '0.5rem', 
+                          color: '#f59e0b', 
+                          marginLeft: '5px', 
+                          background: 'rgba(245, 158, 11, 0.15)', 
+                          padding: '1px 4px', 
+                          borderRadius: '3px', 
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          display: 'inline-block'
+                        }} 
+                        title={`Gộp từ ${w.count} lệnh limit`}
+                      >
+                        ⚡{w.count}
+                      </span>
+                    )}
+                  </td>
                   <td>{w.qty.toFixed(3)}</td>
                   <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
                     <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
@@ -402,7 +510,26 @@ function TargetLiquidityPanel({ whaleData }) {
                       SUPPORT
                     </span>
                   </td>
-                  <td>{fmtPrice(w.price)}</td>
+                  <td>
+                    {w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price)}
+                    {w.count > 1 && (
+                      <span 
+                        style={{ 
+                          fontSize: '0.5rem', 
+                          color: '#f59e0b', 
+                          marginLeft: '5px', 
+                          background: 'rgba(245, 158, 11, 0.15)', 
+                          padding: '1px 4px', 
+                          borderRadius: '3px', 
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          display: 'inline-block'
+                        }} 
+                        title={`Gộp từ ${w.count} lệnh limit`}
+                      >
+                        ⚡{w.count}
+                      </span>
+                    )}
+                  </td>
                   <td>{w.qty.toFixed(3)}</td>
                   <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
                     <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
@@ -707,6 +834,49 @@ function WhaleTradesPanel({ whaleTrades }) {
 
 
 
+// ─── Wrapper: computes clustered data from raw whaleData + gap ────────────────
+
+function TargetLiquidityPanelWrapper({ whaleData, whaleGap, setWhaleGap }) {
+  const { whaleBids, whaleAsks, bidRatio, signal, signalCls } = whaleData || {};
+
+  const clusteredBids = useMemo(() => clusterOrders(whaleBids || [], whaleGap), [whaleBids, whaleGap]);
+  const clusteredAsks = useMemo(() => clusterOrders(whaleAsks || [], whaleGap), [whaleAsks, whaleGap]);
+
+  const bidWallTotal = useMemo(() => clusteredBids.reduce((s, o) => s + o.usdValue, 0), [clusteredBids]);
+  const askWallTotal = useMemo(() => clusteredAsks.reduce((s, o) => s + o.usdValue, 0), [clusteredAsks]);
+
+  return (
+    <TargetLiquidityPanel
+      clusteredBids={clusteredBids}
+      clusteredAsks={clusteredAsks}
+      bidWallTotal={bidWallTotal}
+      askWallTotal={askWallTotal}
+      bidRatio={bidRatio}
+      signal={signal}
+      signalCls={signalCls}
+      gap={whaleGap}
+      setGap={setWhaleGap}
+    />
+  );
+}
+
+function AdvancedChartWrapper({ theme, whaleData, whaleGap }) {
+  const clusteredWhaleData = useMemo(() => {
+    if (!whaleData) return null;
+    const clusteredBids = clusterOrders(whaleData.whaleBids || [], whaleGap);
+    const clusteredAsks = clusterOrders(whaleData.whaleAsks || [], whaleGap);
+    return {
+      ...whaleData,
+      whaleBids: clusteredBids,
+      whaleAsks: clusteredAsks,
+    };
+  }, [whaleData, whaleGap]);
+
+  return <AdvancedChart theme={theme} whaleData={clusteredWhaleData} />;
+}
+
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main HFT Radar Tab Component
 
@@ -718,6 +888,10 @@ export default function HftRadarTab({
   const [orderBook, setOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [whaleGap, setWhaleGap] = useState(() => {
+    const saved = localStorage.getItem('hft_whale_gap');
+    return saved ? Number(saved) : 100;
+  });
   const [depthLimit, setDepthLimit] = useState(() => {
     const saved = localStorage.getItem('hft-depth-limit');
     return saved ? Number(saved) : 100;
@@ -802,7 +976,7 @@ export default function HftRadarTab({
           theme={theme}
         />
 
-        <TargetLiquidityPanel whaleData={whaleData} />
+        <TargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
 
         <OrderBookPanel 
           orderBook={orderBook} 
@@ -810,7 +984,7 @@ export default function HftRadarTab({
           setDepthLimit={setDepthLimit}
         />
 
-        <AdvancedChart theme={theme} whaleData={whaleData} />
+        <AdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
 
         <WhaleTradesPanel whaleTrades={whaleTrades} />
 

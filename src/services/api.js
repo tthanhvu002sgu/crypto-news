@@ -441,10 +441,17 @@ export const fetchRealtimeFeed = async () => {
 
   // 1. Fetch economic calendar events from FairEconomy
   try {
-    const rawData = await fetchWithJina('https://nfs.faireconomy.media/ff_calendar_thisweek.json', 'text');
-    if (rawData) {
-      const events = JSON.parse(rawData);
-      if (Array.isArray(events)) {
+    const calendarUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+    let events = null;
+    try {
+      const res = await axios.get(`https://corsproxy.io/?${encodeURIComponent(calendarUrl)}`, { timeout: 8000 });
+      events = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+    } catch (err) {
+      const res2 = await axios.get(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(calendarUrl)}`, { timeout: 8000 });
+      events = typeof res2.data === 'string' ? JSON.parse(res2.data) : res2.data;
+    }
+
+    if (events && Array.isArray(events)) {
         events.forEach(e => {
           if (!e.date) return;
           const eventTime = new Date(e.date);
@@ -466,7 +473,6 @@ export const fetchRealtimeFeed = async () => {
           }
         });
       }
-    }
   } catch (e) {
     console.error('[API] Error fetching economic calendar:', e.message);
   }
@@ -807,8 +813,8 @@ export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 500000) => {
     const bidRatio = wallTotal > 0 ? bidWallTotal / wallTotal : 0.5;
 
     return {
-      whaleBids: whaleBids.slice(0, 15),
-      whaleAsks: whaleAsks.slice(0, 15),
+      whaleBids: whaleBids.slice(0, 100),
+      whaleAsks: whaleAsks.slice(0, 100),
       bidWallTotal,
       askWallTotal,
       bidRatio: parseFloat(bidRatio.toFixed(3)),
@@ -1064,10 +1070,7 @@ export const getYahooStockQuote = async (ticker) => {
   try {
     const res = await axios.get(url, {
       params,
-      timeout: 8000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
+      timeout: 8000
     });
     const parsed = parseYahooMeta(res.data);
     if (parsed) return parsed;
