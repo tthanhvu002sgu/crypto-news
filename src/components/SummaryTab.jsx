@@ -241,7 +241,7 @@ MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
    - YOU MUST map the current macroeconomic variables (Interest Rates, M2 Supply, CPI Inflation, Unemployment/GDP context) into one of the 4 Business Cycle Phases: (1) Monetary Easing (low rates, expansionary liquidity), (2) Economic Expansion (capital flowing to assets, high GDP, late-cycle inflation), (3) Monetary Tightening (raising rates/credit contraction to curb inflation), or (4) Economic Recession/Contraction (prolonged high rates, asset discounting, declining inflation signaling cycle bottom). Advise investor positioning accordingly (avoiding crowd FOMO during late expansion vs accumulating undervalued assets during recession/tightening).
 
 3. ON-CHAIN VALUATION & STABLECOIN PURCHASING POWER:
-   - Evaluate Network Valuation using MVRV (Market Value to Realized Value) and NUPL (Net Unrealized Profit/Loss) for both BTC and ETH. Highlight if MVRV indicates an overvalued (> 3.5) or undervalued (< 1.0) zone, and interpret NUPL zones (Capitulation < 0, Belief/Optimism > 0, Euphoria > 0.75) to assess market cycle positioning.
+   - Evaluate Network Valuation using MVRV (Market Value to Realized Value), NUPL (Net Unrealized Profit/Loss), and Supply in Profit for both BTC and ETH. Highlight if MVRV indicates an overvalued (> 3.5) or undervalued (< 1.0) zone, and interpret NUPL zones (Capitulation < 0, Belief/Optimism > 0, Euphoria > 0.75) to assess market cycle positioning. Analyze Supply in Profit to gauge the percentage of the network holding unrealized gains (high values > 80-90% often align with tops, low values < 50% with bottoms).
    - DO NOT consider Total Market Cap / Circulating Supply of USDT/Stablecoins as immediate latent demand ready to absorb BTC selling pressure. Explain clearly that: The circulating supply of USDT/Stablecoins might be in DeFi pools, used as collateral, or sitting in long-term wallets.
    - Point out that to analyze the potential direct demand for buying BTC, one must use Stablecoin Exchange Reserves. Since the current system does not provide this metric, you must highlight this limitation rather than extrapolating from Total Stablecoin Market Cap.
 
@@ -316,6 +316,7 @@ Bitcoin is [describe price/onchain environment, e.g., structural distribution/ac
 * **1-Year Performance**: Open: $[Open] -> Current: $[Current] ([Change]%) | High: $[High] | Low: $[Low]
 
 * **Market Structure**: Bitcoin Dominance stands at [BTC Dominance]%, while ETH Dominance is [ETH Dominance]% (with ETH and SOL pricing [describe trend or availability]). Network fundamentals: BTC Hashrate is [Hashrate] EH/s and [Active Addresses] Active Addresses.
+* **On-chain Valuation (MVRV, NUPL, Supply in Profit)**: [Provide a dedicated assessment of BTC and ETH using their respective MVRV ratios, NUPL values, and Supply in Profit percentages. Explain whether these metrics suggest an accumulation phase, a mid-cycle progression, or a distribution phase].
 * **Stablecoin Purchasing Power & Data Limitations**: The circulating supply of USDT stands at $[USDT Supply]B out of a Total Market Cap of $[Total Cap]B. It is critical to state that this total supply must not be considered immediate latent demand ready to absorb BTC selling pressure. The circulating supply of USDT/Stablecoins might be locked in DeFi pools, utilized as capital collateral, or sitting inertly in long-term cold wallets. Accurate analysis of direct, immediate purchasing demand requires Stablecoin Exchange Reserves. Because the current dataset does not provide this specific metric, this presents a severe analytical limitation that prevents any extrapolation regarding immediate buying support from total stablecoin capitalization.
 
 ---
@@ -469,6 +470,10 @@ You MUST follow this exact template structure.
 * 💡 **Concept: Real Rate**: The Real Rate (Fed Funds Rate minus Inflation) tells us if borrowing money is actually expensive. If it's high, investors prefer safe assets over Bitcoin.
 * **Current Situation**: The calculated Real Rate is [Rate]%. [Explain what this means for Bitcoin today in simple terms and state which phase of the Economic Cycle we are currently navigating].
 * **Liquidity**: Net Liquidity is [Value]. [Explain if money is flowing into or out of the system].
+
+### ⛓️ ON-CHAIN HEALTH (NUPL & PROFIT)
+* 💡 **Concept: NUPL & Supply in Profit**: NUPL (Net Unrealized Profit/Loss) shows the overall profit or loss held by investors. Supply in Profit measures how much of the total supply was bought at lower prices than today. When both are extremely high (e.g., Supply in Profit > 90%), the market is usually near a top because many people will want to take profits.
+* **Current Situation**: BTC NUPL is [BTC NUPL Value] and Supply in Profit is [BTC Supply in Profit Value]. [Explain what this means for the current cycle: are we in Euphoria/Greed or Capitulation/Fear?].
 
 ### 🐋 WHALES & INSTITUTIONS
 * 💡 **Concept: ETF Flows & Whale Walls**: ETFs show if traditional finance is buying. Whale Walls show where giant players have placed massive buy/sell orders.

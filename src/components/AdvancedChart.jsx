@@ -231,12 +231,14 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
   const wallLinesRef = useRef([]);
   const wallPrimitiveRef = useRef(null);
   const wsRef = useRef(null);
+  const autoScrollRef = useRef(true);
   
   const [loading, setLoading] = useState(true);
   const [, setVpData] = useState(null);
   const [klines, setKlines] = useState(null);
   const [showWalls, setShowWalls] = useState(true);
   const [showLiq, setShowLiq] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   useEffect(() => {
     const isLight = theme === 'light';
@@ -262,6 +264,8 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
         timeScale: {
           borderColor: gridColor,
           timeVisible: true,
+          shiftVisibleRangeOnNewBar: true,
+          rightOffset: 25,
         },
         autoSize: true,
       });
@@ -330,6 +334,9 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
       if (seriesRef.current && volumeSeriesRef.current) {
         seriesRef.current.setData(formatted);
         volumeSeriesRef.current.setData(volumeData);
+        if (chartRef.current && autoScrollRef.current) {
+          chartRef.current.timeScale().scrollToRealTime();
+        }
       }
 
       // Compute VP
@@ -356,6 +363,9 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
             
             seriesRef.current.update({ time, open, high, low, close });
             volumeSeriesRef.current.update({ time, value: volume, color });
+            if (autoScrollRef.current && chartRef.current) {
+              chartRef.current.timeScale().scrollToRealTime();
+            }
           }
         } catch (e) {
           console.error('[AdvancedChart] WS Error:', e);
@@ -484,7 +494,55 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
         </h3>
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => {
+              if (chartRef.current) {
+                chartRef.current.timeScale().scrollToRealTime();
+              }
+            }}
+            className="font-mono"
+            title="Cuộn ngay đến nến mới nhất"
+            style={{
+              padding: '2px 8px',
+              fontSize: '0.7rem',
+              borderRadius: '4px',
+              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: 'rgba(16, 185, 129, 0.15)',
+              color: '#10b981',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            ⏩ Nến mới nhất
+          </button>
+          <button
+            onClick={() => {
+              const nextVal = !autoScroll;
+              setAutoScroll(nextVal);
+              autoScrollRef.current = nextVal;
+              if (nextVal && chartRef.current) {
+                chartRef.current.timeScale().scrollToRealTime();
+              }
+            }}
+            className="font-mono"
+            title="Tự động bám sát theo nến realtime"
+            style={{
+              padding: '2px 8px',
+              fontSize: '0.7rem',
+              borderRadius: '4px',
+              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: autoScroll ? 'rgba(251, 191, 36, 0.2)' : 'transparent',
+              color: autoScroll ? '#fbbf24' : 'var(--text-slate-400)',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            ⚡ Auto Scroll {autoScroll ? 'ON' : 'OFF'}
+          </button>
           <button
             onClick={() => setShowWalls(!showWalls)}
             className="font-mono"
@@ -524,6 +582,39 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
       
       <div style={{ flexGrow: 1, position: 'relative', marginTop: '10px' }}>
         <div ref={chartContainerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+        {!autoScroll && (
+          <button
+            onClick={() => {
+              setAutoScroll(true);
+              autoScrollRef.current = true;
+              if (chartRef.current) {
+                chartRef.current.timeScale().scrollToRealTime();
+              }
+            }}
+            className="font-mono"
+            style={{
+              position: 'absolute',
+              bottom: '16px',
+              right: '68px',
+              zIndex: 10,
+              padding: '5px 12px',
+              fontSize: '0.72rem',
+              borderRadius: '20px',
+              border: '1px solid #10b981',
+              background: 'rgba(16, 185, 129, 0.95)',
+              color: '#ffffff',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.2s',
+              fontWeight: 600
+            }}
+          >
+            ⏩ Đến nến mới nhất
+          </button>
+        )}
       </div>
 
       <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem', lineHeight: 1.6 }}>
