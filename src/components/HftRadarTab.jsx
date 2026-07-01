@@ -774,24 +774,33 @@ function WhaleTradesPanel({ whaleTrades }) {
     return (whaleTrades || []).filter(t => t.usdtVol >= minVolume);
   }, [whaleTrades, minVolume]);
 
-  const { buyUsd, sellUsd, avgBuyPrice, avgSellPrice } = useMemo(() => {
+  const whaleStats = useMemo(() => {
     let bVol = 0, bUsd = 0, sVol = 0, sUsd = 0;
+    let bCount = 0, sCount = 0;
+    let bMax = 0, sMax = 0;
     filteredTrades.forEach(t => {
       if (t.side === 'BUY') {
-        bVol += t.qty;
-        bUsd += t.usdtVol;
+        bVol += t.qty; bUsd += t.usdtVol; bCount++;
+        if (t.usdtVol > bMax) bMax = t.usdtVol;
       } else {
-        sVol += t.qty;
-        sUsd += t.usdtVol;
+        sVol += t.qty; sUsd += t.usdtVol; sCount++;
+        if (t.usdtVol > sMax) sMax = t.usdtVol;
       }
     });
-    return {
-      buyUsd: bUsd,
-      sellUsd: sUsd,
-      avgBuyPrice: bVol > 0 ? bUsd / bVol : null,
-      avgSellPrice: sVol > 0 ? sUsd / sVol : null
-    };
+    const total = bUsd + sUsd;
+    const buyPct = total > 0 ? (bUsd / total) * 100 : 50;
+    const sellPct = 100 - buyPct;
+    const netFlow = bUsd - sUsd;
+    const dominanceRatio = total > 0 ? Math.abs(netFlow) / total : 0;
+    let signal = 'BALANCED';
+    let signalCls = 'neutral';
+    if (dominanceRatio > 0.08) {
+      signal = netFlow > 0 ? '▲ BUY PRESSURE' : '▼ SELL PRESSURE';
+      signalCls = netFlow > 0 ? 'bullish' : 'bearish';
+    }
+    return { buyUsd: bUsd, sellUsd: sUsd, bCount, sCount, bMax, sMax, buyPct, sellPct, netFlow, signal, signalCls };
   }, [filteredTrades]);
+  const { buyUsd, sellUsd, bCount, sCount, bMax, sMax, buyPct, sellPct, netFlow, signal, signalCls } = whaleStats;
 
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
@@ -812,18 +821,57 @@ function WhaleTradesPanel({ whaleTrades }) {
         </select>
       </div>
 
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', background: 'var(--bg-slate-950)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
-        <div style={{ flex: 1 }}>
-          <div className="font-mono text-slate-400" style={{ fontSize: '0.65rem', marginBottom: '4px' }}>TRUNG BÌNH GIÁ KHỚP LONG (BUY)</div>
-          <div className="font-mono text-emerald" style={{ fontSize: '1rem', fontWeight: 600 }}>{avgBuyPrice ? fmtPrice(avgBuyPrice) : '---'}</div>
-          <div className="font-mono text-slate-500" style={{ fontSize: '0.65rem' }}>Tổng Vol: {fmtUsd(buyUsd)}</div>
+      {/* ── Whale Pressure Dashboard ────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px', background: 'var(--bg-slate-950)', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+
+        {/* Row 1: Net Flow + Signal badge */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div className="font-mono text-slate-400" style={{ fontSize: '0.6rem', marginBottom: '3px', letterSpacing: '0.08em' }}>NET WHALE FLOW</div>
+            <div className="font-mono" style={{
+              fontSize: '1.1rem', fontWeight: 700,
+              color: netFlow > 0 ? 'var(--color-emerald-400)' : netFlow < 0 ? 'var(--color-rose-400)' : 'var(--text-slate-300)'
+            }}>
+              {netFlow >= 0 ? '+' : ''}{fmtUsd(netFlow)}
+            </div>
+          </div>
+          <div className="font-mono" style={{
+            fontSize: '0.65rem', fontWeight: 700,
+            padding: '4px 10px', borderRadius: '4px', letterSpacing: '0.06em',
+            background: signalCls === 'bullish' ? 'rgba(52,211,153,0.12)' : signalCls === 'bearish' ? 'rgba(251,113,133,0.12)' : 'rgba(100,116,139,0.15)',
+            color: signalCls === 'bullish' ? 'var(--color-emerald-400)' : signalCls === 'bearish' ? 'var(--color-rose-400)' : 'var(--text-slate-400)',
+            border: `1px solid ${signalCls === 'bullish' ? 'rgba(52,211,153,0.35)' : signalCls === 'bearish' ? 'rgba(251,113,133,0.35)' : 'rgba(100,116,139,0.3)'}`
+          }}>
+            {signal}
+          </div>
         </div>
-        <div style={{ width: '1px', background: 'var(--border-panel)' }}></div>
-        <div style={{ flex: 1 }}>
-          <div className="font-mono text-slate-400" style={{ fontSize: '0.65rem', marginBottom: '4px' }}>TRUNG BÌNH GIÁ KHỚP SHORT (SELL)</div>
-          <div className="font-mono text-rose" style={{ fontSize: '1rem', fontWeight: 600 }}>{avgSellPrice ? fmtPrice(avgSellPrice) : '---'}</div>
-          <div className="font-mono text-slate-500" style={{ fontSize: '0.65rem' }}>Tổng Vol: {fmtUsd(sellUsd)}</div>
+
+        {/* Row 2: BUY vs SELL volume bar */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <span className="font-mono text-emerald" style={{ fontSize: '0.62rem' }}>BUY {buyPct.toFixed(1)}% · {fmtUsd(buyUsd)}</span>
+            <span className="font-mono text-rose" style={{ fontSize: '0.62rem' }}>{fmtUsd(sellUsd)} · {sellPct.toFixed(1)}% SELL</span>
+          </div>
+          <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--bg-slate-800)' }}>
+            <div style={{ width: `${buyPct}%`, background: 'var(--color-emerald-400)', transition: 'width 0.4s ease' }} />
+            <div style={{ width: `${sellPct}%`, background: 'var(--color-rose-400)', transition: 'width 0.4s ease' }} />
+          </div>
         </div>
+
+        {/* Row 3: Trade count + max trade */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ flex: 1, background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.15)', borderRadius: '4px', padding: '6px 8px' }}>
+            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginBottom: '2px' }}>BUY TRADES</div>
+            <div className="font-mono text-emerald" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{bCount} lệnh</div>
+            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '2px' }}>Max: {bMax > 0 ? fmtUsd(bMax) : '---'}</div>
+          </div>
+          <div style={{ flex: 1, background: 'rgba(251,113,133,0.06)', border: '1px solid rgba(251,113,133,0.15)', borderRadius: '4px', padding: '6px 8px' }}>
+            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginBottom: '2px' }}>SELL TRADES</div>
+            <div className="font-mono text-rose" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{sCount} lệnh</div>
+            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '2px' }}>Max: {sMax > 0 ? fmtUsd(sMax) : '---'}</div>
+          </div>
+        </div>
+
       </div>
 
       {filteredTrades.length === 0 ? (
