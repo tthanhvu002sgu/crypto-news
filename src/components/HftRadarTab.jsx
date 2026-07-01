@@ -41,6 +41,7 @@ const getChartOptsBase = (theme) => {
   return {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false,
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -188,8 +189,8 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
     const isPos = lastVal >= 0;
     const lineColor = isPos ? '#10b981' : '#f43f5e';
     const isLight = theme === 'light';
-    const bgColor = isPos 
-      ? (isLight ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.15)') 
+    const bgColor = isPos
+      ? (isLight ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.15)')
       : (isLight ? 'rgba(244, 63, 94, 0.1)' : 'rgba(244, 63, 94, 0.15)');
 
     return {
@@ -222,8 +223,8 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
             </h3>
           </Tooltip>
           <div className="hft-panel-badges">
-            <span 
-              className="hft-badge badge-api font-mono" 
+            <span
+              className="hft-badge badge-api font-mono"
               style={{ cursor: 'help' }}
               title="Binance Futures aggTrade được sử dụng làm chỉ số tham chiếu CVD chuẩn (Benchmark Proxy) vì chiếm hơn 50% thanh khoản phái sinh toàn cầu"
             >
@@ -295,7 +296,14 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
 
 const clusterOrders = (orders, gap) => {
   if (!orders || !orders.length) return [];
-  if (!gap || gap <= 1) return orders;
+  if (!gap || gap <= 1) {
+    return orders.map(o => ({
+      ...o,
+      minPrice: o.price,
+      maxPrice: o.price,
+      subLevels: [{ price: o.price, usdValue: o.usdValue, qty: o.qty }]
+    }));
+  }
 
   const map = new Map();
   for (let i = 0; i < orders.length; i++) {
@@ -306,15 +314,22 @@ const clusterOrders = (orders, gap) => {
       entry = {
         price: binPrice,
         priceHigh: binPrice + gap - 1,
+        minPrice: o.price,
+        maxPrice: o.price,
         weightedPriceSum: 0,
         qty: 0,
         usdValue: 0,
         side: o.side,
         count: 0,
-        sources: {}
+        sources: {},
+        subLevels: []
       };
       map.set(binPrice, entry);
     }
+    if (o.price < entry.minPrice) entry.minPrice = o.price;
+    if (o.price > entry.maxPrice) entry.maxPrice = o.price;
+    entry.subLevels.push({ price: o.price, usdValue: o.usdValue, qty: o.qty });
+
     entry.qty += o.qty;
     entry.usdValue += o.usdValue;
     entry.weightedPriceSum += o.price * o.usdValue;
@@ -339,9 +354,37 @@ const clusterOrders = (orders, gap) => {
   return result.sort((a, b) => b.usdValue - a.usdValue);
 };
 
+const GAP_STEPS = [10, 50, 100, 250, 500, 1000];
+
+const sliderToGap = (val) => {
+  const i = Math.floor(val / 100);
+  if (i >= GAP_STEPS.length - 1) return GAP_STEPS[GAP_STEPS.length - 1];
+  const start = GAP_STEPS[i];
+  const end = GAP_STEPS[i + 1];
+  const fraction = (val % 100) / 100;
+  const raw = start + fraction * (end - start);
+  if (raw < 50) return Math.round(raw / 5) * 5;
+  if (raw < 100) return Math.round(raw / 5) * 5;
+  if (raw < 250) return Math.round(raw / 10) * 10;
+  return Math.round(raw / 10) * 10;
+};
+
+const gapToSlider = (g) => {
+  if (g <= GAP_STEPS[0]) return 0;
+  if (g >= GAP_STEPS[GAP_STEPS.length - 1]) return (GAP_STEPS.length - 1) * 100;
+  for (let i = 0; i < GAP_STEPS.length - 1; i++) {
+    if (g >= GAP_STEPS[i] && g <= GAP_STEPS[i + 1]) {
+      const fraction = (g - GAP_STEPS[i]) / (GAP_STEPS[i + 1] - GAP_STEPS[i]);
+      return i * 100 + fraction * 100;
+    }
+  }
+  return 0;
+};
+
 function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls, gap, setGap }) {
   const handleGapChange = (e) => {
-    const val = Number(e.target.value);
+    const sliderVal = Number(e.target.value);
+    const val = sliderToGap(sliderVal);
     setGap(val);
     localStorage.setItem('hft_whale_gap', String(val));
   };
@@ -383,10 +426,10 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
         </div>
         <input
           type="range"
-          min="10"
-          max="1000"
-          step="10"
-          value={gap}
+          min="0"
+          max="500"
+          step="1"
+          value={gapToSlider(gap)}
           onChange={handleGapChange}
           style={{
             width: '100%',
@@ -402,8 +445,8 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.45rem', color: 'var(--text-slate-500)', cursor: 'pointer' }} className="font-mono">
           {[10, 50, 100, 250, 500, 1000].map(g => (
-            <span 
-              key={g} 
+            <span
+              key={g}
               onClick={() => { setGap(g); localStorage.setItem('hft_whale_gap', String(g)); }}
               style={{ color: gap === g ? 'var(--color-emerald-400)' : 'inherit', fontWeight: gap === g ? 700 : 400 }}
             >
@@ -453,19 +496,19 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
                     </span>
                   </td>
                   <td>
-                    {w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price)}
+                    {w.minPrice && w.maxPrice && w.minPrice !== w.maxPrice && w.count > 1 ? `${fmtPrice(w.minPrice)} ~ ${fmtPrice(w.maxPrice)}` : (w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price))}
                     {w.count > 1 && (
-                      <span 
-                        style={{ 
-                          fontSize: '0.5rem', 
-                          color: '#f59e0b', 
-                          marginLeft: '5px', 
-                          background: 'rgba(245, 158, 11, 0.15)', 
-                          padding: '1px 4px', 
-                          borderRadius: '3px', 
+                      <span
+                        style={{
+                          fontSize: '0.5rem',
+                          color: '#f59e0b',
+                          marginLeft: '5px',
+                          background: 'rgba(245, 158, 11, 0.15)',
+                          padding: '1px 4px',
+                          borderRadius: '3px',
                           border: '1px solid rgba(245, 158, 11, 0.3)',
                           display: 'inline-block'
-                        }} 
+                        }}
                         title={`Gộp từ ${w.count} lệnh limit`}
                       >
                         ⚡{w.count}
@@ -480,15 +523,15 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
                         {Object.keys(w.sources).map(src => {
                           const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
                           return (
-                            <span 
-                              key={src} 
-                              title={`${src}: ${fmtUsd(w.sources[src])}`} 
-                              style={{ 
-                                fontSize: '0.45rem', 
-                                color: 'var(--text-slate-400)', 
-                                border: '1px solid var(--border-panel)', 
-                                borderRadius: '2px', 
-                                padding: '1px 3px', 
+                            <span
+                              key={src}
+                              title={`${src}: ${fmtUsd(w.sources[src])}`}
+                              style={{
+                                fontSize: '0.45rem',
+                                color: 'var(--text-slate-400)',
+                                border: '1px solid var(--border-panel)',
+                                borderRadius: '2px',
+                                padding: '1px 3px',
                                 background: 'rgba(15, 23, 42, 0.4)',
                                 fontWeight: 'normal'
                               }}
@@ -511,19 +554,19 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
                     </span>
                   </td>
                   <td>
-                    {w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price)}
+                    {w.minPrice && w.maxPrice && w.minPrice !== w.maxPrice && w.count > 1 ? `${fmtPrice(w.minPrice)} ~ ${fmtPrice(w.maxPrice)}` : (w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price))}
                     {w.count > 1 && (
-                      <span 
-                        style={{ 
-                          fontSize: '0.5rem', 
-                          color: '#f59e0b', 
-                          marginLeft: '5px', 
-                          background: 'rgba(245, 158, 11, 0.15)', 
-                          padding: '1px 4px', 
-                          borderRadius: '3px', 
+                      <span
+                        style={{
+                          fontSize: '0.5rem',
+                          color: '#f59e0b',
+                          marginLeft: '5px',
+                          background: 'rgba(245, 158, 11, 0.15)',
+                          padding: '1px 4px',
+                          borderRadius: '3px',
                           border: '1px solid rgba(245, 158, 11, 0.3)',
                           display: 'inline-block'
-                        }} 
+                        }}
                         title={`Gộp từ ${w.count} lệnh limit`}
                       >
                         ⚡{w.count}
@@ -538,15 +581,15 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
                         {Object.keys(w.sources).map(src => {
                           const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
                           return (
-                            <span 
-                              key={src} 
-                              title={`${src}: ${fmtUsd(w.sources[src])}`} 
-                              style={{ 
-                                fontSize: '0.45rem', 
-                                color: 'var(--text-slate-400)', 
-                                border: '1px solid var(--border-panel)', 
-                                borderRadius: '2px', 
-                                padding: '1px 3px', 
+                            <span
+                              key={src}
+                              title={`${src}: ${fmtUsd(w.sources[src])}`}
+                              style={{
+                                fontSize: '0.45rem',
+                                color: 'var(--text-slate-400)',
+                                border: '1px solid var(--border-panel)',
+                                borderRadius: '2px',
+                                padding: '1px 3px',
                                 background: 'rgba(15, 23, 42, 0.4)',
                                 fontWeight: 'normal'
                               }}
@@ -727,23 +770,28 @@ function WhaleTradesPanel({ whaleTrades }) {
     localStorage.setItem('hft_whale_min_vol', String(val));
   };
 
-  const filteredTrades = (whaleTrades || []).filter(t => t.usdtVol >= minVolume);
+  const filteredTrades = useMemo(() => {
+    return (whaleTrades || []).filter(t => t.usdtVol >= minVolume);
+  }, [whaleTrades, minVolume]);
 
-  let buyVol = 0, buyUsd = 0;
-  let sellVol = 0, sellUsd = 0;
-  
-  filteredTrades.forEach(t => {
-    if (t.side === 'BUY') {
-      buyVol += t.qty;
-      buyUsd += t.usdtVol;
-    } else {
-      sellVol += t.qty;
-      sellUsd += t.usdtVol;
-    }
-  });
-
-  const avgBuyPrice = buyVol > 0 ? buyUsd / buyVol : null;
-  const avgSellPrice = sellVol > 0 ? sellUsd / sellVol : null;
+  const { buyUsd, sellUsd, avgBuyPrice, avgSellPrice } = useMemo(() => {
+    let bVol = 0, bUsd = 0, sVol = 0, sUsd = 0;
+    filteredTrades.forEach(t => {
+      if (t.side === 'BUY') {
+        bVol += t.qty;
+        bUsd += t.usdtVol;
+      } else {
+        sVol += t.qty;
+        sUsd += t.usdtVol;
+      }
+    });
+    return {
+      buyUsd: bUsd,
+      sellUsd: sUsd,
+      avgBuyPrice: bVol > 0 ? bUsd / bVol : null,
+      avgSellPrice: sVol > 0 ? sUsd / sVol : null
+    };
+  }, [filteredTrades]);
 
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
@@ -751,7 +799,7 @@ function WhaleTradesPanel({ whaleTrades }) {
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">🐋</span> LIVE WHALE TRADES
         </h3>
-        <select 
+        <select
           className="font-mono text-slate-300"
           value={minVolume}
           onChange={handleVolumeChange}
@@ -777,7 +825,7 @@ function WhaleTradesPanel({ whaleTrades }) {
           <div className="font-mono text-slate-500" style={{ fontSize: '0.65rem' }}>Tổng Vol: {fmtUsd(sellUsd)}</div>
         </div>
       </div>
-      
+
       {filteredTrades.length === 0 ? (
         <div className="hft-empty font-mono">Chưa có lệnh nào khớp với điều kiện lọc...</div>
       ) : (
@@ -793,24 +841,24 @@ function WhaleTradesPanel({ whaleTrades }) {
               </tr>
             </thead>
             <tbody>
-              {filteredTrades.map((t, i) => (
-                <tr key={`${t.timestamp}-${i}`} style={{ borderBottom: '1px solid var(--border-panel)' }}>
+              {filteredTrades.slice(0, 100).map((t, i) => (
+                <tr key={t.id || `${t.timestamp}-${t.price}-${t.qty}-${i}`} style={{ borderBottom: '1px solid var(--border-panel)' }}>
                   <td style={{ color: 'var(--text-slate-400)', padding: '8px' }}>{t.time}</td>
                   <td style={{ padding: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span className={`liq-side-tag ${t.side === 'BUY' ? 'liq-tag-long' : 'liq-tag-short'}`}>
                         {t.side}
                       </span>
-                      <span 
-                        style={{ 
-                          fontSize: '0.45rem', 
-                          opacity: 0.6, 
-                          border: '1px solid var(--border-panel)', 
-                          padding: '1px 3px', 
-                          borderRadius: '2px', 
+                      <span
+                        style={{
+                          fontSize: '0.45rem',
+                          opacity: 0.6,
+                          border: '1px solid var(--border-panel)',
+                          padding: '1px 3px',
+                          borderRadius: '2px',
                           background: 'var(--bg-slate-900)',
                           color: 'var(--text-slate-300)'
-                        }} 
+                        }}
                         title="Binance Futures"
                       >
                         BIN-F
@@ -834,6 +882,8 @@ function WhaleTradesPanel({ whaleTrades }) {
 
 
 
+const MemoTargetLiquidityPanel = React.memo(TargetLiquidityPanel);
+
 // ─── Wrapper: computes clustered data from raw whaleData + gap ────────────────
 
 function TargetLiquidityPanelWrapper({ whaleData, whaleGap, setWhaleGap }) {
@@ -846,7 +896,7 @@ function TargetLiquidityPanelWrapper({ whaleData, whaleGap, setWhaleGap }) {
   const askWallTotal = useMemo(() => clusteredAsks.reduce((s, o) => s + o.usdValue, 0), [clusteredAsks]);
 
   return (
-    <TargetLiquidityPanel
+    <MemoTargetLiquidityPanel
       clusteredBids={clusteredBids}
       clusteredAsks={clusteredAsks}
       bidWallTotal={bidWallTotal}
@@ -881,6 +931,12 @@ function AdvancedChartWrapper({ theme, whaleData, whaleGap }) {
 // Main HFT Radar Tab Component
 
 // ═══════════════════════════════════════════════════════════════════════════════
+
+const MemoCVDPanel = React.memo(CVDPanel);
+const MemoTargetLiquidityPanelWrapper = React.memo(TargetLiquidityPanelWrapper);
+const MemoOrderBookPanel = React.memo(OrderBookPanel);
+const MemoAdvancedChartWrapper = React.memo(AdvancedChartWrapper);
+const MemoWhaleTradesPanel = React.memo(WhaleTradesPanel);
 
 export default function HftRadarTab({
   cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, whaleTrades, theme,
@@ -962,7 +1018,7 @@ export default function HftRadarTab({
       </div>
 
       <div className="hft-grid">
-        <CVDPanel
+        <MemoCVDPanel
           cvd={cvd}
           sessionCvd={sessionCvd}
           buyVolume={buyVolume}
@@ -976,17 +1032,17 @@ export default function HftRadarTab({
           theme={theme}
         />
 
-        <TargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
+        <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
 
-        <OrderBookPanel 
-          orderBook={orderBook} 
+        <MemoOrderBookPanel
+          orderBook={orderBook}
           depthLimit={depthLimit}
           setDepthLimit={setDepthLimit}
         />
 
-        <AdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
+        <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
 
-        <WhaleTradesPanel whaleTrades={whaleTrades} />
+        <MemoWhaleTradesPanel whaleTrades={whaleTrades} />
 
       </div>
     </div>

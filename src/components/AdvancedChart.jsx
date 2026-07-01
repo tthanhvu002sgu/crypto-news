@@ -1,8 +1,105 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createChart, CrosshairMode, LineStyle, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
 import { getBTCKlines } from '../services/api';
 
 const BINS = 150;
+
+class HeatmapWallPrimitive {
+  constructor() {
+    this._walls = [];
+    this._series = null;
+    this._requestUpdate = null;
+  }
+  attached({ series, requestUpdate }) {
+    this._series = series;
+    this._requestUpdate = requestUpdate;
+  }
+  detached() {
+    this._series = null;
+  }
+  setData(walls) {
+    this._walls = walls || [];
+    if (this._requestUpdate) this._requestUpdate();
+  }
+  updateAllViews() {}
+  paneViews() {
+    return [{
+      zOrder: () => 'bottom',
+      renderer: () => ({
+        draw: (target) => {
+          if (!this._series || !this._walls || !this._walls.length) return;
+          target.useMediaCoordinateSpace(({ context, mediaSize }) => {
+            const width = mediaSize.width;
+            context.save();
+            
+            let maxUsd = 1;
+            this._walls.forEach(w => {
+              if (w.subLevels && w.subLevels.length) {
+                w.subLevels.forEach(sub => {
+                  if (sub.usdValue > maxUsd) maxUsd = sub.usdValue;
+                });
+              } else if (w.usdValue > maxUsd) {
+                maxUsd = w.usdValue;
+              }
+            });
+
+            this._walls.forEach(w => {
+              const yMax = this._series.priceToCoordinate(w.maxPrice || w.price || 0);
+              const yMin = this._series.priceToCoordinate(w.minPrice || w.price || 0);
+              if (yMax === null || yMin === null) return;
+
+              let topY = Math.min(yMax, yMin);
+              let bottomY = Math.max(yMax, yMin);
+              if (bottomY - topY < 20) {
+                const center = (topY + bottomY) / 2;
+                topY = center - 10;
+                bottomY = center + 10;
+              }
+
+              const isBid = w.side === 'BID';
+              
+              // 1. Base translucent block fill
+              context.fillStyle = isBid ? 'rgba(56, 189, 248, 0.08)' : 'rgba(192, 132, 252, 0.08)';
+              context.fillRect(0, topY, width, bottomY - topY);
+
+              // 2. Heatmap sub-level intensity bars
+              if (w.subLevels && w.subLevels.length > 0) {
+                const subHeight = Math.max(3, Math.min(14, (bottomY - topY) / w.subLevels.length));
+                w.subLevels.forEach(sub => {
+                  const subY = this._series.priceToCoordinate(sub.price);
+                  if (subY !== null && subY >= -30 && subY <= mediaSize.height + 30) {
+                    const ratio = Math.min(1, Math.max(0.1, sub.usdValue / maxUsd));
+                    const alpha = (0.15 + ratio * 0.55).toFixed(2);
+                    context.fillStyle = isBid ? `rgba(14, 165, 233, ${alpha})` : `rgba(217, 70, 239, ${alpha})`;
+                    context.fillRect(0, subY - subHeight / 2, width, subHeight);
+                  }
+                });
+              } else {
+                const center = (topY + bottomY) / 2;
+                const ratio = Math.min(1, Math.max(0.2, (w.usdValue || 0) / maxUsd));
+                const alpha = (0.2 + ratio * 0.5).toFixed(2);
+                context.fillStyle = isBid ? `rgba(14, 165, 233, ${alpha})` : `rgba(217, 70, 239, ${alpha})`;
+                context.fillRect(0, center - 5, width, 10);
+              }
+
+              // 3. Block top & bottom border lines
+              context.strokeStyle = isBid ? 'rgba(56, 189, 248, 0.6)' : 'rgba(192, 132, 252, 0.6)';
+              context.lineWidth = 1;
+              context.setLineDash([4, 4]);
+              context.beginPath();
+              context.moveTo(0, topY);
+              context.lineTo(width, topY);
+              context.moveTo(0, bottomY);
+              context.lineTo(width, bottomY);
+              context.stroke();
+            });
+            context.restore();
+          });
+        }
+      })
+    }];
+  }
+}
 
 function calculateVolumeProfile(klines) {
   if (!klines || klines.length === 0) return null;
@@ -122,7 +219,7 @@ function calculateLiqZones(klines) {
   return zones;
 }
 
-export default function AdvancedChart({ theme = 'dark', whaleData }) {
+function AdvancedChart({ theme = 'dark', whaleData }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -132,17 +229,17 @@ export default function AdvancedChart({ theme = 'dark', whaleData }) {
   const valLineRef = useRef(null);
   const liqLinesRef = useRef([]);
   const wallLinesRef = useRef([]);
+  const wallPrimitiveRef = useRef(null);
   const wsRef = useRef(null);
   
   const [loading, setLoading] = useState(true);
-  const [vpData, setVpData] = useState(null);
+  const [, setVpData] = useState(null);
   const [klines, setKlines] = useState(null);
   const [showWalls, setShowWalls] = useState(true);
   const [showLiq, setShowLiq] = useState(true);
 
   useEffect(() => {
     const isLight = theme === 'light';
-    const bg = isLight ? '#ffffff' : '#121214';
     const textColor = isLight ? '#333333' : '#d1d5db';
     const gridColor = isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)';
 
@@ -191,6 +288,10 @@ export default function AdvancedChart({ theme = 'dark', whaleData }) {
       chartRef.current = chart;
       seriesRef.current = mainSeries;
       volumeSeriesRef.current = volumeSeries;
+
+      const heatmapPrimitive = new HeatmapWallPrimitive();
+      mainSeries.attachPrimitive(heatmapPrimitive);
+      wallPrimitiveRef.current = heatmapPrimitive;
     } else if (chartRef.current) {
       chartRef.current.applyOptions({
         layout: { textColor: textColor },
@@ -283,6 +384,7 @@ export default function AdvancedChart({ theme = 'dark', whaleData }) {
 
     wallLinesRef.current.forEach(l => seriesRef.current.removePriceLine(l));
     wallLinesRef.current = [];
+    if (wallPrimitiveRef.current) wallPrimitiveRef.current.setData([]);
 
     const vp = calculateVolumeProfile(klines);
     if (vp) {
@@ -348,10 +450,10 @@ export default function AdvancedChart({ theme = 'dark', whaleData }) {
         const line = seriesRef.current.createPriceLine({
           price: w.avgPrice || w.price,
           color: '#38bdf8',
-          lineWidth: 2,
-          lineStyle: LineStyle.Dashed,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: w.count > 1 ? `🛡️ Bid Wall (${fmtWallUsd(w.usdValue)} ⚡${w.count})` : `🛡️ Bid Wall (${fmtWallUsd(w.usdValue)})`,
+          title: `${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
         });
         wallLinesRef.current.push(line);
       });
@@ -360,13 +462,19 @@ export default function AdvancedChart({ theme = 'dark', whaleData }) {
         const line = seriesRef.current.createPriceLine({
           price: w.avgPrice || w.price,
           color: '#c084fc',
-          lineWidth: 2,
-          lineStyle: LineStyle.Dashed,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: w.count > 1 ? `🛡️ Ask Wall (${fmtWallUsd(w.usdValue)} ⚡${w.count})` : `🛡️ Ask Wall (${fmtWallUsd(w.usdValue)})`,
+          title: `${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
         });
         wallLinesRef.current.push(line);
       });
+
+      if (wallPrimitiveRef.current) {
+        wallPrimitiveRef.current.setData([...topBids, ...topAsks]);
+      }
+    } else if (wallPrimitiveRef.current) {
+      wallPrimitiveRef.current.setData([]);
     }
   }, [klines, whaleData, showWalls, showLiq]);
 
@@ -420,9 +528,11 @@ export default function AdvancedChart({ theme = 'dark', whaleData }) {
 
       <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem', lineHeight: 1.6 }}>
         <span style={{color: '#fbbf24'}}>POC</span>: Khối lượng lớn nhất |{' '}
-        <span style={{color: '#38bdf8'}}>🛡️ Bid Wall</span> / <span style={{color: '#c084fc'}}>🛡️ Ask Wall</span>: Top tường mua/bán khủng ($\ge \$500K$) |{' '}
+        <span style={{color: '#38bdf8'}}>Bid</span> / <span style={{color: '#c084fc'}}>Ask</span>: Top tường mua/bán khủng ($\ge \$500K$) |{' '}
         <span style={{color: '#f43f5e'}}>Short Liq</span> / <span style={{color: '#10b981'}}>Long Liq</span>: Vùng ước tính quét thanh lý đòn bẩy cao.
       </div>
     </div>
   );
 }
+
+export default React.memo(AdvancedChart);

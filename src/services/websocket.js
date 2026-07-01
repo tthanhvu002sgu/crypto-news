@@ -29,10 +29,10 @@ function createReconnectingWS(url, onMessage, onStatusChange, mountedRef) {
 
       ws.onmessage = (event) => {
         if (!mountedRef.current) return;
-        try { onMessage(JSON.parse(event.data)); } catch {}
+        try { onMessage(JSON.parse(event.data)); } catch { }
       };
 
-      ws.onerror = () => {};
+      ws.onerror = () => { };
 
       ws.onclose = () => {
         if (!mountedRef.current) return;
@@ -59,16 +59,16 @@ function createReconnectingWS(url, onMessage, onStatusChange, mountedRef) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function useBinanceWebSocket() {
-  const [livePrice,   setLivePrice]   = useState(null);
-  const [liveChange,  setLiveChange]  = useState(null);
-  const [liveHigh,    setLiveHigh]    = useState(null);
-  const [liveLow,     setLiveLow]     = useState(null);
-  const [liveVolume,  setLiveVolume]  = useState(null);
+  const [livePrice, setLivePrice] = useState(null);
+  const [liveChange, setLiveChange] = useState(null);
+  const [liveHigh, setLiveHigh] = useState(null);
+  const [liveLow, setLiveLow] = useState(null);
+  const [liveVolume, setLiveVolume] = useState(null);
   const [liveFunding, setLiveFunding] = useState(null);
   const [liveEthPrice, setLiveEthPrice] = useState(null);
   const [liveSolPrice, setLiveSolPrice] = useState(null);
   const [liveLinkPrice, setLiveLinkPrice] = useState(null);
-  const [wsStatus,    setWsStatus]    = useState('connecting');
+  const [wsStatus, setWsStatus] = useState('connecting');
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -111,22 +111,22 @@ export function useBinanceWebSocket() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function useCVDStream() {
-  const [cvd, setCvd]                   = useState(0);
-  const [sessionCvd, setSessionCvd]     = useState(0);
-  const [buyVolume, setBuyVolume]       = useState(0);
-  const [sellVolume, setSellVolume]     = useState(0);
-  const [cvdHistory, setCvdHistory]     = useState([]);
+  const [cvd, setCvd] = useState(0);
+  const [sessionCvd, setSessionCvd] = useState(0);
+  const [buyVolume, setBuyVolume] = useState(0);
+  const [sellVolume, setSellVolume] = useState(0);
+  const [cvdHistory, setCvdHistory] = useState([]);
   // whaleTrades state is initialized below using whaleRef
-  const [cvdStatus, setCvdStatus]       = useState('connecting');
+  const [cvdStatus, setCvdStatus] = useState('connecting');
   const mountedRef = useRef(true);
 
   // Internal accumulators (no re-render per trade)
-  const cvdRef        = useRef(0);
-  const sessionRef    = useRef(0);
-  const buyRef        = useRef(0);
-  const sellRef       = useRef(0);
-  const historyRef    = useRef([]); // [{time, cvd}]
-  const whaleRef      = useRef(() => {
+  const cvdRef = useRef(0);
+  const sessionRef = useRef(0);
+  const buyRef = useRef(0);
+  const sellRef = useRef(0);
+  const historyRef = useRef([]); // [{time, cvd}]
+  const whaleRef = useRef(() => {
     try {
       const saved = localStorage.getItem('hft_whale_trades');
       return saved ? JSON.parse(saved) : [];
@@ -134,18 +134,18 @@ export function useCVDStream() {
       return [];
     }
   }); // [{time, price, qty, usdtVol, side, timestamp}]
-  
+
   // Actually initialize it correctly for a ref
   if (typeof whaleRef.current === 'function') {
     whaleRef.current = whaleRef.current();
   }
 
   // Set initial state from ref so it renders on mount
-  const [whaleTrades, setWhaleTrades]   = useState(whaleRef.current);
-  const throttleRef   = useRef(null);
-  const minuteRef     = useRef(null); // for history sampling
+  const [whaleTrades, setWhaleTrades] = useState(whaleRef.current);
+  const throttleRef = useRef(null);
+  const minuteRef = useRef(null); // for history sampling
   const isFetchingInitialRef = useRef(true);
-  
+
   // Helper: get today's date string for daily reset
   const getTodayStr = () => new Date().toLocaleDateString('vi-VN');
   const todayRef = useRef(getTodayStr());
@@ -160,7 +160,7 @@ export function useCVDStream() {
       buyRef.current = init.initialBuyVol;
       sellRef.current = init.initialSellVol;
       isFetchingInitialRef.current = false;
-      
+
       setCvd(cvdRef.current);
       setBuyVolume(buyRef.current);
       setSellVolume(sellRef.current);

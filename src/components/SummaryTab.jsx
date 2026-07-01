@@ -245,9 +245,10 @@ MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
    - DO NOT consider Total Market Cap / Circulating Supply of USDT/Stablecoins as immediate latent demand ready to absorb BTC selling pressure. Explain clearly that: The circulating supply of USDT/Stablecoins might be in DeFi pools, used as collateral, or sitting in long-term wallets.
    - Point out that to analyze the potential direct demand for buying BTC, one must use Stablecoin Exchange Reserves. Since the current system does not provide this metric, you must highlight this limitation rather than extrapolating from Total Stablecoin Market Cap.
 
-4. CME COT (COMMITMENT OF TRADERS) LAG:
+4. CME COT (COMMITMENT OF TRADERS) COMPREHENSIVE BREAKDOWN & LAG:
+   - MANDATORY EXHAUSTIVE BREAKDOWN: You MUST explicitly report, analyze, and interpret the Net positioning and weekly Change for ALL 5 trader categories: (1) Dealer Intermediary, (2) Asset Manager/Institutional, (3) Leveraged Funds, (4) Other Reportables, and (5) Nonreportable Positions. DO NOT skip, merge, or omit any category.
    - Acknowledge that CME COT data is updated weekly (on Fridays, reflecting the previous Tuesday's data), meaning it has a 3-7 day lag.
-   - MANDATORY: DO NOT use CME COT data to evaluate short-term price action (48h - 7-day timeframe). CME COT is only valuable for the Medium to Long-term picture (Position Trading). You must clearly separate the short-term outlook (based on ETF Flow, Order Book, CVD, HFT) and the long-term outlook (based on CME COT).
+   - MANDATORY: DO NOT use CME COT data to evaluate short-term price action (48h - 7-day timeframe). CME COT is strictly valuable for the Medium to Long-term picture (Position Trading). You must clearly separate the short-term outlook (based on ETF Flow, Order Book, CVD, HFT) and the long-term outlook (based on CME COT).
 
 5. DERIVATIVES & FLOW CORRELATION (HFT):
    - Analyze the strong correlation between the Long/Short Ratio (counted by accounts) and CVD/Volume (calculated by monetary volume) alongside OBI.
@@ -326,7 +327,13 @@ Institutional sentiment shows [describe overall sentiment, e.g., divergence, sel
 [List the 7 dates and flows, e.g., Date: Flow M USD]
 [Conclude if spot price failed/succeeded to absorb this].
 
-* **CME COT Assessment**: [Summarize the positioning and changes of major groups: Dealer Intermediary, Asset Managers, Leveraged Funds, Other Reportables, and Nonreportable. Highlight key shifts in Net positions and what they signal].
+* **CME COT Comprehensive Assessment**: You MUST systematically detail and interpret the positioning of ALL 5 categories (DO NOT summarize or skip any group):
+  * **Dealer Intermediary**: [Net position, weekly change, and role as liquidity providers/market makers]
+  * **Asset Manager / Institutional**: [Net position, weekly change, and directional bias of real-money funds]
+  * **Leveraged Funds**: [Net position, weekly change, and speculative bias of hedge funds/CTA strategies]
+  * **Other Reportables**: [Net position, weekly change, and positioning of family offices/large prop firms]
+  * **Nonreportable Positions**: [Net position, weekly change, and sentiment of retail/small traders]
+  * **Overall COT Synthesis**: [Analyze the structural divergence between institutional/real-money positioning vs leveraged speculators for the medium-to-long term outlook].
 * **CME COT Lag Acknowledgement**: It must be explicitly acknowledged that CME COT data is updated weekly on Fridays (reflecting the previous Tuesday's data), establishing a 3-7 day lag. Consequently, this data cannot be utilized to evaluate short-term price action (48h - 7-day timeframe). While ETF flows track immediate spot demand shifts, the lagged CME COT metrics are strictly valuable for the medium-to-long-term position trading outlook.
 
 ---
