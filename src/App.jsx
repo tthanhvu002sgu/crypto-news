@@ -312,7 +312,6 @@ function useDraggableScroll() {
       isDown = true;
       isDragging = false;
       slider.style.cursor = 'grabbing';
-      slider.style.scrollSnapType = 'none';
       startX = e.pageX - slider.offsetLeft;
       scrollLeft = slider.scrollLeft;
     };
@@ -320,13 +319,11 @@ function useDraggableScroll() {
     const onMouseLeave = () => {
       isDown = false;
       slider.style.cursor = 'grab';
-      slider.style.scrollSnapType = '';
     };
     
     const onMouseUp = () => {
       isDown = false;
       slider.style.cursor = 'grab';
-      slider.style.scrollSnapType = '';
     };
     
     const onMouseMove = (e) => {

@@ -435,6 +435,24 @@ export const fetchWithJina = async (url, format = 'text') => {
 
 // ─── NEWS RSS & ECONOMIC CALENDAR (Today/Real-time Macro Events) ──────────────────
 
+const cleanNewsSnippet = (str, title = '') => {
+  if (!str) return '';
+  let text = str
+    .replace(/<[^>]*>?/gm, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (title && text.toLowerCase().startsWith(title.toLowerCase())) {
+    text = text.substring(title.length).replace(/^[\s\-\|:]+/, '').trim();
+  }
+  return text;
+};
+
 export const fetchRealtimeFeed = async () => {
   const now = new Date();
   let combined = [];
@@ -467,7 +485,8 @@ export const fetchRealtimeFeed = async () => {
               time: eventTime,
               tag: `Calendar (${e.country})`,
               cat: 'macro',
-              title: `[LỊCH SỰ KIỆN] ${e.title} (Dự báo: ${e.forecast || 'N/A'}, Trước đó: ${e.previous || 'N/A'})`,
+              title: `[LỊCH SỰ KIỆN] ${e.title}`,
+              snippet: `Mức độ tác động: High (${e.country}) • Dự báo: ${e.forecast || 'N/A'} • Trước đó: ${e.previous || 'N/A'}. Lịch công bố dữ liệu kinh tế vĩ mô quan trọng.`,
               link: 'https://www.forexfactory.com/calendar',
             });
           }
@@ -490,11 +509,13 @@ export const fetchRealtimeFeed = async () => {
         
         // Filter: within the last 24 hours
         if (now.getTime() - pubDate.getTime() <= 24 * 60 * 60 * 1000) {
+          const rawSnippet = cleanNewsSnippet(item.description || item.content || '', item.title);
           combined.push({
             time: pubDate,
             tag: 'Geopolitics/Macro',
             cat: 'macro',
             title: item.title || '',
+            snippet: rawSnippet.length > 20 ? rawSnippet : 'Cập nhật tin tức vĩ mô, tình hình địa chính trị và chính sách tiền tệ ảnh hưởng đến thị trường tài chính.',
             link: item.link || '',
           });
         }
@@ -504,7 +525,31 @@ export const fetchRealtimeFeed = async () => {
     console.error('[API] Error fetching geopolitical news:', e.message);
   }
 
-  // 3. Fetch specific crypto news from Google News search
+  // 3. Fetch crypto news with rich summaries from CryptoCompare
+  try {
+    const ccRes = await axios.get('https://min-api.cryptocompare.com/data/v2/news/?lang=EN', { timeout: 8000 });
+    if (ccRes.data?.Data && Array.isArray(ccRes.data.Data)) {
+      ccRes.data.Data.slice(0, 20).forEach(item => {
+        if (!item.published_on) return;
+        const pubDate = new Date(item.published_on * 1000);
+        if (now.getTime() - pubDate.getTime() <= 48 * 60 * 60 * 1000) {
+          const rawSnippet = cleanNewsSnippet(item.body || '', item.title);
+          combined.push({
+            time: pubDate,
+            tag: item.source_info?.name ? `Crypto (${item.source_info.name})` : 'Crypto News',
+            cat: 'crypto',
+            title: item.title || '',
+            snippet: rawSnippet || 'Cập nhật diễn biến mới nhất về thị trường Bitcoin và tiền mã hóa từ các nguồn uy tín toàn cầu.',
+            link: item.url || '',
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.error('[API] Error fetching CryptoCompare news:', e.message);
+  }
+
+  // 4. Fetch specific crypto news from Google News search
   try {
     const cryptoQuery = encodeURIComponent('(site:coindesk.com OR site:bloomberg.com/crypto OR site:reuters.com OR site:theblock.co OR site:glassnode.com) AND (bitcoin OR crypto OR cryptocurrency)');
     const cryptoNewsUrl = `https://news.google.com/rss/search?q=${cryptoQuery}&hl=en-US&gl=US&ceid=US:en&_cb=${now.getTime()}`;
@@ -517,11 +562,13 @@ export const fetchRealtimeFeed = async () => {
         
         // Filter: within the last 48 hours to get enough crypto news
         if (now.getTime() - pubDate.getTime() <= 48 * 60 * 60 * 1000) {
+          const rawSnippet = cleanNewsSnippet(item.description || item.content || '', item.title);
           combined.push({
             time: pubDate,
             tag: 'Crypto News',
             cat: 'crypto',
             title: item.title || '',
+            snippet: rawSnippet.length > 20 ? rawSnippet : 'Phân tích và bình luận chuyên sâu về xu hướng thị trường tiền mã hóa và dòng tiền các tổ chức lớn.',
             link: item.link || '',
           });
         }
@@ -531,9 +578,19 @@ export const fetchRealtimeFeed = async () => {
     console.error('[API] Error fetching crypto news:', e.message);
   }
 
-  return combined
+  const seenTitles = new Set();
+  const uniqueCombined = [];
+  combined
     .sort((a, b) => b.time - a.time)
-    .map(item => ({ ...item, timeStr: item.time.toLocaleString('vi-VN') }));
+    .forEach(item => {
+      const normTitle = (item.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (normTitle && !seenTitles.has(normTitle)) {
+        seenTitles.add(normTitle);
+        uniqueCombined.push(item);
+      }
+    });
+
+  return uniqueCombined.map(item => ({ ...item, timeStr: item.time.toLocaleString('vi-VN') }));
 };
 
 // ─── COINALYZE API — REMOVED ───────────────────────────────────────────────────
@@ -1620,3 +1677,48 @@ export const getFearAndGreed = async () => {
     return null;
   }
 };
+
+/** Fetch Top Markets from Polymarket Gamma API (Real Data Only) */
+export const getPolymarketTopMarkets = async () => {
+  const targetUrl = 'https://gamma-api.polymarket.com/markets?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
+  
+  const parseMarkets = (data) => {
+    if (!data || !Array.isArray(data)) return null;
+    return data.map(m => {
+      let outcomePrices = [0.5, 0.5];
+      try {
+        if (m.outcomePrices) outcomePrices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices).map(Number) : m.outcomePrices.map(Number);
+      } catch {}
+      return {
+        id: m.id,
+        question: m.question || m.title,
+        slug: m.slug,
+        volume: Number(m.volume || 0),
+        liquidity: Number(m.liquidity || 0),
+        outcomePrices,
+        outcomes: m.outcomes ? (typeof m.outcomes === 'string' ? JSON.parse(m.outcomes) : m.outcomes) : ['Yes', 'No'],
+      };
+    });
+  };
+
+  try {
+    const res = await axios.get(targetUrl, { timeout: 8000 });
+    const parsed = parseMarkets(res.data);
+    if (parsed && parsed.length > 0) return parsed;
+  } catch (e) {
+    console.warn('[API] Polymarket direct fetch error:', e.message);
+  }
+
+  // Try public proxy if direct connection is blocked by DNS/ISP
+  try {
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    const res = await axios.get(proxyUrl, { timeout: 8000 });
+    const parsed = parseMarkets(res.data);
+    if (parsed && parsed.length > 0) return parsed;
+  } catch (e2) {
+    console.warn('[API] Polymarket proxy fetch error:', e2.message);
+  }
+
+  return [];
+};
+

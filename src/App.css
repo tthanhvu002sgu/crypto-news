@@ -340,7 +340,6 @@
   display: flex;
   overflow-x: auto;
   gap: 16px;
-  scroll-snap-type: x mandatory;
   padding-bottom: 8px; /* For scrollbar */
   user-select: none;
   -webkit-user-select: none;
@@ -365,7 +364,6 @@
   border: 1px solid var(--border-panel);
   border-radius: var(--card-radius-sm);
   padding: 12px;
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -399,9 +397,10 @@
 }
 
 .news-slide-snippet {
-  font-size: 0.58rem;
-  color: var(--text-slate-500);
-  line-height: 1.4;
+  font-size: 0.62rem;
+  color: var(--text-slate-400);
+  line-height: 1.45;
+  margin-top: 4px;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;

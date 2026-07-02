@@ -1,5 +1,6 @@
 import React from 'react';
 import { Line, Bar } from 'react-chartjs-2';
+import PolymarketWhales from './PolymarketWhales';
 
 export default function DashboardTab({
   data,
@@ -50,6 +51,9 @@ export default function DashboardTab({
           </div>
         </div>
       )}
+
+      {/* Polymarket Whales Tracker */}
+      <PolymarketWhales fmt={fmt} />
 
       {/* BTC Price Chart */}
       <div className="glass-panel chart-panel">
