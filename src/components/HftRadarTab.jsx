@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 
 import { getOrderBookDepth, getWhaleWalls } from '../services/api';
+import { runSignalDetection, takePeriodicSnapshot, SIGNAL_TYPE } from '../services/signalEngine';
+import { getSignals, exportSignals, clearAllSignals, clearOldSignals } from '../services/signalStore';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 
@@ -930,6 +932,367 @@ function WhaleTradesPanel({ whaleTrades }) {
 
 
 
+// ─── PANEL 5: Signal Log ─────────────────────────────────────────────────────
+
+const SIGNAL_TYPE_LABELS = {
+  PRICE_SPIKE: '💥 Price Spike',
+  VOLUME_SPIKE: '📈 Volume Spike',
+  CVD_DIVERGENCE: '⚠️ CVD Divergence',
+  FUNDING_EXTREME: '💰 Funding',
+  OI_SURGE: '📊 OI Surge',
+  OBI_EXTREME: '📖 OBI Extreme',
+  WHALE_CLUSTER: '🐋 Whale Cluster',
+  WHALE_WALL_SHIFT: '🧱 Whale Wall',
+  MACRO_EVENT: '🌍 Macro Event',
+  FNG_EXTREME: '😱 Fear/Greed',
+  PERIODIC_SNAPSHOT: '📸 Snapshot',
+};
+
+const SNAPSHOT_LABELS = {
+  btcPrice: 'BTC Price',
+  btcChange24h: 'BTC 24h%',
+  ethPrice: 'ETH Price',
+  solPrice: 'SOL Price',
+  cvd: 'CVD',
+  sessionCvd: 'Session CVD',
+  buyVolume: 'Buy Vol',
+  sellVolume: 'Sell Vol',
+  buyRatio: 'Buy Ratio',
+  fundingRate: 'Funding Rate',
+  fundingRateRest: 'FR (REST)',
+  openInterest: 'Open Interest',
+  openInterestRest: 'OI (REST)',
+  obiPercent: 'OBI %',
+  obSignal: 'OB Signal',
+  bidVolBtc: 'Bid Vol BTC',
+  askVolBtc: 'Ask Vol BTC',
+  bidWallTotal: 'Bid Walls',
+  askWallTotal: 'Ask Walls',
+  bidRatio: 'Wall Bid Ratio',
+  whaleWallSignal: 'Wall Signal',
+  fngValue: 'Fear & Greed',
+  fngSentiment: 'F&G Label',
+  btcDominance: 'BTC Dom',
+  totalMarketCap: 'Mkt Cap',
+  stablecoinTotal: 'Stablecoin',
+  fedRate: 'Fed Rate',
+  cpi: 'CPI',
+  tenYearYield: '10Y Yield',
+  dxy: 'DXY',
+  vix: 'VIX',
+  sp500: 'S&P 500',
+  netLiquidity: 'Net Liq.',
+  mvrv: 'MVRV',
+  highYield: 'HY Spread',
+  m2Supply: 'M2 Supply',
+};
+
+function formatSnapshotValue(key, value) {
+  if (value == null || value === '') return '---';
+  if (typeof value === 'object') return JSON.stringify(value);
+
+  // USD values
+  if (['btcPrice', 'ethPrice', 'solPrice', 'sp500'].includes(key)) {
+    return `$${Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  }
+  // Large USD volumes or numbers
+  if (['cvd', 'sessionCvd', 'buyVolume', 'sellVolume', 'bidWallTotal', 'askWallTotal', 'btcVolume24h'].includes(key)) {
+    const abs = Math.abs(value);
+    const sign = value < 0 ? '-' : value > 0 && ['cvd', 'sessionCvd'].includes(key) ? '+' : '';
+    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
+    return `${sign}$${abs.toFixed(0)}`;
+  }
+  // Market cap
+  if (['totalMarketCap', 'stablecoinTotal'].includes(key)) {
+    return `$${(value / 1e12).toFixed(2)}T`;
+  }
+  // Percentages
+  if (['btcChange24h', 'buyRatio', 'obiPercent', 'btcDominance'].includes(key)) {
+    return `${value >= 0 && key !== 'buyRatio' && key !== 'btcDominance' ? '+' : ''}${Number(value).toFixed(1)}%`;
+  }
+  // Funding rate
+  if (['fundingRate', 'fundingRateRest'].includes(key)) {
+    return `${(value * 100).toFixed(4)}%`;
+  }
+  // Ratios
+  if (['bidRatio'].includes(key)) {
+    return `${(value * 100).toFixed(0)}%`;
+  }
+  // Open interest
+  if (['openInterest', 'openInterestRest'].includes(key)) {
+    return `${Number(value).toLocaleString()} BTC`;
+  }
+
+  return String(value);
+}
+
+// Helper: Analyze snapshot to give concise BIAS and HIGHLIGHTS
+function analyzeSnapshot(snapshot) {
+  if (!snapshot) return null;
+
+  let bullPoints = 0;
+  let bearPoints = 0;
+  const highlights = [];
+
+  // 1. CVD Analysis
+  if (snapshot.cvd != null) {
+    if (snapshot.cvd > 10000000) {
+      bullPoints += 2;
+      highlights.push(`⚡ Dòng tiền Mua chủ động (+${formatSnapshotValue('cvd', snapshot.cvd)} CVD)`);
+    } else if (snapshot.cvd < -10000000) {
+      bearPoints += 2;
+      highlights.push(`⚡ Dòng tiền Bán chủ động (${formatSnapshotValue('cvd', snapshot.cvd)} CVD)`);
+    }
+  }
+
+  // 2. OBI Analysis
+  if (snapshot.obiPercent != null) {
+    if (snapshot.obiPercent > 15) {
+      bullPoints += 1;
+      highlights.push(`📖 Sổ lệnh nghiêng Mua (+${snapshot.obiPercent}% OBI)`);
+    } else if (snapshot.obiPercent < -15) {
+      bearPoints += 1;
+      highlights.push(`📖 Sổ lệnh nghiêng Bán (${snapshot.obiPercent}% OBI)`);
+    }
+  }
+
+  // 3. Whale Walls Analysis
+  if (snapshot.bidRatio != null) {
+    const ratioPct = Math.round(snapshot.bidRatio * 100);
+    if (ratioPct >= 60) {
+      bullPoints += 2;
+      highlights.push(`🧱 Tường cá voi đỡ giá dày (${ratioPct}% Bid ~ ${formatSnapshotValue('bidWallTotal', snapshot.bidWallTotal)})`);
+    } else if (ratioPct <= 40) {
+      bearPoints += 2;
+      highlights.push(`🧱 Tường cá voi chặn bán dày (${100 - ratioPct}% Ask ~ ${formatSnapshotValue('askWallTotal', snapshot.askWallTotal)})`);
+    }
+  }
+
+  // 4. Funding Rate Analysis
+  const fr = snapshot.fundingRate ?? snapshot.fundingRateRest;
+  if (fr != null) {
+    if (fr > 0.0003) {
+      bearPoints += 1;
+      highlights.push(`🔥 Funding Rate cao (${(fr * 100).toFixed(4)}%) — Áp lực thanh lý Long`);
+    } else if (fr < -0.0001) {
+      bullPoints += 1;
+      highlights.push(`🎯 Funding Rate âm (${(fr * 100).toFixed(4)}%) — Short trả phí, dễ Short Squeeze`);
+    }
+  }
+
+  // 5. Fear & Greed
+  if (snapshot.fngValue != null) {
+    if (snapshot.fngValue <= 25) {
+      highlights.push(`😱 Tâm lý Extreme Fear (${snapshot.fngValue}) — Thường là vùng mua hoảng loạn`);
+    } else if (snapshot.fngValue >= 75) {
+      highlights.push(`🤑 Tâm lý Extreme Greed (${snapshot.fngValue}) — Thường là vùng FOMO rủi ro`);
+    }
+  }
+
+  if (highlights.length === 0) {
+    highlights.push('⚖️ Thị trường cân bằng, dòng tiền và sổ lệnh không có chênh lệch lớn.');
+  }
+
+  let biasLabel = '⚪ NEUTRAL (Trung Tính)';
+  let biasClass = 'bias-neutral';
+  if (bullPoints > bearPoints + 1) {
+    biasLabel = '🟢 BULLISH BIAS (Thiên Về Mua)';
+    biasClass = 'bias-bullish';
+  } else if (bearPoints > bullPoints + 1) {
+    biasLabel = '🔴 BEARISH BIAS (Thiên Về Bán)';
+    biasClass = 'bias-bearish';
+  }
+
+  return { biasLabel, biasClass, highlights };
+}
+
+function SignalLogPanel({ signals, onRefresh, signalCount }) {
+  const [filter, setFilter] = useState('ALL');
+  const [expandedId, setExpandedId] = useState(null);
+
+  const filteredSignals = useMemo(() => {
+    if (filter === 'ALL') return signals;
+    if (filter === 'ALERTS') return signals.filter(s => s.type !== SIGNAL_TYPE.PERIODIC_SNAPSHOT);
+    return signals.filter(s => s.severity === filter);
+  }, [signals, filter]);
+
+  const handleExport = useCallback(async () => {
+    try {
+      const json = await exportSignals();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `signal-log-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('[SignalLog] Export error:', e);
+    }
+  }, []);
+
+  const handleClear = useCallback(async () => {
+    if (window.confirm('Xóa toàn bộ signal log?')) {
+      await clearAllSignals();
+      onRefresh();
+    }
+  }, [onRefresh]);
+
+  const handleCleanup = useCallback(async () => {
+    const deleted = await clearOldSignals(7);
+    if (deleted > 0) {
+      onRefresh();
+    }
+  }, [onRefresh]);
+
+  return (
+    <div className="hft-panel glass-panel signal-log-panel" style={{ gridColumn: 'span 2' }}>
+      <div className="hft-panel-header">
+        <h3 className="hft-panel-title font-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
+          <span className="hft-icon">📋</span> SIGNAL LOG (KIỂM TRA BIAS &amp; DÒNG TIỀN)
+        </h3>
+        <div className="hft-panel-badges">
+          <span className="hft-badge badge-api font-mono">{signalCount} entries</span>
+        </div>
+      </div>
+
+      {/* Toolbar: Filters + Actions */}
+      <div className="signal-log-toolbar">
+        <div className="signal-log-filters">
+          {['ALL', 'ALERTS', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(f => (
+            <button
+              key={f}
+              className={`signal-filter-pill ${filter === f ? 'active' : ''}`}
+              onClick={() => setFilter(f)}
+            >
+              {f === 'ALERTS' ? '⚡ Alerts' : f}
+            </button>
+          ))}
+        </div>
+        <div className="signal-log-actions">
+          <button className="signal-log-btn" onClick={handleCleanup} title="Xóa log cũ hơn 7 ngày">🧹 Clean 7d</button>
+          <button className="signal-log-btn" onClick={handleExport} title="Export signal log ra JSON">📥 Export</button>
+          <button className="signal-log-btn btn-danger" onClick={handleClear} title="Xóa toàn bộ">🗑️ Clear</button>
+        </div>
+      </div>
+
+      {/* Signal List */}
+      {filteredSignals.length === 0 ? (
+        <div className="hft-empty font-mono">
+          {filter === 'ALL'
+            ? 'Chưa có signal nào. Engine sẽ tự động ghi nhận khi phát hiện sự kiện...'
+            : `Không có signal nào cho filter "${filter}"`}
+        </div>
+      ) : (
+        <div className="signal-log-list">
+          {filteredSignals.map((sig) => {
+            const isExpanded = expandedId === sig.id;
+            const timeStr = new Date(sig.timestamp).toLocaleString('vi-VN', {
+              day: '2-digit', month: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            const typeLabel = SIGNAL_TYPE_LABELS[sig.type] || sig.type;
+            const analysis = analyzeSnapshot(sig.snapshot);
+
+            return (
+              <div key={sig.id} className={`signal-card severity-${sig.severity}`}>
+                <div className="signal-card-header">
+                  <div className="signal-card-left">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span className="signal-card-title">{sig.title}</span>
+                      <span className="signal-type-badge">{typeLabel}</span>
+                      {analysis && (
+                        <span className={`signal-bias-pill font-mono ${analysis.biasClass}`}>
+                          {analysis.biasLabel}
+                        </span>
+                      )}
+                    </div>
+                    {sig.description && <div className="signal-card-desc">{sig.description}</div>}
+                  </div>
+                  <div className="signal-card-meta">
+                    <span className={`signal-severity-tag tag-${sig.severity}`}>{sig.severity}</span>
+                    <span className="signal-time">{timeStr}</span>
+                  </div>
+                </div>
+
+                {/* Quick Synthesis Highlights (Show right away if alert or expanded) */}
+                {analysis && analysis.highlights.length > 0 && (
+                  <div className="signal-highlights font-mono">
+                    <div className="signal-hl-title">NỔI TRỘI TẠI THỜI ĐIỂM NÀY:</div>
+                    <ul className="signal-hl-list">
+                      {analysis.highlights.map((hl, idx) => (
+                        <li key={idx}>{hl}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Snapshot toggle + grouped content */}
+                {sig.snapshot && (
+                  <>
+                    <button
+                      className="signal-snapshot-toggle font-mono"
+                      onClick={() => setExpandedId(isExpanded ? null : sig.id)}
+                    >
+                      {isExpanded ? '▼ Ẩn bảng chỉ số chi tiết' : '▶ Xem toàn bộ bảng chỉ số chi tiết'}
+                    </button>
+                    {isExpanded && (
+                      <div className="signal-snapshot-grouped">
+                        {/* Group 1: Flow & Order Book */}
+                        <div className="snap-group">
+                          <div className="snap-group-title font-mono">⚡ DÒNG TIỀN &amp; SỔ LỆNH</div>
+                          {['btcPrice', 'btcChange24h', 'btcVolume24h', 'cvd', 'sessionCvd', 'obiPercent', 'obSignal', 'bidWallTotal', 'askWallTotal', 'bidRatio', 'whaleWallSignal']
+                            .filter(k => sig.snapshot[k] != null)
+                            .map(key => (
+                              <div key={key} className="signal-snap-item">
+                                <span className="signal-snap-label">{SNAPSHOT_LABELS[key] || key}</span>
+                                <span className="signal-snap-value">{formatSnapshotValue(key, sig.snapshot[key])}</span>
+                              </div>
+                            ))}
+                        </div>
+
+                        {/* Group 2: Derivatives & Sentiment */}
+                        <div className="snap-group">
+                          <div className="snap-group-title font-mono">📊 PHÁI SINH &amp; TÂM LÝ</div>
+                          {['fundingRate', 'fundingRateRest', 'openInterest', 'openInterestRest', 'fngValue', 'fngSentiment', 'btcDominance']
+                            .filter(k => sig.snapshot[k] != null)
+                            .map(key => (
+                              <div key={key} className="signal-snap-item">
+                                <span className="signal-snap-label">{SNAPSHOT_LABELS[key] || key}</span>
+                                <span className="signal-snap-value">{formatSnapshotValue(key, sig.snapshot[key])}</span>
+                              </div>
+                            ))}
+                        </div>
+
+                        {/* Group 3: Macro & Global */}
+                        <div className="snap-group">
+                          <div className="snap-group-title font-mono">🌍 KINH TẾ VĨ MÔ (MACRO)</div>
+                          {['fedRate', 'cpi', 'tenYearYield', 'dxy', 'vix', 'sp500', 'netLiquidity', 'mvrv', 'highYield', 'm2Supply']
+                            .filter(k => sig.snapshot[k] != null)
+                            .map(key => (
+                              <div key={key} className="signal-snap-item">
+                                <span className="signal-snap-label">{SNAPSHOT_LABELS[key] || key}</span>
+                                <span className="signal-snap-value">{formatSnapshotValue(key, sig.snapshot[key])}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
 const MemoTargetLiquidityPanel = React.memo(TargetLiquidityPanel);
 
 // ─── Wrapper: computes clustered data from raw whaleData + gap ────────────────
@@ -985,9 +1348,12 @@ const MemoTargetLiquidityPanelWrapper = React.memo(TargetLiquidityPanelWrapper);
 const MemoOrderBookPanel = React.memo(OrderBookPanel);
 const MemoAdvancedChartWrapper = React.memo(AdvancedChartWrapper);
 const MemoWhaleTradesPanel = React.memo(WhaleTradesPanel);
+const MemoSignalLogPanel = React.memo(SignalLogPanel);
 
 export default function HftRadarTab({
   cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, whaleTrades, theme,
+  // Additional props for signal engine context
+  data, fundingRate, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice,
 }) {
   const [orderBook, setOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
@@ -1001,6 +1367,23 @@ export default function HftRadarTab({
     return saved ? Number(saved) : 100;
   });
 
+  // ── Signal Log State ──────────────────────────────────────────────────────
+  const [signals, setSignals] = useState([]);
+  const [signalCount, setSignalCount] = useState(0);
+  const signalDetectionRef = useRef(null);
+  const snapshotRef = useRef(null);
+
+  // Load signals from IndexedDB on mount
+  const loadSignals = useCallback(async () => {
+    const stored = await getSignals(200);
+    setSignals(stored);
+    setSignalCount(stored.length);
+  }, []);
+
+  useEffect(() => {
+    loadSignals();
+  }, [loadSignals]);
+
   useEffect(() => {
     localStorage.setItem('hft-depth-limit', String(depthLimit));
   }, [depthLimit]);
@@ -1008,6 +1391,10 @@ export default function HftRadarTab({
   const obIntervalRef = useRef(null);
   const whaleIntervalRef = useRef(null);
   const smoothedObiRef = useRef(null);
+
+  // Refs to hold latest values for signal engine (avoids stale closures)
+  const orderBookRef = useRef(null);
+  const whaleDataRef = useRef(null);
 
   // Fetch Order Book every 3s + Whale Walls every 12s
   useEffect(() => {
@@ -1020,16 +1407,21 @@ export default function HftRadarTab({
           // EMA smoothing with alpha = 0.15 to filter noise
           smoothedObiRef.current = (smoothedObiRef.current * 0.85) + (data.obiPercent * 0.15);
         }
-        setOrderBook({
+        const smoothed = {
           ...data,
           obiPercent: parseFloat(smoothedObiRef.current.toFixed(1))
-        });
+        };
+        setOrderBook(smoothed);
+        orderBookRef.current = smoothed;
       }
     };
 
     const fetchWhales = async () => {
       const d = await getWhaleWalls();
-      if (d) setWhaleData(d);
+      if (d) {
+        setWhaleData(d);
+        whaleDataRef.current = d;
+      }
     };
 
     // Initial fetch all
@@ -1054,11 +1446,97 @@ export default function HftRadarTab({
     };
   }, [depthLimit]);
 
+  // ── Signal Detection Engine (every 30s) ──────────────────────────────────
+  useEffect(() => {
+    // Run signal detection every 30 seconds
+    signalDetectionRef.current = setInterval(async () => {
+      const ctx = {
+        livePrice,
+        liveChange,
+        liveHigh,
+        liveLow,
+        liveVolume,
+        liveEthPrice,
+        liveSolPrice,
+        cvd,
+        sessionCvd,
+        buyVolume,
+        sellVolume,
+        fundingRate,
+        orderBook: orderBookRef.current,
+        whaleData: whaleDataRef.current,
+        data,
+      };
+      const newSignals = await runSignalDetection(ctx);
+      if (newSignals.length > 0) {
+        loadSignals(); // Refresh from DB
+      }
+    }, 30 * 1000);
+
+    return () => {
+      if (signalDetectionRef.current) clearInterval(signalDetectionRef.current);
+    };
+  }, [livePrice, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice, cvd, sessionCvd, buyVolume, sellVolume, fundingRate, data, loadSignals]);
+
+  // ── Periodic Snapshot (every 15 min) ─────────────────────────────────────
+  useEffect(() => {
+    // Take first snapshot after 60s, then every 15 min
+    const initialTimeout = setTimeout(async () => {
+      const ctx = {
+        livePrice,
+        liveChange,
+        liveHigh,
+        liveLow,
+        liveVolume,
+        liveEthPrice,
+        liveSolPrice,
+        cvd,
+        sessionCvd,
+        buyVolume,
+        sellVolume,
+        fundingRate,
+        orderBook: orderBookRef.current,
+        whaleData: whaleDataRef.current,
+        data,
+      };
+      await takePeriodicSnapshot(ctx);
+      loadSignals();
+
+      // Then every 15 min
+      snapshotRef.current = setInterval(async () => {
+        const freshCtx = {
+          livePrice,
+          liveChange,
+          liveHigh,
+          liveLow,
+          liveVolume,
+          liveEthPrice,
+          liveSolPrice,
+          cvd,
+          sessionCvd,
+          buyVolume,
+          sellVolume,
+          fundingRate,
+          orderBook: orderBookRef.current,
+          whaleData: whaleDataRef.current,
+          data,
+        };
+        await takePeriodicSnapshot(freshCtx);
+        loadSignals();
+      }, 15 * 60 * 1000);
+    }, 60 * 1000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      if (snapshotRef.current) clearInterval(snapshotRef.current);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="hft-radar-layout">
       <div className="hft-radar-header glass-panel">
         <h2 className="hft-radar-title font-mono">
-          <span className="hft-icon-lg">🎯</span> HFT RADAR — DERIVATIVES ORDER FLOW
+          <span className="hft-icon-lg">🎯</span> DATA — DERIVATIVES ORDER FLOW
         </h2>
         <p className="hft-radar-desc font-mono">
           Phân tích dòng tiền phái sinh theo thời gian thực: CVD, Target Liquidity &amp; Order Book Imbalance
@@ -1092,10 +1570,17 @@ export default function HftRadarTab({
 
         <MemoWhaleTradesPanel whaleTrades={whaleTrades} />
 
+        <MemoSignalLogPanel
+          signals={signals}
+          onRefresh={loadSignals}
+          signalCount={signalCount}
+        />
+
       </div>
     </div>
   );
 }
+
 
 
 

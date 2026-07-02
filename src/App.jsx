@@ -385,7 +385,7 @@ function App() {
   });
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
-    const validTabs = ['dashboard', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
+    const validTabs = ['dashboard', 'data', 'cascade', 'summary', 'glossary', 'terminal'];
     return validTabs.includes(hash) ? hash : 'dashboard';
   });
 
@@ -1267,7 +1267,7 @@ function App() {
           <nav className="tabs-nav font-mono">
             {[
               { id: 'dashboard', icon: <BarChart2 size={13} />, label: 'DASHBOARD' },
-              { id: 'hft',       icon: <Crosshair size={13} />, label: 'HFT RADAR' },
+              { id: 'hft',       icon: <Crosshair size={13} />, label: 'DATA' },
               { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN' },
               { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY' },
               { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ' },
@@ -1319,6 +1319,9 @@ function App() {
                 cvdHistory={cvdHistory} cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
                 cvdStatus={cvdStatus} livePrice={livePrice}
                 whaleTrades={whaleTrades} theme={theme}
+                data={data} fundingRate={fund}
+                liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
+                liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
               />
             )}
 

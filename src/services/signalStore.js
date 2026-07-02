@@ -1,0 +1,211 @@
+/**
+ * Signal Store — IndexedDB wrapper for persistent signal log storage.
+ * Signals are stored with full indicator snapshots for retrospective analysis.
+ */
+
+const DB_NAME = 'CryptoSignalLog';
+const DB_VERSION = 1;
+const STORE_NAME = 'signals';
+
+let dbInstance = null;
+
+function openDB() {
+  if (dbInstance) return Promise.resolve(dbInstance);
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+        store.createIndex('type', 'type', { unique: false });
+        store.createIndex('severity', 'severity', { unique: false });
+      }
+    };
+
+    request.onsuccess = (event) => {
+      dbInstance = event.target.result;
+      resolve(dbInstance);
+    };
+
+    request.onerror = (event) => {
+      console.error('[SignalStore] IndexedDB open error:', event.target.error);
+      reject(event.target.error);
+    };
+  });
+}
+
+/**
+ * Add a signal to the store.
+ * @param {Object} signal - { timestamp, type, severity, title, description, snapshot }
+ * @returns {Promise<number>} - The auto-generated ID
+ */
+export async function addSignal(signal) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.add({
+        ...signal,
+        timestamp: signal.timestamp || Date.now(),
+      });
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) {
+    console.error('[SignalStore] addSignal error:', e);
+    return null;
+  }
+}
+
+/**
+ * Get all signals, newest first. Optional limit.
+ * @param {number} limit - Max signals to return (default 200)
+ * @returns {Promise<Array>}
+ */
+export async function getSignals(limit = 200) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const index = store.index('timestamp');
+      const request = index.openCursor(null, 'prev'); // newest first
+      const results = [];
+
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor && results.length < limit) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) {
+    console.error('[SignalStore] getSignals error:', e);
+    return [];
+  }
+}
+
+/**
+ * Get signals within a date range.
+ * @param {number} fromTs - Start timestamp (inclusive)
+ * @param {number} toTs - End timestamp (inclusive)
+ * @returns {Promise<Array>}
+ */
+export async function getSignalsByDateRange(fromTs, toTs) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const index = store.index('timestamp');
+      const range = IDBKeyRange.bound(fromTs, toTs);
+      const request = index.openCursor(range, 'prev');
+      const results = [];
+
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) {
+    console.error('[SignalStore] getSignalsByDateRange error:', e);
+    return [];
+  }
+}
+
+/**
+ * Get total signal count.
+ * @returns {Promise<number>}
+ */
+export async function getSignalCount() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.count();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) {
+    console.error('[SignalStore] getSignalCount error:', e);
+    return 0;
+  }
+}
+
+/**
+ * Delete signals older than X days.
+ * @param {number} daysToKeep - Keep signals newer than this many days
+ * @returns {Promise<number>} - Number of deleted signals
+ */
+export async function clearOldSignals(daysToKeep = 30) {
+  try {
+    const db = await openDB();
+    const cutoff = Date.now() - daysToKeep * 24 * 60 * 60 * 1000;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const index = store.index('timestamp');
+      const range = IDBKeyRange.upperBound(cutoff);
+      const request = index.openCursor(range);
+      let deleted = 0;
+
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          cursor.delete();
+          deleted++;
+          cursor.continue();
+        } else {
+          resolve(deleted);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) {
+    console.error('[SignalStore] clearOldSignals error:', e);
+    return 0;
+  }
+}
+
+/**
+ * Clear all signals.
+ * @returns {Promise<void>}
+ */
+export async function clearAllSignals() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.clear();
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) {
+    console.error('[SignalStore] clearAllSignals error:', e);
+  }
+}
+
+/**
+ * Export all signals as JSON string (for download).
+ * @returns {Promise<string>}
+ */
+export async function exportSignals() {
+  const signals = await getSignals(10000);
+  return JSON.stringify(signals, null, 2);
+}
