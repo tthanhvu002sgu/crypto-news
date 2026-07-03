@@ -1484,9 +1484,19 @@ export const getETFFlowHistory = async () => {
     return parseFloat(clean);
   };
 
+  const toSortableDate = (ddmmyy) => {
+    if (!ddmmyy) return '';
+    const parts = ddmmyy.split('/');
+    if (parts.length !== 3) return ddmmyy;
+    const [day, month, yr] = parts;
+    const fullYear = yr.length === 2 ? `20${yr}` : yr;
+    return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  };
+
   // Start with bundled static data (Jan 2024 → Jun 2026)
   const baseHistory = [...staticFlowHistory];
   const lastStaticDate = baseHistory.length > 0 ? baseHistory[baseHistory.length - 1].date : null;
+  const lastStaticSortable = lastStaticDate ? toSortableDate(lastStaticDate) : null;
   
   // Try to fetch new rows from /btc/ (current month page - less protected)
   try {
@@ -1509,14 +1519,15 @@ export const getETFFlowHistory = async () => {
             const year = parts[2];
             const month = months[monthStr] || '01';
             const formattedDate = `${day}/${month}/${year ? year.substring(2) : '26'}`;
-            // Only add rows newer than last static date
-            if (!lastStaticDate || formattedDate > lastStaticDate) {
+            // Only add rows newer than last static date using sortable YYYY-MM-DD format
+            if (!lastStaticSortable || toSortableDate(formattedDate) > lastStaticSortable) {
               newRows.push({ date: formattedDate, flow: flowVal });
             }
           }
         }
       }
       if (newRows.length > 0) {
+        newRows.sort((a, b) => toSortableDate(a.date).localeCompare(toSortableDate(b.date)));
         console.log(`[API] ETF Flow: appended ${newRows.length} new rows from /btc/`);
         return [...baseHistory, ...newRows];
       }
