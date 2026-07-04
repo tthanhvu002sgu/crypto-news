@@ -1,8 +1,18 @@
 /**
  * Signal Engine — Detects notable market conditions and logs them with full indicator snapshots.
- * 
+ *
  * Runs client-side, fed by WebSocket + REST data.
  * Produces signal objects: { timestamp, type, severity, title, description, snapshot }
+ *
+ * v2.0 — Event-driven multi-window price detection using a sliding ring-buffer.
+ * Instead of comparing only against the "last cycle" value (which missed moves
+ * spanning multiple cycles), a ring-buffer stores { price, cvd, buyVolume, sellVolume }
+ * every 30 s. PRICE_SPIKE fires per time-window (1m / 5m / 15m / 30m) with
+ * independent thresholds (absolute USD AND %). Each signal is enriched with:
+ *   • CVD delta over the same window
+ *   • OBI current state
+ *   • Funding rate
+ *   • Whale wall imbalance
  */
 
 import { addSignal } from './signalStore';
@@ -33,17 +43,44 @@ export const SIGNAL_TYPE = {
 // ─── Cooldown tracking — prevent spam ─────────────────────────────────────────
 const cooldowns = new Map();
 
-function isOnCooldown(signalType, cooldownMs = 5 * 60 * 1000) {
-  const lastFired = cooldowns.get(signalType) || 0;
+function isOnCooldown(key, cooldownMs = 5 * 60 * 1000) {
+  const lastFired = cooldowns.get(key) || 0;
   if (Date.now() - lastFired < cooldownMs) return true;
-  cooldowns.set(signalType, Date.now());
+  cooldowns.set(key, Date.now());
   return false;
 }
 
-// ─── Previous values for delta detection ──────────────────────────────────────
+// ─── Sliding Price Ring-Buffer ─────────────────────────────────────────────────
+// Stores one entry each time runSignalDetection is called (~every 30 s).
+// 2 hours at 30 s cadence = 240 entries max.
+const PRICE_HISTORY_MAX = 240;
+const priceHistory = []; // [{ price, cvd, buyVolume, sellVolume, ts }]
+
+function pushPriceHistory(ctx) {
+  priceHistory.push({
+    price: ctx.livePrice,
+    cvd: ctx.cvd ?? null,
+    buyVolume: ctx.buyVolume ?? null,
+    sellVolume: ctx.sellVolume ?? null,
+    ts: Date.now(),
+  });
+  if (priceHistory.length > PRICE_HISTORY_MAX) priceHistory.shift();
+}
+
+/**
+ * Return the oldest ring-buffer entry that is AT LEAST windowMs ago.
+ * Walks backward to find the entry closest to (now - windowMs).
+ */
+function getBaselineEntry(windowMs) {
+  const cutoff = Date.now() - windowMs;
+  for (let i = priceHistory.length - 1; i >= 0; i--) {
+    if (priceHistory[i].ts <= cutoff) return priceHistory[i];
+  }
+  return null;
+}
+
+// ─── Slower-changing detector state (OI surge, CVD divergence) ────────────────
 const prevValues = {
-  price: null,
-  priceTimestamp: null,
   oiValue: null,
   oiTimestamp: null,
   cvd: null,
@@ -51,7 +88,7 @@ const prevValues = {
 };
 
 // ─── Helper: build full snapshot object ───────────────────────────────────────
-function buildSnapshot(ctx) {
+function buildSnapshot(ctx, extra = {}) {
   const snap = {};
 
   // Price data
@@ -124,28 +161,94 @@ function buildSnapshot(ctx) {
     if (d.m2Supply != null) snap.m2Supply = d.m2Supply;
   }
 
+  // Merge window-specific deltas
+  Object.assign(snap, extra);
+
   return snap;
 }
 
 // ─── Detection Rules ──────────────────────────────────────────────────────────
 
-function detectPriceSpike(ctx) {
-  if (!ctx.livePrice || !prevValues.price) return null;
-  const priceDelta = ((ctx.livePrice - prevValues.price) / prevValues.price) * 100;
-  const timeDelta = Date.now() - (prevValues.priceTimestamp || 0);
+/**
+ * Multi-window PRICE_SPIKE detection.
+ * Fires independently per window; each has its own cooldown key so a 5m
+ * signal does not suppress a 15m signal.
+ *
+ * Thresholds (fires when EITHER condition is met):
+ *   1m:  ≥ $300 or ≥ 0.4%
+ *   5m:  ≥ $500 or ≥ 0.7%
+ *  15m:  ≥ $800 or ≥ 1.2%
+ *  30m:  ≥ $1500 or ≥ 2.0%
+ */
+const PRICE_WINDOWS = [
+  { label: '1 phút',  ms: 1 * 60 * 1000,  minUsd: 300,  minPct: 0.4,  cooldownKey: 'PRICE_SPIKE_1M',  cooldownMs: 2 * 60 * 1000 },
+  { label: '5 phút',  ms: 5 * 60 * 1000,  minUsd: 500,  minPct: 0.7,  cooldownKey: 'PRICE_SPIKE_5M',  cooldownMs: 5 * 60 * 1000 },
+  { label: '15 phút', ms: 15 * 60 * 1000, minUsd: 800,  minPct: 1.2,  cooldownKey: 'PRICE_SPIKE_15M', cooldownMs: 8 * 60 * 1000 },
+  { label: '30 phút', ms: 30 * 60 * 1000, minUsd: 1500, minPct: 2.0,  cooldownKey: 'PRICE_SPIKE_30M', cooldownMs: 15 * 60 * 1000 },
+];
 
-  // >1.5% move in under 5 minutes
-  if (Math.abs(priceDelta) >= 1.5 && timeDelta <= 5 * 60 * 1000) {
-    const direction = priceDelta > 0 ? '↑' : '↓';
-    const severity = Math.abs(priceDelta) >= 3 ? SEVERITY.CRITICAL : Math.abs(priceDelta) >= 2 ? SEVERITY.HIGH : SEVERITY.MEDIUM;
-    return {
+function detectPriceSpikeMultiWindow(ctx) {
+  if (!ctx.livePrice) return [];
+  const results = [];
+
+  for (const win of PRICE_WINDOWS) {
+    const base = getBaselineEntry(win.ms);
+    if (!base) continue;
+
+    const usdDelta = ctx.livePrice - base.price;
+    const pctDelta = (usdDelta / base.price) * 100;
+
+    // Must exceed at least one threshold
+    if (Math.abs(usdDelta) < win.minUsd && Math.abs(pctDelta) < win.minPct) continue;
+    if (isOnCooldown(win.cooldownKey, win.cooldownMs)) continue;
+
+    const direction = usdDelta > 0 ? '↑' : '↓';
+    const absUsd = Math.abs(usdDelta);
+    const absPct = Math.abs(pctDelta);
+    const actualWindowMin = Math.round((Date.now() - base.ts) / 60000);
+
+    // Severity by magnitude
+    let severity;
+    if (absUsd >= 2000 || absPct >= 3) severity = SEVERITY.CRITICAL;
+    else if (absUsd >= 1000 || absPct >= 2) severity = SEVERITY.HIGH;
+    else if (absUsd >= 500  || absPct >= 1) severity = SEVERITY.MEDIUM;
+    else severity = SEVERITY.LOW;
+
+    // CVD delta over the same window
+    const cvdDelta = (ctx.cvd != null && base.cvd != null) ? ctx.cvd - base.cvd : null;
+    const buyDelta  = (ctx.buyVolume  != null && base.buyVolume  != null) ? ctx.buyVolume  - base.buyVolume  : null;
+    const sellDelta = (ctx.sellVolume != null && base.sellVolume != null) ? ctx.sellVolume - base.sellVolume : null;
+
+    // Inline context notes for the description
+    const cvdNote   = cvdDelta != null ? ` | CVD window: ${cvdDelta >= 0 ? '+' : ''}${(cvdDelta / 1e6).toFixed(1)}M` : '';
+    const obiNote   = ctx.orderBook?.obiPercent != null ? ` | OBI: ${ctx.orderBook.obiPercent > 0 ? '+' : ''}${ctx.orderBook.obiPercent}%` : '';
+    const fr        = ctx.fundingRate ?? ctx.data?.fundingRate;
+    const frNote    = fr != null ? ` | FR: ${(fr * 100).toFixed(4)}%` : '';
+    const whaleNote = ctx.whaleData?.bidWallTotal != null
+      ? ` | BidWall: $${(ctx.whaleData.bidWallTotal / 1e6).toFixed(1)}M AskWall: $${(ctx.whaleData.askWallTotal / 1e6).toFixed(1)}M`
+      : '';
+
+    results.push({
       type: SIGNAL_TYPE.PRICE_SPIKE,
       severity,
-      title: `Giá BTC ${direction} ${Math.abs(priceDelta).toFixed(2)}% trong ${Math.round(timeDelta / 60000)} phút`,
-      description: `$${prevValues.price.toLocaleString()} → $${ctx.livePrice.toLocaleString()}`,
-    };
+      title: `Giá BTC ${direction}$${absUsd.toFixed(0)} (${direction}${absPct.toFixed(2)}%) trong ${win.label}`,
+      description: `$${Math.round(base.price).toLocaleString()} → $${Math.round(ctx.livePrice).toLocaleString()} (${actualWindowMin} phút thực tế)${cvdNote}${obiNote}${frNote}${whaleNote}`,
+      // Extra fields merged into snapshot
+      _extra: {
+        priceWindow: win.label,
+        priceUsdDelta: parseFloat(usdDelta.toFixed(0)),
+        pricePctDelta: parseFloat(pctDelta.toFixed(3)),
+        priceBase: Math.round(base.price),
+        priceCurrent: Math.round(ctx.livePrice),
+        cvdDeltaWindow: cvdDelta != null ? Math.round(cvdDelta) : null,
+        cvdBuyDeltaWindow: buyDelta  != null ? Math.round(buyDelta)  : null,
+        cvdSellDeltaWindow: sellDelta != null ? Math.round(sellDelta) : null,
+        windowActualMin: actualWindowMin,
+      },
+    });
   }
-  return null;
+
+  return results;
 }
 
 function detectFundingExtreme(ctx) {
@@ -286,33 +389,48 @@ function detectCVDDivergence(ctx) {
 /**
  * Run all detection rules against current context.
  * Called periodically (every ~30s from the HFT tab).
- * 
+ *
  * @param {Object} ctx - All available data context
  * @returns {Promise<Array>} - Array of newly detected signals
  */
 export async function runSignalDetection(ctx) {
-  const detectors = [
-    { fn: detectPriceSpike, cooldown: 3 * 60 * 1000 },       // 3 min cooldown
-    { fn: detectFundingExtreme, cooldown: 15 * 60 * 1000 },   // 15 min
-    { fn: detectOBIExtreme, cooldown: 5 * 60 * 1000 },        // 5 min
-    { fn: detectWhaleWallShift, cooldown: 10 * 60 * 1000 },   // 10 min
-    { fn: detectFnGExtreme, cooldown: 60 * 60 * 1000 },       // 1 hour
-    { fn: detectOISurge, cooldown: 10 * 60 * 1000 },          // 10 min
-    { fn: detectCVDDivergence, cooldown: 10 * 60 * 1000 },    // 10 min
-  ];
+  if (!ctx.livePrice) return [];
 
-  const snapshot = buildSnapshot(ctx);
+  // Push current reading into ring-buffer BEFORE detection runs
+  pushPriceHistory(ctx);
+
   const newSignals = [];
 
-  for (const { fn, cooldown } of detectors) {
+  // ── Multi-window price spikes (array) ─────────────────────────────────────
+  const spikes = detectPriceSpikeMultiWindow(ctx);
+  for (const spike of spikes) {
+    const { _extra, ...signalBase } = spike;
+    const snapshot = buildSnapshot(ctx, _extra);
+    const signal = { ...signalBase, timestamp: Date.now(), snapshot };
+    try {
+      await addSignal(signal);
+      newSignals.push(signal);
+    } catch (e) {
+      console.warn('[SignalEngine] addSignal error (spike):', e);
+    }
+  }
+
+  // ── Single-result detectors ────────────────────────────────────────────────
+  const snapshot = buildSnapshot(ctx);
+  const singleDetectors = [
+    { fn: detectFundingExtreme, cooldownKey: SIGNAL_TYPE.FUNDING_EXTREME, cooldownMs: 15 * 60 * 1000 },
+    { fn: detectOBIExtreme,     cooldownKey: SIGNAL_TYPE.OBI_EXTREME,     cooldownMs: 5  * 60 * 1000 },
+    { fn: detectWhaleWallShift, cooldownKey: SIGNAL_TYPE.WHALE_WALL_SHIFT, cooldownMs: 10 * 60 * 1000 },
+    { fn: detectFnGExtreme,     cooldownKey: SIGNAL_TYPE.FNG_EXTREME,     cooldownMs: 60 * 60 * 1000 },
+    { fn: detectOISurge,        cooldownKey: SIGNAL_TYPE.OI_SURGE,        cooldownMs: 10 * 60 * 1000 },
+    { fn: detectCVDDivergence,  cooldownKey: SIGNAL_TYPE.CVD_DIVERGENCE,  cooldownMs: 10 * 60 * 1000 },
+  ];
+
+  for (const { fn, cooldownKey, cooldownMs } of singleDetectors) {
     try {
       const result = fn(ctx);
-      if (result && !isOnCooldown(result.type, cooldown)) {
-        const signal = {
-          ...result,
-          timestamp: Date.now(),
-          snapshot,
-        };
+      if (result && !isOnCooldown(cooldownKey, cooldownMs)) {
+        const signal = { ...result, timestamp: Date.now(), snapshot };
         await addSignal(signal);
         newSignals.push(signal);
       }
@@ -321,11 +439,7 @@ export async function runSignalDetection(ctx) {
     }
   }
 
-  // Update prev values for next cycle
-  if (ctx.livePrice != null) {
-    prevValues.price = ctx.livePrice;
-    prevValues.priceTimestamp = Date.now();
-  }
+  // Update state for slower-changing detectors
   if (ctx.data?.openInterest != null) {
     prevValues.oiValue = ctx.data.openInterest;
     prevValues.oiTimestamp = Date.now();
@@ -340,21 +454,60 @@ export async function runSignalDetection(ctx) {
 
 /**
  * Take a periodic snapshot of all indicators (every 15 min).
- * This is the main "log" function that ensures data is always recorded.
- * 
+ * Enriched with price-window deltas from the ring-buffer so the snapshot
+ * shows how much price moved in the last 1/5/15/30 minutes.
+ *
  * @param {Object} ctx - All available data context
  * @returns {Promise<Object|null>} - The saved signal, or null if skipped
  */
 export async function takePeriodicSnapshot(ctx) {
-  if (!ctx.livePrice) return null; // Don't snapshot if no price data
+  if (!ctx.livePrice) return null;
 
-  const snapshot = buildSnapshot(ctx);
+  // Compute window deltas from ring-buffer
+  const windowDeltas = {};
+  for (const win of PRICE_WINDOWS) {
+    const base = getBaselineEntry(win.ms);
+    if (!base) continue;
+    const usd = ctx.livePrice - base.price;
+    const pct = (usd / base.price) * 100;
+    const cvd = ctx.cvd != null && base.cvd != null ? ctx.cvd - base.cvd : null;
+    const key  = win.label.replace(' ', '_');
+    windowDeltas[`delta_${key}_usd`] = parseFloat(usd.toFixed(0));
+    windowDeltas[`delta_${key}_pct`] = parseFloat(pct.toFixed(3));
+    if (cvd != null) windowDeltas[`delta_${key}_cvd`] = Math.round(cvd);
+  }
+
+  const snapshot = buildSnapshot(ctx, windowDeltas);
+
+  // Build description with notable window moves
+  const notableLines = [];
+  for (const win of PRICE_WINDOWS) {
+    const key = win.label.replace(' ', '_');
+    const usd = windowDeltas[`delta_${key}_usd`];
+    const pct = windowDeltas[`delta_${key}_pct`];
+    const cvd = windowDeltas[`delta_${key}_cvd`];
+    if (usd != null && Math.abs(usd) >= 200) {
+      const dir = usd > 0 ? '↑' : '↓';
+      const cvdNote = cvd != null ? ` CVD:${cvd >= 0 ? '+' : ''}${(cvd / 1e6).toFixed(1)}M` : '';
+      notableLines.push(`${win.label}: ${dir}$${Math.abs(usd).toLocaleString()} (${pct >= 0 ? '+' : ''}${pct}%)${cvdNote}`);
+    }
+  }
+
+  const description = buildSnapshotSummary(ctx)
+    + (notableLines.length > 0 ? '\n' + notableLines.join(' · ') : '');
+
+  // Elevate severity if a notable move happened in last 15m
+  const move15mUsd = Math.abs(windowDeltas['delta_15_phút_usd'] ?? 0);
+  const severity = move15mUsd >= 800 ? SEVERITY.HIGH
+    : move15mUsd >= 300 ? SEVERITY.MEDIUM
+    : SEVERITY.LOW;
+
   const signal = {
     type: SIGNAL_TYPE.PERIODIC_SNAPSHOT,
-    severity: SEVERITY.LOW,
+    severity,
     timestamp: Date.now(),
     title: `Snapshot — BTC $${ctx.livePrice?.toLocaleString() || '---'}`,
-    description: buildSnapshotSummary(ctx),
+    description,
     snapshot,
   };
 
