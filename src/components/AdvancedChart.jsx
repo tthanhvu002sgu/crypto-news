@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, CrosshairMode, LineStyle, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
 import { getBTCKlines } from '../services/api';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
+import ModuleMenu from './ModuleMenu';
 
 const BINS = 150;
 
@@ -219,7 +221,8 @@ function calculateLiqZones(klines) {
   return zones;
 }
 
-function AdvancedChart({ theme = 'dark', whaleData }) {
+function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
+  const { isModuleHidden } = useModuleVisibility();
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -488,13 +491,15 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
     }
   }, [klines, whaleData, showWalls, showLiq]);
 
+  if (moduleId && isModuleHidden(moduleId)) return null;
+
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2', position: 'relative', height: '520px', display: 'flex', flexDirection: 'column' }}>
       <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
         </h3>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             onClick={() => {
               if (chartRef.current) {
@@ -575,6 +580,7 @@ function AdvancedChart({ theme = 'dark', whaleData }) {
           >
             🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
           </button>
+          {moduleId && <ModuleMenu moduleId={moduleId} />}
         </div>
       </div>
       

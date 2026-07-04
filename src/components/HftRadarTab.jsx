@@ -6,6 +6,8 @@ import { runSignalDetection, takePeriodicSnapshot, SIGNAL_TYPE } from '../servic
 import { getSignals, exportSignals, clearAllSignals, clearOldSignals } from '../services/signalStore';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
+import ModuleMenu from './ModuleMenu';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -237,16 +239,19 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
             </span>
           </div>
         </div>
-        <div className="etf-timeframe-toggle font-mono">
-          {['1H', '24H', '7D', '30D'].map(t => (
-            <button
-              key={t}
-              onClick={() => setCvdTf(t)}
-              className={`toggle-btn ${cvdTf === t ? 'active' : ''}`}
-            >
-              {t === '1H' ? '1H (LIVE)' : t}
-            </button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="etf-timeframe-toggle font-mono">
+            {['1H', '24H', '7D', '30D'].map(t => (
+              <button
+                key={t}
+                onClick={() => setCvdTf(t)}
+                className={`toggle-btn ${cvdTf === t ? 'active' : ''}`}
+              >
+                {t === '1H' ? '1H (LIVE)' : t}
+              </button>
+            ))}
+          </div>
+          <ModuleMenu moduleId="hft_cvd" />
         </div>
       </div>
 
@@ -397,12 +402,13 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
   if (!clusteredBids.length && !clusteredAsks.length && !bidRatio) {
     return (
       <div className="hft-panel glass-panel">
-        <div className="hft-panel-header">
+        <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Tooltip content={METRIC_METADATA.whaleWalls}>
             <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
               <span className="hft-icon">🎯</span> TARGET LIQUIDITY (WHALE WALLS)
             </h3>
           </Tooltip>
+          <ModuleMenu moduleId="hft_whale_walls" />
         </div>
         <div className="hft-empty font-mono">Nhấn SYNC để quét các vùng thanh khoản...</div>
       </div>
@@ -417,7 +423,10 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
             <span className="hft-icon">🎯</span> TARGET LIQUIDITY (≥$500K)
           </h3>
         </Tooltip>
-        <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
+          <ModuleMenu moduleId="hft_whale_walls" />
+        </div>
       </div>
 
       {/* Gap Cluster Control */}
@@ -657,12 +666,13 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
   if (!orderBook) {
     return (
       <div className="hft-panel glass-panel">
-        <div className="hft-panel-header">
+        <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Tooltip content={METRIC_METADATA.obi}>
             <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
               <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE
             </h3>
           </Tooltip>
+          <ModuleMenu moduleId="hft_orderbook" />
         </div>
         {renderDepthSlider()}
         <div className="hft-empty font-mono">Nhấn SYNC để tải Order Book...</div>
@@ -682,7 +692,10 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
             <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE
           </h3>
         </Tooltip>
-        <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
+          <ModuleMenu moduleId="hft_orderbook" />
+        </div>
       </div>
 
       {renderDepthSlider()}
@@ -810,17 +823,20 @@ function WhaleTradesPanel({ whaleTrades }) {
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">🐋</span> LIVE WHALE TRADES
         </h3>
-        <select
-          className="font-mono text-slate-300"
-          value={minVolume}
-          onChange={handleVolumeChange}
-          style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', padding: '2px 6px', borderRadius: '4px', outline: 'none', cursor: 'pointer' }}
-        >
-          <option value={100000}>≥ $100K</option>
-          <option value={500000}>≥ $500K</option>
-          <option value={1000000}>≥ $1M</option>
-          <option value={5000000}>≥ $5M</option>
-        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <select
+            className="font-mono text-slate-300"
+            value={minVolume}
+            onChange={handleVolumeChange}
+            style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', padding: '2px 6px', borderRadius: '4px', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value={100000}>≥ $100K</option>
+            <option value={500000}>≥ $500K</option>
+            <option value={1000000}>≥ $1M</option>
+            <option value={5000000}>≥ $5M</option>
+          </select>
+          <ModuleMenu moduleId="hft_liquidations" />
+        </div>
       </div>
 
       {/* ── Whale Pressure Dashboard ────────────────────────────────── */}
@@ -1153,8 +1169,9 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
         <h3 className="hft-panel-title font-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">📋</span> SIGNAL LOG (KIỂM TRA BIAS &amp; DÒNG TIỀN)
         </h3>
-        <div className="hft-panel-badges">
+        <div className="hft-panel-badges" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className="hft-badge badge-api font-mono">{signalCount} entries</span>
+          <ModuleMenu moduleId="hft_signals" />
         </div>
       </div>
 
@@ -1333,7 +1350,7 @@ function AdvancedChartWrapper({ theme, whaleData, whaleGap }) {
     };
   }, [whaleData, whaleGap]);
 
-  return <AdvancedChart theme={theme} whaleData={clusteredWhaleData} />;
+  return <AdvancedChart theme={theme} whaleData={clusteredWhaleData} moduleId="hft_heatmap" />;
 }
 
 
@@ -1355,6 +1372,7 @@ export default function HftRadarTab({
   // Additional props for signal engine context
   data, fundingRate, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice,
 }) {
+  const { isModuleHidden } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1544,37 +1562,49 @@ export default function HftRadarTab({
       </div>
 
       <div className="hft-grid">
-        <MemoCVDPanel
-          cvd={cvd}
-          sessionCvd={sessionCvd}
-          buyVolume={buyVolume}
-          sellVolume={sellVolume}
-          cvdHistory={cvdHistory}
-          cvdHistory24h={cvdHistory24h}
-          cvdHistory7d={cvdHistory7d}
-          cvdHistory30d={cvdHistory30d}
-          cvdStatus={cvdStatus}
-          livePrice={livePrice}
-          theme={theme}
-        />
+        {!isModuleHidden('hft_cvd') && (
+          <MemoCVDPanel
+            cvd={cvd}
+            sessionCvd={sessionCvd}
+            buyVolume={buyVolume}
+            sellVolume={sellVolume}
+            cvdHistory={cvdHistory}
+            cvdHistory24h={cvdHistory24h}
+            cvdHistory7d={cvdHistory7d}
+            cvdHistory30d={cvdHistory30d}
+            cvdStatus={cvdStatus}
+            livePrice={livePrice}
+            theme={theme}
+          />
+        )}
 
-        <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
+        {!isModuleHidden('hft_whale_walls') && (
+          <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
+        )}
 
-        <MemoOrderBookPanel
-          orderBook={orderBook}
-          depthLimit={depthLimit}
-          setDepthLimit={setDepthLimit}
-        />
+        {!isModuleHidden('hft_orderbook') && (
+          <MemoOrderBookPanel
+            orderBook={orderBook}
+            depthLimit={depthLimit}
+            setDepthLimit={setDepthLimit}
+          />
+        )}
 
-        <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
+        {!isModuleHidden('hft_heatmap') && (
+          <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
+        )}
 
-        <MemoWhaleTradesPanel whaleTrades={whaleTrades} />
+        {!isModuleHidden('hft_liquidations') && (
+          <MemoWhaleTradesPanel whaleTrades={whaleTrades} />
+        )}
 
-        <MemoSignalLogPanel
-          signals={signals}
-          onRefresh={loadSignals}
-          signalCount={signalCount}
-        />
+        {!isModuleHidden('hft_signals') && (
+          <MemoSignalLogPanel
+            signals={signals}
+            onRefresh={loadSignals}
+            signalCount={signalCount}
+          />
+        )}
 
       </div>
     </div>

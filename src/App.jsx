@@ -12,7 +12,7 @@ import {
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
-  Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles
+  Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff
 } from 'lucide-react';
 import GlossaryTab from './components/GlossaryTab';
 import HftRadarTab from './components/HftRadarTab';
@@ -21,6 +21,8 @@ import DashboardTab from './components/DashboardTab';
 import CascadeTab from './components/CascadeTab';
 import TerminalTab from './components/TerminalTab';
 import Tooltip, { METRIC_METADATA, useTooltipSettings } from './components/Tooltip';
+import { ModuleVisibilityProvider, useModuleVisibility, MODULES_CONFIG } from './context/ModuleVisibilityContext';
+import ModuleMenu from './components/ModuleMenu';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, Title, Tooltip as ChartTooltip, Legend, Filler, BarElement,
@@ -361,9 +363,10 @@ function useDraggableScroll() {
   return ref;
 }
 
-function App() {
+function AppContent() {
   const newsSliderRef = useDraggableScroll();
   const { tooltipsEnabled, setTooltipsEnabled, setLastSyncTime } = useTooltipSettings();
+  const { hiddenModules, showModule, showAllModules, isModuleHidden } = useModuleVisibility();
   const [data, setData] = useState(() => {
     // Preload CVD history from localStorage cache for immediate display
     const readCache = (key) => {
@@ -388,6 +391,13 @@ function App() {
     const validTabs = ['dashboard', 'data', 'cascade', 'summary', 'glossary', 'terminal'];
     return validTabs.includes(hash) ? hash : 'dashboard';
   });
+
+  useEffect(() => {
+    if (activeTab === 'cascade' && isModuleHidden('tab_cascade')) setActiveTab('dashboard');
+    if (activeTab === 'summary' && isModuleHidden('tab_summary')) setActiveTab('dashboard');
+    if (activeTab === 'glossary' && isModuleHidden('tab_glossary')) setActiveTab('dashboard');
+    if (activeTab === 'terminal' && isModuleHidden('tab_terminal')) setActiveTab('dashboard');
+  }, [activeTab, isModuleHidden]);
 
   const [aiSummary, setAiSummary] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -1078,184 +1088,203 @@ function App() {
             <div className="sidebar-divider" />
 
             {/* Metrics grid — Derivatives */}
-            <h3 className="widget-title font-mono">
-              <LiveDot /> PHÁI SINH REALTIME
-            </h3>
-            <div className="metrics-grid">
-              <MetricCard
-                label="FUNDING RATE"
-                value={fund != null ? `${(fund * 100).toFixed(4)}%` : '---'}
-                sub={fundInfo.text}
-                subCls={fundInfo.cls}
-                badge={liveFunding != null ? '⚡WS' : null}
-                badgeCls="badge-ws"
-                tooltipId="funding"
-              />
-              <MetricCard
-                label="OPEN INTEREST"
-                value={data.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
-                sub="Derivatives"
-                subCls="text-slate-400"
-                tooltipId="oi"
-              />
-              <MetricCard
-                label="L/S RATIO"
-                value={currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
-                sub={currentLS ? `Long ${(parseFloat(currentLS.longAccount) * 100).toFixed(1)}%` : ''}
-                subCls={currentLS && parseFloat(currentLS.longAccount) > 0.55 ? 'text-rose' : 'text-emerald'}
-                tooltipId="lsRatio"
-              />
-              <MetricCard
-                label="BTC DOMINANCE"
-                value={data.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---'}
-                sub={data.globalData?.ethDominance ? `ETH ${data.globalData.ethDominance}%` : ''}
-                subCls="text-slate-400"
-                tooltipId="btcDom"
-              />
-              <MetricCard
-                label="STABLECOIN CAP"
-                value={data.stablecoins ? fmtB(data.stablecoins.total) : '---'}
-                sub={data.stablecoins ? `USDT ${fmtB(data.stablecoins.usdt)}` : ''}
-                subCls="text-slate-400"
-                tooltipId="stablecoin"
-              />
-              <MetricCard
-                label="TOTAL MARKET CAP"
-                value={data.globalData ? fmtT(data.globalData.totalMarketCap) : '---'}
-                sub={data.globalData?.marketCapChange24h ? `${data.globalData.marketCapChange24h}% 24h` : ''}
-                subCls={data.globalData?.marketCapChange24h > 0 ? 'text-emerald' : 'text-rose'}
-                tooltipId="totalMcap"
-              />
-              <MetricCard
-                label="BTC 24H VOL"
-                value={btcDisplay ? fmtB(btcDisplay.volume) : '---'}
-                sub="USDT Volume"
-                subCls="text-slate-400"
-                tooltipId="volume24h"
-              />
-              <MetricCard
-                label="24H RANGE"
-                value={btcDisplay ? `${fmt(btcDisplay.low, 0)}` : '---'}
-                sub={btcDisplay ? `H: ${fmt(btcDisplay.high, 0)}` : ''}
-                subCls="text-slate-400"
-                tooltipId="range24h"
-              />
-            </div>
+            {!isModuleHidden('sidebar_derivatives') && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 className="widget-title font-mono" style={{ margin: 0 }}>
+                    <LiveDot /> PHÁI SINH REALTIME
+                  </h3>
+                  <ModuleMenu moduleId="sidebar_derivatives" />
+                </div>
+                <div className="metrics-grid">
+                  <MetricCard
+                    label="FUNDING RATE"
+                    value={fund != null ? `${(fund * 100).toFixed(4)}%` : '---'}
+                    sub={fundInfo.text}
+                    subCls={fundInfo.cls}
+                    badge={liveFunding != null ? '⚡WS' : null}
+                    badgeCls="badge-ws"
+                    tooltipId="funding"
+                  />
+                  <MetricCard
+                    label="OPEN INTEREST"
+                    value={data.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
+                    sub="Derivatives"
+                    subCls="text-slate-400"
+                    tooltipId="oi"
+                  />
+                  <MetricCard
+                    label="L/S RATIO"
+                    value={currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
+                    sub={currentLS ? `Long ${(parseFloat(currentLS.longAccount) * 100).toFixed(1)}%` : ''}
+                    subCls={currentLS && parseFloat(currentLS.longAccount) > 0.55 ? 'text-rose' : 'text-emerald'}
+                    tooltipId="lsRatio"
+                  />
+                  <MetricCard
+                    label="BTC DOMINANCE"
+                    value={data.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---'}
+                    sub={data.globalData?.ethDominance ? `ETH ${data.globalData.ethDominance}%` : ''}
+                    subCls="text-slate-400"
+                    tooltipId="btcDom"
+                  />
+                  <MetricCard
+                    label="STABLECOIN CAP"
+                    value={data.stablecoins ? fmtB(data.stablecoins.total) : '---'}
+                    sub={data.stablecoins ? `USDT ${fmtB(data.stablecoins.usdt)}` : ''}
+                    subCls="text-slate-400"
+                    tooltipId="stablecoin"
+                  />
+                  <MetricCard
+                    label="TOTAL MARKET CAP"
+                    value={data.globalData ? fmtT(data.globalData.totalMarketCap) : '---'}
+                    sub={data.globalData?.marketCapChange24h ? `${data.globalData.marketCapChange24h}% 24h` : ''}
+                    subCls={data.globalData?.marketCapChange24h > 0 ? 'text-emerald' : 'text-rose'}
+                    tooltipId="totalMcap"
+                  />
+                  <MetricCard
+                    label="BTC 24H VOL"
+                    value={btcDisplay ? fmtB(btcDisplay.volume) : '---'}
+                    sub="USDT Volume"
+                    subCls="text-slate-400"
+                    tooltipId="volume24h"
+                  />
+                  <MetricCard
+                    label="24H RANGE"
+                    value={btcDisplay ? `${fmt(btcDisplay.low, 0)}` : '---'}
+                    sub={btcDisplay ? `H: ${fmt(btcDisplay.high, 0)}` : ''}
+                    subCls="text-slate-400"
+                    tooltipId="range24h"
+                  />
+                </div>
+                <div className="sidebar-divider" />
+              </>
+            )}
 
-            <div className="sidebar-divider" />
-
-            <h3 className="widget-title font-mono">
-              <LiveDot /> DỮ LIỆU KINH TẾ MỸ (HÀNG THÁNG)
-            </h3>
-            <div className="metrics-grid">
-              <MetricCard
-                label="CPI"
-                value={data.cpi ? data.cpi.toFixed(2) : '---'}
-                sub="Chỉ số giá tiêu dùng"
-                subCls="text-slate-400"
-                tooltipId="cpi"
-              />
-              <MetricCard
-                label="UNEMPLOYMENT"
-                value={data.unrate ? `${data.unrate}%` : '---'}
-                sub="Tỷ lệ thất nghiệp"
-                subCls="text-slate-400"
-                tooltipId="unrate"
-              />
-            </div>
-
-            <div className="sidebar-divider" />
+            {!isModuleHidden('sidebar_macro') && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 className="widget-title font-mono" style={{ margin: 0 }}>
+                    <LiveDot /> DỮ LIỆU KINH TẾ MỸ (HÀNG THÁNG)
+                  </h3>
+                  <ModuleMenu moduleId="sidebar_macro" />
+                </div>
+                <div className="metrics-grid">
+                  <MetricCard
+                    label="CPI"
+                    value={data.cpi ? data.cpi.toFixed(2) : '---'}
+                    sub="Chỉ số giá tiêu dùng"
+                    subCls="text-slate-400"
+                    tooltipId="cpi"
+                  />
+                  <MetricCard
+                    label="UNEMPLOYMENT"
+                    value={data.unrate ? `${data.unrate}%` : '---'}
+                    sub="Tỷ lệ thất nghiệp"
+                    subCls="text-slate-400"
+                    tooltipId="unrate"
+                  />
+                </div>
+                <div className="sidebar-divider" />
+              </>
+            )}
 
             {/* On-chain Network Stats — Blockchain.info */}
-            <h3 className="widget-title font-mono">
-              <LiveDot /> BTC NETWORK (ON-CHAIN)
-            </h3>
-            <div className="metrics-grid">
-              <MetricCard
-                label="HASH RATE"
-                value={data.onChain?.hashRate ? `${data.onChain.hashRate} EH/s` : '---'}
-                sub="Mining Power"
-                subCls="text-slate-400"
-                tooltipId="hashRate"
-              />
-              <MetricCard
-                label="DIFFICULTY"
-                value={data.onChain?.difficulty ? `${data.onChain.difficulty}T` : '---'}
-                sub="Mining Difficulty"
-                subCls="text-slate-400"
-                tooltipId="difficulty"
-              />
-              <MetricCard
-                label="TX / 24H"
-                value={data.onChain?.txCount24h ? data.onChain.txCount24h.toLocaleString() : '---'}
-                sub="Transactions"
-                subCls="text-slate-400"
-                tooltipId="txCount"
-              />
-              <MetricCard
-                label="BLOCK TIME"
-                value={data.onChain?.minutesBetweenBlocks ? `${data.onChain.minutesBetweenBlocks}m` : '---'}
-                sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Fast ↑' : 'Normal'}
-                subCls={data.onChain?.minutesBetweenBlocks < 10 ? 'text-emerald' : 'text-slate-400'}
-                tooltipId="blockTime"
-              />
-              <MetricCard
-                label="ACTIVE ADDR"
-                value={data.onChainMetrics?.activeAddresses || '---'}
-                sub="Unique senders/day"
-                subCls="text-slate-400"
-                tooltipId="activeAddr"
-              />
-              <MetricCard
-                label="PRODUCTION COST"
-                value={data.onChain?.productionCost ? `$${parseInt(data.onChain.productionCost).toLocaleString()}` : '---'}
-                sub="1 BTC (Est.)"
-                subCls="text-slate-400"
-                tooltipId="productionCost"
-              />
-              <MetricCard
-                label="BTC MVRV"
-                value={data.onChainMetrics?.mvrv || '---'}
-                sub={data.onChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.onChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
-                subCls={data.onChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.onChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
-                tooltipId="mvrv"
-              />
-              <MetricCard
-                label="ETH MVRV"
-                value={data.ethOnChainMetrics?.mvrv || '---'}
-                sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
-                subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
-                tooltipId="ethMvrv"
-              />
-              <MetricCard
-                label="BTC NUPL (LÃI/LỖ)"
-                value={btcNuplVal?.percentStr || '---'}
-                sub={btcNuplVal?.subStr || 'Net Unrealized Profit'}
-                subCls={btcNuplVal?.cls || 'text-slate-400'}
-                tooltipId="btcNupl"
-              />
-              <MetricCard
-                label="ETH NUPL (LÃI/LỖ)"
-                value={ethNuplVal?.percentStr || '---'}
-                sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
-                subCls={ethNuplVal?.cls || 'text-slate-400'}
-                tooltipId="ethNupl"
-              />
-              <MetricCard
-                label="BTC COIN LỜI (EST)"
-                value={btcSupplyProfitEst?.valStr || '---'}
-                sub={btcSupplyProfitEst?.subStr || 'Supply in Profit'}
-                subCls={btcSupplyProfitEst?.cls || 'text-slate-400'}
-                tooltipId="btcSupplyProfit"
-              />
-              <MetricCard
-                label="ETH COIN LỜI (EST)"
-                value={ethSupplyProfitEst?.valStr || '---'}
-                sub={ethSupplyProfitEst?.subStr || 'Supply in Profit'}
-                subCls={ethSupplyProfitEst?.cls || 'text-slate-400'}
-                tooltipId="ethSupplyProfit"
-              />
-            </div>
+            {!isModuleHidden('sidebar_onchain') && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 className="widget-title font-mono" style={{ margin: 0 }}>
+                    <LiveDot /> BTC NETWORK (ON-CHAIN)
+                  </h3>
+                  <ModuleMenu moduleId="sidebar_onchain" />
+                </div>
+                <div className="metrics-grid">
+                  <MetricCard
+                    label="HASH RATE"
+                    value={data.onChain?.hashRate ? `${data.onChain.hashRate} EH/s` : '---'}
+                    sub="Mining Power"
+                    subCls="text-slate-400"
+                    tooltipId="hashRate"
+                  />
+                  <MetricCard
+                    label="DIFFICULTY"
+                    value={data.onChain?.difficulty ? `${data.onChain.difficulty}T` : '---'}
+                    sub="Mining Difficulty"
+                    subCls="text-slate-400"
+                    tooltipId="difficulty"
+                  />
+                  <MetricCard
+                    label="TX / 24H"
+                    value={data.onChain?.txCount24h ? data.onChain.txCount24h.toLocaleString() : '---'}
+                    sub="Transactions"
+                    subCls="text-slate-400"
+                    tooltipId="txCount"
+                  />
+                  <MetricCard
+                    label="BLOCK TIME"
+                    value={data.onChain?.minutesBetweenBlocks ? `${data.onChain.minutesBetweenBlocks}m` : '---'}
+                    sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Fast ↑' : 'Normal'}
+                    subCls={data.onChain?.minutesBetweenBlocks < 10 ? 'text-emerald' : 'text-slate-400'}
+                    tooltipId="blockTime"
+                  />
+                  <MetricCard
+                    label="ACTIVE ADDR"
+                    value={data.onChainMetrics?.activeAddresses || '---'}
+                    sub="Unique senders/day"
+                    subCls="text-slate-400"
+                    tooltipId="activeAddr"
+                  />
+                  <MetricCard
+                    label="PRODUCTION COST"
+                    value={data.onChain?.productionCost ? `$${parseInt(data.onChain.productionCost).toLocaleString()}` : '---'}
+                    sub="1 BTC (Est.)"
+                    subCls="text-slate-400"
+                    tooltipId="productionCost"
+                  />
+                  <MetricCard
+                    label="BTC MVRV"
+                    value={data.onChainMetrics?.mvrv || '---'}
+                    sub={data.onChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.onChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                    subCls={data.onChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.onChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
+                    tooltipId="mvrv"
+                  />
+                  <MetricCard
+                    label="ETH MVRV"
+                    value={data.ethOnChainMetrics?.mvrv || '---'}
+                    sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                    subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
+                    tooltipId="ethMvrv"
+                  />
+                  <MetricCard
+                    label="BTC NUPL (LÃI/LỖ)"
+                    value={btcNuplVal?.percentStr || '---'}
+                    sub={btcNuplVal?.subStr || 'Net Unrealized Profit'}
+                    subCls={btcNuplVal?.cls || 'text-slate-400'}
+                    tooltipId="btcNupl"
+                  />
+                  <MetricCard
+                    label="ETH NUPL (LÃI/LỖ)"
+                    value={ethNuplVal?.percentStr || '---'}
+                    sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
+                    subCls={ethNuplVal?.cls || 'text-slate-400'}
+                    tooltipId="ethNupl"
+                  />
+                  <MetricCard
+                    label="BTC COIN LỜI (EST)"
+                    value={btcSupplyProfitEst?.valStr || '---'}
+                    sub={btcSupplyProfitEst?.subStr || 'Supply in Profit'}
+                    subCls={btcSupplyProfitEst?.cls || 'text-slate-400'}
+                    tooltipId="btcSupplyProfit"
+                  />
+                  <MetricCard
+                    label="ETH COIN LỜI (EST)"
+                    value={ethSupplyProfitEst?.valStr || '---'}
+                    sub={ethSupplyProfitEst?.subStr || 'Supply in Profit'}
+                    subCls={ethSupplyProfitEst?.cls || 'text-slate-400'}
+                    tooltipId="ethSupplyProfit"
+                  />
+                </div>
+              </>
+            )}
 
 
 
@@ -1268,11 +1297,11 @@ function App() {
             {[
               { id: 'dashboard', icon: <BarChart2 size={13} />, label: 'DASHBOARD' },
               { id: 'hft',       icon: <Crosshair size={13} />, label: 'DATA' },
-              { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN' },
-              { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY' },
-              { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ' },
-              { id: 'terminal',  icon: <Terminal size={13} />,  label: 'TERMINAL LOGS' },
-            ].map(t => (
+              { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN', moduleId: 'tab_cascade' },
+              { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY', moduleId: 'tab_summary' },
+              { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ', moduleId: 'tab_glossary' },
+              { id: 'terminal',  icon: <Terminal size={13} />,  label: 'TERMINAL LOGS', moduleId: 'tab_terminal' },
+            ].filter(t => !t.moduleId || !isModuleHidden(t.moduleId)).map(t => (
               <button
                 key={t.id}
                 className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
@@ -1453,6 +1482,77 @@ function App() {
                 LƯU &amp; ĐỒNG BỘ
               </button>
             </div>
+
+            <div style={{ borderTop: '1px solid var(--border-panel)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 className="font-mono text-slate-300" style={{ margin: 0, fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <EyeOff size={13} className="text-emerald" /> QUẢN LÝ MODULE ĐÃ ẨN
+                </h4>
+                {hiddenModules.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={showAllModules}
+                    className="font-mono text-emerald"
+                    style={{ background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                  >
+                    Hiển thị tất cả ({hiddenModules.length})
+                  </button>
+                )}
+              </div>
+              
+              <p className="font-mono text-slate-400" style={{ fontSize: '0.55rem', margin: 0, lineHeight: 1.4 }}>
+                Bật toggle ON để hiển thị lại module đã ẩn (chỉ hiển thị các module đang ẩn để tránh nhiễu).
+              </p>
+
+              {hiddenModules.length === 0 ? (
+                <div className="font-mono text-slate-500" style={{ fontSize: '0.58rem', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px dashed var(--border-panel)', textAlign: 'center' }}>
+                  ✓ Không có module nào đang bị ẩn.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {hiddenModules.map(id => {
+                    const meta = MODULES_CONFIG[id] || { label: id, category: 'Khác' };
+                    return (
+                      <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span className="font-mono text-contrast" style={{ fontSize: '0.62rem', fontWeight: 600 }}>{meta.label}</span>
+                          <span className="font-mono text-slate-500" style={{ fontSize: '0.48rem' }}>[{meta.category}]</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => showModule(id)}
+                          title="Bật để hiển thị lại module này"
+                          style={{
+                            width: '36px',
+                            height: '20px',
+                            borderRadius: '10px',
+                            background: 'rgba(255,255,255,0.1)',
+                            border: '1px solid var(--border-panel)',
+                            position: 'relative',
+                            cursor: 'pointer',
+                            transition: 'all 0.25s ease',
+                            padding: 0
+                          }}
+                          className="module-toggle-off"
+                        >
+                          <span style={{
+                            display: 'block',
+                            width: '14px',
+                            height: '14px',
+                            borderRadius: '50%',
+                            background: 'var(--text-slate-400)',
+                            position: 'absolute',
+                            top: '2px',
+                            left: '2px',
+                            transition: 'all 0.25s ease'
+                          }} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1460,4 +1560,10 @@ function App() {
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <ModuleVisibilityProvider>
+      <AppContent />
+    </ModuleVisibilityProvider>
+  );
+}

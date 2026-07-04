@@ -1,6 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Tooltip from './Tooltip';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
+import ModuleMenu from './ModuleMenu';
 
 export default function CascadeTab({
   data,
@@ -11,6 +13,9 @@ export default function CascadeTab({
   CASCADE_KEY_MAP,
   METRIC_METADATA,
 }) {
+  const { isModuleHidden } = useModuleVisibility();
+  if (isModuleHidden('tab_cascade')) return null;
+
   return (
     <motion.div 
       className="cascade-layout"
@@ -19,10 +24,11 @@ export default function CascadeTab({
       transition={{ duration: 0.4 }}
     >
       <div className="glass-panel panel-section">
-        <div className="panel-header">
-          <h3 className="panel-title font-mono text-emerald">
+        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
             [BƯỚC 3] THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN
           </h3>
+          <ModuleMenu moduleId="tab_cascade" />
         </div>
         <p className="text-xs text-slate-400 mb-6" style={{ lineHeight: 1.7, textAlign: 'center' }}>
           Tiền bắt đầu từ FED → chảy vào các thị trường theo thứ tự ưu tiên rủi ro. Sơ đồ minh họa phân bổ dòng tiền cơ sở.

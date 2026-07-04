@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import { glossaryData } from '../services/glossaryData';
 import { Search, X, HelpCircle } from 'lucide-react';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
+import ModuleMenu from './ModuleMenu';
 
 export default function GlossaryTab() {
+  const { isModuleHidden } = useModuleVisibility();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCat, setSelectedCat] = useState('all');
+
+  if (isModuleHidden('tab_glossary')) return null;
 
   const categories = [
     { id: 'all', label: 'TẤT CẢ' },
@@ -25,11 +30,14 @@ export default function GlossaryTab() {
 
   return (
     <div className="glass-panel panel-section glossary-section">
-      <div className="panel-header">
-        <h3 className="panel-title font-mono text-emerald">
+      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
           <HelpCircle size={15} /> 📖 CẨM NANG THUẬT NGỮ &amp; ĐỊNH NGHĨA CHO NEWBIE
         </h3>
-        <span className="panel-badge font-mono">{filteredData.length} thuật ngữ</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="panel-badge font-mono">{filteredData.length} thuật ngữ</span>
+          <ModuleMenu moduleId="tab_glossary" />
+        </div>
       </div>
 
       <p className="text-xs text-slate-400 mb-4" style={{ lineHeight: 1.7 }}>

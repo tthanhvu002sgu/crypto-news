@@ -1,4 +1,6 @@
 import React from 'react';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
+import ModuleMenu from './ModuleMenu';
 
 export default function TerminalTab({
   data,
@@ -10,13 +12,19 @@ export default function TerminalTab({
   fngColor,
   theme,
 }) {
+  const { isModuleHidden } = useModuleVisibility();
+  if (isModuleHidden('tab_terminal')) return null;
+
   return (
     <div className="glass-panel panel-section">
-      <div className="panel-header">
-        <h3 className="panel-title font-mono text-emerald">
+      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
           <span className="dot dot-emerald" /> SOVEREIGN CRAWLER — ACTIVITY LOG
         </h3>
-        <span className="panel-badge font-mono">{data.logs?.length || 0} entries</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="panel-badge font-mono">{data.logs?.length || 0} entries</span>
+          <ModuleMenu moduleId="tab_terminal" />
+        </div>
       </div>
       <div className="terminal-log font-mono">
         {!data.logs || data.logs.length === 0

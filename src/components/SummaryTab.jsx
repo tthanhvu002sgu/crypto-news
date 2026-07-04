@@ -4,6 +4,8 @@ import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
+import ModuleMenu from './ModuleMenu';
 
 const cleanLatex = (text) => {
   if (!text) return text;
@@ -23,6 +25,8 @@ export default function SummaryTab({
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
   btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit
 }) {
+  const { isModuleHidden } = useModuleVisibility();
+  if (isModuleHidden('tab_summary')) return null;
 
   const provider = 'gemini';
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -774,6 +778,7 @@ ${promptData}
               {isAiLoading ? 'GENERATING REPORT...' : 'GENERATE AI REPORT'}
             </button>
           </Tooltip>
+          <ModuleMenu moduleId="tab_summary" />
         </div>
       </div>
     </div>

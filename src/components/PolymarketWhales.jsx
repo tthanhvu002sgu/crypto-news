@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCw, ExternalLink, TrendingUp, Filter } from 'lucide-react';
 import { getPolymarketTopMarkets } from '../services/api';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
+import ModuleMenu from './ModuleMenu';
 
 const categorizeMarket = (m) => {
   const q = (m.question || '').toLowerCase();
@@ -44,7 +46,8 @@ const VOL_FILTERS = [
   { id: 'all', label: 'Tất cả' }
 ];
 
-export default function PolymarketWhales({ fmt }) {
+export default function PolymarketWhales({ fmt, moduleId }) {
+  const { isModuleHidden } = useModuleVisibility();
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,6 +97,8 @@ export default function PolymarketWhales({ fmt }) {
     return filteredMarkets.reduce((sum, m) => sum + (m.volume || 0), 0);
   }, [filteredMarkets]);
 
+  if (moduleId && isModuleHidden(moduleId)) return null;
+
   return (
     <div className="glass-panel whale-panel" style={{ marginTop: 16, marginBottom: 16, border: '1px solid rgba(16, 185, 129, 0.25)', boxShadow: '0 8px 32px rgba(16, 185, 129, 0.05)' }}>
       {/* Header */}
@@ -139,6 +144,7 @@ export default function PolymarketWhales({ fmt }) {
           >
             <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} /> LÀM MỚI
           </button>
+          {moduleId && <ModuleMenu moduleId={moduleId} />}
         </div>
       </div>
 

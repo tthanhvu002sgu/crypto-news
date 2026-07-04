@@ -1871,3 +1871,26 @@
   color: var(--text-contrast);
   text-align: right;
 }
+
+/* ── Module Visibility & Menu ─────────────────────────────────────────── */
+.module-menu-btn:hover {
+  opacity: 1 !important;
+  color: var(--text-contrast, #fff) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.module-dropdown-item:hover {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: var(--color-rose-400, #f87171) !important;
+}
+
+.module-toggle-off:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: var(--color-emerald-400, #10b981) !important;
+}
+
+.module-toggle-off:hover span {
+  background: var(--color-emerald-400, #10b981) !important;
+  transform: translateX(14px);
+}
+
