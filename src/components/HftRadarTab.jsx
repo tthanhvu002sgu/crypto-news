@@ -773,7 +773,7 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
 
 // ─── PANEL 4: Whale Trades ───────────────────────────────────────────────────
 
-function WhaleTradesPanel({ whaleTrades }) {
+function WhaleTradesPanel({ whaleTrades, volume24h }) {
   const [minVolume, setMinVolume] = useState(() => {
     const saved = localStorage.getItem('hft_whale_min_vol');
     return saved ? Number(saved) : 100000;
@@ -852,6 +852,11 @@ function WhaleTradesPanel({ whaleTrades }) {
             }}>
               {netFlow >= 0 ? '+' : ''}{fmtUsd(netFlow)}
             </div>
+            {volume24h > 0 && (
+              <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '3px' }}>
+                Chiếm {(((buyUsd + sellUsd) / volume24h) * 100).toFixed(2)}% Vol 24H
+              </div>
+            )}
           </div>
           <div className="font-mono" style={{
             fontSize: '0.65rem', fontWeight: 700,
@@ -1595,7 +1600,7 @@ export default function HftRadarTab({
         )}
 
         {!isModuleHidden('hft_liquidations') && (
-          <MemoWhaleTradesPanel whaleTrades={whaleTrades} />
+          <MemoWhaleTradesPanel whaleTrades={whaleTrades} volume24h={liveVolume || data?.btc?.volume} />
         )}
 
         {!isModuleHidden('hft_signals') && (

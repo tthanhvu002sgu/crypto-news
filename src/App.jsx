@@ -1066,22 +1066,31 @@ function AppContent() {
 
             {/* BTC Price row */}
             <div className="sidebar-top-row">
-              <div className="btc-hero" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <Tooltip content={METRIC_METADATA.btcPrice}>
-                  <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block', margin: 0 }}>
-                    BITCOIN {wsStatus === 'connected' && <span className="ws-live-tag font-mono">⚡</span>}
-                  </span>
-                </Tooltip>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className={`btc-price font-mono${livePrice ? ' ws-price-live' : ''}`} style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
-                    ${btcDisplay?.price ? fmt(btcDisplay.price, 0) : '---'}
-                  </span>
-                  {btcDisplay?.change != null && (
-                    <span className={`btc-change font-mono ${btcDisplay.change >= 0 ? 'text-emerald' : 'text-rose'}`} style={{ fontSize: '0.65rem', fontWeight: 600, margin: 0 }}>
-                      ({btcDisplay.change >= 0 ? '+' : ''}{btcDisplay.change.toFixed(2)}%)
+              <div className="btc-hero" style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <Tooltip content={METRIC_METADATA.btcPrice}>
+                    <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block', margin: 0 }}>
+                      BITCOIN {wsStatus === 'connected' && <span className="ws-live-tag font-mono">⚡</span>}
                     </span>
-                  )}
+                  </Tooltip>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className={`btc-price font-mono${livePrice ? ' ws-price-live' : ''}`} style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
+                      ${btcDisplay?.price ? fmt(btcDisplay.price, 0) : '---'}
+                    </span>
+                    {btcDisplay?.change != null && (
+                      <span className={`btc-change font-mono ${btcDisplay.change >= 0 ? 'text-emerald' : 'text-rose'}`} style={{ fontSize: '0.65rem', fontWeight: 600, margin: 0 }}>
+                        ({btcDisplay.change >= 0 ? '+' : ''}{btcDisplay.change.toFixed(2)}%)
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {btcDisplay?.volume != null && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+                    <span className="font-mono text-slate-400" style={{ fontSize: '0.65rem' }}>
+                      Vol 24H: {fmtB(btcDisplay.volume)}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
