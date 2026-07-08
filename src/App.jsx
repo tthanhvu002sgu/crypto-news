@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+// Force rebuild trigger: 2026-07-08T20:55:00
 import './App.css';
 import {
   getBTCTicker24h, getBTCKlines, getLongShortRatio,
@@ -1020,7 +1021,7 @@ function AppContent() {
           <div>
             <div className="title-group">
               <h1 className="app-title font-mono">SOVEREIGN MACRO TERMINAL</h1>
-              <span className="version-badge font-mono">v5.0-LIVE</span>
+              <span className="version-badge font-mono">v5.1-LIVE</span>
             </div>
             <p className="subtitle font-mono">
               Phân tích dòng tiền phi cảm xúc • Hoài nghi Socratic • Dữ liệu thực thời gian thực
