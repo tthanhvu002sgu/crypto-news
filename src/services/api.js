@@ -4,9 +4,9 @@ import staticFlowHistory from '../data/etfFlowHistoryStatic.json';
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-const getFredUrl = () => isLocal ? '/api-fred/fred/series/observations' : 'https://api.stlouisfed.org/fred/series/observations';
-const getAlphaUrl = () => isLocal ? '/api-alphavantage/query' : 'https://www.alphavantage.co/query';
-const getCoinMetricsUrl = () => isLocal ? '/api-coinmetrics/v4/timeseries/asset-metrics' : 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
+const getFredUrl = () => '/api-fred/fred/series/observations';
+const getAlphaUrl = () => '/api-alphavantage/query';
+const getCoinMetricsUrl = () => '/api-coinmetrics/v4/timeseries/asset-metrics';
 
 // ─── BINANCE PUBLIC API ────────────────────────────────────────────────────────
 
@@ -919,9 +919,7 @@ const fetchWithProxyFallback = async (targetUrlStr, params) => {
 
 const getFredGraphUrl = (seriesId, units = 'lin') => {
   const unitsParam = units !== 'lin' ? `&units=${units}` : '';
-  return isLocal
-    ? `/api-fred-graph/graph/fredgraph.csv?id=${seriesId}${unitsParam}`
-    : `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}${unitsParam}`;
+  return `/api-fred-graph/graph/fredgraph.csv?id=${seriesId}${unitsParam}`;
 };
 
 // ─── HELPER FOR TEXT-BASED PROXY FALLBACK ─────────────────────────────────────
@@ -1101,9 +1099,7 @@ export const getFredCSVMetric = async (seriesId, units = 'lin') => {
 
 // ─── YAHOO FINANCE STOCK/INDEX QUOTE ──────────────────────────────────────────
 export const getYahooStockQuote = async (ticker) => {
-  const url = isLocal 
-    ? `/api-yahoo/v8/finance/chart/${ticker}` 
-    : `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}`;
+  const url = `/api-yahoo/v8/finance/chart/${ticker}`;
   const params = {
     interval: '1d',
     range: '1d',
@@ -1363,7 +1359,7 @@ export const getAlphaVantageQuote = async (symbol, apiKey) => {
  */
 export const getETFHoldings = async () => {
   try {
-    const url = isLocal ? '/api-bitbo/etf/' : 'https://bitbo.io/etf/';
+    const url = '/api-bitbo/etf/';
     let html = '';
     
     try {

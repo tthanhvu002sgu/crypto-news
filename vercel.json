@@ -1,0 +1,32 @@
+{
+  "rewrites": [
+    {
+      "source": "/api-fred/:path*",
+      "destination": "https://api.stlouisfed.org/:path*"
+    },
+    {
+      "source": "/api-fred-graph/:path*",
+      "destination": "https://fred.stlouisfed.org/:path*"
+    },
+    {
+      "source": "/api-alphavantage/:path*",
+      "destination": "https://www.alphavantage.co/:path*"
+    },
+    {
+      "source": "/api-coinmetrics/:path*",
+      "destination": "https://community-api.coinmetrics.io/:path*"
+    },
+    {
+      "source": "/api-bitbo/:path*",
+      "destination": "https://bitbo.io/:path*"
+    },
+    {
+      "source": "/api-yahoo/:path*",
+      "destination": "https://query2.finance.yahoo.com/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
