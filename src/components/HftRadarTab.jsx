@@ -361,37 +361,11 @@ const clusterOrders = (orders, gap) => {
   return result.sort((a, b) => b.usdValue - a.usdValue);
 };
 
-const GAP_STEPS = [10, 50, 100, 250, 500, 1000];
-
-const sliderToGap = (val) => {
-  const i = Math.floor(val / 100);
-  if (i >= GAP_STEPS.length - 1) return GAP_STEPS[GAP_STEPS.length - 1];
-  const start = GAP_STEPS[i];
-  const end = GAP_STEPS[i + 1];
-  const fraction = (val % 100) / 100;
-  const raw = start + fraction * (end - start);
-  if (raw < 50) return Math.round(raw / 5) * 5;
-  if (raw < 100) return Math.round(raw / 5) * 5;
-  if (raw < 250) return Math.round(raw / 10) * 10;
-  return Math.round(raw / 10) * 10;
-};
-
-const gapToSlider = (g) => {
-  if (g <= GAP_STEPS[0]) return 0;
-  if (g >= GAP_STEPS[GAP_STEPS.length - 1]) return (GAP_STEPS.length - 1) * 100;
-  for (let i = 0; i < GAP_STEPS.length - 1; i++) {
-    if (g >= GAP_STEPS[i] && g <= GAP_STEPS[i + 1]) {
-      const fraction = (g - GAP_STEPS[i]) / (GAP_STEPS[i + 1] - GAP_STEPS[i]);
-      return i * 100 + fraction * 100;
-    }
-  }
-  return 0;
-};
+// Linear gap slider removed non-linear mapping functions
 
 function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls, gap, setGap }) {
   const handleGapChange = (e) => {
-    const sliderVal = Number(e.target.value);
-    const val = sliderToGap(sliderVal);
+    const val = Number(e.target.value);
     setGap(val);
     localStorage.setItem('hft_whale_gap', String(val));
   };
@@ -437,10 +411,10 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
         </div>
         <input
           type="range"
-          min="0"
-          max="500"
-          step="1"
-          value={gapToSlider(gap)}
+          min="10"
+          max="1000"
+          step="10"
+          value={gap}
           onChange={handleGapChange}
           style={{
             width: '100%',
@@ -454,16 +428,28 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
             margin: '4px 0'
           }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.45rem', color: 'var(--text-slate-500)', cursor: 'pointer' }} className="font-mono">
-          {[10, 50, 100, 250, 500, 1000].map(g => (
-            <span
-              key={g}
-              onClick={() => { setGap(g); localStorage.setItem('hft_whale_gap', String(g)); }}
-              style={{ color: gap === g ? 'var(--color-emerald-400)' : 'inherit', fontWeight: gap === g ? 700 : 400 }}
-            >
-              ${g}
-            </span>
-          ))}
+        <div style={{ position: 'relative', height: '14px', fontSize: '0.45rem', color: 'var(--text-slate-500)', cursor: 'pointer', marginTop: '4px' }} className="font-mono">
+          {[10, 250, 500, 750, 1000].map((g, idx, arr) => {
+            const pct = ((g - 10) / 990) * 100;
+            let transform = 'translateX(-50%)';
+            if (idx === 0) transform = 'translateX(0)';
+            if (idx === arr.length - 1) transform = 'translateX(-100%)';
+            return (
+              <span
+                key={g}
+                onClick={() => { setGap(g); localStorage.setItem('hft_whale_gap', String(g)); }}
+                style={{ 
+                  position: 'absolute', 
+                  left: `${pct}%`, 
+                  transform,
+                  color: gap === g ? 'var(--color-emerald-400)' : 'inherit', 
+                  fontWeight: gap === g ? 700 : 400 
+                }}
+              >
+                ${g}
+              </span>
+            );
+          })}
         </div>
       </div>
 

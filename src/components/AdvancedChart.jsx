@@ -1,16 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, CrosshairMode, LineStyle, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
+import { createChart, CrosshairMode, LineStyle, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
 import { getBTCKlines } from '../services/api';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 
 const BINS = 150;
 
+// ─── Helper: format USD values compactly ───────────────────────────────────────
+const fmtWallUsdCompact = (val) => {
+  if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+  if (val >= 1e3) return `$${(val / 1e3).toFixed(0)}K`;
+  return `$${val.toFixed(0)}`;
+};
+
+const fmtPriceCompact = (price) => {
+  if (price >= 1000) return price.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  return price.toFixed(2);
+};
+
 class HeatmapWallPrimitive {
   constructor() {
     this._walls = [];
     this._series = null;
     this._requestUpdate = null;
+    this._options = { wallWidthPct: 35 };
+  }
+  setOptions(opts) {
+    this._options = { ...this._options, ...opts };
+    if (this._requestUpdate) this._requestUpdate();
   }
   attached({ series, requestUpdate }) {
     this._series = series;
@@ -32,8 +49,10 @@ class HeatmapWallPrimitive {
           if (!this._series || !this._walls || !this._walls.length) return;
           target.useMediaCoordinateSpace(({ context, mediaSize }) => {
             const width = mediaSize.width;
+            const height = mediaSize.height;
             context.save();
-            
+
+            // ── Global max USD across all sub-levels for normalization ──
             let maxUsd = 1;
             this._walls.forEach(w => {
               if (w.subLevels && w.subLevels.length) {
@@ -45,6 +64,7 @@ class HeatmapWallPrimitive {
               }
             });
 
+            // ── Render each wall cluster ────────────────────────────────
             this._walls.forEach(w => {
               const yMax = this._series.priceToCoordinate(w.maxPrice || w.price || 0);
               const yMin = this._series.priceToCoordinate(w.minPrice || w.price || 0);
@@ -52,48 +72,116 @@ class HeatmapWallPrimitive {
 
               let topY = Math.min(yMax, yMin);
               let bottomY = Math.max(yMax, yMin);
-              if (bottomY - topY < 20) {
+              const clusterHeight = bottomY - topY;
+              if (clusterHeight < 24) {
                 const center = (topY + bottomY) / 2;
-                topY = center - 10;
-                bottomY = center + 10;
+                topY = center - 12;
+                bottomY = center + 12;
               }
 
               const isBid = w.side === 'BID';
-              
-              // 1. Base translucent block fill
-              context.fillStyle = isBid ? 'rgba(56, 189, 248, 0.08)' : 'rgba(192, 132, 252, 0.08)';
-              context.fillRect(0, topY, width, bottomY - topY);
+              const baseR = isBid ? 56 : 192;
+              const baseG = isBid ? 189 : 132;
+              const baseB = isBid ? 248 : 252;
+              const accentR = isBid ? 14 : 217;
+              const accentG = isBid ? 165 : 70;
+              const accentB = isBid ? 233 : 239;
+              const borderColor = `rgba(${baseR}, ${baseG}, ${baseB}, 0.55)`;
+              const labelColor = `rgba(${baseR}, ${baseG}, ${baseB}, 0.85)`;
 
-              // 2. Heatmap sub-level intensity bars
+              // ── 1. Calculate Peak Sub-level ───────────────────────────
+              let peakSub = null;
+              let peakSubY = null;
+              let peakBarW = 0;
+
+              const MAX_BAR_WIDTH = width * (this._options.wallWidthPct / 100); // Maximum width of the histogram bar
+
+              // Handle sub-levels
               if (w.subLevels && w.subLevels.length > 0) {
-                const subHeight = Math.max(3, Math.min(14, (bottomY - topY) / w.subLevels.length));
+                const subHeight = Math.max(3, Math.min(14, clusterHeight / w.subLevels.length));
+
+                // Find peak sub-level
+                let peakVal = 0;
+                w.subLevels.forEach(sub => {
+                  if (sub.usdValue > peakVal) {
+                    peakVal = sub.usdValue;
+                    peakSub = sub;
+                  }
+                });
+
+                // Draw horizontal bars (Depth Histogram)
                 w.subLevels.forEach(sub => {
                   const subY = this._series.priceToCoordinate(sub.price);
-                  if (subY !== null && subY >= -30 && subY <= mediaSize.height + 30) {
-                    const ratio = Math.min(1, Math.max(0.1, sub.usdValue / maxUsd));
-                    const alpha = (0.15 + ratio * 0.55).toFixed(2);
-                    context.fillStyle = isBid ? `rgba(14, 165, 233, ${alpha})` : `rgba(217, 70, 239, ${alpha})`;
-                    context.fillRect(0, subY - subHeight / 2, width, subHeight);
+                  if (subY !== null && subY >= -30 && subY <= height + 30) {
+                    const ratio = Math.min(1, Math.max(0.05, sub.usdValue / maxUsd));
+                    const barW = ratio * MAX_BAR_WIDTH;
+                    const isPeak = peakSub && sub.price === peakSub.price;
+                    
+                    const alpha = isPeak ? 0.7 : 0.35;
+                    const barH = isPeak ? Math.max(subHeight, 6) : subHeight;
+                    
+                    context.fillStyle = `rgba(${accentR}, ${accentG}, ${accentB}, ${alpha})`;
+                    context.fillRect(width - barW, subY - barH / 2, barW, barH);
+
+                    if (isPeak) {
+                      peakSubY = subY;
+                      peakBarW = barW;
+                    }
                   }
                 });
               } else {
+                // Single-level wall (no sub-levels)
                 const center = (topY + bottomY) / 2;
-                const ratio = Math.min(1, Math.max(0.2, (w.usdValue || 0) / maxUsd));
-                const alpha = (0.2 + ratio * 0.5).toFixed(2);
-                context.fillStyle = isBid ? `rgba(14, 165, 233, ${alpha})` : `rgba(217, 70, 239, ${alpha})`;
-                context.fillRect(0, center - 5, width, 10);
+                const ratio = Math.min(1, Math.max(0.1, (w.usdValue || 0) / maxUsd));
+                const barW = ratio * MAX_BAR_WIDTH;
+                const alpha = 0.5;
+                
+                context.fillStyle = `rgba(${accentR}, ${accentG}, ${accentB}, ${alpha})`;
+                context.fillRect(width - barW, center - 6, barW, 12);
+
+                peakSubY = center;
+                peakBarW = barW;
+                peakSub = { price: w.avgPrice || w.price, usdValue: w.usdValue };
               }
 
-              // 3. Block top & bottom border lines
-              context.strokeStyle = isBid ? 'rgba(56, 189, 248, 0.6)' : 'rgba(192, 132, 252, 0.6)';
-              context.lineWidth = 1;
-              context.setLineDash([4, 4]);
-              context.beginPath();
-              context.moveTo(0, topY);
-              context.lineTo(width, topY);
-              context.moveTo(0, bottomY);
-              context.lineTo(width, bottomY);
-              context.stroke();
+              // ── 2. Peak Volume Label (Pill style) ─────────────────────
+              if (peakSub && peakSubY !== null && peakSubY >= -10 && peakSubY <= height + 10) {
+                const priceText = fmtPriceCompact(peakSub.price);
+                const usdText = fmtWallUsdCompact(peakSub.usdValue);
+                const labelText = `${priceText} | ${usdText}`;
+                
+                context.font = 'bold 10px monospace';
+                const textW = context.measureText(labelText).width;
+                const padX = 6;
+                const padY = 4;
+                const pillW = textW + padX * 2;
+                const pillH = 16;
+                
+                // Position label just to the left of the peak bar
+                const pillX = width - peakBarW - pillW - 4;
+                const pillY = peakSubY - pillH / 2;
+
+                // Background pill
+                context.fillStyle = isBid ? 'rgba(14, 165, 233, 0.85)' : 'rgba(168, 85, 247, 0.85)';
+                context.beginPath();
+                context.roundRect(pillX, pillY, pillW, pillH, 4);
+                context.fill();
+
+                // Text
+                context.fillStyle = '#ffffff';
+                context.textAlign = 'left';
+                context.textBaseline = 'middle';
+                context.fillText(labelText, pillX + padX, peakSubY);
+                
+                // Small connection triangle
+                context.fillStyle = isBid ? 'rgba(14, 165, 233, 0.85)' : 'rgba(168, 85, 247, 0.85)';
+                context.beginPath();
+                context.moveTo(pillX + pillW, peakSubY - 4);
+                context.lineTo(pillX + pillW + 4, peakSubY);
+                context.lineTo(pillX + pillW, peakSubY + 4);
+                context.closePath();
+                context.fill();
+              }
             });
             context.restore();
           });
@@ -243,6 +331,38 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
   const [showLiq, setShowLiq] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
 
+  // Settings state
+  const [wallWidth, setWallWidth] = useState(() => parseInt(localStorage.getItem('hft_wall_width')) || 35);
+  const [rightOffset, setRightOffset] = useState(() => parseInt(localStorage.getItem('hft_right_offset')) || 120);
+
+  // Apply Wall Width dynamically
+  useEffect(() => {
+    if (wallPrimitiveRef.current) {
+      wallPrimitiveRef.current.setOptions({ wallWidthPct: wallWidth });
+    }
+  }, [wallWidth]);
+
+  // Apply Right Offset dynamically
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.timeScale().applyOptions({ rightOffset: rightOffset });
+    }
+  }, [rightOffset]);
+
+  const handleWallWidthChange = (e) => {
+    let val = parseInt(e.target.value);
+    if (isNaN(val)) val = 0;
+    setWallWidth(val);
+    localStorage.setItem('hft_wall_width', val);
+  };
+
+  const handleRightOffsetChange = (e) => {
+    let val = parseInt(e.target.value);
+    if (isNaN(val)) val = 0;
+    setRightOffset(val);
+    localStorage.setItem('hft_right_offset', val);
+  };
+
   useEffect(() => {
     const isLight = theme === 'light';
     const textColor = isLight ? '#333333' : '#d1d5db';
@@ -268,18 +388,16 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
           borderColor: gridColor,
           timeVisible: true,
           shiftVisibleRangeOnNewBar: true,
-          rightOffset: 25,
+          rightOffset: rightOffset,
         },
         autoSize: true,
       });
 
-      const mainSeries = chart.addSeries(CandlestickSeries, {
-        upColor: '#10b981',
-        downColor: '#f43f5e',
-        borderDownColor: '#f43f5e',
-        borderUpColor: '#10b981',
-        wickDownColor: '#f43f5e',
-        wickUpColor: '#10b981',
+      const isLight = theme === 'light';
+      const mainSeries = chart.addSeries(LineSeries, {
+        color: isLight ? '#000000' : '#ffffff',
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
       });
 
       const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -315,10 +433,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
       
       let formatted = rawKlines.map(k => ({
         time: Math.floor(k.time.getTime() / 1000),
-        open: k.open,
-        high: k.high,
-        low: k.low,
-        close: k.close,
+        value: k.close,
       }));
 
       // Lightweight-charts requires strictly ascending unique times
@@ -364,7 +479,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
             const volume = parseFloat(k.v);
             const color = close >= open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)';
             
-            seriesRef.current.update({ time, open, high, low, close });
+            seriesRef.current.update({ time, value: close });
             volumeSeriesRef.current.update({ time, value: volume, color });
             if (autoScrollRef.current && chartRef.current) {
               chartRef.current.timeScale().scrollToRealTime();
@@ -406,8 +521,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
         color: '#fbbf24',
         lineWidth: 2,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
-        title: 'POC',
+        axisLabelVisible: false,
+        title: `POC ${fmtPriceCompact(vp.pocPrice)}`,
       });
 
       vahLineRef.current = seriesRef.current.createPriceLine({
@@ -437,8 +552,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
           color: z.color,
           lineWidth: 1,
           lineStyle: LineStyle.SparseDotted,
-          axisLabelVisible: true,
-          title: z.label,
+          axisLabelVisible: false,
+          title: `${fmtPriceCompact(z.price)} | ${z.label}`,
         });
         liqLinesRef.current.push(line);
       });
@@ -460,25 +575,27 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
         .slice(0, 3);
 
       topBids.forEach(w => {
+        const avgP = w.avgPrice || w.price;
         const line = seriesRef.current.createPriceLine({
-          price: w.avgPrice || w.price,
+          price: avgP,
           color: '#38bdf8',
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: `${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
+          axisLabelVisible: false,
+          title: `${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
         });
         wallLinesRef.current.push(line);
       });
 
       topAsks.forEach(w => {
+        const avgP = w.avgPrice || w.price;
         const line = seriesRef.current.createPriceLine({
-          price: w.avgPrice || w.price,
+          price: avgP,
           color: '#c084fc',
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: `${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
+          axisLabelVisible: false,
+          title: `${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
         });
         wallLinesRef.current.push(line);
       });
@@ -500,6 +617,31 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
           <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
         </h3>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+          
+          {/* Settings Inputs */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }} title="Tỉ lệ % chiều rộng của vùng Limit Wall">WALL WIDTH:</span>
+            <input 
+              type="number" 
+              value={wallWidth} 
+              onChange={handleWallWidthChange} 
+              style={{ width: '35px', background: 'transparent', border: 'none', color: 'var(--text-slate-200)', fontSize: '0.7rem', outline: 'none', textAlign: 'right' }} 
+              min="10" max="100" 
+            />
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-500)' }}>%</span>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }} title="Khoảng cách từ nến hiện tại đến lề phải (đơn vị: số nến)">OFFSET:</span>
+            <input 
+              type="number" 
+              value={rightOffset} 
+              onChange={handleRightOffsetChange} 
+              style={{ width: '35px', background: 'transparent', border: 'none', color: 'var(--text-slate-200)', fontSize: '0.7rem', outline: 'none', textAlign: 'right' }} 
+              min="0" max="300" 
+            />
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-500)' }}>BARS</span>
+          </div>
           <button
             onClick={() => {
               if (chartRef.current) {
@@ -624,9 +766,9 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
       </div>
 
       <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem', lineHeight: 1.6 }}>
-        <span style={{color: '#fbbf24'}}>POC</span>: Khối lượng lớn nhất |{' '}
-        <span style={{color: '#38bdf8'}}>Bid</span> / <span style={{color: '#c084fc'}}>Ask</span>: Top tường mua/bán khủng ($\ge \$500K$) |{' '}
-        <span style={{color: '#f43f5e'}}>Short Liq</span> / <span style={{color: '#10b981'}}>Long Liq</span>: Vùng ước tính quét thanh lý đòn bẩy cao.
+        <span style={{color: '#38bdf8'}}>Limit Walls</span>: Chiều dài các thanh ngang thể hiện khối lượng lệnh chờ khớp (Bid/Ask) tại mỗi mức giá.{' '}
+        <span style={{background: 'rgba(168, 85, 247, 0.85)', color: '#fff', padding: '2px 6px', borderRadius: '4px', margin: '0 4px', display: 'inline-block'}}>63,000 | $1M</span>:{' '}
+        Nhãn hiển thị <span style={{color: '#fbbf24'}}>Mức giá</span> có thanh khoản lớn nhất | <span style={{color: '#fbbf24'}}>Tổng USD</span> chờ khớp tại cụm đó.
       </div>
     </div>
   );

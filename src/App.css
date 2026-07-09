@@ -26,6 +26,8 @@
   z-index: 40;
   flex-shrink: 0;
   position: relative;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 /* Clean bottom border accent */
@@ -40,7 +42,7 @@
 }
 
 .header-left { display: flex; align-items: center; gap: 14px; }
-.header-right { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 10px; pointer-events: auto; -webkit-app-region: no-drag; }
 
 .logo-box {
   width: 34px; height: 34px;
@@ -302,6 +304,9 @@
   padding-bottom: 0;
   flex-shrink: 0;
   border-bottom: none;
+  pointer-events: auto;
+  position: relative;
+  z-index: 10;
 }
 .tab-btn {
   display: flex; align-items: center; gap: 6px;
