@@ -100,7 +100,8 @@ export const METRIC_METADATA = {
   cvd: {
     api: 'Binance WebSocket (btcusdt@aggTrade)',
     def: 'Chênh lệch tích lũy giữa volume lệnh Mua chủ động (Taker Buy) và lệnh Bán chủ động (Taker Sell) từ thời điểm mở trang.',
-    formula: 'CVD = Σ(Taker Buy Vol) - Σ(Taker Sell Vol)'
+    formula: 'CVD = Σ(Taker Buy Vol) - Σ(Taker Sell Vol)',
+    sessionOnly: true
   },
   whaleWalls: {
     api: 'Binance Futures API (REST - 1000 levels)',
@@ -293,6 +294,23 @@ export default function Tooltip({ content, lastUpdated, children }) {
             </div>
           )}
           <p style={{ margin: 0 }}>{content.def}</p>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', marginBottom: '2px' }}>
+            {isRealTime && (
+              <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '3px 6px', borderRadius: '4px', fontSize: '0.55rem', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                🟢 Liên tục
+              </span>
+            )}
+            {content.sessionOnly && (
+              <span style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '3px 6px', borderRadius: '4px', fontSize: '0.55rem', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                ⏳ Tính từ lúc tải trang
+              </span>
+            )}
+            {!isRealTime && (
+              <span style={{ background: 'rgba(148, 163, 184, 0.15)', color: 'var(--text-slate-400)', padding: '3px 6px', borderRadius: '4px', fontSize: '0.55rem', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid rgba(148, 163, 184, 0.3)' }}>
+                🔄 Cập nhật định kỳ
+              </span>
+            )}
+          </div>
           {displayTime && (
             <div style={{ borderTop: '1px solid var(--border-panel)', paddingTop: '6px', marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ color: 'var(--text-tooltip-title)' }}>Cập nhật:</span>
