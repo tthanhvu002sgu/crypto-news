@@ -384,6 +384,16 @@ function TargetLiquidityPanel({
   const sortedAsks = useMemo(() => clusteredAsks.slice(0, 10), [clusteredAsks]);
   const sortedBids = useMemo(() => clusteredBids.slice(0, 10), [clusteredBids]);
 
+  const maxUsdVol = useMemo(() => {
+    let max = 0;
+    sortedAsks.forEach(w => max = Math.max(max, w.usdValue));
+    sortedBids.forEach(w => max = Math.max(max, w.usdValue));
+    return max || 1;
+  }, [sortedAsks, sortedBids]);
+
+  const getAskColor = (val) => `rgba(244, 63, 94, ${0.35 + 0.65 * (val / maxUsdVol)})`;
+  const getBidColor = (val) => `rgba(16, 185, 129, ${0.35 + 0.65 * (val / maxUsdVol)})`;
+
   if (!clusteredBids.length && !clusteredAsks.length && !bidRatio) {
     return (
       <div className={containerClass} style={containerStyle}>
@@ -527,8 +537,8 @@ function TargetLiquidityPanel({
                           </span>
                         )}
                       </td>
-                      <td>{w.qty.toFixed(3)}</td>
-                      <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
+                      <td style={{ color: getAskColor(w.usdValue), fontWeight: 600 }}>{w.qty.toFixed(3)}</td>
+                      <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''} style={{ color: getAskColor(w.usdValue) }}>
                         <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
                         {w.sources && (
                           <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
@@ -599,8 +609,8 @@ function TargetLiquidityPanel({
                           </span>
                         )}
                       </td>
-                      <td>{w.qty.toFixed(3)}</td>
-                      <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
+                      <td style={{ color: getBidColor(w.usdValue), fontWeight: 600 }}>{w.qty.toFixed(3)}</td>
+                      <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''} style={{ color: getBidColor(w.usdValue) }}>
                         <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
                         {w.sources && (
                           <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
@@ -655,7 +665,14 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
   const renderDepthSlider = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>SỔ LỆNH DEPTH (OBI LEVEL)</span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>SỔ LỆNH DEPTH (OBI LEVEL)</span>
+          {orderBook?.minBid > 0 && orderBook?.maxAsk > 0 && (
+            <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem', marginTop: '2px' }}>
+              Vùng giá: {orderBook.minBid.toLocaleString()} ~ {orderBook.maxAsk.toLocaleString()}
+            </span>
+          )}
+        </div>
         <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>{depthLimit} Levels</span>
       </div>
       <input

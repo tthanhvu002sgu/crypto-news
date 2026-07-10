@@ -676,6 +676,8 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
     let totalAskVol = 0;
     let binanceBestBid = 0;
     let binanceBestAsk = 0;
+    let binanceMinBid = 0;
+    let binanceMaxAsk = 0;
 
     const okxScale = getOKXContractSize(symbol);
 
@@ -695,6 +697,8 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
       if (sourceName === 'Binance Futures') {
         binanceBestBid = bids.length > 0 ? parseFloat(bids[0][0]) : 0;
         binanceBestAsk = asks.length > 0 ? parseFloat(asks[0][0]) : 0;
+        binanceMinBid = bids.length > 0 ? parseFloat(bids[bids.length - 1][0]) : 0;
+        binanceMaxAsk = asks.length > 0 ? parseFloat(asks[asks.length - 1][0]) : 0;
       }
     });
 
@@ -726,6 +730,8 @@ export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
       spread: parseFloat(spread.toFixed(4)),      // %
       bestBid: binanceBestBid,
       bestAsk: binanceBestAsk,
+      minBid: binanceMinBid,
+      maxAsk: binanceMaxAsk,
       bidVolBtc: parseFloat(totalBidVol.toFixed(2)),
       askVolBtc: parseFloat(totalAskVol.toFixed(2)),
       bidVolUsd: Math.round(bidVolUsd),
