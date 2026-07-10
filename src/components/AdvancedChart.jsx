@@ -503,14 +503,14 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
     if (!seriesRef.current || !klines) return;
 
     // Clean up existing lines
-    if (pocLineRef.current) { seriesRef.current.removePriceLine(pocLineRef.current); pocLineRef.current = null; }
-    if (vahLineRef.current) { seriesRef.current.removePriceLine(vahLineRef.current); vahLineRef.current = null; }
-    if (valLineRef.current) { seriesRef.current.removePriceLine(valLineRef.current); valLineRef.current = null; }
+    if (pocLineRef.current) { try { seriesRef.current.removePriceLine(pocLineRef.current); } catch(e) {} pocLineRef.current = null; }
+    if (vahLineRef.current) { try { seriesRef.current.removePriceLine(vahLineRef.current); } catch(e) {} vahLineRef.current = null; }
+    if (valLineRef.current) { try { seriesRef.current.removePriceLine(valLineRef.current); } catch(e) {} valLineRef.current = null; }
     
-    liqLinesRef.current.forEach(l => seriesRef.current.removePriceLine(l));
+    liqLinesRef.current.forEach(l => { try { seriesRef.current.removePriceLine(l); } catch(e) {} });
     liqLinesRef.current = [];
 
-    wallLinesRef.current.forEach(l => seriesRef.current.removePriceLine(l));
+    wallLinesRef.current.forEach(l => { try { seriesRef.current.removePriceLine(l); } catch(e) {} });
     wallLinesRef.current = [];
     if (wallPrimitiveRef.current) wallPrimitiveRef.current.setData([]);
 
