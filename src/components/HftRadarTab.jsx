@@ -366,6 +366,12 @@ const clusterOrders = (orders, gap) => {
 function TargetLiquidityPanel({
   clusteredBids, clusteredAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls, gap, setGap, isNested
 }) {
+  const [expandedRows, setExpandedRows] = useState({});
+
+  const toggleRow = (key) => {
+    setExpandedRows(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const containerStyle = isNested ? { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' } : undefined;
   const containerClass = isNested ? "" : "hft-panel glass-panel";
 
@@ -490,121 +496,149 @@ function TargetLiquidityPanel({
             </thead>
             <tbody>
               {/* Resistance first */}
-              {sortedAsks.map((w, i) => (
-                <tr key={`ask-${i}`} className="whale-row-ask">
-                  <td>
-                    <span className="liq-side-tag liq-tag-long">
-                      RESISTANCE
-                    </span>
-                  </td>
-                  <td>
-                    {w.minPrice && w.maxPrice && w.minPrice !== w.maxPrice && w.count > 1 ? `${fmtPrice(w.minPrice)} ~ ${fmtPrice(w.maxPrice)}` : (w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price))}
-                    {w.count > 1 && (
-                      <span
-                        style={{
-                          fontSize: '0.5rem',
-                          color: '#f59e0b',
-                          marginLeft: '5px',
-                          background: 'rgba(245, 158, 11, 0.15)',
-                          padding: '1px 4px',
-                          borderRadius: '3px',
-                          border: '1px solid rgba(245, 158, 11, 0.3)',
-                          display: 'inline-block'
-                        }}
-                        title={`Gộp từ ${w.count} lệnh limit`}
-                      >
-                        ⚡{w.count}
-                      </span>
-                    )}
-                  </td>
-                  <td>{w.qty.toFixed(3)}</td>
-                  <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
-                    <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
-                    {w.sources && (
-                      <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
-                        {Object.keys(w.sources).map(src => {
-                          const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
-                          return (
-                            <span
-                              key={src}
-                              title={`${src}: ${fmtUsd(w.sources[src])}`}
-                              style={{
-                                fontSize: '0.45rem',
-                                color: 'var(--text-slate-400)',
-                                border: '1px solid var(--border-panel)',
-                                borderRadius: '2px',
-                                padding: '1px 3px',
-                                background: 'rgba(15, 23, 42, 0.4)',
-                                fontWeight: 'normal'
-                              }}
-                            >
-                              {shortName}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {sortedAsks.map((w, i) => {
+                const rowKey = `ask-${i}`;
+                const isExpanded = expandedRows[rowKey];
+                return (
+                  <React.Fragment key={rowKey}>
+                    <tr className="whale-row-ask" onClick={w.count > 1 ? () => toggleRow(rowKey) : undefined} style={{ cursor: w.count > 1 ? 'pointer' : 'default' }}>
+                      <td>
+                        <span className="liq-side-tag liq-tag-long">
+                          RESISTANCE
+                        </span>
+                      </td>
+                      <td>
+                        {w.minPrice && w.maxPrice && w.minPrice !== w.maxPrice && w.count > 1 ? `${fmtPrice(w.minPrice)} ~ ${fmtPrice(w.maxPrice)}` : (w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price))}
+                        {w.count > 1 && (
+                          <span
+                            style={{
+                              fontSize: '0.5rem',
+                              color: '#f59e0b',
+                              marginLeft: '5px',
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              padding: '2px 5px',
+                              borderRadius: '3px',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              display: 'inline-block'
+                            }}
+                            title={`Gộp từ ${w.count} lệnh limit. Bấm để xem chi tiết`}
+                          >
+                            ⚡{w.count} {isExpanded ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </td>
+                      <td>{w.qty.toFixed(3)}</td>
+                      <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
+                        <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
+                        {w.sources && (
+                          <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
+                            {Object.keys(w.sources).map(src => {
+                              const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
+                              return (
+                                <span
+                                  key={src}
+                                  title={`${src}: ${fmtUsd(w.sources[src])}`}
+                                  style={{
+                                    fontSize: '0.45rem',
+                                    color: 'var(--text-slate-400)',
+                                    border: '1px solid var(--border-panel)',
+                                    borderRadius: '2px',
+                                    padding: '1px 3px',
+                                    background: 'rgba(15, 23, 42, 0.4)',
+                                    fontWeight: 'normal'
+                                  }}
+                                >
+                                  {shortName}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && w.subLevels && w.subLevels.map((sub, j) => (
+                      <tr key={`${rowKey}-sub-${j}`} style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        <td style={{ paddingLeft: '24px', color: 'var(--text-slate-500)', fontSize: '0.65rem' }}>↳ Lệnh đơn</td>
+                        <td style={{ color: 'var(--text-slate-300)', fontSize: '0.65rem' }}>{fmtPrice(sub.price)}</td>
+                        <td style={{ color: 'var(--text-slate-300)', fontSize: '0.65rem' }}>{sub.qty.toFixed(3)}</td>
+                        <td style={{ color: 'var(--text-slate-300)', fontSize: '0.65rem' }}>{fmtUsd(sub.usdValue)}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
               {/* Support second */}
-              {sortedBids.map((w, i) => (
-                <tr key={`bid-${i}`} className="whale-row-bid">
-                  <td>
-                    <span className="liq-side-tag liq-tag-short">
-                      SUPPORT
-                    </span>
-                  </td>
-                  <td>
-                    {w.minPrice && w.maxPrice && w.minPrice !== w.maxPrice && w.count > 1 ? `${fmtPrice(w.minPrice)} ~ ${fmtPrice(w.maxPrice)}` : (w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price))}
-                    {w.count > 1 && (
-                      <span
-                        style={{
-                          fontSize: '0.5rem',
-                          color: '#f59e0b',
-                          marginLeft: '5px',
-                          background: 'rgba(245, 158, 11, 0.15)',
-                          padding: '1px 4px',
-                          borderRadius: '3px',
-                          border: '1px solid rgba(245, 158, 11, 0.3)',
-                          display: 'inline-block'
-                        }}
-                        title={`Gộp từ ${w.count} lệnh limit`}
-                      >
-                        ⚡{w.count}
-                      </span>
-                    )}
-                  </td>
-                  <td>{w.qty.toFixed(3)}</td>
-                  <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
-                    <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
-                    {w.sources && (
-                      <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
-                        {Object.keys(w.sources).map(src => {
-                          const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
-                          return (
-                            <span
-                              key={src}
-                              title={`${src}: ${fmtUsd(w.sources[src])}`}
-                              style={{
-                                fontSize: '0.45rem',
-                                color: 'var(--text-slate-400)',
-                                border: '1px solid var(--border-panel)',
-                                borderRadius: '2px',
-                                padding: '1px 3px',
-                                background: 'rgba(15, 23, 42, 0.4)',
-                                fontWeight: 'normal'
-                              }}
-                            >
-                              {shortName}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {sortedBids.map((w, i) => {
+                const rowKey = `bid-${i}`;
+                const isExpanded = expandedRows[rowKey];
+                return (
+                  <React.Fragment key={rowKey}>
+                    <tr className="whale-row-bid" onClick={w.count > 1 ? () => toggleRow(rowKey) : undefined} style={{ cursor: w.count > 1 ? 'pointer' : 'default' }}>
+                      <td>
+                        <span className="liq-side-tag liq-tag-short">
+                          SUPPORT
+                        </span>
+                      </td>
+                      <td>
+                        {w.minPrice && w.maxPrice && w.minPrice !== w.maxPrice && w.count > 1 ? `${fmtPrice(w.minPrice)} ~ ${fmtPrice(w.maxPrice)}` : (w.count > 1 ? `${fmtPrice(w.price)} ~ ${fmtPrice(w.priceHigh)}` : fmtPrice(w.avgPrice || w.price))}
+                        {w.count > 1 && (
+                          <span
+                            style={{
+                              fontSize: '0.5rem',
+                              color: '#f59e0b',
+                              marginLeft: '5px',
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              padding: '2px 5px',
+                              borderRadius: '3px',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              display: 'inline-block'
+                            }}
+                            title={`Gộp từ ${w.count} lệnh limit. Bấm để xem chi tiết`}
+                          >
+                            ⚡{w.count} {isExpanded ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </td>
+                      <td>{w.qty.toFixed(3)}</td>
+                      <td className={w.usdValue >= 1e6 ? 'whale-mega' : ''}>
+                        <div style={{ fontWeight: w.usdValue >= 1e6 ? 'bold' : 'normal' }}>{fmtUsd(w.usdValue)}</div>
+                        {w.sources && (
+                          <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '3px' }}>
+                            {Object.keys(w.sources).map(src => {
+                              const shortName = src.replace(' Futures', '-F').replace(' Spot', '-S').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT');
+                              return (
+                                <span
+                                  key={src}
+                                  title={`${src}: ${fmtUsd(w.sources[src])}`}
+                                  style={{
+                                    fontSize: '0.45rem',
+                                    color: 'var(--text-slate-400)',
+                                    border: '1px solid var(--border-panel)',
+                                    borderRadius: '2px',
+                                    padding: '1px 3px',
+                                    background: 'rgba(15, 23, 42, 0.4)',
+                                    fontWeight: 'normal'
+                                  }}
+                                >
+                                  {shortName}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && w.subLevels && w.subLevels.map((sub, j) => (
+                      <tr key={`${rowKey}-sub-${j}`} style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        <td style={{ paddingLeft: '24px', color: 'var(--text-slate-500)', fontSize: '0.65rem' }}>↳ Lệnh đơn</td>
+                        <td style={{ color: 'var(--text-slate-300)', fontSize: '0.65rem' }}>{fmtPrice(sub.price)}</td>
+                        <td style={{ color: 'var(--text-slate-300)', fontSize: '0.65rem' }}>{sub.qty.toFixed(3)}</td>
+                        <td style={{ color: 'var(--text-slate-300)', fontSize: '0.65rem' }}>{fmtUsd(sub.usdValue)}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
