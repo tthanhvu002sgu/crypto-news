@@ -1569,8 +1569,15 @@ export default function HftRadarTab({
           />
         )}
 
-        {!isModuleHidden('hft_whale_walls') && (
-          <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
+        {(!isModuleHidden('hft_heatmap') || !isModuleHidden('hft_whale_walls')) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%' }}>
+            {!isModuleHidden('hft_heatmap') && (
+              <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
+            )}
+            {!isModuleHidden('hft_whale_walls') && (
+              <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
+            )}
+          </div>
         )}
 
         {!isModuleHidden('hft_orderbook') && (
@@ -1579,10 +1586,6 @@ export default function HftRadarTab({
             depthLimit={depthLimit}
             setDepthLimit={setDepthLimit}
           />
-        )}
-
-        {!isModuleHidden('hft_heatmap') && (
-          <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
         )}
 
         {!isModuleHidden('hft_liquidations') && (
