@@ -309,7 +309,7 @@ function calculateLiqZones(klines) {
   return zones;
 }
 
-function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
+function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const { isModuleHidden } = useModuleVisibility();
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -611,7 +611,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
   if (moduleId && isModuleHidden(moduleId)) return null;
 
   return (
-    <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2', position: 'relative', height: '520px', display: 'flex', flexDirection: 'column' }}>
+    <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2', position: 'relative', minHeight: '520px', height: 'auto', display: 'flex', flexDirection: 'column' }}>
       <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
@@ -728,7 +728,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
       
       {loading && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>Loading...</div>}
       
-      <div style={{ flexGrow: 1, position: 'relative', marginTop: '10px' }}>
+      <div style={{ flex: 1, width: '100%', position: 'relative', minHeight: '400px' }}>
         <div ref={chartContainerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
         {!autoScroll && (
           <button
@@ -770,6 +770,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId }) {
         <span style={{background: 'rgba(168, 85, 247, 0.85)', color: '#fff', padding: '2px 6px', borderRadius: '4px', margin: '0 4px', display: 'inline-block'}}>63,000 | $1M</span>:{' '}
         Nhãn hiển thị <span style={{color: '#fbbf24'}}>Mức giá</span> có thanh khoản lớn nhất | <span style={{color: '#fbbf24'}}>Tổng USD</span> chờ khớp tại cụm đó.
       </div>
+      {children}
     </div>
   );
 }

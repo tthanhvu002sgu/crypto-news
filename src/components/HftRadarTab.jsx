@@ -363,7 +363,12 @@ const clusterOrders = (orders, gap) => {
 
 // Linear gap slider removed non-linear mapping functions
 
-function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls, gap, setGap }) {
+function TargetLiquidityPanel({
+  clusteredBids, clusteredAsks, bidWallTotal, askWallTotal, bidRatio, signal, signalCls, gap, setGap, isNested
+}) {
+  const containerStyle = isNested ? { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' } : undefined;
+  const containerClass = isNested ? "" : "hft-panel glass-panel";
+
   const handleGapChange = (e) => {
     const val = Number(e.target.value);
     setGap(val);
@@ -375,7 +380,7 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
 
   if (!clusteredBids.length && !clusteredAsks.length && !bidRatio) {
     return (
-      <div className="hft-panel glass-panel">
+      <div className={containerClass} style={containerStyle}>
         <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Tooltip content={METRIC_METADATA.whaleWalls}>
             <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
@@ -390,7 +395,7 @@ function TargetLiquidityPanel({ clusteredBids, clusteredAsks, bidWallTotal, askW
   }
 
   return (
-    <div className="hft-panel glass-panel">
+    <div className={containerClass} style={containerStyle}>
       <div className="hft-panel-header">
         <Tooltip content={METRIC_METADATA.whaleWalls}>
           <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
@@ -1305,7 +1310,7 @@ const MemoTargetLiquidityPanel = React.memo(TargetLiquidityPanel);
 
 // ─── Wrapper: computes clustered data from raw whaleData + gap ────────────────
 
-function TargetLiquidityPanelWrapper({ whaleData, whaleGap, setWhaleGap }) {
+function TargetLiquidityPanelWrapper({ whaleData, whaleGap, setWhaleGap, isNested }) {
   const { whaleBids, whaleAsks, bidRatio, signal, signalCls } = whaleData || {};
 
   const clusteredBids = useMemo(() => clusterOrders(whaleBids || [], whaleGap), [whaleBids, whaleGap]);
@@ -1325,11 +1330,12 @@ function TargetLiquidityPanelWrapper({ whaleData, whaleGap, setWhaleGap }) {
       signalCls={signalCls}
       gap={whaleGap}
       setGap={setWhaleGap}
+      isNested={isNested}
     />
   );
 }
 
-function AdvancedChartWrapper({ theme, whaleData, whaleGap }) {
+function AdvancedChartWrapper({ theme, whaleData, whaleGap, children }) {
   const clusteredWhaleData = useMemo(() => {
     if (!whaleData) return null;
     const clusteredBids = clusterOrders(whaleData.whaleBids || [], whaleGap);
@@ -1341,7 +1347,7 @@ function AdvancedChartWrapper({ theme, whaleData, whaleGap }) {
     };
   }, [whaleData, whaleGap]);
 
-  return <AdvancedChart theme={theme} whaleData={clusteredWhaleData} moduleId="hft_heatmap" />;
+  return <AdvancedChart theme={theme} whaleData={clusteredWhaleData} moduleId="hft_heatmap">{children}</AdvancedChart>;
 }
 
 
@@ -1570,14 +1576,11 @@ export default function HftRadarTab({
         )}
 
         {(!isModuleHidden('hft_heatmap') || !isModuleHidden('hft_whale_walls')) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%' }}>
-            {!isModuleHidden('hft_heatmap') && (
-              <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap} />
-            )}
+          <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap}>
             {!isModuleHidden('hft_whale_walls') && (
-              <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} />
+              <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={true} />
             )}
-          </div>
+          </MemoAdvancedChartWrapper>
         )}
 
         {!isModuleHidden('hft_orderbook') && (
