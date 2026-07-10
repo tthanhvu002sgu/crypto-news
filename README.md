@@ -1,75 +1,59 @@
-# React + Vite
+# Crypto News & HFT Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## 1. Tổng quan các tính năng (Features Overview)
+Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ thuật (Technical Analysis), và Phân tích dòng tiền tần suất cao (High-Frequency Trading - HFT) cho thị trường Crypto (chủ yếu là BTC, ETH, SOL).
 
-Currently, two official plugins are available:
+**Các tính năng cốt lõi:**
+- **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
+- **HFT Radar (Phân tích dòng tiền Phái sinh):**
+  - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta realtime và phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
+  - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
+  - **Advanced Price Action:** Biểu đồ TradingView tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản) và Liquidity Zones (Vùng thanh lý đòn bẩy).
+  - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
+- **AI Summary & Nupl / Supply in Profit:** Tích hợp AI (Gemini) để phân tích báo cáo thị trường, tâm lý, cảnh báo các mốc kháng cự/hỗ trợ.
+- **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 2. Kiến trúc hệ thống (System Architecture)
+- **Frontend Framework:** React.js (Sử dụng Vite hoặc Create React App).
+- **Biểu đồ (Charting):** `lightweight-charts` (Biểu đồ nến và các mức giá), `chart.js` & `react-chartjs-2` (Biểu đồ cột/đường cho ETF, CVD).
+- **Quản lý trạng thái (State Management):** React Hooks (`useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`), Context API (`ModuleVisibilityContext`).
+- **Nguồn dữ liệu (Data Sources):**
+  - **REST API:** Binance, Bybit, OKX, Bitget (Lấy Order Book, Klines, Funding Rate, Open Interest). Coinglass API (Lấy ETF Flows, Liquidations).
+  - **WebSocket:** Binance `aggTrade` (Lấy tick-level trades để tính toán CVD, Footprint Nodes và Whale Trades realtime).
+- **Lưu trữ cục bộ:** `localStorage` để lưu cấu hình giao diện người dùng (Gap, Theme, API Keys, Module Visibility, v.v.).
 
-## React Compiler
+## 3. Các thành phần chính (Components)
+### Giao diện / Bố cục (UI/Layout)
+- `App.jsx`: Component gốc quản lý Routing/Tabs (HFT Radar, Cascade, AI Summary) và quản lý kết nối WebSocket tổng.
+- `Dashboard.jsx`: Có thể là layout chính bao bọc các thành phần.
+- `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Các Tabs chính
+- `HftRadarTab.jsx`: Tab quan trọng nhất chứa các module phân tích HFT.
+  - `CVDPanel`: Hiển thị CVD Line Chart, Gauge tỷ lệ Buy/Sell, và Bảng Footprint Node (được tính toán từ trade tick realtime).
+  - `WhaleTradesPanel`: Danh sách lệnh cá mập quét từ WebSocket.
+  - `AdvancedChart.jsx`: Biểu đồ Klines tích hợp Line (POC, VAH, VAL), Limit Walls và Liquidation Zones. Có nhúng module `TargetLiquidityPanel`.
+  - `TargetLiquidityPanel`: Tích hợp vào trong Advanced Chart, hiển thị cụm lệnh chờ Limit Walls theo mức Gap do người dùng chọn.
+  - `OrderBookPanel`: Phân tích sổ lệnh tổng hợp (OBI) từ các sàn với khả năng mở rộng/thu hẹp depth levels, hiển thị vùng giá và màu sắc heatmap theo Volume.
+- `CascadeTab.jsx`: Bảng Heatmap/Grid hiển thị các chỉ số phái sinh đa khung.
+- `SummaryTab.jsx`: Bảng tóm tắt nội dung AI dựa trên dữ liệu.
 
-## Expanding the ESLint configuration
+### Dịch vụ (Services)
+- `api.js`: File chứa hàm gọi HTTP REST API đa sàn. Đáng chú ý có `getOrderBookDepth` (gom orderbook).
+- `websocket.js`: Khởi tạo và quản lý WebSocket (`useCVDStream` để lấy aggTrade).
+- `coinglass.js`: Giao tiếp với API của Coinglass.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 4. Các Task đã làm (Completed Tasks)
+- [x] Gộp module `TargetLiquidityPanel` vào bên trong 100% diện tích của `AdvancedChart`.
+- [x] Mở rộng `OrderBookPanel` (OBI) và đưa `WhaleTradesPanel` lên cùng một hàng lưới.
+- [x] Tạo hiệu ứng Dropdown (Accordion) cho bảng Limit Walls trong Target Liquidity (Cho phép xem chi tiết các lệnh cấu thành một cụm).
+- [x] Hiệu chỉnh Heatmap (Gradient/Opacity) cho giá trị Volume trong bảng Limit Walls dựa trên kích thước lệnh so với lệnh lớn nhất (Max Volume).
+- [x] Thêm thông tin "Vùng giá" quét được tương ứng với số Depth (Level) được chọn bên trong bảng Order Book Imbalance (OBI).
+- [x] Sửa lỗi mất đường Liq Zones trên biểu đồ Advanced Chart (Do thư viện ném lỗi khi xóa đường không tồn tại `removePriceLine`).
+- [x] Tích hợp tính năng Volume Footprint (Nodes) cho thẻ CVD & Order Flow, kèm thanh trượt chọn mức Gap ($10-$1000).
 
-
-
-Viewed HftRadarTab.jsx:1-646
-
-Tab **HFT (High-Frequency Trading) Radar** cung cấp các công cụ phân tích dòng tiền phái sinh (Derivatives Order Flow) theo thời gian thực để tìm ra các hành vi gom hàng/xả hàng của cá mập (Whales) và các bẫy thanh khoản. 
-
-Dưới đây là hướng dẫn chi tiết cách đọc từng chỉ số và cách sử dụng các Input đi kèm:
-
----
-
-### 📊 1. CVD & Order Flow (Cumulative Volume Delta)
-**CVD** đo lường sự chênh lệch lũy kế giữa khối lượng khớp lệnh chủ động của bên mua (Taker Buy - lệnh Market) và bên bán (Taker Sell - lệnh Market).
-
-*   **Cách đọc chỉ số CVD:**
-    *   **CVD dương (+ / Màu xanh lá):** Lực mua chủ động đang chiếm ưu thế (Taker đang mua đuổi giá Market).
-    *   **CVD âm (- / Màu đỏ):** Lực bán chủ động đang chiếm ưu thế (Taker đang bán tháo bằng giá Market).
-*   **Hệ thống phát hiện Phân kỳ (Divergence):**
-    *   **Phân kỳ Bullish (Mua hấp thụ):** Giá đi xuống nhưng đường CVD lại dốc lên. *Ý nghĩa:* Taker đang liên tục bán chủ động, nhưng bên dưới có các lệnh mua giới hạn (Limit Buy) cực lớn của Whales hấp thụ hết lực bán đó, khiến giá không thể giảm sâu hơn. Đây là tín hiệu **tạo đáy tiềm năng**.
-    *   **Phân kỳ Bearish (Bán hấp thụ):** Giá đi lên nhưng đường CVD lại dốc xuống. *Ý nghĩa:* Taker liên tục mua chủ động, nhưng bên trên có các lệnh bán giới hạn (Limit Sell) của Whales hấp thụ hết lực mua, chặn đà tăng của giá. Đây là tín hiệu **tạo đỉnh tiềm năng**.
-    *   **Momentum Tăng / Giảm:** Khi cả giá và CVD cùng đồng thuận tăng mạnh hoặc giảm mạnh, cho thấy xu hướng đang đi rất rõ ràng và mạnh mẽ.
-
----
-
-### 🎯 2. Target Liquidity (Whale Walls)
-Bảng này quét các tường lệnh giới hạn (Limit Order) có giá trị cực lớn (**≥ $500K**) trên sổ lệnh, đại diện cho ý đồ chặn giá hoặc gom/xả hàng của Cá mập.
-
-*   **Cách đọc dữ liệu:**
-    *   **SUPPORT (BID) WALLS (Màu xanh lá - Support):** Các tường lệnh mua của Whales treo sẵn ở bên dưới giá hiện tại. Đây là các vùng hỗ trợ mạnh. Whales thường dùng để đỡ giá hoặc ép người chơi bán khống (Short) phải mua cover lại tại đây.
-    *   **RESISTANCE (ASK) WALLS (Màu đỏ - Resistance):** Các tường lệnh bán của Whales treo sẵn bên trên giá hiện tại. Đây là các vùng kháng cự mạnh, nơi Whales muốn xả hàng hoặc ép người chơi mua (Long) phải cắt lỗ.
-    *   **Bid Ratio (Tỷ lệ Bid):** 
-        *   **> 60% (Bullish):** Tường mua chiếm ưu thế tuyệt đối $\rightarrow$ Thị trường có bệ đỡ vững chắc phía dưới.
-        *   **< 40% (Bearish):** Tường bán chiếm ưu thế tuyệt đối $\rightarrow$ Áp lực cản phía trên rất lớn.
-
----
-
-### 📖 3. Order Book Imbalance (OBI)
-Chỉ số này đo lường mức độ mất cân bằng giữa lượng lệnh chờ mua (Bids) và lượng lệnh chờ bán (Asks) trong sổ lệnh tại một độ sâu nhất định.
-
-*   **Ý nghĩa của Input thanh trượt (Depth Limit / OBI Level):**
-    *   **Các mức nhỏ (5, 10, 20 levels):** Chỉ quét các lệnh chờ nằm rất sát giá hiện tại. Mức này đại diện cho áp lực giá **ngay lập tức** (chỉ trong vài giây tới vài phút). Tuy nhiên chỉ số này thay đổi cực nhanh do các bot HFT chèn lệnh/hủy lệnh liên tục.
-    *   **Các mức trung bình (50, 100 levels):** Phản ánh cung cầu trong ngắn hạn (vài chục đến vài trăm USD xung quanh giá hiện tại).
-    *   **Các mức lớn (500, 1000 levels):** Phản ánh cấu trúc cung cầu vĩ mô của sổ lệnh (quét sâu hàng ngàn USD). Giúp bạn thấy rõ lực đỡ/cản thực sự của thị trường thay vì các lệnh nhiễu của bot.
-*   **Cách đọc chỉ số OBI Percent:**
-    *   Thang đo chạy từ **-100%** (Sổ lệnh trống rỗng bên mua, chỉ toàn lệnh bán Ask) đến **+100%** (Sổ lệnh trống rỗng bên bán, chỉ toàn lệnh mua Bid).
-    *   **OBI > 0 (+ / Màu xanh lá):** Tổng số lượng BTC đặt mua (Bid) nhiều hơn đặt bán (Ask) $\rightarrow$ Lực cầu chờ mua mạnh hơn.
-    *   **OBI < 0 (- / Màu đỏ):** Tổng số lượng BTC đặt bán (Ask) nhiều hơn đặt mua (Bid) $\rightarrow$ Lực cung chờ bán đè nặng hơn.
+## 5. Các Task chưa làm (Pending/TODO Tasks)
+- [ ] *[Thêm các task sắp tới vào đây...]*
 
 ---
-
-### 💥 4. Liquidation Feed (Thanh lý thực)
-Bảng này theo dõi thời gian thực các lệnh phái sinh bị sàn buộc thanh lý (Force Order).
-
-*   **Cách đọc dữ liệu:**
-    *   **🔴 LONG BỊ THANH LÝ (Long Liquidation):** Xảy ra khi giá giảm nhanh làm cháy tài khoản của các vị thế Long. Sàn buộc phải **BÁN Market** lượng BTC đó ra thị trường. Khi có quá nhiều lệnh Long bị thanh lý cùng lúc sẽ tạo ra hiện tượng **Long Flush / Cascade** (giá sụt giảm rất nhanh).
-    *   **🟢 SHORT BỊ THANH LÝ (Short Liquidation):** Xảy ra khi giá tăng nhanh làm cháy tài khoản của các vị thế Short. Sàn buộc phải **MUA Market** lượng BTC đó để đóng vị thế. Tạo ra hiện tượng **Short Squeeze** (giá bay thẳng đứng).
-*   **Ý nghĩa của các nút lọc (Filter ≥):**
-    *   Mặc định bạn có thể chọn lọc các lệnh thanh lý có giá trị từ **>$10K** lên đến **>$1M**.
-    *   **Cách tận dụng:** Các lệnh thanh lý nhỏ xảy ra liên tục. Nhưng khi xuất hiện các lệnh thanh lý khổng lồ **>$1M** (được đánh dấu bằng biểu tượng quả bom 💣), đó thường là dấu hiệu của **sự kiệt sức (exhaustion)**. Ví dụ: Một chuỗi quả bom thanh lý Long nổ liên tiếp thường đánh dấu **đáy ngắn hạn** của nhịp giảm đó (vì lượng bán ép buộc lớn nhất đã bị thị trường hấp thụ hết).
+*Ghi chú: Mọi update từ nay về sau bắt buộc phải ghi log lại vào file này.*
