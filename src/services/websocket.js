@@ -116,6 +116,7 @@ export function useCVDStream() {
   const [buyVolume, setBuyVolume] = useState(0);
   const [sellVolume, setSellVolume] = useState(0);
   const [cvdHistory, setCvdHistory] = useState([]);
+  const [volNodes, setVolNodes] = useState([]);
   // whaleTrades state is initialized below using whaleRef
   const [cvdStatus, setCvdStatus] = useState('connecting');
   const mountedRef = useRef(true);
@@ -126,6 +127,7 @@ export function useCVDStream() {
   const buyRef = useRef(0);
   const sellRef = useRef(0);
   const historyRef = useRef([]); // [{time, cvd}]
+  const volNodeRef = useRef(new Map()); // Map of price -> {buy, sell}
   const whaleRef = useRef(() => {
     try {
       const saved = localStorage.getItem('hft_whale_trades');
@@ -185,6 +187,7 @@ export function useCVDStream() {
           sellRef.current = 0;
           historyRef.current = [];
           whaleRef.current = [];
+          volNodeRef.current.clear();
           localStorage.removeItem('hft_whale_trades');
         }
 
@@ -196,14 +199,23 @@ export function useCVDStream() {
 
         // m=true → buyer is maker → taker SELLS → bearish → CVD decreases
         // m=false → seller is maker → taker BUYS → bullish → CVD increases
+        const binPrice = Math.floor(price / 10) * 10;
+        let node = volNodeRef.current.get(binPrice);
+        if (!node) {
+          node = { buy: 0, sell: 0 };
+          volNodeRef.current.set(binPrice, node);
+        }
+
         if (data.m) {
           cvdRef.current -= usdtVol;
           sessionRef.current -= usdtVol;
           sellRef.current += usdtVol;
+          node.sell += usdtVol;
         } else {
           cvdRef.current += usdtVol;
           sessionRef.current += usdtVol;
           buyRef.current += usdtVol;
+          node.buy += usdtVol;
         }
 
         // Track Whale Trades (Volume > $100k)
@@ -242,6 +254,7 @@ export function useCVDStream() {
               setSellVolume(sellRef.current);
               setCvdHistory([...historyRef.current]);
               setWhaleTrades([...whaleRef.current]);
+              setVolNodes(Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v })));
             }
             throttleRef.current = null;
           }, 500);
@@ -262,7 +275,7 @@ export function useCVDStream() {
     ? buyRef.current / (buyRef.current + sellRef.current)
     : 0.5;
 
-  return { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus };
+  return { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus, volNodes };
 }
 
 

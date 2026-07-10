@@ -72,11 +72,39 @@ const getChartOptsBase = (theme) => {
 
 // ─── PANEL 1: CVD & Order Flow ────────────────────────────────────────────────
 
-function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, theme }) {
+function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, theme, volNodes = [] }) {
   const [cvdTf, setCvdTf] = useState('1H');
+  const [cvdTf, setCvdTf] = useState('1H');
+  const [nodeGap, setNodeGap] = useState(() => {
+    const saved = localStorage.getItem('hft_cvd_gap');
+    return saved ? Number(saved) : 100;
+  });
+
   const totalVol = buyVolume + sellVolume;
   const buyPct = totalVol > 0 ? (buyVolume / totalVol * 100) : 50;
   const sellPct = 100 - buyPct;
+
+  const clusteredNodes = useMemo(() => {
+    if (!volNodes || volNodes.length === 0) return [];
+    if (!nodeGap || nodeGap <= 1) return volNodes;
+
+    const map = new Map();
+    for (let i = 0; i < volNodes.length; i++) {
+      const n = volNodes[i];
+      const binPrice = Math.floor(n.price / nodeGap) * nodeGap;
+      let entry = map.get(binPrice);
+      if (!entry) {
+        entry = { price: binPrice, priceHigh: binPrice + nodeGap - 1, buy: 0, sell: 0 };
+        map.set(binPrice, entry);
+      }
+      entry.buy += n.buy;
+      entry.sell += n.sell;
+    }
+    
+    // Convert to array and sort descending by price
+    const arr = Array.from(map.values()).sort((a, b) => b.price - a.price);
+    return arr;
+  }, [volNodes, nodeGap]);
 
   const baseSession24hRef = useRef(sessionCvd || 0);
   const prevList24hRef = useRef(cvdHistory24h);
@@ -294,6 +322,65 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
           <span>{fmtUsd(sellVolume)}</span>
         </div>
       </div>
+
+      {/* Node Gap Config */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>FOOTPRINT GAP (NODE)</span>
+          <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${nodeGap}</span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="5"
+          value={[10, 50, 100, 250, 500, 1000].indexOf(nodeGap) >= 0 ? [10, 50, 100, 250, 500, 1000].indexOf(nodeGap) : 2}
+          onChange={(e) => {
+            const val = [10, 50, 100, 250, 500, 1000][Number(e.target.value)];
+            setNodeGap(val);
+            localStorage.setItem('hft_cvd_gap', String(val));
+          }}
+          style={{ width: '100%', accentColor: 'var(--color-emerald-500)', cursor: 'pointer', height: '4px', background: 'var(--bg-slate-800)', borderRadius: '2px', outline: 'none', border: 'none', margin: '4px 0' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.45rem', color: 'var(--text-slate-500)' }} className="font-mono">
+          <span>10</span><span>50</span><span>100</span><span>250</span><span>500</span><span>1000</span>
+        </div>
+      </div>
+      
+      {/* Nodes Table */}
+      {clusteredNodes.length > 0 && (
+        <div className="table-responsive" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+          <table className="whale-table">
+            <thead>
+              <tr>
+                <th>VÙNG GIÁ (NODE)</th>
+                <th>BUY VOL</th>
+                <th>SELL VOL</th>
+                <th>DELTA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clusteredNodes.map(n => {
+                const delta = n.buy - n.sell;
+                const total = n.buy + n.sell;
+                if (total === 0) return null;
+                // dynamic shading based on volume
+                const maxVol = Math.max(...clusteredNodes.map(cn => cn.buy + cn.sell));
+                const intensity = Math.max(0.3, total / maxVol);
+                const bgStyle = { background: `linear-gradient(90deg, rgba(16,185,129,${intensity * 0.15}) 0%, rgba(244,63,94,${intensity * 0.15}) 100%)` };
+                
+                return (
+                  <tr key={n.price} style={bgStyle}>
+                    <td className="font-mono">{n.price} ~ {n.priceHigh}</td>
+                    <td className="font-mono" style={{ color: `rgba(16, 185, 129, ${0.4 + 0.6 * (n.buy / Math.max(n.buy, n.sell))})` }}>{fmtUsd(n.buy)}</td>
+                    <td className="font-mono" style={{ color: `rgba(244, 63, 94, ${0.4 + 0.6 * (n.sell / Math.max(n.buy, n.sell))})` }}>{fmtUsd(n.sell)}</td>
+                    <td className={`font-mono ${delta > 0 ? 'text-emerald' : 'text-rose'}`} style={{ fontWeight: 600 }}>{delta > 0 ? '+' : ''}{fmtUsd(delta)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
     </div>
   );
@@ -1416,7 +1503,7 @@ const MemoWhaleTradesPanel = React.memo(WhaleTradesPanel);
 const MemoSignalLogPanel = React.memo(SignalLogPanel);
 
 export default function HftRadarTab({
-  cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, whaleTrades, theme,
+  cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, whaleTrades, theme, volNodes,
   // Additional props for signal engine context
   data, fundingRate, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice,
 }) {
@@ -1622,6 +1709,7 @@ export default function HftRadarTab({
             cvdHistory30d={cvdHistory30d}
             cvdStatus={cvdStatus}
             livePrice={livePrice}
+            volNodes={volNodes}
             theme={theme}
           />
         )}

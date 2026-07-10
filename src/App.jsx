@@ -484,7 +484,7 @@ function AppContent() {
     useBinanceWebSocket();
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
-  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus } = useCVDStream();
+  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus, volNodes } = useCVDStream();
 
 
   const addLog = useCallback((msg, type = 'info') => {
@@ -1357,7 +1357,7 @@ function AppContent() {
                 cvd={cvd} sessionCvd={sessionCvd} buyVolume={buyVolume} sellVolume={sellVolume}
                 cvdHistory={cvdHistory} cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
                 cvdStatus={cvdStatus} livePrice={livePrice}
-                whaleTrades={whaleTrades} theme={theme}
+                whaleTrades={whaleTrades} volNodes={volNodes} theme={theme}
                 data={data} fundingRate={fund}
                 liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
                 liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
