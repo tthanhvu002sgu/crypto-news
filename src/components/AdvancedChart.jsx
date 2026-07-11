@@ -236,7 +236,7 @@ class TPOPrimitive {
             this._data.forEach(k => {
               if (k.low < globalMin) globalMin = k.low;
               if (k.high > globalMax) globalMax = k.high;
-              const date = new Date(k.time * 1000);
+              const date = k.time; // k.time is already a Date object
               const dayStr = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
               if (!sessions[dayStr]) sessions[dayStr] = [];
               sessions[dayStr].push(k);
@@ -254,9 +254,9 @@ class TPOPrimitive {
 
             Object.values(sessions).forEach(sessionKlines => {
               if (!sessionKlines.length) return;
-              sessionKlines.sort((a,b) => a.time - b.time);
+              sessionKlines.sort((a,b) => a.time.getTime() - b.time.getTime());
               
-              const firstTime = sessionKlines[0].time;
+              const firstTime = Math.floor(sessionKlines[0].time.getTime() / 1000);
               let xCoordinate = timeScale.timeToCoordinate(firstTime);
               if (xCoordinate === null) return; // Still offscreen or error
 
@@ -576,37 +576,41 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
 
   useEffect(() => {
     async function loadData() {
-      setLoading(true);
-      // Fetch 30m klines
-      const rawKlines = await getBTCKlines('BTCUSDT', '30m', 300);
-      
-      let formatted = rawKlines.map(k => ({
-        time: Math.floor(k.time.getTime() / 1000),
-        value: k.close,
-      }));
+      try {
+        setLoading(true);
+        // Fetch 30m klines
+        const rawKlines = await getBTCKlines('BTCUSDT', '30m', 300);
+        
+        let formatted = rawKlines.map(k => ({
+          time: Math.floor(k.time.getTime() / 1000),
+          value: k.close,
+        }));
 
-      // Lightweight-charts requires strictly ascending unique times
-      formatted.sort((a, b) => a.time - b.time);
-      formatted = formatted.filter((v, i, a) => i === 0 || v.time > a[i - 1].time);
+        // Lightweight-charts requires strictly ascending unique times
+        formatted.sort((a, b) => a.time - b.time);
+        formatted = formatted.filter((v, i, a) => i === 0 || v.time > a[i - 1].time);
 
-      if (seriesRef.current) {
-        seriesRef.current.setData(formatted);
-        if (chartRef.current && autoScrollRef.current) {
-          chartRef.current.timeScale().scrollToRealTime();
+        if (seriesRef.current) {
+          seriesRef.current.setData(formatted);
+          if (chartRef.current && autoScrollRef.current) {
+            chartRef.current.timeScale().scrollToRealTime();
+          }
         }
-      }
 
-      // Compute VP
-      const vp = calculateVolumeProfile(rawKlines);
-      setVpData(vp);
-      setKlines(rawKlines);
-      if (rawKlines.length > 0) {
-        latestPriceRef.current = rawKlines[rawKlines.length - 1].close;
-      }
-      setLoading(false);
+        // Compute VP
+        const vp = calculateVolumeProfile(rawKlines);
+        setVpData(vp);
+        setKlines(rawKlines);
+        if (rawKlines.length > 0) {
+          latestPriceRef.current = rawKlines[rawKlines.length - 1].close;
+        }
+        setLoading(false);
 
-      if (tpoPrimitiveRef.current) {
-        tpoPrimitiveRef.current.setData(rawKlines);
+        if (tpoPrimitiveRef.current) {
+          tpoPrimitiveRef.current.setData(rawKlines);
+        }
+      } catch (err) {
+        console.error('[AdvancedChart] Error in loadData:', err);
       }
 
       // Start realtime WebSocket updates
@@ -654,10 +658,6 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
     
     liqLinesRef.current.forEach(l => { try { seriesRef.current.removePriceLine(l); } catch(e) {} });
     liqLinesRef.current = [];
-
-    wallLinesRef.current.forEach(l => { try { seriesRef.current.removePriceLine(l); } catch(e) {} });
-    wallLinesRef.current = [];
-    if (wallPrimitiveRef.current) wallPrimitiveRef.current.setData([]);
 
     const vp = calculateVolumeProfile(klines);
     if (vp) {
