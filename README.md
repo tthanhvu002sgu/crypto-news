@@ -52,6 +52,8 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - [x] Sửa lỗi mất đường Liq Zones trên biểu đồ Advanced Chart (Do thư viện ném lỗi khi xóa đường không tồn tại `removePriceLine`).
 - [x] Tích hợp tính năng Volume Footprint (Nodes) cho thẻ CVD & Order Flow, kèm thanh trượt chọn mức Gap ($10-$1000).
 - [x] Tích hợp tính năng TPO Profile (Time Price Opportunity) vào Advanced Chart với cấu hình 30 phút, phân phiên theo ngày, hỗ trợ bật/tắt (Blocks/Letters) và được vẽ trực tiếp bằng Primitive API.
+- [x] Loại bỏ thanh Volume (HistogramSeries) khỏi Advanced Chart để biểu đồ sạch sẽ hơn.
+- [x] Tạo chu kỳ Reset độc lập (500ms) cho việc lọc Limit Walls nhằm tránh độ trễ từ API và hạn chế hiện tượng chớp nháy giao diện khi cập nhật liên tục theo tick.
 
 ## 5. Các Task chưa làm (Pending/TODO Tasks)
 - [ ] *[Thêm các task sắp tới vào đây...]*
