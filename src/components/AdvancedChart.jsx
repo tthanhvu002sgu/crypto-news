@@ -451,7 +451,6 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
-  const volumeSeriesRef = useRef(null);
   const pocLineRef = useRef(null);
   const vahLineRef = useRef(null);
   const valLineRef = useRef(null);
@@ -470,6 +469,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const [showLiq, setShowLiq] = useState(true);
   const [tpoMode, setTpoMode] = useState('off');
   const [autoScroll, setAutoScroll] = useState(true);
+  const [wallTick, setWallTick] = useState(0);
 
   // Settings state
   const [wallWidth, setWallWidth] = useState(() => parseInt(localStorage.getItem('hft_wall_width')) || 35);
@@ -494,6 +494,15 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       tpoPrimitiveRef.current.setOptions({ mode: tpoMode });
     }
   }, [tpoMode]);
+
+  // Wall reset cycle (500ms) to ensure limit walls update promptly
+  useEffect(() => {
+    let interval;
+    if (showWalls) {
+      interval = setInterval(() => setWallTick(t => t + 1), 500);
+    }
+    return () => clearInterval(interval);
+  }, [showWalls]);
 
   const handleWallWidthChange = (e) => {
     let val = parseInt(e.target.value);
@@ -546,19 +555,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         crosshairMarkerVisible: true,
       });
 
-      const volumeSeries = chart.addSeries(HistogramSeries, {
-        color: '#26a69a',
-        priceFormat: { type: 'volume' },
-        priceScaleId: '',
-        scaleMargins: {
-          top: 0.8,
-          bottom: 0,
-        },
-      });
-
       chartRef.current = chart;
       seriesRef.current = mainSeries;
-      volumeSeriesRef.current = volumeSeries;
 
       const heatmapPrimitive = new HeatmapWallPrimitive();
       mainSeries.attachPrimitive(heatmapPrimitive);
@@ -591,18 +589,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       formatted.sort((a, b) => a.time - b.time);
       formatted = formatted.filter((v, i, a) => i === 0 || v.time > a[i - 1].time);
 
-      let volumeData = rawKlines.map(k => ({
-        time: Math.floor(k.time.getTime() / 1000),
-        value: k.volume,
-        color: k.close >= k.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'
-      }));
-
-      volumeData.sort((a, b) => a.time - b.time);
-      volumeData = volumeData.filter((v, i, a) => i === 0 || v.time > a[i - 1].time);
-
-      if (seriesRef.current && volumeSeriesRef.current) {
+      if (seriesRef.current) {
         seriesRef.current.setData(formatted);
-        volumeSeriesRef.current.setData(volumeData);
         if (chartRef.current && autoScrollRef.current) {
           chartRef.current.timeScale().scrollToRealTime();
         }
@@ -628,18 +616,12 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         try {
           const message = JSON.parse(event.data);
           const k = message.k;
-          if (k && seriesRef.current && volumeSeriesRef.current) {
+          if (k && seriesRef.current) {
             const time = Math.floor(k.t / 1000);
-            const open = parseFloat(k.o);
-            const high = parseFloat(k.h);
-            const low = parseFloat(k.l);
             const close = parseFloat(k.c);
-            const volume = parseFloat(k.v);
-            const color = close >= open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)';
             
             latestPriceRef.current = close;
             seriesRef.current.update({ time, value: close });
-            volumeSeriesRef.current.update({ time, value: volume, color });
             if (autoScrollRef.current && chartRef.current) {
               chartRef.current.timeScale().scrollToRealTime();
             }
@@ -721,6 +703,15 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         liqLinesRef.current.push(line);
       });
     }
+  }, [klines, showLiq]);
+
+  // Handle Limit Walls independently with its own reset tick
+  useEffect(() => {
+    if (!seriesRef.current) return;
+
+    wallLinesRef.current.forEach(l => { try { seriesRef.current.removePriceLine(l); } catch(e) {} });
+    wallLinesRef.current = [];
+    if (wallPrimitiveRef.current) wallPrimitiveRef.current.setData([]);
 
     if (showWalls && whaleData) {
       const fmtWallUsd = (val) => {
@@ -729,7 +720,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         return `$${val.toFixed(0)}`;
       };
 
-      const currentPrice = latestPriceRef.current || (klines[klines.length - 1]?.close || 0);
+      const currentPrice = latestPriceRef.current || (klines && klines.length > 0 ? klines[klines.length - 1].close : 0);
       const topBids = (whaleData.whaleBids || [])
         .filter(w => !currentPrice || (w.avgPrice || w.price) <= currentPrice)
         .slice(0, 3);
@@ -766,10 +757,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       if (wallPrimitiveRef.current) {
         wallPrimitiveRef.current.setData([...topBids, ...topAsks]);
       }
-    } else if (wallPrimitiveRef.current) {
-      wallPrimitiveRef.current.setData([]);
     }
-  }, [klines, whaleData, showWalls, showLiq]);
+  }, [whaleData, showWalls, wallTick, klines]);
 
   if (moduleId && isModuleHidden(moduleId)) return null;
 
