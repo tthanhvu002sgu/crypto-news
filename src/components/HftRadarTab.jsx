@@ -347,14 +347,14 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
       
       {/* Nodes Table */}
       {clusteredNodes.length > 0 && (
-        <div className="table-responsive" style={{ maxHeight: '250px', overflowY: 'auto' }}>
-          <table className="whale-table">
-            <thead>
+        <div style={{ maxHeight: '250px', overflowY: 'auto', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', padding: '4px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.65rem' }}>
+            <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-950)', zIndex: 10 }}>
               <tr>
-                <th>VÙNG GIÁ (NODE)</th>
-                <th>BUY VOL</th>
-                <th>SELL VOL</th>
-                <th>DELTA</th>
+                <th style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)' }}>VÙNG GIÁ (NODE)</th>
+                <th style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)' }}>BUY VOL</th>
+                <th style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)' }}>SELL VOL</th>
+                <th style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)' }}>DELTA</th>
               </tr>
             </thead>
             <tbody>
@@ -362,17 +362,31 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
                 const delta = n.buy - n.sell;
                 const total = n.buy + n.sell;
                 if (total === 0) return null;
-                // dynamic shading based on volume
+                
+                // Dynamic shading base
                 const maxVol = Math.max(...clusteredNodes.map(cn => cn.buy + cn.sell));
-                const intensity = Math.max(0.3, total / maxVol);
-                const bgStyle = { background: `linear-gradient(90deg, rgba(16,185,129,${intensity * 0.15}) 0%, rgba(244,63,94,${intensity * 0.15}) 100%)` };
+                const maxSingleVol = Math.max(...clusteredNodes.map(cn => Math.max(cn.buy, cn.sell)));
+                const buyWidth = Math.min(100, (n.buy / maxSingleVol) * 100);
+                const sellWidth = Math.min(100, (n.sell / maxSingleVol) * 100);
                 
                 return (
-                  <tr key={n.price} style={bgStyle}>
-                    <td className="font-mono">{n.price} ~ {n.priceHigh}</td>
-                    <td className="font-mono" style={{ color: `rgba(16, 185, 129, ${0.4 + 0.6 * (n.buy / Math.max(n.buy, n.sell))})` }}>{fmtUsd(n.buy)}</td>
-                    <td className="font-mono" style={{ color: `rgba(244, 63, 94, ${0.4 + 0.6 * (n.sell / Math.max(n.buy, n.sell))})` }}>{fmtUsd(n.sell)}</td>
-                    <td className={`font-mono ${delta > 0 ? 'text-emerald' : 'text-rose'}`} style={{ fontWeight: 600 }}>{delta > 0 ? '+' : ''}{fmtUsd(delta)}</td>
+                  <tr key={n.price} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                    <td className="font-mono" style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-200)' }}>
+                      {n.price} <span style={{ color: 'var(--text-slate-500)', margin: '0 4px' }}>~</span> {n.priceHigh}
+                    </td>
+                    <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
+                      <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${buyWidth}%`, background: 'rgba(16, 185, 129, 0.15)', borderRadius: '2px', zIndex: 1 }} />
+                      <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-emerald-400)' }}>{fmtUsd(n.buy)}</span>
+                    </td>
+                    <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
+                      <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${sellWidth}%`, background: 'rgba(244, 63, 94, 0.15)', borderRadius: '2px', zIndex: 1 }} />
+                      <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-rose-400)' }}>{fmtUsd(n.sell)}</span>
+                    </td>
+                    <td className={`font-mono ${delta > 0 ? 'text-emerald' : 'text-rose'}`} style={{ padding: '8px', fontWeight: 600 }}>
+                      <div style={{ background: delta > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)', display: 'inline-block', padding: '2px 6px', borderRadius: '4px' }}>
+                        {delta > 0 ? '+' : ''}{fmtUsd(delta)}
+                      </div>
+                    </td>
                   </tr>
                 )
               })}
