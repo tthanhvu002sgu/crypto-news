@@ -74,7 +74,6 @@ const getChartOptsBase = (theme) => {
 
 function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, theme, volNodes = [] }) {
   const [cvdTf, setCvdTf] = useState('1H');
-  const [cvdTf, setCvdTf] = useState('1H');
   const [nodeGap, setNodeGap] = useState(() => {
     const saved = localStorage.getItem('hft_cvd_gap');
     return saved ? Number(saved) : 100;
