@@ -54,6 +54,9 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - [x] Tích hợp tính năng TPO Profile (Time Price Opportunity) vào Advanced Chart với cấu hình 30 phút, phân phiên theo ngày, hỗ trợ bật/tắt (Blocks/Letters) và được vẽ trực tiếp bằng Primitive API.
 - [x] Loại bỏ thanh Volume (HistogramSeries) khỏi Advanced Chart để biểu đồ sạch sẽ hơn.
 - [x] Tạo chu kỳ Reset độc lập (500ms) cho việc lọc Limit Walls nhằm tránh độ trễ từ API và hạn chế hiện tượng chớp nháy giao diện khi cập nhật liên tục theo tick.
+- [x] Sửa triệt để lỗi mất TPO (Time Price Opportunity) và POC trên biểu đồ bằng cách đồng bộ định dạng thời gian (Unix timestamp) cho thư viện Lightweight-Charts.
+- [x] Nâng cấp toàn diện UI bảng Footprint Nodes: Bố cục gọn gàng, định dạng font chữ tốt hơn, tích hợp background volume bars (thanh trạng thái ngầm) sau các con số Buy/Sell Vol để tăng tính trực quan.
+- [x] Thêm Tooltips giải thích các thuật ngữ Volume Node, Buy Vol, Sell Vol, Delta cho người dùng.
 
 ## 5. Các Task chưa làm (Pending/TODO Tasks)
 - [ ] *[Thêm các task sắp tới vào đây...]*
