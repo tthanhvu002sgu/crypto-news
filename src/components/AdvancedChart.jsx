@@ -461,6 +461,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const tpoPrimitiveRef = useRef(null);
   const wsRef = useRef(null);
   const autoScrollRef = useRef(true);
+  const latestPriceRef = useRef(null);
   
   const [loading, setLoading] = useState(true);
   const [, setVpData] = useState(null);
@@ -611,6 +612,9 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       const vp = calculateVolumeProfile(rawKlines);
       setVpData(vp);
       setKlines(rawKlines);
+      if (rawKlines.length > 0) {
+        latestPriceRef.current = rawKlines[rawKlines.length - 1].close;
+      }
       setLoading(false);
 
       if (tpoPrimitiveRef.current) {
@@ -633,6 +637,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
             const volume = parseFloat(k.v);
             const color = close >= open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)';
             
+            latestPriceRef.current = close;
             seriesRef.current.update({ time, value: close });
             volumeSeriesRef.current.update({ time, value: volume, color });
             if (autoScrollRef.current && chartRef.current) {
@@ -724,7 +729,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         return `$${val.toFixed(0)}`;
       };
 
-      const currentPrice = klines[klines.length - 1]?.close || 0;
+      const currentPrice = latestPriceRef.current || (klines[klines.length - 1]?.close || 0);
       const topBids = (whaleData.whaleBids || [])
         .filter(w => !currentPrice || (w.avgPrice || w.price) <= currentPrice)
         .slice(0, 3);
