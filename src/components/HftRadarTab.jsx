@@ -351,10 +351,10 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.65rem' }}>
             <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-950)', zIndex: 10 }}>
               <tr>
-                <th title="Vùng giá (Node) gộp các mức giá dựa trên cấu hình GAP. Là các lệnh Market đã khớp tại vùng giá này." style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ (NODE)</th>
-                <th title="Volume Mua Chủ Động (Lệnh Market Buy khớp vào Limit Sell)" style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
-                <th title="Volume Bán Chủ Động (Lệnh Market Sell khớp vào Limit Buy)" style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
-                <th title="Độ chênh lệch (Buy Vol - Sell Vol). Dương (Xanh) = Phe Mua áp đảo. Âm (Đỏ) = Phe Bán áp đảo." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
+                <th title="Vùng giá (Node) gộp các mức giá dựa trên cấu hình GAP. Dữ liệu được tích lũy theo thời gian thực từ WebSocket kể từ lúc bạn mở trang Web." style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ (NODE)</th>
+                <th title="Volume Mua Chủ Động (Lệnh Market Buy khớp vào Limit Sell) tích lũy realtime kể từ lúc mở trang." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
+                <th title="Volume Bán Chủ Động (Lệnh Market Sell khớp vào Limit Buy) tích lũy realtime kể từ lúc mở trang." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
+                <th title="Độ chênh lệch (Buy Vol - Sell Vol) tích lũy realtime kể từ lúc mở trang. Dương (Xanh) = Phe Mua áp đảo. Âm (Đỏ) = Phe Bán áp đảo." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
               </tr>
             </thead>
             <tbody>
