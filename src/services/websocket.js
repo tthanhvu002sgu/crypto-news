@@ -111,7 +111,8 @@ export function useBinanceWebSocket() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function useCVDStream() {
-  const getTodayStr = () => new Date().toLocaleDateString('vi-VN');
+  // Thay đổi sang múi giờ chuẩn UTC (Midnight UTC Reset) thay vì múi giờ local
+  const getTodayStr = () => new Date().toISOString().split('T')[0];
   
   const [cvd, setCvd] = useState(0);
   const [sessionCvd, setSessionCvd] = useState(0);
@@ -131,8 +132,8 @@ export function useCVDStream() {
         const saved = localStorage.getItem('hft_cvd_history');
         if (saved) {
           const parsed = JSON.parse(saved);
-          const now = Date.now();
-          return parsed.filter(p => now - p.timestamp <= 60 * 60 * 1000);
+          // Không giới hạn 60 phút nữa, tải lại toàn bộ lịch sử trong ngày
+          return parsed;
         }
       }
     } catch (e) {}
@@ -199,7 +200,7 @@ export function useCVDStream() {
         const qty = parseFloat(data.q);
         const usdtVol = price * qty;
 
-        // Reset history at midnight
+        // Reset history at midnight (UTC)
         const today = getTodayStr();
         if (today !== todayRef.current) {
           todayRef.current = today;
@@ -252,8 +253,10 @@ export function useCVDStream() {
         if (minuteRef.current !== currentMinute) {
           minuteRef.current = currentMinute;
           const timeStr = new Date(data.T).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+          
+          // Giữ toàn bộ lịch sử trong ngày (lên tới 1440 điểm) thay vì chỉ lấy 60 điểm
           historyRef.current = [
-            ...historyRef.current.slice(-59),
+            ...historyRef.current,
             { time: timeStr, cvd: cvdRef.current, price, timestamp: data.T }
           ];
         } else if (historyRef.current.length > 0) {
