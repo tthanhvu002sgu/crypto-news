@@ -191,6 +191,143 @@ class HeatmapWallPrimitive {
   }
 }
 
+class TPOPrimitive {
+  constructor() {
+    this._data = [];
+    this._series = null;
+    this._chart = null;
+    this._requestUpdate = null;
+    this._options = { mode: 'off' }; // 'off', 'blocks', 'letters'
+  }
+  setOptions(opts) {
+    this._options = { ...this._options, ...opts };
+    if (this._requestUpdate) this._requestUpdate();
+  }
+  setChart(chart) {
+    this._chart = chart;
+  }
+  attached({ series, requestUpdate }) {
+    this._series = series;
+    this._requestUpdate = requestUpdate;
+  }
+  detached() {
+    this._series = null;
+  }
+  setData(klines) {
+    this._data = klines || [];
+    if (this._requestUpdate) this._requestUpdate();
+  }
+  updateAllViews() {}
+  paneViews() {
+    return [{
+      zOrder: () => 'bottom',
+      renderer: () => ({
+        draw: (target) => {
+          if (!this._series || !this._chart || !this._data.length || this._options.mode === 'off') return;
+          
+          target.useMediaCoordinateSpace(({ context }) => {
+            context.save();
+            
+            // Group klines by Day (UTC)
+            const sessions = {};
+            let globalMin = Infinity;
+            let globalMax = -Infinity;
+
+            this._data.forEach(k => {
+              if (k.low < globalMin) globalMin = k.low;
+              if (k.high > globalMax) globalMax = k.high;
+              const date = new Date(k.time * 1000);
+              const dayStr = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
+              if (!sessions[dayStr]) sessions[dayStr] = [];
+              sessions[dayStr].push(k);
+            });
+
+            // Bin size: dynamically calculate based on visible range or fixed.
+            const binSize = Math.max((globalMax - globalMin) / 150, 10);
+            if (binSize <= 0 || !isFinite(binSize)) { context.restore(); return; }
+
+            const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+            const isLettersMode = this._options.mode === 'letters';
+            const blockWidth = isLettersMode ? 8 : 4;
+            const blockHeight = isLettersMode ? 10 : 4;
+            const timeScale = this._chart.timeScale();
+
+            Object.values(sessions).forEach(sessionKlines => {
+              if (!sessionKlines.length) return;
+              sessionKlines.sort((a,b) => a.time - b.time);
+              
+              const firstTime = sessionKlines[0].time;
+              let xCoordinate = timeScale.timeToCoordinate(firstTime);
+              if (xCoordinate === null) return; // Still offscreen or error
+
+              const profile = {};
+              let maxLen = 0;
+              let pocBin = null;
+
+              sessionKlines.forEach((k, idx) => {
+                const char = LETTERS[idx % LETTERS.length];
+                const startBin = Math.floor((k.low - globalMin) / binSize);
+                const endBin = Math.floor((k.high - globalMin) / binSize);
+                
+                for (let b = startBin; b <= endBin; b++) {
+                  if (!profile[b]) profile[b] = [];
+                  profile[b].push({ char, klineTime: k.time });
+                  if (profile[b].length > maxLen) {
+                    maxLen = profile[b].length;
+                    pocBin = b;
+                  }
+                }
+              });
+
+              // Draw POC background
+              if (pocBin !== null) {
+                 const pocPrice = globalMin + pocBin * binSize + binSize / 2;
+                 const y = this._series.priceToCoordinate(pocPrice);
+                 if (y !== null) {
+                    context.fillStyle = 'rgba(251, 191, 36, 0.2)'; // amber-400 with opacity
+                    context.fillRect(xCoordinate, y - blockHeight / 2, profile[pocBin].length * blockWidth, blockHeight);
+                 }
+              }
+
+              // Draw TPO blocks
+              Object.keys(profile).forEach(b => {
+                const binIdx = parseInt(b);
+                const priceCenter = globalMin + binIdx * binSize + binSize / 2;
+                const yCoordinate = this._series.priceToCoordinate(priceCenter);
+                if (yCoordinate === null) return;
+                
+                const items = profile[binIdx];
+                items.forEach((item, i) => {
+                  const drawX = xCoordinate + i * blockWidth;
+                  const colorIdx = LETTERS.indexOf(item.char);
+                  const ratio = Math.min(1, colorIdx / 48); // max 48 periods in a day
+                  // Gradient from blue to purple
+                  const r = Math.floor(56 + (168 - 56) * ratio);
+                  const g = Math.floor(189 - (189 - 85) * ratio);
+                  const b_col = Math.floor(248 - (248 - 247) * ratio);
+                  
+                  if (!isLettersMode) {
+                    context.fillStyle = `rgba(${r}, ${g}, ${b_col}, 0.8)`;
+                    context.fillRect(drawX, yCoordinate - blockHeight / 2, blockWidth - 1, blockHeight - 1);
+                  } else {
+                    context.fillStyle = `rgba(${r}, ${g}, ${b_col}, 0.9)`;
+                    context.font = 'bold 9px monospace';
+                    context.textAlign = 'left';
+                    context.textBaseline = 'middle';
+                    context.fillText(item.char, drawX, yCoordinate);
+                  }
+                });
+              });
+            });
+
+            context.restore();
+          });
+        }
+      })
+    }];
+  }
+}
+
 function calculateVolumeProfile(klines) {
   if (!klines || klines.length === 0) return null;
   
@@ -321,6 +458,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const liqLinesRef = useRef([]);
   const wallLinesRef = useRef([]);
   const wallPrimitiveRef = useRef(null);
+  const tpoPrimitiveRef = useRef(null);
   const wsRef = useRef(null);
   const autoScrollRef = useRef(true);
   
@@ -329,6 +467,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const [klines, setKlines] = useState(null);
   const [showWalls, setShowWalls] = useState(true);
   const [showLiq, setShowLiq] = useState(true);
+  const [tpoMode, setTpoMode] = useState('off');
   const [autoScroll, setAutoScroll] = useState(true);
 
   // Settings state
@@ -348,6 +487,12 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       chartRef.current.timeScale().applyOptions({ rightOffset: rightOffset });
     }
   }, [rightOffset]);
+
+  useEffect(() => {
+    if (tpoPrimitiveRef.current) {
+      tpoPrimitiveRef.current.setOptions({ mode: tpoMode });
+    }
+  }, [tpoMode]);
 
   const handleWallWidthChange = (e) => {
     let val = parseInt(e.target.value);
@@ -417,6 +562,11 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       const heatmapPrimitive = new HeatmapWallPrimitive();
       mainSeries.attachPrimitive(heatmapPrimitive);
       wallPrimitiveRef.current = heatmapPrimitive;
+
+      const tpoPrimitive = new TPOPrimitive();
+      mainSeries.attachPrimitive(tpoPrimitive);
+      tpoPrimitive.setChart(chart);
+      tpoPrimitiveRef.current = tpoPrimitive;
     } else if (chartRef.current) {
       chartRef.current.applyOptions({
         layout: { textColor: textColor },
@@ -428,8 +578,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   useEffect(() => {
     async function loadData() {
       setLoading(true);
-      // Fetch 1h klines
-      const rawKlines = await getBTCKlines('BTCUSDT', '1h', 150);
+      // Fetch 30m klines
+      const rawKlines = await getBTCKlines('BTCUSDT', '30m', 300);
       
       let formatted = rawKlines.map(k => ({
         time: Math.floor(k.time.getTime() / 1000),
@@ -463,9 +613,13 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       setKlines(rawKlines);
       setLoading(false);
 
+      if (tpoPrimitiveRef.current) {
+        tpoPrimitiveRef.current.setData(rawKlines);
+      }
+
       // Start realtime WebSocket updates
       if (wsRef.current) wsRef.current.close();
-      wsRef.current = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1h');
+      wsRef.current = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_30m');
       wsRef.current.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
@@ -483,6 +637,10 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
             volumeSeriesRef.current.update({ time, value: volume, color });
             if (autoScrollRef.current && chartRef.current) {
               chartRef.current.timeScale().scrollToRealTime();
+            }
+            if (tpoPrimitiveRef.current) {
+              // trigger a redraw if needed, or we might need to append data.
+              // For simplicity, lightweight-charts requests updates automatically when series updates.
             }
           }
         } catch (e) {
@@ -722,6 +880,22 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
           >
             🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
           </button>
+          <button
+            onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}
+            className="font-mono"
+            style={{
+              padding: '2px 8px',
+              fontSize: '0.7rem',
+              borderRadius: '4px',
+              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: tpoMode !== 'off' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+              color: tpoMode !== 'off' ? '#a855f7' : 'var(--text-slate-400)',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            🧩 TPO: {tpoMode.toUpperCase()}
+          </button>
           {moduleId && <ModuleMenu moduleId={moduleId} />}
         </div>
       </div>
@@ -769,6 +943,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         <span style={{color: '#38bdf8'}}>Limit Walls</span>: Chiều dài các thanh ngang thể hiện khối lượng lệnh chờ khớp (Bid/Ask) tại mỗi mức giá.{' '}
         <span style={{background: 'rgba(168, 85, 247, 0.85)', color: '#fff', padding: '2px 6px', borderRadius: '4px', margin: '0 4px', display: 'inline-block'}}>63,000 | $1M</span>:{' '}
         Nhãn hiển thị <span style={{color: '#fbbf24'}}>Mức giá</span> có thanh khoản lớn nhất | <span style={{color: '#fbbf24'}}>Tổng USD</span> chờ khớp tại cụm đó.
+        <span style={{color: '#a855f7', marginLeft: '8px'}}>TPO Profile</span>: Biểu đồ thời gian - giá theo ngày (Blocks/Letters). POC của ngày có màu vàng mờ.
       </div>
       {children}
     </div>

@@ -51,6 +51,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - [x] Thêm thông tin "Vùng giá" quét được tương ứng với số Depth (Level) được chọn bên trong bảng Order Book Imbalance (OBI).
 - [x] Sửa lỗi mất đường Liq Zones trên biểu đồ Advanced Chart (Do thư viện ném lỗi khi xóa đường không tồn tại `removePriceLine`).
 - [x] Tích hợp tính năng Volume Footprint (Nodes) cho thẻ CVD & Order Flow, kèm thanh trượt chọn mức Gap ($10-$1000).
+- [x] Tích hợp tính năng TPO Profile (Time Price Opportunity) vào Advanced Chart với cấu hình 30 phút, phân phiên theo ngày, hỗ trợ bật/tắt (Blocks/Letters) và được vẽ trực tiếp bằng Primitive API.
 
 ## 5. Các Task chưa làm (Pending/TODO Tasks)
 - [ ] *[Thêm các task sắp tới vào đây...]*
