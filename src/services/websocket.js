@@ -111,45 +111,67 @@ export function useBinanceWebSocket() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function useCVDStream() {
+  const getTodayStr = () => new Date().toLocaleDateString('vi-VN');
+  
   const [cvd, setCvd] = useState(0);
   const [sessionCvd, setSessionCvd] = useState(0);
   const [buyVolume, setBuyVolume] = useState(0);
   const [sellVolume, setSellVolume] = useState(0);
-  const [cvdHistory, setCvdHistory] = useState([]);
-  const [volNodes, setVolNodes] = useState([]);
-  // whaleTrades state is initialized below using whaleRef
   const [cvdStatus, setCvdStatus] = useState('connecting');
-  const mountedRef = useRef(true);
 
-  // Internal accumulators (no re-render per trade)
   const cvdRef = useRef(0);
   const sessionRef = useRef(0);
   const buyRef = useRef(0);
   const sellRef = useRef(0);
-  const historyRef = useRef([]); // [{time, cvd}]
-  const volNodeRef = useRef(new Map()); // Map of price -> {buy, sell}
+
+  const historyRef = useRef(() => {
+    try {
+      const savedDate = localStorage.getItem('hft_cvd_history_date');
+      if (savedDate === getTodayStr()) {
+        const saved = localStorage.getItem('hft_cvd_history');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const now = Date.now();
+          return parsed.filter(p => now - p.timestamp <= 60 * 60 * 1000);
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+  if (typeof historyRef.current === 'function') historyRef.current = historyRef.current();
+  
+  const volNodeRef = useRef(() => {
+    try {
+      const savedDate = localStorage.getItem('hft_vol_nodes_date');
+      if (savedDate === getTodayStr()) {
+        const saved = localStorage.getItem('hft_vol_nodes');
+        if (saved) return new Map(JSON.parse(saved));
+      }
+    } catch (e) {}
+    return new Map();
+  });
+  if (typeof volNodeRef.current === 'function') volNodeRef.current = volNodeRef.current();
+
   const whaleRef = useRef(() => {
     try {
-      const saved = localStorage.getItem('hft_whale_trades');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  }); // [{time, price, qty, usdtVol, side, timestamp}]
+      const savedDate = localStorage.getItem('hft_whale_trades_date');
+      if (savedDate === getTodayStr()) {
+        const saved = localStorage.getItem('hft_whale_trades');
+        return saved ? JSON.parse(saved) : [];
+      }
+    } catch (e) {}
+    return [];
+  });
+  if (typeof whaleRef.current === 'function') whaleRef.current = whaleRef.current();
 
-  // Actually initialize it correctly for a ref
-  if (typeof whaleRef.current === 'function') {
-    whaleRef.current = whaleRef.current();
-  }
-
-  // Set initial state from ref so it renders on mount
+  const [cvdHistory, setCvdHistory] = useState(historyRef.current);
+  const [volNodes, setVolNodes] = useState(Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v })));
   const [whaleTrades, setWhaleTrades] = useState(whaleRef.current);
+  
+  const mountedRef = useRef(true);
   const throttleRef = useRef(null);
-  const minuteRef = useRef(null); // for history sampling
+  const minuteRef = useRef(null);
   const isFetchingInitialRef = useRef(true);
-
-  // Helper: get today's date string for daily reset
-  const getTodayStr = () => new Date().toLocaleDateString('vi-VN');
   const todayRef = useRef(getTodayStr());
 
   useEffect(() => {
@@ -173,7 +195,6 @@ export function useCVDStream() {
       (msg) => {
         if (!msg || !msg.data) return;
         const data = msg.data;
-        // aggTrade: { p: price, q: qty, m: isBuyerMaker, T: time }
         const price = parseFloat(data.p);
         const qty = parseFloat(data.q);
         const usdtVol = price * qty;
@@ -188,14 +209,12 @@ export function useCVDStream() {
           historyRef.current = [];
           whaleRef.current = [];
           volNodeRef.current.clear();
+          localStorage.removeItem('hft_cvd_history');
+          localStorage.removeItem('hft_vol_nodes');
           localStorage.removeItem('hft_whale_trades');
         }
 
-        if (isFetchingInitialRef.current) {
-          // Skip websocket updates while fetching initial CVD to avoid double counting 
-          // or replacing the fetched initial value incorrectly.
-          return;
-        }
+        if (isFetchingInitialRef.current) return;
 
         // m=true → buyer is maker → taker SELLS → bearish → CVD decreases
         // m=false → seller is maker → taker BUYS → bullish → CVD increases
@@ -225,11 +244,10 @@ export function useCVDStream() {
           whaleRef.current = [
             { time: timeStr, price, qty, usdtVol, side, timestamp: data.T },
             ...whaleRef.current
-          ].slice(0, 5000); // Keep last 5000 large trades of the day
-          localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
+          ].slice(0, 5000); 
         }
 
-        // Sample history once per minute (for chart — keep 60 points = 1h)
+        // Sample history once per minute
         const currentMinute = Math.floor(data.T / 60000);
         if (minuteRef.current !== currentMinute) {
           minuteRef.current = currentMinute;
@@ -239,12 +257,11 @@ export function useCVDStream() {
             { time: timeStr, cvd: cvdRef.current, price, timestamp: data.T }
           ];
         } else if (historyRef.current.length > 0) {
-          // Update current active candle real-time on every trade
           historyRef.current[historyRef.current.length - 1].cvd = cvdRef.current;
           historyRef.current[historyRef.current.length - 1].price = price;
         }
 
-        // Throttle React state updates to every 500ms
+        // Throttle React state updates & Persistence to every 500ms
         if (!throttleRef.current) {
           throttleRef.current = setTimeout(() => {
             if (mountedRef.current) {
@@ -255,6 +272,20 @@ export function useCVDStream() {
               setCvdHistory([...historyRef.current]);
               setWhaleTrades([...whaleRef.current]);
               setVolNodes(Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v })));
+              
+              // Persist to local storage safely
+              try {
+                localStorage.setItem('hft_cvd_history_date', todayRef.current);
+                localStorage.setItem('hft_cvd_history', JSON.stringify(historyRef.current));
+                
+                localStorage.setItem('hft_vol_nodes_date', todayRef.current);
+                localStorage.setItem('hft_vol_nodes', JSON.stringify(Array.from(volNodeRef.current.entries())));
+                
+                localStorage.setItem('hft_whale_trades_date', todayRef.current);
+                localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
+              } catch (e) {
+                console.error("Failed to persist HFT data:", e);
+              }
             }
             throttleRef.current = null;
           }, 500);

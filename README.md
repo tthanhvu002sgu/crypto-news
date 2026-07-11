@@ -57,6 +57,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - [x] Sửa triệt để lỗi mất TPO (Time Price Opportunity) và POC trên biểu đồ bằng cách đồng bộ định dạng thời gian (Unix timestamp) cho thư viện Lightweight-Charts.
 - [x] Nâng cấp toàn diện UI bảng Footprint Nodes: Bố cục gọn gàng, định dạng font chữ tốt hơn, tích hợp background volume bars (thanh trạng thái ngầm) sau các con số Buy/Sell Vol để tăng tính trực quan.
 - [x] Thêm Tooltips giải thích các thuật ngữ Volume Node, Buy Vol, Sell Vol, Delta cho người dùng.
+- [x] Rà soát và tái cấu trúc Data Layer (WebSocket): Xây dựng cơ chế **Persistence Storage** lưu trữ cục bộ (LocalStorage) cho dữ liệu Footprint Nodes, CVD History và Whale Trades. Khắc phục triệt để lỗi mất dữ liệu tích lũy khi trình duyệt bị tải lại (Reload) hoặc crash, tích hợp cơ chế tự động clear rác khi qua ngày mới (Midnight Reset).
 
 ## 5. Các Task chưa làm (Pending/TODO Tasks)
 - [ ] *[Thêm các task sắp tới vào đây...]*
