@@ -197,7 +197,7 @@ class TPOPrimitive {
     this._series = null;
     this._chart = null;
     this._requestUpdate = null;
-    this._options = { mode: 'off' }; // 'off', 'blocks', 'letters'
+    this._options = { mode: 'blocks' }; // 'off', 'blocks', 'letters'
   }
   setOptions(opts) {
     this._options = { ...this._options, ...opts };
@@ -467,7 +467,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const [klines, setKlines] = useState(null);
   const [showWalls, setShowWalls] = useState(true);
   const [showLiq, setShowLiq] = useState(true);
-  const [tpoMode, setTpoMode] = useState('off');
+  const [tpoMode, setTpoMode] = useState('blocks'); // default ON: blocks
   const [autoScroll, setAutoScroll] = useState(true);
   const [wallTick, setWallTick] = useState(0);
 
