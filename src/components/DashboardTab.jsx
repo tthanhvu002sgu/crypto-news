@@ -29,6 +29,16 @@ export default function DashboardTab({
 }) {
   const { isModuleHidden } = useModuleVisibility();
 
+  // Helper to safely get macro values
+  const getMacroValue = (key, fallback = '---') => {
+    if (!data) return fallback;
+    const val = data[key];
+    if (val == null) return fallback;
+    if (typeof val === 'object' && val.price != null) return val.price.toFixed(1);
+    if (typeof val === 'number') return val.toFixed(2);
+    return val;
+  };
+
   return (
     <div className="dashboard-layout">
       {/* News Slider */}
@@ -59,6 +69,129 @@ export default function DashboardTab({
         </div>
       )}
 
+      {/* NEW: Macro Pulse Panel */}
+      {!isModuleHidden('dash_macro') && (
+        <div className="glass-panel" style={{ padding: '16px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
+              <span className="dot dot-emerald" /> MACRO PULSE
+            </h3>
+            <ModuleMenu moduleId="dash_macro" />
+          </div>
+
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', 
+            gap: '10px' 
+          }}>
+            {/* DXY */}
+            <div style={{ 
+              background: 'var(--bg-slate-950)', 
+              border: '1px solid var(--border-panel)', 
+              borderRadius: '6px', 
+              padding: '10px 12px' 
+            }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>DXY</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+                {getMacroValue('dxy')}
+              </div>
+              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: data?.dxy > 104 ? 'var(--color-rose-400)' : 'var(--color-emerald-400)' }}>
+                {data?.dxy > 104 ? 'Risk Off ↑' : data?.dxy < 100 ? 'Risk On ↓' : 'Neutral'}
+              </div>
+            </div>
+
+            {/* VIX */}
+            <div style={{ 
+              background: 'var(--bg-slate-950)', 
+              border: '1px solid var(--border-panel)', 
+              borderRadius: '6px', 
+              padding: '10px 12px' 
+            }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>VIX</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+                {getMacroValue('vix')}
+              </div>
+              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: data?.vix?.price < 18 ? 'var(--color-emerald-400)' : data?.vix?.price > 28 ? 'var(--color-rose-400)' : 'var(--text-slate-400)' }}>
+                {data?.vix?.price < 18 ? 'Low Volatility' : data?.vix?.price > 28 ? 'High Fear' : 'Normal'}
+              </div>
+            </div>
+
+            {/* 10Y Yield + Real Rate */}
+            <div style={{ 
+              background: 'var(--bg-slate-950)', 
+              border: '1px solid var(--border-panel)', 
+              borderRadius: '6px', 
+              padding: '10px 12px' 
+            }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>10Y Yield / Real Rate</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+                {data?.tenYearYield ? `${data.tenYearYield}%` : '---'}
+                {data?.fedFundsRate != null && data?.cpi != null && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-slate-400)' }}> / {(data.fedFundsRate - data.cpi).toFixed(1)}%</span>
+                )}
+              </div>
+              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
+                Real Rate = Fed - CPI
+              </div>
+            </div>
+
+            {/* Fear & Greed */}
+            <div style={{ 
+              background: 'var(--bg-slate-950)', 
+              border: '1px solid var(--border-panel)', 
+              borderRadius: '6px', 
+              padding: '10px 12px' 
+            }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>Fear & Greed</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+                {data?.fngData?.value ?? '---'}
+              </div>
+              <div style={{ 
+                fontSize: '0.6rem', 
+                marginTop: '2px', 
+                color: data?.fngData?.value >= 75 ? 'var(--color-rose-400)' : data?.fngData?.value <= 25 ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' 
+              }}>
+                {data?.fngData?.sentiment || 'Neutral'}
+              </div>
+            </div>
+
+            {/* S&P 500 */}
+            <div style={{ 
+              background: 'var(--bg-slate-950)', 
+              border: '1px solid var(--border-panel)', 
+              borderRadius: '6px', 
+              padding: '10px 12px' 
+            }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>S&P 500</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+                {data?.sp500?.price ? data.sp500.price.toFixed(0) : '---'}
+                {data?.sp500?.change != null && (
+                  <span style={{ fontSize: '0.7rem', marginLeft: '4px', color: data.sp500.change >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)' }}>
+                    {data.sp500.change >= 0 ? '+' : ''}{data.sp500.change.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* BTC Dominance */}
+            <div style={{ 
+              background: 'var(--bg-slate-950)', 
+              border: '1px solid var(--border-panel)', 
+              borderRadius: '6px', 
+              padding: '10px 12px' 
+            }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>BTC Dominance</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+                {data?.globalData?.btcDominance ? `${data.globalData.btcDominance.toFixed(1)}%` : '---'}
+              </div>
+              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
+                Market Structure
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Polymarket Whales Tracker */}
       <PolymarketWhales moduleId="dash_polymarket" fmt={fmt} />
 
@@ -67,7 +200,7 @@ export default function DashboardTab({
         <div className="glass-panel chart-panel">
           <div className="chart-header">
             <h3 className="chart-title font-mono text-emerald">
-              <span className="dot dot-emerald" /> BTC/USDT — GIÁ 48 GIỜ GẦN NHẤT (1H)
+              <span className="dot dot-emerald" /> BTC/USDT — GIÁ 48 GIờ GẦN NHẤT (1H)
             </h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="chart-badge font-mono">
@@ -77,10 +210,8 @@ export default function DashboardTab({
                     {' '}{data.btc.change >= 0 ? '+' : ''}{data.btc.change.toFixed(2)}%
                   </span>
                 )}
-              </span>
-              <ModuleMenu moduleId="dash_btc_chart" />
+              </div>
             </div>
-          </div>
           <div className="chart-body">
             {data.klines.length > 0
               ? <Line data={btcChartData} options={{
@@ -214,7 +345,7 @@ export default function DashboardTab({
             <div className="glass-panel whale-panel">
               <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                  <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
+                  <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH Sử DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
                 </h3>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   {etfChartType === 'aum' && (
@@ -269,7 +400,7 @@ export default function DashboardTab({
           <div className="glass-panel whale-panel" style={{ height: '100%', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h3 className="chart-title font-mono text-amber" style={{ margin: 0 }}>
-                <span className="dot dot-amber" /> CME BITCOIN FUTURES COT (AS OF {data.cotData?.date || 'N/A'})
+                  <span className="dot dot-amber" /> CME BITCOIN FUTURES COT (AS OF {data.cotData?.date || 'N/A'})
               </h3>
               <ModuleMenu moduleId="dash_cme_cot" />
             </div>
