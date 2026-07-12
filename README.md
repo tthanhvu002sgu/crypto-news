@@ -11,7 +11,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **Advanced Price Action:** Biểu đồ TradingView tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản) và Liquidity Zones (Vùng thanh lý đòn bẩy).
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
 - **AI Summary & Nupl / Supply in Profit:** Tích hợp AI (Gemini) để phân tích báo cáo thị trường, tâm lý, cảnh báo các mốc kháng cự/hỗ trợ. Hỗ trợ chọn **ngôn ngữ báo cáo** (Tiếng Việt / English) và 3 style (Professional / Tactical / Educational).
-- **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** (không hiển thị một số “chính xác giả”), dựa trên difficulty + energy model (J/TH, $/kWh, opex) với biên assumption hợp lý quanh baseline.
+- **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%** (không dùng min–max fleet toàn ngành).
 - **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
@@ -58,11 +58,11 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ### [2026-07-12] Production Cost hiển thị dạng khoảng low → high `(FAST)`
 - **Lane / Mode:** FEATURE FAST
-- **Tóm tắt:** Thay số production cost “điểm” bằng khoảng ước tính phản ánh sai số assumption (efficiency / điện / opex), tránh ảo giác độ chính xác.
+- **Tóm tắt:** Thay số production cost “điểm” bằng khoảng quanh baseline; biên sai số **−5% / +10%** (siết lại sau khi gap fleet-scenario quá rộng).
 - **Thay đổi chính:**
-  - `estimateBtcProductionCost` + `estimateBtcProductionCostRange` trong `api.js` (baseline mid 26 J/TH @ $0.05 + 10% opex; low/high siết quanh mid).
+  - `estimateBtcProductionCost` + `estimateBtcProductionCostRange` trong `api.js` (mid = 26 J/TH @ $0.05 + 10% opex; `low = mid×0.95`, `high = mid×1.10`).
   - UI MetricCard: `$XXk → $YYk`, sub `mid ~$ZZk · 1 BTC est.`; tương thích cache legacy (string/number).
-  - Tooltip productionCost: giải thích range + formula energy model.
+  - Tooltip productionCost: giải thích range ± error band, không phải min–max ngành.
 - **Files / areas chạm:** `src/services/api.js`, `src/App.jsx`, `src/components/Tooltip.jsx`, `README.md`
 - **Ảnh hưởng README:** §1, §3, §4
 - **Verify:** logic range sanity-check (Node); UI fallback legacy

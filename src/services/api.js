@@ -322,34 +322,35 @@ export function estimateBtcProductionCost(difficulty, jPerTh, usdPerKwh, opexMul
 }
 
 /**
- * Khoảng chi phí sản xuất 1 BTC — phản ánh sai số assumption (efficiency + điện + opex),
- * không phải điểm số "chính xác giả".
- *
- * Biên được siết quanh baseline (không lấy min–max cực đoan toàn ngành) để UI hữu dụng:
- * - low:  fleet khá hiệu quả + điện rẻ hơn một chút
- * - mid:  baseline network-average (26 J/TH @ $0.05 + 10% opex)
- * - high: fleet kém hơn + điện/opex cao hơn trong biên hợp lý
- * → khoảng ~±30–50% quanh mid (sai số chấp nhận được cho proxy model)
+ * Khoảng chi phí sản xuất 1 BTC quanh baseline energy model.
+ * Mid = 26 J/TH @ $0.05/kWh + 10% opex; low/high = mid ± error band (5–10%),
+ * không phải min–max fleet toàn ngành (tránh gap kiểu $40k–$120k).
  */
+const PRODUCTION_COST_ERR_LOW = 0.05;  // −5%
+const PRODUCTION_COST_ERR_HIGH = 0.10; // +10%
+
 export function estimateBtcProductionCostRange(difficulty) {
   if (!difficulty || difficulty <= 0) return null;
 
-  const low = estimateBtcProductionCost(difficulty, 20, 0.04, 1.08);
-  const mid = estimateBtcProductionCost(difficulty, 26, 0.05, 1.1);
-  const high = estimateBtcProductionCost(difficulty, 32, 0.065, 1.18);
+  const midRaw = estimateBtcProductionCost(difficulty, 26, 0.05, 1.1);
+  if (midRaw == null) return null;
 
-  // Làm tròn về nghìn USD cho UI gọn và tránh ảo giác độ chính xác
+  const lowRaw = midRaw * (1 - PRODUCTION_COST_ERR_LOW);
+  const highRaw = midRaw * (1 + PRODUCTION_COST_ERR_HIGH);
+
+  // Làm tròn về nghìn USD — UI gọn, không giả vờ chính xác đến từng dollar
   const roundK = (n) => Math.round(n / 1000) * 1000;
 
   return {
-    low: roundK(low),
-    mid: roundK(mid),
-    high: roundK(high),
-    // Assumptions documented for tooltip / debugging
+    low: roundK(lowRaw),
+    mid: roundK(midRaw),
+    high: roundK(highRaw),
+    errorBand: { lowPct: PRODUCTION_COST_ERR_LOW, highPct: PRODUCTION_COST_ERR_HIGH },
     assumptions: {
-      low: { jPerTh: 20, usdPerKwh: 0.04, opex: 1.08 },
-      mid: { jPerTh: 26, usdPerKwh: 0.05, opex: 1.1 },
-      high: { jPerTh: 32, usdPerKwh: 0.065, opex: 1.18 },
+      jPerTh: 26,
+      usdPerKwh: 0.05,
+      opex: 1.1,
+      note: 'Range = mid × (1−5%) … mid × (1+10%); fixed baseline efficiency/power',
     },
   };
 }
