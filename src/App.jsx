@@ -229,7 +229,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 const INIT = {
-  btc: null,          // { price, change, high, low, volume }
+  btc: null,          // { price, change, high, low, close, volume }
   klines: [],         // [{time, open, high, low, close, volume}]
   lsHistory: [],      // [{longShortRatio, longAccount, shortAccount, timestamp}]
   fundingRate: null,
@@ -533,7 +533,7 @@ function AppContent() {
       cotRes,
       yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes,
       cvd24hRes, cvd7dRes, cvd30dRes, btcDailyKlinesAllRes
-    ] = await Promise.allSettlement([
+    ] = await Promise.allSettled([
       getBTCTicker24h('BTCUSDT'),
       getBTCKlines('BTCUSDT', '1h', 48),
       getLongShortRatio('BTCUSDT', '1h', 24),
@@ -871,7 +871,7 @@ function AppContent() {
 
   const filteredAumHistory = useMemo(() => {
     if (etfAumTimeframe === '30D') return holdingsHistory.slice(-30);
-    if (etfAumTimeframe === '90D') return holdingsHistory.slice(-90);
+    if (etfAumTimeframe === '90D') return holdingsHistory;
     return holdingsHistory;
   }, [holdingsHistory, etfAumTimeframe]);
 
@@ -1053,7 +1053,7 @@ function AppContent() {
           <div className="status-box font-mono">
             <LiveDot active={isOnline} />
             <span className="text-slate-400">{isOnline ? 'LIVE' : 'OFFLINE'}</span>
-            {lastSync && <><span className="text-slate-500">•</span><span className="sync-time">{lastSync}</span>}
+            {lastSync && <React.Fragment><span className="text-slate-500">•</span><span className="sync-time">{lastSync}</span></React.Fragment>}
             </div>
           {/* WebSocket status badge */}
           <div className={`ws-badge font-mono ws-${wsStatus}`}>
