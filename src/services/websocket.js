@@ -1,12 +1,21 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getDailyCVD } from './api';
+import { updateBrowserChrome } from '../utils/browserChrome';
 
-// ─── Stream #1: BTC, ETH, SOL, LINK Ticker + BTC Mark Price (v6.0) ───────────────────────
+// ─── Stream URLs ──────────────────────────────────────────────────────────────
+
 const WS_TICKER_URL =
   'wss://fstream.binance.com/market/stream?streams=btcusdt@ticker/btcusdt@markPrice@1s/ethusdt@ticker/solusdt@ticker/linkusdt@ticker';
 
-// ─── Stream #3: Aggregate Trades → CVD Calculator ─────────────────────────────
 const WS_AGG_URL = 'wss://fstream.binance.com/market/stream?streams=btcusdt@aggTrade';
+
+/** Throttle React state pushes from ticker stream (reduces re-render load). */
+const TICKER_UI_MS = 250;
+/** CVD / footprint UI + localStorage write throttle. */
+const CVD_UI_MS = 500;
+const WHALE_USD_MIN = 100_000;
+const WHALE_KEEP = 5000;
+const RECONNECT_MS = 4000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,42 +25,90 @@ function createReconnectingWS(url, onMessage, onStatusChange, mountedRef) {
 
   function connect() {
     if (!mountedRef.current) return;
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     onStatusChange?.('connecting');
 
     try {
       ws = new WebSocket(url);
 
       ws.onopen = () => {
-        if (!mountedRef.current) { ws.close(); return; }
+        if (!mountedRef.current) {
+          ws.close();
+          return;
+        }
         onStatusChange?.('connected');
       };
 
       ws.onmessage = (event) => {
         if (!mountedRef.current) return;
-        try { onMessage(JSON.parse(event.data)); } catch { }
+        try {
+          onMessage(JSON.parse(event.data));
+        } catch {
+          /* ignore malformed frames */
+        }
       };
 
-      ws.onerror = () => { };
+      ws.onerror = () => {};
 
       ws.onclose = () => {
         if (!mountedRef.current) return;
         onStatusChange?.('disconnected');
-        reconnectTimer = setTimeout(() => { if (mountedRef.current) connect(); }, 4000);
+        reconnectTimer = setTimeout(() => {
+          if (mountedRef.current) connect();
+        }, RECONNECT_MS);
       };
     } catch {
       onStatusChange?.('disconnected');
-      reconnectTimer = setTimeout(() => { if (mountedRef.current) connect(); }, 4000);
+      reconnectTimer = setTimeout(() => {
+        if (mountedRef.current) connect();
+      }, RECONNECT_MS);
     }
   }
 
   function close() {
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    if (ws) { ws.onclose = null; ws.close(); }
+    if (ws) {
+      ws.onclose = null;
+      ws.close();
+    }
   }
 
   connect();
   return { close };
+}
+
+function loadTodayJson(key, dateKey, fallback) {
+  try {
+    const savedDate = localStorage.getItem(dateKey);
+    if (savedDate === getTodayStr()) {
+      const saved = localStorage.getItem(key);
+      if (saved) return JSON.parse(saved);
+    }
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+function loadTodayMap(key, dateKey) {
+  try {
+    const savedDate = localStorage.getItem(dateKey);
+    if (savedDate === getTodayStr()) {
+      const saved = localStorage.getItem(key);
+      if (saved) return new Map(JSON.parse(saved));
+    }
+  } catch {
+    /* ignore */
+  }
+  return new Map();
+}
+
+// UTC calendar day (matches midnight reset for HFT session data)
+function getTodayStr() {
+  return new Date().toISOString().split('T')[0];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -69,51 +126,118 @@ export function useBinanceWebSocket() {
   const [liveSolPrice, setLiveSolPrice] = useState(null);
   const [liveLinkPrice, setLiveLinkPrice] = useState(null);
   const [wsStatus, setWsStatus] = useState('connecting');
+
   const mountedRef = useRef(true);
+  // Latest values live in refs; UI state is flushed on a timer
+  const snapRef = useRef({
+    price: null,
+    change: null,
+    high: null,
+    low: null,
+    volume: null,
+    funding: null,
+    eth: null,
+    sol: null,
+    link: null,
+  });
+  const flushTimerRef = useRef(null);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
+
+    const flushUi = () => {
+      flushTimerRef.current = null;
+      if (!mountedRef.current || !dirtyRef.current) return;
+      dirtyRef.current = false;
+      const s = snapRef.current;
+      if (s.price != null) setLivePrice(s.price);
+      if (s.change != null) setLiveChange(s.change);
+      if (s.high != null) setLiveHigh(s.high);
+      if (s.low != null) setLiveLow(s.low);
+      if (s.volume != null) setLiveVolume(s.volume);
+      if (s.funding != null) setLiveFunding(s.funding);
+      if (s.eth != null) setLiveEthPrice(s.eth);
+      if (s.sol != null) setLiveSolPrice(s.sol);
+      if (s.link != null) setLiveLinkPrice(s.link);
+    };
+
+    const scheduleFlush = () => {
+      dirtyRef.current = true;
+      if (!flushTimerRef.current) {
+        flushTimerRef.current = setTimeout(flushUi, TICKER_UI_MS);
+      }
+    };
+
     const conn = createReconnectingWS(
       WS_TICKER_URL,
       (msg) => {
         const { stream, data } = msg;
+        if (!data) return;
+
         if (stream === 'btcusdt@ticker') {
-          setLivePrice(parseFloat(data.c));
-          setLiveChange(parseFloat(data.P));
-          setLiveHigh(parseFloat(data.h));
-          setLiveLow(parseFloat(data.l));
-          setLiveVolume(parseFloat(data.q));
+          const price = parseFloat(data.c);
+          const change = parseFloat(data.P);
+          snapRef.current.price = price;
+          snapRef.current.change = change;
+          snapRef.current.high = parseFloat(data.h);
+          snapRef.current.low = parseFloat(data.l);
+          snapRef.current.volume = parseFloat(data.q);
+          // Favicon/title: bypass React so background tabs still update
+          updateBrowserChrome(price, change);
+          scheduleFlush();
+          return;
         }
         if (stream === 'ethusdt@ticker') {
-          setLiveEthPrice(parseFloat(data.c));
+          snapRef.current.eth = parseFloat(data.c);
+          scheduleFlush();
+          return;
         }
         if (stream === 'solusdt@ticker') {
-          setLiveSolPrice(parseFloat(data.c));
+          snapRef.current.sol = parseFloat(data.c);
+          scheduleFlush();
+          return;
         }
         if (stream === 'linkusdt@ticker') {
-          setLiveLinkPrice(parseFloat(data.c));
+          snapRef.current.link = parseFloat(data.c);
+          scheduleFlush();
+          return;
         }
         if (stream === 'btcusdt@markPrice@1s') {
-          setLiveFunding(parseFloat(data.r));
+          snapRef.current.funding = parseFloat(data.r);
+          scheduleFlush();
         }
       },
       setWsStatus,
       mountedRef
     );
-    return () => { mountedRef.current = false; conn.close(); };
+
+    return () => {
+      mountedRef.current = false;
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+      conn.close();
+    };
   }, []);
 
-  return { livePrice, liveChange, liveHigh, liveLow, liveVolume, liveFunding, liveEthPrice, liveSolPrice, liveLinkPrice, wsStatus };
+  return {
+    livePrice,
+    liveChange,
+    liveHigh,
+    liveLow,
+    liveVolume,
+    liveFunding,
+    liveEthPrice,
+    liveSolPrice,
+    liveLinkPrice,
+    wsStatus,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Hook 3: useCVDStream — Cumulative Volume Delta from aggTrade
+// Hook 2: useCVDStream — Cumulative Volume Delta from aggTrade
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function useCVDStream() {
-  // Thay đổi sang múi giờ chuẩn UTC (Midnight UTC Reset) thay vì múi giờ local
-  const getTodayStr = () => new Date().toISOString().split('T')[0];
-  
   const [cvd, setCvd] = useState(0);
   const [sessionCvd, setSessionCvd] = useState(0);
   const [buyVolume, setBuyVolume] = useState(0);
@@ -125,50 +249,22 @@ export function useCVDStream() {
   const buyRef = useRef(0);
   const sellRef = useRef(0);
 
-  const historyRef = useRef(() => {
-    try {
-      const savedDate = localStorage.getItem('hft_cvd_history_date');
-      if (savedDate === getTodayStr()) {
-        const saved = localStorage.getItem('hft_cvd_history');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          // Không giới hạn 60 phút nữa, tải lại toàn bộ lịch sử trong ngày
-          return parsed;
-        }
-      }
-    } catch (e) {}
-    return [];
-  });
-  if (typeof historyRef.current === 'function') historyRef.current = historyRef.current();
-  
-  const volNodeRef = useRef(() => {
-    try {
-      const savedDate = localStorage.getItem('hft_vol_nodes_date');
-      if (savedDate === getTodayStr()) {
-        const saved = localStorage.getItem('hft_vol_nodes');
-        if (saved) return new Map(JSON.parse(saved));
-      }
-    } catch (e) {}
-    return new Map();
-  });
-  if (typeof volNodeRef.current === 'function') volNodeRef.current = volNodeRef.current();
-
-  const whaleRef = useRef(() => {
-    try {
-      const savedDate = localStorage.getItem('hft_whale_trades_date');
-      if (savedDate === getTodayStr()) {
-        const saved = localStorage.getItem('hft_whale_trades');
-        return saved ? JSON.parse(saved) : [];
-      }
-    } catch (e) {}
-    return [];
-  });
-  if (typeof whaleRef.current === 'function') whaleRef.current = whaleRef.current();
+  const historyRef = useRef(
+    loadTodayJson('hft_cvd_history', 'hft_cvd_history_date', [])
+  );
+  const volNodeRef = useRef(
+    loadTodayMap('hft_vol_nodes', 'hft_vol_nodes_date')
+  );
+  const whaleRef = useRef(
+    loadTodayJson('hft_whale_trades', 'hft_whale_trades_date', [])
+  );
 
   const [cvdHistory, setCvdHistory] = useState(historyRef.current);
-  const [volNodes, setVolNodes] = useState(Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v })));
+  const [volNodes, setVolNodes] = useState(
+    Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v }))
+  );
   const [whaleTrades, setWhaleTrades] = useState(whaleRef.current);
-  
+
   const mountedRef = useRef(true);
   const throttleRef = useRef(null);
   const minuteRef = useRef(null);
@@ -178,7 +274,6 @@ export function useCVDStream() {
   useEffect(() => {
     mountedRef.current = true;
 
-    // Fetch initial CVD from start of day
     getDailyCVD('BTCUSDT').then((init) => {
       if (!mountedRef.current) return;
       cvdRef.current = init.initialCvd;
@@ -194,13 +289,13 @@ export function useCVDStream() {
     const conn = createReconnectingWS(
       WS_AGG_URL,
       (msg) => {
-        if (!msg || !msg.data) return;
+        if (!msg?.data) return;
         const data = msg.data;
         const price = parseFloat(data.p);
         const qty = parseFloat(data.q);
         const usdtVol = price * qty;
 
-        // Reset history at midnight (UTC)
+        // Midnight UTC reset
         const today = getTodayStr();
         if (today !== todayRef.current) {
           todayRef.current = today;
@@ -217,8 +312,7 @@ export function useCVDStream() {
 
         if (isFetchingInitialRef.current) return;
 
-        // m=true → buyer is maker → taker SELLS → bearish → CVD decreases
-        // m=false → seller is maker → taker BUYS → bullish → CVD increases
+        // m=true → taker sell; m=false → taker buy
         const binPrice = Math.floor(price / 10) * 10;
         let node = volNodeRef.current.get(binPrice);
         if (!node) {
@@ -238,33 +332,43 @@ export function useCVDStream() {
           node.buy += usdtVol;
         }
 
-        // Track Whale Trades (Volume > $100k)
-        if (usdtVol >= 100000) {
-          const timeStr = new Date(data.T).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-          const side = data.m ? 'SELL' : 'BUY';
+        if (usdtVol >= WHALE_USD_MIN) {
+          const timeStr = new Date(data.T).toLocaleTimeString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
           whaleRef.current = [
-            { time: timeStr, price, qty, usdtVol, side, timestamp: data.T },
-            ...whaleRef.current
-          ].slice(0, 5000); 
+            {
+              time: timeStr,
+              price,
+              qty,
+              usdtVol,
+              side: data.m ? 'SELL' : 'BUY',
+              timestamp: data.T,
+            },
+            ...whaleRef.current,
+          ].slice(0, WHALE_KEEP);
         }
 
-        // Sample history once per minute
+        // One sample per minute for history series
         const currentMinute = Math.floor(data.T / 60000);
         if (minuteRef.current !== currentMinute) {
           minuteRef.current = currentMinute;
-          const timeStr = new Date(data.T).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-          
-          // Giữ toàn bộ lịch sử trong ngày (lên tới 1440 điểm) thay vì chỉ lấy 60 điểm
+          const timeStr = new Date(data.T).toLocaleTimeString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
           historyRef.current = [
             ...historyRef.current,
-            { time: timeStr, cvd: cvdRef.current, price, timestamp: data.T }
+            { time: timeStr, cvd: cvdRef.current, price, timestamp: data.T },
           ];
         } else if (historyRef.current.length > 0) {
-          historyRef.current[historyRef.current.length - 1].cvd = cvdRef.current;
-          historyRef.current[historyRef.current.length - 1].price = price;
+          const last = historyRef.current[historyRef.current.length - 1];
+          last.cvd = cvdRef.current;
+          last.price = price;
         }
 
-        // Throttle React state updates & Persistence to every 500ms
         if (!throttleRef.current) {
           throttleRef.current = setTimeout(() => {
             if (mountedRef.current) {
@@ -274,24 +378,35 @@ export function useCVDStream() {
               setSellVolume(sellRef.current);
               setCvdHistory([...historyRef.current]);
               setWhaleTrades([...whaleRef.current]);
-              setVolNodes(Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v })));
-              
-              // Persist to local storage safely
+              setVolNodes(
+                Array.from(volNodeRef.current.entries()).map(([p, v]) => ({
+                  price: p,
+                  ...v,
+                }))
+              );
+
               try {
                 localStorage.setItem('hft_cvd_history_date', todayRef.current);
-                localStorage.setItem('hft_cvd_history', JSON.stringify(historyRef.current));
-                
+                localStorage.setItem(
+                  'hft_cvd_history',
+                  JSON.stringify(historyRef.current)
+                );
                 localStorage.setItem('hft_vol_nodes_date', todayRef.current);
-                localStorage.setItem('hft_vol_nodes', JSON.stringify(Array.from(volNodeRef.current.entries())));
-                
+                localStorage.setItem(
+                  'hft_vol_nodes',
+                  JSON.stringify(Array.from(volNodeRef.current.entries()))
+                );
                 localStorage.setItem('hft_whale_trades_date', todayRef.current);
-                localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
+                localStorage.setItem(
+                  'hft_whale_trades',
+                  JSON.stringify(whaleRef.current)
+                );
               } catch (e) {
-                console.error("Failed to persist HFT data:", e);
+                console.error('Failed to persist HFT data:', e);
               }
             }
             throttleRef.current = null;
-          }, 500);
+          }, CVD_UI_MS);
         }
       },
       setCvdStatus,
@@ -305,11 +420,18 @@ export function useCVDStream() {
     };
   }, []);
 
-  const volumeRatio = (buyRef.current + sellRef.current) > 0
-    ? buyRef.current / (buyRef.current + sellRef.current)
-    : 0.5;
+  const totalVol = buyRef.current + sellRef.current;
+  const volumeRatio = totalVol > 0 ? buyRef.current / totalVol : 0.5;
 
-  return { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus, volNodes };
+  return {
+    cvd,
+    sessionCvd,
+    buyVolume,
+    sellVolume,
+    volumeRatio,
+    cvdHistory,
+    whaleTrades,
+    cvdStatus,
+    volNodes,
+  };
 }
-
-

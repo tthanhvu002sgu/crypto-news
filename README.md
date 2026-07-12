@@ -10,17 +10,23 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản) và Liquidity Zones (Vùng thanh lý đòn bẩy).
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
-- **AI Summary & Nupl / Supply in Profit:** Tích hợp AI (Gemini) để phân tích báo cáo thị trường, tâm lý, cảnh báo các mốc kháng cự/hỗ trợ.
+- **AI Summary & Nupl / Supply in Profit:** Tích hợp AI (Gemini) để phân tích báo cáo thị trường, tâm lý, cảnh báo các mốc kháng cự/hỗ trợ. Hỗ trợ chọn **ngôn ngữ báo cáo** (Tiếng Việt / English) và 3 style (Professional / Tactical / Educational).
 - **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
-- **Frontend Framework:** React.js (Sử dụng Vite hoặc Create React App).
-- **Biểu đồ (Charting):** `lightweight-charts` (Biểu đồ nến và các mức giá), `chart.js` & `react-chartjs-2` (Biểu đồ cột/đường cho ETF, CVD).
-- **Quản lý trạng thái (State Management):** React Hooks (`useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`), Context API (`ModuleVisibilityContext`).
-- **Nguồn dữ liệu (Data Sources):**
-  - **REST API:** Binance, Bybit, OKX, Bitget (Lấy Order Book, Klines, Funding Rate, Open Interest). Coinglass API (Lấy ETF Flows, Liquidations).
-  - **WebSocket:** Binance `aggTrade` (Lấy tick-level trades để tính toán CVD, Footprint Nodes và Whale Trades realtime).
-- **Lưu trữ cục bộ:** `localStorage` để lưu cấu hình giao diện người dùng (Gap, Theme, API Keys, Module Visibility, v.v.).
+- **Frontend Framework:** React.js (Vite).
+- **Biểu đồ (Charting):** `lightweight-charts` (nến / profile), `chart.js` & `react-chartjs-2` (ETF, CVD, macro).
+- **Quản lý trạng thái:** React Hooks + Context (`ModuleVisibilityContext`, tooltip settings).
+- **Nguồn dữ liệu:**
+  - **REST API:** Binance, CoinGecko, FRED, CoinMetrics, ETF/COT scrapers, news RSS, Yahoo/FRED equities.
+  - **WebSocket:** Binance multi-ticker + `markPrice` + `aggTrade` (CVD / footprint / whale).
+- **Đồng bộ REST theo tầng (tiered sync):**
+  - **HOT** mỗi 5 phút — Binance REST (ticker/klines/L-S/funding/OI), TTL cache 2–5 phút.
+  - **WARM** mỗi 15 phút — global mcap, stablecoin, news, equities/yields, CVD 24h/7d.
+  - **COLD** mỗi 60 phút — FRED macro, on-chain, ETF, COT, Fear&Greed, CVD 30d, daily klines (TTL 2–12h).
+  - Nút **SYNC NGAY** / auto 08:00 = full force (bỏ qua cache).
+- **Giảm tải realtime:** WS ticker flush UI ~250ms; CVD/UI+localStorage ~500ms; favicon/title cập nhật **ngoài React** (canvas PNG + throttle).
+- **Lưu trữ cục bộ:** `localStorage` (theme, API keys, module visibility, `cache_*` REST, HFT session CVD/nodes/whales).
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
@@ -36,14 +42,41 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - `TargetLiquidityPanel`: Tích hợp vào trong Advanced Chart, hiển thị cụm lệnh chờ Limit Walls theo mức Gap do người dùng chọn.
   - `OrderBookPanel`: Phân tích sổ lệnh tổng hợp (OBI) từ các sàn với khả năng mở rộng/thu hẹp depth levels, hiển thị vùng giá và màu sắc heatmap theo Volume.
 - `CascadeTab.jsx`: Bảng Heatmap/Grid hiển thị các chỉ số phái sinh đa khung.
-- `SummaryTab.jsx`: Bảng tóm tắt nội dung AI dựa trên dữ liệu.
+- `SummaryTab.jsx`: Báo cáo AI (Gemini streaming) — chọn ngôn ngữ VI/EN, style, model; export Markdown.
+- `services/aiPrompts.js`: System prompt EN + VI cho 3 style phân tích.
 
-### Dịch vụ (Services)
-- `api.js`: File chứa hàm gọi HTTP REST API đa sàn. Đáng chú ý có `getOrderBookDepth` (gom orderbook).
-- `websocket.js`: Khởi tạo và quản lý WebSocket (`useCVDStream` để lấy aggTrade).
-- `coinglass.js`: Giao tiếp với API của Coinglass.
+### Dịch vụ / Utils
+- `services/api.js` — REST multi-source (Binance, FRED, ETF, COT, …).
+- `services/websocket.js` — `useBinanceWebSocket` (giá/funding, throttle UI + browser chrome) + `useCVDStream` (aggTrade).
+- `config/syncConfig.js` — TTL cache + interval HOT/WARM/COLD.
+- `utils/cache.js` — `fetchCached` / đọc cache localStorage.
+- `utils/browserChrome.js` — document title + favicon giá BTC (canvas, không phụ thuộc re-render).
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-07-12] AI Summary chọn ngôn ngữ VI/EN `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Thêm selector ngôn ngữ báo cáo AI (Tiếng Việt / English) và system prompt tiếng Việt đầy đủ cho 3 style.
+- **Thay đổi chính:**
+  - `src/services/aiPrompts.js` — prompt EN + VI (professional / tactical / educational).
+  - `SummaryTab` — LANG selector (default VI, lưu `localStorage`), label UI theo ngôn ngữ, export file kèm lang.
+- **Files / areas chạm:** `src/services/aiPrompts.js`, `src/components/SummaryTab.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §3, §4
+- **Verify:** `npm run build`
+
+### [2026-07-12] Refactor sync tiered + favicon realtime `(FULL)`
+- **Lane / Mode:** FEATURE FULL
+- **Tóm tắt:** Làm code sync/WS tường minh hơn; giảm tải REST lặp lại; sửa favicon/title update chậm khi tab nền.
+- **Thay đổi chính:**
+  - Tách `fetchCached`, `CACHE_TTL`/`SYNC_INTERVAL`, favicon helper ra module riêng.
+  - Sync 3 tầng HOT/WARM/COLD + cache Binance REST; full force giữ cho nút Sync / 08:00.
+  - WS ticker batch/throttle 250ms; favicon canvas PNG cập nhật trực tiếp từ WS + re-apply khi tab focus.
+  - Fix duplicate mouse listeners ở `useDraggableScroll`; truyền `apiKeys.fred` vào FRED fetch.
+- **Files / areas chạm:** `src/App.jsx`, `src/services/websocket.js`, `src/utils/*`, `src/config/syncConfig.js`, `README.md`
+- **Ảnh hưởng README:** §2, §3, §4, §5
+- **Verify:** `npm run build` OK
+- **Notes:** Trình duyệt vẫn có thể throttle tab nền nặng; favicon chỉ đổi khi short-price/màu đổi (vd. `67.1k` → `67.2k`).
+
 - [x] Gộp module `TargetLiquidityPanel` vào bên trong 100% diện tích của `AdvancedChart`.
 - [x] Mở rộng `OrderBookPanel` (OBI) và đưa `WhaleTradesPanel` lên cùng một hàng lưới.
 - [x] Tạo hiệu ứng Dropdown (Accordion) cho bảng Limit Walls trong Target Liquidity (Cho phép xem chi tiết các lệnh cấu thành một cụm).
@@ -60,7 +93,8 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - [x] Rà soát và tái cấu trúc Data Layer (WebSocket): Xây dựng cơ chế **Persistence Storage** lưu trữ cục bộ (LocalStorage) cho dữ liệu Footprint Nodes, CVD History và Whale Trades. Khắc phục triệt để lỗi mất dữ liệu tích lũy khi trình duyệt bị tải lại (Reload) hoặc crash, tích hợp cơ chế tự động clear rác khi qua ngày mới (Midnight Reset).
 
 ## 5. Các Task chưa làm (Pending/TODO Tasks)
-- [ ] *[Thêm các task sắp tới vào đây...]*
+- [ ] Code-split bundle JS (>500kB warning sau build)
+- [ ] (Tuỳ chọn) Pause/giảm poll HFT orderbook khi tab ẩn (`document.visibilityState`)
 
 ---
 *Ghi chú: Mọi update từ nay về sau bắt buộc phải ghi log lại vào file này.*

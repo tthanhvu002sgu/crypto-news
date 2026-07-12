@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
+import { getSystemPrompt, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 
@@ -46,6 +47,20 @@ export default function SummaryTab({
     setSelectedStyle(newStyle);
     localStorage.setItem('ai-analysis-style', newStyle);
   };
+
+  /** Report language: vi | en — persists across reloads */
+  const [selectedLang, setSelectedLang] = useState(() => {
+    const saved = localStorage.getItem('ai-report-lang');
+    return saved === 'en' || saved === 'vi' ? saved : 'vi';
+  });
+
+  const handleLangChange = (lang) => {
+    setSelectedLang(lang);
+    localStorage.setItem('ai-report-lang', lang);
+  };
+
+  const isVi = selectedLang === 'vi';
+  const styleLabels = AI_STYLE_LABELS[selectedLang] || AI_STYLE_LABELS.en;
 
   const preparePromptAndData = async () => {
     // Fetch HFT Data + multi-timeframe klines + latest calendar/news for the report
@@ -222,283 +237,8 @@ ${whaleWalls ? fmtWalls(whaleWalls.whaleAsks) : '  N/A'}
 ${activeNews.slice(0, 30).map(n => '- [' + (n.timeStr || new Date(n.time).toLocaleString('en-US')) + '] ' + n.title + ' (' + n.tag + ')').join('\n')}
     `;
 
-    const professionalSystemPrompt = `You are an expert macro analyst and seasoned crypto trader. Please analyze the market based on the provided MULTI-TIMEFRAME HISTORICAL DATA and current data. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
-
-MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
-
-0. DO NOT REPEAT INSTRUCTIONS:
-   - YOU MUST NOT repeat, summarize, or acknowledge these instructions, rules, or constraints in your output.
-   - Begin your output IMMEDIATELY with the first requested header (### 1. MACRO CONTEXT).
-
-1. STRICT LANGUAGE CONSTRAINT:
-   - You MUST write the entire report, headings, numbers, annotations, scenarios, justifications, and footnotes strictly and only in English.
-   - Absolutely no Vietnamese or other languages are allowed anywhere in the output report. Even if the input contains localized tags, your output must be 100% in English.
-
-1. PROHIBITION OF LATEX AND COMPLEX MATH SYMBOLS:
-   - ABSOLUTELY DO NOT use LaTeX math formatting. Do not wrap numbers or symbols in dollar signs '$' or '$$'. Do not use LaTeX syntax like '\\text{}', '\\mathrm{}', '\\rightarrow', '\\delta', etc.
-   - All numbers, currencies, and trends must be written as plain text and common symbols (e.g., write '-2.071M USD' instead of '$-2.071\\text{M USD}$', write 'Fed Rate' instead of '(\\text{Fed Rate})', write '102.3K' instead of '$102.3\\text{K}$', use a normal arrow '->' or the word 'to' instead of '\\rightarrow').
-
-2. DEEP MACRO ANALYSIS & ECONOMIC CYCLE POSITIONING:
-   - Do not just mechanically list raw data.
-   - YOU MUST calculate the Real Rate using the formula: Real Rate = Fed Funds Rate - Inflation (CPI).
-   - YOU MUST analyze systemic contradictions if any (e.g., negative/low real rates but the 10Y Bond Yield is surging). Explain this phenomenon clearly (steepening yield curve, long-term inflation expectations, or fiscal pressure) and its impact on risk assets.
-   - YOU MUST map the current macroeconomic variables (Interest Rates, M2 Supply, CPI Inflation, Unemployment/GDP context) into one of the 4 Business Cycle Phases: (1) Monetary Easing (low rates, expansionary liquidity), (2) Economic Expansion (capital flowing to assets, high GDP, late-cycle inflation), (3) Monetary Tightening (raising rates/credit contraction to curb inflation), or (4) Economic Recession/Contraction (prolonged high rates, asset discounting, declining inflation signaling cycle bottom). Advise investor positioning accordingly (avoiding crowd FOMO during late expansion vs accumulating undervalued assets during recession/tightening).
-
-3. ON-CHAIN VALUATION & STABLECOIN PURCHASING POWER:
-   - Evaluate Network Valuation using MVRV (Market Value to Realized Value), NUPL (Net Unrealized Profit/Loss), and Supply in Profit for both BTC and ETH. Highlight if MVRV indicates an overvalued (> 3.5) or undervalued (< 1.0) zone, and interpret NUPL zones (Capitulation < 0, Belief/Optimism > 0, Euphoria > 0.75) to assess market cycle positioning. Analyze Supply in Profit to gauge the percentage of the network holding unrealized gains (high values > 80-90% often align with tops, low values < 50% with bottoms).
-   - IMPORTANT: The circulating supply of USDT/Stablecoins is NOT immediate latent buying power for BTC. Much of it sits in DeFi, used as collateral, or in long-term wallets. Do NOT treat total stablecoin market cap as direct demand. Highlight this limitation clearly.
-
-4. CME COT (COMMITMENT OF TRADERS) COMPREHENSIVE BREAKDOWN & LAG:
-   - MANDATORY EXHAUSTIVE BREAKDOWN: You MUST explicitly report, analyze, and interpret the Net positioning and weekly Change for ALL 5 trader categories: (1) Dealer Intermediary, (2) Asset Manager/Institutional, (3) Leveraged Funds, (4) Other Reportables, and (5) Nonreportable Positions. DO NOT skip, merge, or omit any category.
-   - Acknowledge that CME COT data is updated weekly (on Fridays, reflecting the previous Tuesday's data), meaning it has a 3-7 day lag.
-   - MANDATORY: DO NOT use CME COT data to evaluate short-term price action (48h - 7-day timeframe). CME COT is strictly valuable for the Medium to Long-term picture (Position Trading). You must clearly separate the short-term outlook (based on ETF Flow, Order Book, CVD, HFT) and the long-term outlook (based on CME COT).
-
-5. DERIVATIVES & FLOW CORRELATION (HFT):
-   - Analyze the strong correlation between the Long/Short Ratio (counted by accounts) and CVD/Volume (calculated by monetary volume) alongside OBI.
-   - Key Example: If Long orders dominate absolutely (L/S Ratio high, > 1.5) but CVD is heavily negative and OBI is negative, point out the conflict: the Long side is merely placing passive Limit Orders to support the price, while the Short/Sell side is aggressively placing Market Orders, pressing down hard. This reflects an active downtrend rather than aggressive buying.
-   - Carefully analyze Short Squeeze (Price up + Open Interest down) or Long Squeeze (Price down + Open Interest down) phenomena if present.
-   - Analyze the 7-day (4h timeframe) and 30-day (1d timeframe) historical CVD trend against BTC price movements. Point out divergences if any: e.g., if price makes a new high but CVD goes sideways/down (Selling absorption / Exhausted buying pressure) or price makes a new low but CVD gradually rises (Buying absorption / Whales accumulating).
-
-6. WHALE WALLS SCALE METRICS (AGGREGATED ORDER BOOK):
-   - The provided Whale Walls data is an Aggregated Order Book from the top 4 exchanges: Binance Spot, Binance Futures, Bybit Spot, Bybit Futures.
-   - Apply a strict scale metric for BTC:
-     * Total walls under 10M USD: Too small for BTC, practically meaningless as hard support/resistance (can be eaten in seconds by Market orders).
-     * Total walls from 10M - 30M USD: Weak/micro support/resistance in ultra-short timeframes (HFT scalping).
-     * Total walls from 30M - 50M USD: Medium support/resistance.
-     * Total walls over 50M USD: Strong support/resistance (actual Whale Walls).
-     * Total walls over 100M USD: Extremely strong barriers capable of causing short-term trend reversals.
-   - Specifically cite the price level and the total aggregated USD value from the exchanges (Binance Spot, Binance Futures, Bybit Spot, Bybit Futures) as evidence.
-
-7. SCORING MATRIX FOR PROJECTIONS:
-   - Do not arbitrarily guess probabilities (e.g., 70% / 30%) based on feeling.
-   - YOU MUST construct and print a **Scoring Matrix** to calculate the trend score.
-   - Scoring categories (from -2 to +2 each: extremely bad is -2, bad is -1, neutral is 0, good is +1, extremely good is +2):
-     * 1. Macro Context
-     * 2. Institutional ETF Flow
-     * 3. Spot & Onchain Price Action
-     * 4. Derivatives & Open Interest
-     * 5. HFT Flows & Aggregated Order Book
-   - Calculate the total score (max +10, min -10). Convert to probabilities as follows:
-     * Total score >= +6: Bullish (>75% probability of upward trend), Bearish (<25%)
-     * Total score from +2 to +5: Moderately Bullish (60% - 70% upward prob.), Bearish (30% - 40%)
-     * Total score from -1 to +1: Neutral (50% up / 50% down)
-     * Total score from -5 to -2: Moderately Bearish (60% - 70% downward prob.), Bullish (30% - 40%)
-     * Total score <= -6: Bearish (>75% downward prob.), Bullish (<25%)
-   - You must print this scorecard specifically in section 5. YOU MUST use actual newline characters ('\n') for each row of the table (header, separator :---, and each data row). Absolutely do not compress all table rows onto a single line. Write a proper markdown table comprising: Line 1: Header (| Col 1 | Col 2 |), Line 2: Separator (| :--- | :---: |), Line 3+: Data rows.
-
-8. FINANCIAL CAUSALITY PRINCIPLES (REAL CAUSAL FACTORS IN FINANCE):
-   - YOU MUST analyze the market and explain price action using the following real causal factors from financial science:
-     * Mechanical Supply-Demand Imbalance (Order Flow Imbalance): Asset price increases are the direct result of active buy volume fully matching passive limit sell orders and pushing prices to higher levels. This is a direct, mechanical causal relationship.
-     * Information Asymmetry: Accurate analysis of macroeconomic data and capital flows helps traders discover the underlying causes of asset mispricing before the market self-corrects toward its intrinsic value.
-     * Forced Dynamics from Market Structure: Understanding why a specific group of investor positions is forced to stop out or get liquidated (Liquidation) at a particular price zone helps traders identify high-probability reversal or trend continuation areas, driven by this forced liquidity.
-
-MANDATORY REPORT STRUCTURE COMPLIANCE:
-You MUST follow this exact template structure, including headers, list patterns, and bullet descriptions. Just fill in the brackets [like this] with actual metrics analysis and numbers from the input data:
-
-### 1. MACRO CONTEXT
-The global macroeconomic framework is [describe general macro climate based on VIX, DXY, and geopolitical inflation]. When analyzing news, ALWAYS explicitly state the date of the news being referenced.
-
-* **Real Rate Calculation**: The Real Rate is calculated using the formula:
-Real Rate = Fed Funds Rate - Inflation (CPI)
-Real Rate = [Fed Funds Rate]% - [Inflation (CPI)]% = [Calculated Real Rate]%
-
-* **Systemic Contradictions**: [Analyze contradiction between Real Rate and 10Y Yield, long-term expectations, fiscal pressure].
-* **Economic Cycle Positioning**: [Map the global economy into one of the 4 Business Cycle Phases: Monetary Easing / Expansion / Tightening / Recession based on rates, CPI, M2, and employment data. Provide strategic cycle-based investment positioning advice, such as observing patiently or preparing capital to accumulate discounted assets instead of following crowd FOMO].
-* **Liquidity and Market Volatility**: U.S. Net Liquidity stands at [Net Liquidity]B USD, M2 Supply is [M2 Supply]B USD. Broad market anxiety is [VIX level] (VIX). High Yield Spread is [Spread]%, indicating [credit conditions]. Equities: S&P 500 at [S&P 500 Price] and Nasdaq 100 at [Nasdaq 100 Price]. [Conclude how this affects appetite for high-beta risk assets like Bitcoin].
-
----
-
-### 2. CRYPTO MARKET & ON-CHAIN SITUATION
-Bitcoin is [describe price/onchain environment, e.g., structural distribution/accumulation/consolidation] across multiple timeframes.
-
-* **Multi-Timeframe Comparison**:
-* **Current Price**: $[Current Price] (24h Change: [Change]%, 24h Volume: $[Vol]B)
-* **7-Day Performance**: Open: $[Open] -> Current: $[Current] ([Change]%) | High: $[High] | Low: $[Low]
-* **30-Day Performance**: Open: $[Open] -> Current: $[Current] ([Change]%) | High: $[High] | Low: $[Low]
-* **90-Day Performance**: Open: $[Open] -> Current: $[Current] ([Change]%) | High: $[High] | Low: $[Low]
-* **1-Year Performance**: Open: $[Open] -> Current: $[Current] ([Change]%) | High: $[High] | Low: $[Low]
-
-* **Market Structure**: Bitcoin Dominance stands at [BTC Dominance]%, while ETH Dominance is [ETH Dominance]% (with ETH and SOL pricing [describe trend or availability]). Network fundamentals: BTC Hashrate is [Hashrate] EH/s and [Active Addresses] Active Addresses.
-* **On-chain Valuation (MVRV, NUPL, Supply in Profit)**: [Provide a dedicated assessment of BTC and ETH using their respective MVRV ratios, NUPL values, and Supply in Profit percentages. Explain whether these metrics suggest an accumulation phase, a mid-cycle progression, or a distribution phase].
-* **Stablecoin Purchasing Power & Data Limitations**: The circulating supply of USDT stands at $[USDT Supply]B. IMPORTANT: This total supply must NOT be treated as immediate latent demand ready to absorb BTC selling pressure. Stablecoin supply is often locked in DeFi, used as collateral, or held in long-term wallets. Accurate analysis of direct buying demand requires Stablecoin Exchange Reserves (which is not available in current data).
-
----
-
-### 3. INSTITUTIONAL FLOWS (ETF & CME)
-Institutional sentiment shows [describe overall sentiment, e.g., divergence, selling pressure, etc.].
-
-* **Institutional ETF Flows**: Total BTC ETF Holdings stand at [ETF Holdings] BTC (~$[Holdings Value]B). Daily Net Flows breakdown for the last 7 days:
-[List the 7 dates and flows, e.g., Date: Flow M USD]
-[Conclude if spot price failed/succeeded to absorb this].
-
-* **CME COT Comprehensive Assessment**: You MUST systematically detail and interpret the positioning of ALL 5 categories (DO NOT summarize or skip any group):
-  * **Dealer Intermediary**: [Net position, weekly change, and role as liquidity providers/market makers]
-  * **Asset Manager / Institutional**: [Net position, weekly change, and directional bias of real-money funds]
-  * **Leveraged Funds**: [Net position, weekly change, and speculative bias of hedge funds/CTA strategies]
-  * **Other Reportables**: [Net position, weekly change, and positioning of family offices/large prop firms]
-  * **Nonreportable Positions**: [Net position, weekly change, and sentiment of retail/small traders]
-  * **Overall COT Synthesis**: [Analyze the structural divergence between institutional/real-money positioning vs leveraged speculators for the medium-to-long term outlook].
-* **CME COT Lag Acknowledgement**: It must be explicitly acknowledged that CME COT data is updated weekly on Fridays (reflecting the previous Tuesday's data), establishing a 3-7 day lag. Consequently, this data cannot be utilized to evaluate short-term price action (48h - 7-day timeframe). While ETF flows track immediate spot demand shifts, the lagged CME COT metrics are strictly valuable for the medium-to-long-term position trading outlook.
-
----
-
-### 4. DERIVATIVES & SHORT-TERM FLOWS (HFT)
-High-frequency and derivatives metrics reveal [describe derivatives market structure].
-
-* **Derivatives Metrics & Conflict Analysis**: Funding Rate is [Funding Rate]%, Open Interest is [Open Interest] BTC (trending [UP/DOWN] over the last 24 hours), and Long/Short Ratio is [L/S Ratio] (retail accounts are [Long percentage]% Long).
-* **Market Order vs. Limit Order Conflict**: There is a [stark/subtle] tactical conflict between the high Long/Short Ratio (counted by accounts) and the Intraday Cumulative Volume Delta (CVD), which is [CVD Value], yet [CVD HTF Value] on higher timeframes. The Long side is primarily placing passive Limit Orders to support the price, while the Short/Sell side has historically been aggressively executing Market Orders. This asymmetry typically reflects [distribution/accumulation/consolidation] rather than aggressive spot accumulation. [Comment on Long/Short Squeezes based on Price and Open Interest trend].
-* **CVD Trend & Divergence Analysis**:
-  * **7-Day CVD vs. Price (4h TF)**: The 7-day CVD array shifted from [7d CVD Start] to [7d CVD End]. Price during this period [price movement]. [Divergence analysis].
-  * **30-Day CVD vs. Price (1d TF)**: The 30-day CVD shifted from [30d CVD Start] to [30d CVD End], [divergence or tracking analysis].
-* **Whale Walls Scale Metrics**: The Aggregated Order Book from Binance Spot, Binance Futures, Bybit Spot, and Bybit Futures reveals [describe liquidity].
-  * *Scale Metrics Application*: [Classify walls according to scale: under 10M USD (too small/meaningless), 10M-30M (weak/micro), 30M-50M (medium), over 50M (strong/Whale walls), over 100M (extremely strong)].
-  * *Support*: [Detail largest aggregated bids, e.g. Price (USD Value, Breakdown)].
-  * *Resistance*: [Detail largest aggregated asks, e.g. Price (USD Value, Breakdown)].
-  Whale Walls Bid/Ask Ratio is [Ratio]% Bid, indicating [sentiment].
-
----
-
-### 5. CONCLUSION & TREND PROJECTION
-* **BIAS**: [🟢 BULLISH / 🔴 BEARISH / 🟡 NEUTRAL] (Short-to-Medium Term)
-* **RISK SCORE**: [Score]/10. The risk score is [justification based on VIX, ETF flow, wall strength, retail leverage, etc.].
-
-#### SCORING MATRIX
-| Scoring Category | Score (-2 to +2) | Technical Justification |
-| --- | --- | --- |
-| 1. Macro Context | [Score] | [Justification] |
-| 2. Institutional ETF Flow | [Score] | [Justification] |
-| 3. Spot & Onchain Price Action | [Score] | [Justification] |
-| 4. Derivatives & Open Interest | [Score] | [Justification] |
-| 5. HFT Flows & Aggregated Order Book | [Score] | [Justification] |
-| **Total Score** | **[Total Score]** | **[Outlook Class, e.g., Bearish/Bullish/Neutral Outlook]**<br> |
-
-#### KEY PRICE ZONES
-* **Immediate Support**: $[Price] ([Value] USD aggregated support; [weak/strong] structural defense). Critical macro support remains at $[Price].
-* **Immediate Resistance**: $[Price] ([Value] USD aggregated resistance). Stronger macro resistance sits at $[Price].
-
-#### FINANCIAL CAUSALITY OF CURRENT TREND
-* **Mechanical Supply-Demand Imbalance (Order Flow Imbalance)**: [Analyze how current price movements are the direct mechanical result of active buy/sell volume fully matching passive limit sell/buy orders and pushing prices to new levels].
-* **Information Asymmetry**: [Explain how macroeconomic data and capital flows are causing the market to misprice BTC, before self-correction toward intrinsic value].
-* **Forced Dynamics from Market Structure**: [Explain which specific group of investor positions is forced to cut losses or be liquidated at specific price zones, and how this forced liquidity creates reversal/continuation zones].
-
-#### SCENARIO ANALYSIS BASED ON TRIGGER EVENTS
-* **Scenario A: Continuation of the Structural Downtrend (Primary Path)** [or alternative path]
-  * **Trigger Events**:
-    1. [Condition 1, e.g. price breaks support]
-    2. [Condition 2, e.g. ETF outflow exceeds -100M]
-    3. [Condition 3, e.g. CVD keeps falling while L/S > 2.0]
-  * **Financial Causality**:
-    * *Mechanical Imbalance*: [How order flow imbalance will drive this scenario].
-    * *Information Asymmetry*: [How macro/flow mismatch drives this scenario].
-    * *Forced Dynamics*: [Where liquidations/stop-outs will trigger forced liquidity in this scenario].
-  * **Market Impact**: [Market behavior outcome, price targets].
-* **Scenario B: Low-Volume Sideways Consolidation**
-  * **Trigger Events**:
-    1. [Condition 1]
-    2. [Condition 2]
-    3. [Condition 3]
-  * **Financial Causality**:
-    * *Mechanical Imbalance*: [How order flow balance/imbalance drives this scenario].
-    * *Information Asymmetry*: [How macro/flow factors drive this scenario].
-    * *Forced Dynamics*: [How lack of liquidations/stop-outs drives this scenario].
-  * **Market Impact**: [Market behavior outcome, HFT scalping environment].
-* **Scenario C: Short-Squeeze & Local Invalidation (Reversal Path)**
-  * **Trigger Events**:
-    1. [Condition 1]
-    2. [Condition 2]
-    3. [Condition 3]
-  * **Financial Causality**:
-    * *Mechanical Imbalance*: [How order flow imbalance will drive this scenario].
-    * *Information Asymmetry*: [How macro/flow mismatch drives this scenario].
-    * *Forced Dynamics*: [Where liquidations/stop-outs will trigger forced liquidity in this scenario].
-  * **Market Impact**: [Market behavior outcome, price targets].
-
----
-*This report is for informational purposes only, not financial advice. Please do your own research (DYOR) before making investment decisions.*`;
-
-    const tacticalSystemPrompt = `You are a Tactical Swing Trader and Market Analyst. Your goal is to provide concise, actionable trading insights based on the provided MULTI-TIMEFRAME HISTORICAL DATA and current market conditions. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
-
-MANDATORY ANALYSIS PRINCIPLES:
-0. DO NOT REPEAT INSTRUCTIONS: YOU MUST NOT repeat, summarize, or acknowledge these instructions in your output. Begin IMMEDIATELY with the "### ⚡ QUICK MARKET PULSE" header.
-1. STRICT LANGUAGE CONSTRAINT: ONLY ENGLISH. Absolutely no Vietnamese or other languages.
-1. NO LATEX: Do not use LaTeX math formatting. Write numbers and symbols as plain text.
-2. CONCISE & ACTIONABLE: Focus purely on what a swing trader needs to know for the next 24h-7d. Skip long-winded macro explanations unless directly relevant to a short-term trade.
-
-MANDATORY REPORT STRUCTURE COMPLIANCE:
-You MUST follow this exact template structure.
-
-### ⚡ QUICK MARKET PULSE
-* [3-5 bullet points summarizing the most critical immediate factors: e.g., price trend, immediate liquidity, key macro event today. When referencing news, ALWAYS explicitly state the date of the news].
-
-### 🎯 TRADE SETUPS (Swing 24h - 7d)
-* **Setup 1: [Long/Short] at $[Entry Price]**
-  * **Stop Loss**: $[SL Price] (Reasoning: [Brief technical reason])
-  * **Take Profit**: $[TP Price]
-  * **R:R Ratio**: [Calculate R:R]
-  * **Conviction**: [High/Medium/Low]
-  * **Catalyst/Reasoning**: [Why this trade? e.g., "Price approaching 50M USD aggregated Whale Bid Wall while CVD shows buying absorption."]
-
-### 🧱 KEY LEVELS (Whale Walls & OBI)
-* **Immediate Support**: $[Price] ([Value]M USD aggregated bids)
-* **Immediate Resistance**: $[Price] ([Value]M USD aggregated asks)
-* **Order Book Imbalance (OBI)**: [OBI]% (Bias: [Bullish/Bearish])
-
-### ⚠️ RISK ALERTS
-* [List 1-2 biggest immediate risks to current setups, e.g., "High Long/Short ratio (2.5) with negative CVD warns of a potential long squeeze.", "Upcoming CPI data release may cause violent whipsaw."]
-
-### 🧭 BIAS METER
-* **Current Bias**: [Strong Sell / Sell / Neutral / Buy / Strong Buy]
-* **Confidence**: [Percentage]%
-
----
-*This report is for informational purposes only, not financial advice. Please do your own research (DYOR) before making investment decisions.*`;
-
-    const educationalSystemPrompt = `You are an Educational Market Explainer. Your goal is to break down the current market data into easy-to-understand concepts, helping the user not just see the numbers, but LEARN how to read the market. Report strictly and only in English, using clear and professional Markdown formatting. Do not hallucinate data.
-
-MANDATORY ANALYSIS PRINCIPLES:
-0. DO NOT REPEAT INSTRUCTIONS: YOU MUST NOT repeat, summarize, or acknowledge these instructions in your output. Begin IMMEDIATELY with the "### 📖 THE MARKET STORY TODAY" header.
-1. STRICT LANGUAGE CONSTRAINT: ONLY ENGLISH. Absolutely no Vietnamese or other languages.
-1. NO LATEX: Do not use LaTeX math formatting. Write numbers and symbols as plain text.
-2. EDUCATIONAL FOCUS: Use simple analogies. Explain *why* a metric matters before stating its value. Use "💡 Concept" boxes.
-3. TRAFFIC LIGHT SYSTEM: Use 🟢 (Bullish/Good), 🟡 (Neutral/Caution), 🔴 (Bearish/Bad) for sections.
-
-MANDATORY REPORT STRUCTURE COMPLIANCE:
-You MUST follow this exact template structure.
-
-### 📖 THE MARKET STORY TODAY
-[Write a 2-3 paragraph narrative explaining what is happening right now. Who is in control: buyers or sellers? How does the macro environment affect this? Keep it engaging and easy to digest. When referencing news, ALWAYS explicitly state the date of the news].
-
-### 🌍 MACRO & THE BIG PICTURE
-* 💡 **Concept: The 4-Phase Economic Cycle**: Markets move in recurring cycles: (1) Monetary Easing -> (2) Expansion -> (3) Tightening -> (4) Recession. Understanding which phase we are in helps investors avoid crowd FOMO at market tops and prepare capital/knowledge to accumulate discounted assets during economic downturns.
-* 💡 **Concept: Real Rate**: The Real Rate (Fed Funds Rate minus Inflation) tells us if borrowing money is actually expensive. If it's high, investors prefer safe assets over Bitcoin.
-* **Current Situation**: The calculated Real Rate is [Rate]%. [Explain what this means for Bitcoin today in simple terms and state which phase of the Economic Cycle we are currently navigating].
-* **Liquidity**: Net Liquidity is [Value]. [Explain if money is flowing into or out of the system].
-
-### ⛓️ ON-CHAIN HEALTH (NUPL & PROFIT)
-* 💡 **Concept: NUPL & Supply in Profit**: NUPL (Net Unrealized Profit/Loss) shows the overall profit or loss held by investors. Supply in Profit measures how much of the total supply was bought at lower prices than today. When both are extremely high (e.g., Supply in Profit > 90%), the market is usually near a top because many people will want to take profits.
-* **Current Situation**: BTC NUPL is [BTC NUPL Value] and Supply in Profit is [BTC Supply in Profit Value]. [Explain what this means for the current cycle: are we in Euphoria/Greed or Capitulation/Fear?].
-
-### 🐋 WHALES & INSTITUTIONS
-* 💡 **Concept: ETF Flows & Whale Walls**: ETFs show if traditional finance is buying. Whale Walls show where giant players have placed massive buy/sell orders.
-* **ETF Flow**: Over 7 days, ETFs saw [Net Flow]. [Explain impact].
-* **Whale Walls**: The biggest buyers are waiting at $[Price] ([Value]M USD), acting as a "floor". The biggest sellers are at $[Price] ([Value]M USD), acting as a "ceiling".
-
-### 📊 TRADERS & LEVERAGE (HFT)
-* 💡 **Concept: Long/Short Ratio & CVD**: Long/Short ratio shows crowd sentiment. CVD (Cumulative Volume Delta) shows actual money flowing. When the crowd is Long but CVD is negative, the "smart money" is selling to the crowd.
-* **Current Situation**: The crowd is currently [Long/Short dominant]. Meanwhile, CVD is [Positive/Negative]. [Explain the conflict or alignment and what it signals].
-
-### 🎯 WHAT THIS MEANS FOR YOU (KEY TAKEAWAYS)
-1. **[Takeaway 1]**
-2. **[Takeaway 2]**
-3. **[Takeaway 3]**
-
----
-*This report is for educational purposes only, not financial advice. Please do your own research (DYOR) before making investment decisions.*`;
-
-    let systemPrompt = professionalSystemPrompt;
-    if (selectedStyle === 'tactical') systemPrompt = tacticalSystemPrompt;
-    if (selectedStyle === 'educational') systemPrompt = educationalSystemPrompt;
-
+    // System prompt by style + language (vi | en)
+    const systemPrompt = getSystemPrompt(selectedStyle, selectedLang);
     return { promptData, systemPrompt };
   };
 
@@ -508,10 +248,34 @@ You MUST follow this exact template structure.
     setIsExporting(true);
     try {
       const { promptData, systemPrompt } = await preparePromptAndData();
-      
-      const markdownContent = `# AI Market Analysis Request
+      const langNote = isVi ? 'Tiếng Việt' : 'English';
+
+      const markdownContent = isVi
+        ? `# Yêu cầu phân tích thị trường AI
+
+File này chứa dữ liệu thị trường hiện tại và hướng dẫn phân tích (system prompt). Bạn có thể tải/copy sang ChatGPT, Claude, Gemini hoặc AI khác.
+
+**Ngôn ngữ báo cáo mong muốn:** ${langNote}
+
+---
+
+## 1. System Prompt (Hướng dẫn phân tích)
+
+\`\`\`markdown
+${systemPrompt}
+\`\`\`
+
+## 2. Market Data (Dữ liệu đầu vào)
+
+\`\`\`markdown
+${promptData}
+\`\`\`
+`
+        : `# AI Market Analysis Request
 
 This file contains the current market data and analysis instructions. You can upload or copy this content to ChatGPT, Claude, Gemini, or any other AI model for a professional market analysis.
+
+**Report language:** ${langNote}
 
 ---
 
@@ -530,20 +294,23 @@ ${promptData}
 
       const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      
+      const link = document.createElement('a');
+
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
       const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
       link.href = url;
-      link.setAttribute("download", `crypto_market_data_for_ai_${dateStr}_${timeStr}.md`);
+      link.setAttribute(
+        'download',
+        `crypto_market_data_for_ai_${selectedLang}_${dateStr}_${timeStr}.md`
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (e) {
-      console.error("Error exporting data:", e);
-      alert("Failed to export data: " + e.message);
+      console.error('Error exporting data:', e);
+      alert((isVi ? 'Xuất dữ liệu thất bại: ' : 'Failed to export data: ') + e.message);
     } finally {
       setIsExporting(false);
     }
@@ -553,7 +320,11 @@ ${promptData}
     const geminiKey = apiKeys?.gemini?.trim();
 
     if (!geminiKey) {
-      alert("Please enter your Gemini API Key in the API Settings!");
+      alert(
+        isVi
+          ? 'Vui lòng nhập Gemini API Key trong phần API Settings!'
+          : 'Please enter your Gemini API Key in the API Settings!'
+      );
       return;
     }
 
@@ -564,26 +335,24 @@ ${promptData}
       const { promptData, systemPrompt } = await preparePromptAndData();
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:streamGenerateContent?alt=sse&key=${geminiKey}`;
-      const headers = { 
-        "Content-Type": "application/json"
+      const headers = {
+        'Content-Type': 'application/json',
       };
 
-      console.log(`[AI] Trying model: ${selectedModel} (${provider})`);
+      console.log(`[AI] model=${selectedModel} lang=${selectedLang} style=${selectedStyle}`);
       const res = await fetch(url, {
         method: 'POST',
-        headers: headers,
+        headers,
         body: JSON.stringify({
           system_instruction: {
-            parts: { text: systemPrompt }
+            parts: { text: systemPrompt },
           },
-          contents: [
-            { role: "user", parts: [{ text: promptData }] }
-          ],
+          contents: [{ role: 'user', parts: [{ text: promptData }] }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 3000
-          }
-        })
+            maxOutputTokens: 3000,
+          },
+        }),
       });
 
       if (!res.ok) {
@@ -591,54 +360,63 @@ ${promptData}
         throw new Error(errText || `HTTP status ${res.status}`);
       }
 
-      console.log(`[AI] Success with model: ${selectedModel}`);
-
       const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        
-        // Split by either \r\n, \n, or \r
+
         const lines = buffer.split(/\r?\n|\r/);
-        buffer = lines.pop() || "";
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
           const cleaned = line.trim();
           if (!cleaned) continue;
-          if (cleaned.startsWith("data: ")) {
-            let dataStr = cleaned.slice(6).trim();
+          if (cleaned.startsWith('data: ')) {
+            const dataStr = cleaned.slice(6).trim();
             if (!dataStr) continue;
-            
+
             let parsed = null;
-            let isParseError = false;
             try {
               parsed = JSON.parse(dataStr);
-            } catch (e) {
-              isParseError = true;
+            } catch {
+              continue;
             }
 
-            if (!isParseError && parsed) {
-              if (parsed.error) {
-                throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+            if (parsed.error) {
+              throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+            }
+            const choice = parsed.candidates?.[0];
+            if (choice) {
+              const text = choice.content?.parts?.[0]?.text || '';
+              if (text) {
+                setAiSummary((prev) => cleanLatex(prev + text));
               }
-              const choice = parsed.candidates?.[0];
-              if (choice) {
-                const text = choice.content?.parts?.[0]?.text || "";
-                if (text) {
-                  setAiSummary(prev => cleanLatex(prev + text));
-                }
-                if (choice.finishReason && choice.finishReason !== "STOP") {
-                  if (choice.finishReason === "SAFETY") {
-                    setAiSummary(prev => prev + "\n\n**[Report stopped due to AI Safety Filter]**");
-                  } else if (choice.finishReason === "MAX_TOKENS") {
-                    setAiSummary(prev => prev + "\n\n**[Report stopped: Max Output Tokens limit reached]**");
-                  } else {
-                    setAiSummary(prev => prev + `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`);
-                  }
+              if (choice.finishReason && choice.finishReason !== 'STOP') {
+                if (choice.finishReason === 'SAFETY') {
+                  setAiSummary((prev) =>
+                    prev +
+                    (isVi
+                      ? '\n\n**[Báo cáo dừng do bộ lọc an toàn AI]**'
+                      : '\n\n**[Report stopped due to AI Safety Filter]**')
+                  );
+                } else if (choice.finishReason === 'MAX_TOKENS') {
+                  setAiSummary((prev) =>
+                    prev +
+                    (isVi
+                      ? '\n\n**[Báo cáo dừng: đã đạt giới hạn token đầu ra]**'
+                      : '\n\n**[Report stopped: Max Output Tokens limit reached]**')
+                  );
+                } else {
+                  setAiSummary((prev) =>
+                    prev +
+                    (isVi
+                      ? `\n\n**[Báo cáo dừng sớm. Lý do: ${choice.finishReason}]**`
+                      : `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`)
+                  );
                 }
               }
             }
@@ -646,21 +424,29 @@ ${promptData}
         }
       }
 
-      setAiSummary(prev => prev + `\n\n---\n*Report generated by model: **${selectedModel}** (Gemini API)*`);
+      const footer = isVi
+        ? `\n\n---\n*Báo cáo tạo bởi model: **${selectedModel}** (Gemini API) · Ngôn ngữ: Tiếng Việt*`
+        : `\n\n---\n*Report generated by model: **${selectedModel}** (Gemini API) · Language: English*`;
+      setAiSummary((prev) => prev + footer);
     } catch (err) {
       console.error(err);
       let friendlyError = err.message;
       if (
-        err.message.includes('429') || 
-        err.message.toLowerCase().includes('quota') || 
-        err.message.toLowerCase().includes('rate limit') || 
+        err.message.includes('429') ||
+        err.message.toLowerCase().includes('quota') ||
+        err.message.toLowerCase().includes('rate limit') ||
         err.message.toLowerCase().includes('exhausted')
       ) {
-        friendlyError = `Rate Limit hoặc hết hạn mức API.\n\n` +
-          `**Hướng khắc phục đề xuất:**\n` +
-          `Vui lòng kiểm tra lại hạn mức trên Google AI Studio hoặc thử lại sau.`;
+        friendlyError = isVi
+          ? `Rate limit hoặc hết hạn mức API.\n\n**Hướng khắc phục:** Kiểm tra hạn mức trên Google AI Studio hoặc thử lại sau.`
+          : `Rate limit or API quota exhausted.\n\n**Fix:** Check your quota on Google AI Studio or try again later.`;
       }
-      setAiSummary(prev => prev + "\n\n**Error generating report:** " + friendlyError);
+      setAiSummary(
+        (prev) =>
+          prev +
+          (isVi ? '\n\n**Lỗi tạo báo cáo:** ' : '\n\n**Error generating report:** ') +
+          friendlyError
+      );
     } finally {
       setIsAiLoading(false);
     }
@@ -673,9 +459,37 @@ ${promptData}
           <Sparkles size={18} /> AI MACRO & HFT SUMMARY
         </h3>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Language Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
+            <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
+              {isVi ? 'NGÔN NGỮ:' : 'LANG:'}
+            </span>
+            <select
+              value={selectedLang}
+              onChange={(e) => handleLangChange(e.target.value)}
+              disabled={isAiLoading || isExporting}
+              className="text-slate-300 font-mono"
+              title={isVi ? 'Ngôn ngữ báo cáo AI' : 'AI report language'}
+              style={{
+                background: 'var(--bg-slate-900)',
+                border: '1px solid var(--border-panel)',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+
           {/* Style Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
-            <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>STYLE:</span>
+            <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
+              {isVi ? 'PHONG CÁCH:' : 'STYLE:'}
+            </span>
             <select
               value={selectedStyle}
               onChange={(e) => handleStyleChange(e.target.value)}
@@ -688,12 +502,12 @@ ${promptData}
                 borderRadius: '4px',
                 fontSize: '0.65rem',
                 outline: 'none',
-                cursor: 'pointer'
+                cursor: 'pointer',
               }}
             >
-              <option value="professional">Professional Macro</option>
-              <option value="tactical">Tactical Swing Trader</option>
-              <option value="educational">Educational Explainer</option>
+              <option value="professional">{styleLabels.professional}</option>
+              <option value="tactical">{styleLabels.tactical}</option>
+              <option value="educational">{styleLabels.educational}</option>
             </select>
           </div>
 
@@ -712,7 +526,7 @@ ${promptData}
                 borderRadius: '4px',
                 fontSize: '0.65rem',
                 outline: 'none',
-                cursor: 'pointer'
+                cursor: 'pointer',
               }}
             >
               <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
@@ -723,91 +537,130 @@ ${promptData}
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
-          <Tooltip content={{
-            api: 'Hệ thống (Local)',
-            def: 'Xuất dữ liệu thị trường hiện có (Macro, Crypto, ETF, Derivatives, HFT) và Hướng dẫn phân tích (System Prompt) thành một file Markdown (.md) để người dùng có thể mang đi phân tích ở các nền tảng AI khác.'
-          }} lastUpdated={lastSync}>
-            <button 
-              className="font-mono" 
-              onClick={exportDataForAi} 
-              disabled={isExporting || isAiLoading}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '6px', 
-                padding: '6px 14px', 
-                fontSize: '0.7rem', 
-                fontWeight: 700,
-                borderRadius: '4px',
-                background: (isExporting || isAiLoading) ? 'var(--bg-slate-800)' : 'var(--bg-slate-900)',
-                color: (isExporting || isAiLoading) ? 'var(--text-slate-500)' : 'var(--color-emerald-400)',
-                border: (isExporting || isAiLoading) ? '1px solid var(--border-panel)' : '1px solid var(--border-emerald-500)',
-                cursor: (isExporting || isAiLoading) ? 'not-allowed' : 'pointer',
-                boxShadow: 'none',
-                transition: 'all 0.2s ease'
+            <Tooltip
+              content={{
+                api: 'Hệ thống (Local)',
+                def: isVi
+                  ? 'Xuất dữ liệu thị trường + system prompt (theo ngôn ngữ đã chọn) thành file Markdown để dùng với AI khác.'
+                  : 'Export market data + system prompt (in the selected language) as Markdown for other AI tools.',
               }}
-              onMouseOver={(e) => {
-                if (!isExporting && !isAiLoading) {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.borderColor = 'var(--text-contrast)';
-                }
-              }}
-              onMouseOut={(e) => {
-                if (!isExporting && !isAiLoading) {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.borderColor = 'var(--border-emerald-500)';
-                }
-              }}
+              lastUpdated={lastSync}
             >
-              {isExporting ? <Loader2 size={14} className="spinning" /> : <Download size={14} />}
-              {isExporting ? 'EXPORTING...' : 'EXPORT DATA FOR AI'}
-            </button>
-          </Tooltip>
-          <Tooltip content={{
-            api: 'Gemini API',
-            def: 'Yêu cầu AI (Gemini) đọc dữ liệu hiện có và tự động lập báo cáo tóm tắt vĩ mô & HFT theo cấu trúc nghiêm ngặt của hệ thống.'
-          }} lastUpdated={lastSync}>
-            <button 
-              className="btn-sync font-mono" 
-              onClick={generateReport} 
-              disabled={isAiLoading || isExporting}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              <button
+                className="font-mono"
+                onClick={exportDataForAi}
+                disabled={isExporting || isAiLoading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  borderRadius: '4px',
+                  background: isExporting || isAiLoading ? 'var(--bg-slate-800)' : 'var(--bg-slate-900)',
+                  color: isExporting || isAiLoading ? 'var(--text-slate-500)' : 'var(--color-emerald-400)',
+                  border:
+                    isExporting || isAiLoading
+                      ? '1px solid var(--border-panel)'
+                      : '1px solid var(--border-emerald-500)',
+                  cursor: isExporting || isAiLoading ? 'not-allowed' : 'pointer',
+                  boxShadow: 'none',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseOver={(e) => {
+                  if (!isExporting && !isAiLoading) {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.borderColor = 'var(--text-contrast)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isExporting && !isAiLoading) {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = 'var(--border-emerald-500)';
+                  }
+                }}
+              >
+                {isExporting ? <Loader2 size={14} className="spinning" /> : <Download size={14} />}
+                {isExporting
+                  ? isVi
+                    ? 'ĐANG XUẤT...'
+                    : 'EXPORTING...'
+                  : isVi
+                    ? 'XUẤT DATA CHO AI'
+                    : 'EXPORT DATA FOR AI'}
+              </button>
+            </Tooltip>
+            <Tooltip
+              content={{
+                api: 'Gemini API',
+                def: isVi
+                  ? 'Gemini đọc dữ liệu và lập báo cáo vĩ mô & HFT bằng ngôn ngữ đã chọn, theo cấu trúc system prompt.'
+                  : 'Gemini reads market data and writes a macro & HFT report in the selected language.',
+              }}
+              lastUpdated={lastSync}
             >
-              {isAiLoading ? <Loader2 size={14} className="spinning" /> : <Sparkles size={14} />}
-              {isAiLoading ? 'GENERATING REPORT...' : 'GENERATE AI REPORT'}
-            </button>
-          </Tooltip>
-          <ModuleMenu moduleId="tab_summary" />
+              <button
+                className="btn-sync font-mono"
+                onClick={generateReport}
+                disabled={isAiLoading || isExporting}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {isAiLoading ? <Loader2 size={14} className="spinning" /> : <Sparkles size={14} />}
+                {isAiLoading
+                  ? isVi
+                    ? 'ĐANG TẠO BÁO CÁO...'
+                    : 'GENERATING REPORT...'
+                  : isVi
+                    ? 'TẠO BÁO CÁO AI'
+                    : 'GENERATE AI REPORT'}
+              </button>
+            </Tooltip>
+            <ModuleMenu moduleId="tab_summary" />
+          </div>
         </div>
       </div>
-    </div>
 
-
-      <div className="summary-content font-mono" style={{ 
-        background: 'var(--bg-slate-950)', 
-        padding: '20px', 
-        borderRadius: '8px',
-        border: '1px solid var(--border-panel)',
-        minHeight: '300px',
-        color: 'var(--text-contrast)',
-        lineHeight: '1.6',
-        fontSize: '0.85rem',
-        overflowY: 'auto'
-      }}>
+      <div
+        className="summary-content font-mono"
+        style={{
+          background: 'var(--bg-slate-950)',
+          padding: '20px',
+          borderRadius: '8px',
+          border: '1px solid var(--border-panel)',
+          minHeight: '300px',
+          color: 'var(--text-contrast)',
+          lineHeight: '1.6',
+          fontSize: '0.85rem',
+          overflowY: 'auto',
+        }}
+      >
         {aiSummary ? (
           <div className="markdown-body">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiSummary}</ReactMarkdown>
           </div>
         ) : (
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>
-            Click "GENERATE AI REPORT" to have the AI (Gemini) summarize and analyze the current market data.
-            <br/><br/>
-            (Requires Gemini API Key in Settings)
+            {isVi ? (
+              <>
+                Bấm &quot;TẠO BÁO CÁO AI&quot; để Gemini tóm tắt và phân tích dữ liệu thị trường hiện tại
+                (theo ngôn ngữ đã chọn).
+                <br />
+                <br />
+                (Cần Gemini API Key trong Settings)
+              </>
+            ) : (
+              <>
+                Click &quot;GENERATE AI REPORT&quot; to have the AI (Gemini) summarize and analyze the
+                current market data (in the selected language).
+                <br />
+                <br />
+                (Requires Gemini API Key in Settings)
+              </>
+            )}
           </div>
         )}
       </div>
-
-
     </div>
   );
 }

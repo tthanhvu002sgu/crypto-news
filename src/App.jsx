@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-// Force rebuild trigger: 2026-07-08T20:55:00
 import './App.css';
 import {
   getBTCTicker24h, getBTCKlines, getLongShortRatio,
   getFundingRate, getOpenInterest, getOIHistory,
   getGlobalCryptoData, getStablecoinData,
   fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics, getETHOnChainMetrics,
-  getFREDMetric, getAlphaVantageQuote, getFREDStockQuote,
+  getFREDMetric, getFREDStockQuote,
   getETFHoldings, getETFFlowHistory, getCMECot, getDXYQuote,
-  getFearAndGreed, getHistoricalCVD, getIntradayCVD,
+  getFearAndGreed, getHistoricalCVD,
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
+import { fetchCached } from './utils/cache';
+import { updateBrowserChromeImmediate } from './utils/browserChrome';
+import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
   Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff
@@ -129,55 +131,6 @@ const CASCADE_KEY_MAP = {
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-const fetchCached = async (cacheKey, fetchFn, expiryMs, addLog, label, force = false) => {
-  let cachedVal = null;
-  let hasCached = false;
-  try {
-    const cached = localStorage.getItem(`cache_${cacheKey}`);
-    if (cached) {
-      const { val, time } = JSON.parse(cached);
-      cachedVal = val;
-      hasCached = true;
-      if (!force && (Date.now() - time < expiryMs)) {
-        if (addLog && label) {
-          addLog(`✓ ${label} (Dữ liệu cache)`, 'ok');
-        }
-        return val;
-      }
-    }
-  } catch (e) {
-    console.warn(`Lỗi đọc cache cho ${cacheKey}:`, e);
-  }
-
-  try {
-    const freshVal = await fetchFn();
-    if (freshVal !== null && freshVal !== undefined) {
-      try {
-        localStorage.setItem(`cache_${cacheKey}`, JSON.stringify({ val: freshVal, time: Date.now() }));
-      } catch (e) {
-        console.warn(`Lỗi ghi cache cho ${cacheKey}:`, e);
-      }
-      if (addLog && label) {
-        addLog(`✓ ${label}`, 'ok');
-      }
-      return freshVal;
-    } else {
-      throw new Error("Phản hồi trống hoặc lỗi API");
-    }
-  } catch (e) {
-    if (hasCached) {
-      if (addLog && label) {
-        addLog(`⚠ ${label} — lỗi truy vấn, dùng tạm cache cũ`, 'warning');
-      }
-      return cachedVal;
-    }
-    if (addLog && label) {
-      addLog(`✗ ${label} — thất bại: ${e.message}`, 'error');
-    }
-  }
-  return null;
-};
 
 const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId }) {
   const metadata = tooltipId ? METRIC_METADATA[tooltipId] : null;
@@ -352,13 +305,6 @@ function useDraggableScroll() {
     slider.addEventListener('mousemove', onMouseMove);
     slider.addEventListener('click', onClick, true); // capture phase
 
-    slider.style.cursor = 'grab';
-    slider.addEventListener('mousedown', onMouseDown);
-    slider.addEventListener('mouseleave', onMouseLeave);
-    slider.addEventListener('mouseup', onMouseUp);
-    slider.addEventListener('mousemove', onMouseMove);
-    slider.addEventListener('click', onClick, true); // capture phase
-
     return () => {
       slider.removeEventListener('mousedown', onMouseDown);
       slider.removeEventListener('mouseleave', onMouseLeave);
@@ -467,6 +413,10 @@ function AppContent() {
     localStorage.setItem('app-theme', theme);
   }, [theme]);
 
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   const [apiKeys, setApiKeys] = useState(() => {
     try {
       const saved = localStorage.getItem('app-api-keys');
@@ -495,197 +445,251 @@ function AppContent() {
     return entry;
   }, []);
 
-  const syncData = useCallback(async (force = false) => {
-    if (isSyncing) return;
+  // Per-tier in-flight locks so HOT/WARM/COLD can overlap without skipping each other
+  const tierLockRef = useRef({ hot: false, warm: false, cold: false });
+
+  /**
+   * Tiered sync — only requested tiers run.
+   * force=true: bypass TTL for every key (manual SYNC / daily 08:00).
+   * HOT  = Binance REST (short TTL; live price still from WS)
+   * WARM = global / news / equities / short CVD history
+   * COLD = FRED macro, on-chain, ETF, COT, F&G, long history
+   */
+  const syncData = useCallback(async (force = false, tiers = ['hot', 'warm', 'cold']) => {
+    const activeTiers = tiers.filter((t) => !tierLockRef.current[t]);
+    if (activeTiers.length === 0) return;
+
+    activeTiers.forEach((t) => { tierLockRef.current[t] = true; });
     setIsSyncing(true);
-    addLog(force ? 'Bắt đầu đồng bộ dữ liệu (Bỏ qua cache)...' : 'Bắt đầu đồng bộ dữ liệu...', 'system');
 
-    addLog('Đang đồng bộ chỉ số vĩ mô từ FRED & NY Fed...', 'system');
-    
-    // Fetch macro metrics in parallel using cache
-    const macroResults = await Promise.allSettled([
-      fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS'), 12 * 60 * 60 * 1000, addLog, 'Lãi suất Fed', force),
-      fetchCached('cpi', () => getFREDMetric('CPIAUCSL'), 12 * 60 * 60 * 1000, addLog, 'CPI Inflation', force),
-      fetchCached('unrate', () => getFREDMetric('UNRATE'), 12 * 60 * 60 * 1000, addLog, 'Tỷ lệ thất nghiệp', force),
-      fetchCached('m2Supply', () => getFREDMetric('M2SL'), 12 * 60 * 60 * 1000, addLog, 'M2 Money Supply', force),
-      fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY'), 12 * 60 * 60 * 1000, addLog, 'High Yield Spread', force),
-      fetchCached('walcl', () => getFREDMetric('WALCL'), 12 * 60 * 60 * 1000, addLog, 'Fed Assets', force),
-      fetchCached('tga', () => getFREDMetric('WDTGAL'), 12 * 60 * 60 * 1000, addLog, 'TGA Treasury Account', force),
-      fetchCached('rrp', () => getFREDMetric('RRPONTSYD'), 12 * 60 * 60 * 1000, addLog, 'Reverse Repo', force)
-    ]);
-
-    const fedFundsRateVal = macroResults[0].status === 'fulfilled' ? macroResults[0].value : null;
-    const cpiVal          = macroResults[1].status === 'fulfilled' ? macroResults[1].value : null;
-    const unrateVal       = macroResults[2].status === 'fulfilled' ? macroResults[2].value : null;
-    const m2SupplyVal     = macroResults[3].status === 'fulfilled' ? macroResults[3].value : null;
-    const highYieldVal    = macroResults[4].status === 'fulfilled' ? macroResults[4].value : null;
-    const walclVal        = macroResults[5].status === 'fulfilled' ? macroResults[5].value : null;
-    const tgaVal          = macroResults[6].status === 'fulfilled' ? macroResults[6].value : null;
-    const rrpVal          = macroResults[7].status === 'fulfilled' ? macroResults[7].value : null;
-
-    addLog('Đang đồng bộ dữ liệu phái sinh, tin tức, ETF và chỉ số Yahoo Finance...', 'system');
-
-    const [
-      btcRes, klinesRes, lsRes, fundRes, oiRes, oiHistRes,
-      globalRes, stableRes, newsRes,
-      onChainRes, onChainMetricsRes, ethOnChainMetricsRes,
-      etfHoldingsRes, etfHistoryRes,
-      cotRes,
-      yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes,
-      cvd24hRes, cvd7dRes, cvd30dRes, btcDailyKlinesAllRes
-    ] = await Promise.allSettled([
-      getBTCTicker24h('BTCUSDT'),
-      getBTCKlines('BTCUSDT', '1h', 48),
-      getLongShortRatio('BTCUSDT', '1h', 24),
-      getFundingRate('BTCUSDT'),
-      getOpenInterest('BTCUSDT'),
-      getOIHistory('BTCUSDT', '1h', 24),
-      fetchCached('globalCryptoData', () => getGlobalCryptoData(), 15 * 60 * 1000, addLog, 'Global Market (CoinGecko)', force),
-      fetchCached('stablecoinData', () => getStablecoinData(), 15 * 60 * 1000, addLog, 'Stablecoins (CoinGecko)', force),
-      fetchCached('realtimeFeed', () => fetchRealtimeFeed(), 15 * 60 * 1000, addLog, 'News RSS (rss2json)', force),
-      fetchCached('btcOnChain', () => getBTCOnChain(), 6 * 60 * 60 * 1000, addLog, 'BTC Network (blockchain.info)', force),
-      fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), 6 * 60 * 60 * 1000, addLog, 'On-chain Metrics (CoinMetrics)', force),
-      fetchCached('ethOnChainMetrics', () => getETHOnChainMetrics(), 6 * 60 * 60 * 1000, addLog, 'ETH On-chain Metrics (CoinMetrics)', force),
-      fetchCached('etfHoldings', () => getETFHoldings(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Holdings (Bitbo)', force),
-      fetchCached('etfFlowHistory_v4', () => getETFFlowHistory(), 4 * 60 * 60 * 1000, addLog, 'Spot ETF Flow History (Farside)', force),
-      fetchCached('cmeCot', () => getCMECot(), 12 * 60 * 60 * 1000, addLog, 'Báo cáo CME COT (Tradingster)', force),
-      fetchCached('yield10y', () => getFREDMetric('DGS10'), 30 * 60 * 1000, addLog, 'Yield 10Y (Yahoo Finance)', force),
-      fetchCached('dxyQuote', () => getDXYQuote(), 30 * 60 * 1000, addLog, 'Chỉ số DXY (Yahoo Finance)', force),
-      fetchCached('sp500Quote', () => getFREDStockQuote('SP500'), 30 * 60 * 1000, addLog, 'S&P 500 Index (Yahoo Finance)', force),
-      fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS'), 30 * 60 * 1000, addLog, 'VIX Volatility Index (Yahoo Finance)', force),
-      fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100'), 30 * 60 * 1000, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force),
-      fetchCached('fearAndGreed', () => getFearAndGreed(), 4 * 60 * 60 * 1000, addLog, 'Chỉ số Fear & Greed (alternative.me)', force),
-      fetchCached('cvdHistory24h_v2', () => getHistoricalCVD('BTCUSDT', '1h', 24), 10 * 60 * 1000, addLog, 'Lịch sử CVD 24h (Binance)', force),
-      fetchCached('cvdHistory7d', () => getHistoricalCVD('BTCUSDT', '4h', 42), 30 * 60 * 1000, addLog, 'Lịch sử CVD 7d (Binance)', force),
-      fetchCached('cvdHistory30d', () => getHistoricalCVD('BTCUSDT', '1d', 30), 2 * 60 * 60 * 1000, addLog, 'Lịch sử CVD 30d (Binance)', force),
-      fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), 2 * 60 * 60 * 1000, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force)
-    ]);
-
-    const get = (res, label, hasKey) => {
-      if (res.status === 'fulfilled' && res.value != null) {
-        addLog(`✓ ${label}`, 'ok');
-        return res.value;
-      }
-      if (!hasKey) {
-        return null; // Silent skip
-      }
-      const errMsg = res.status === 'rejected' ? res.reason?.message : 'Không nhận được dữ liệu (lỗi API hoặc phản hồi trống)';
-      addLog(`✗ ${label} — thất bại: ${errMsg}`, 'error');
-      return null;
+    const wantHot = activeTiers.includes('hot');
+    const wantWarm = activeTiers.includes('warm');
+    const wantCold = activeTiers.includes('cold');
+    const releaseLocks = () => {
+      activeTiers.forEach((t) => { tierLockRef.current[t] = false; });
+      setIsSyncing(Object.values(tierLockRef.current).some(Boolean));
     };
 
-    const btc             = get(btcRes,             'BTC Ticker (Binance)', true);
-    const klines          = get(klinesRes,          'BTC Klines 48h (Binance)', true) || [];
-    const lsHistory       = get(lsRes,              'L/S Ratio 24h (Binance)', true) || [];
-    const fundingRate     = get(fundRes,            'Funding Rate (Binance)', true);
-    const openInterest    = get(oiRes,              'Open Interest (Binance)', true);
-    const oiHistory       = get(oiHistRes,          'OI History 24h (Binance)', true) || [];
+    try {
+      const tierLabel = force
+        ? 'FULL force'
+        : activeTiers.map((t) => t.toUpperCase()).join('+');
+      addLog(`Bắt đầu đồng bộ [${tierLabel}]${force ? ' (bỏ qua cache)' : ''}...`, 'system');
 
-    const globalData      = globalRes.status === 'fulfilled' ? globalRes.value : null;
-    const stablecoins     = stableRes.status === 'fulfilled' ? stableRes.value : null;
-    const news            = newsRes.status === 'fulfilled' ? newsRes.value : [];
-    const onChain         = onChainRes.status === 'fulfilled' ? onChainRes.value : null;
-    const onChainMetrics  = onChainMetricsRes.status === 'fulfilled' ? onChainMetricsRes.value : null;
-    const ethOnChainMetrics = ethOnChainMetricsRes.status === 'fulfilled' ? ethOnChainMetricsRes.value : null;
-    const etfHoldingsVal  = etfHoldingsRes.status === 'fulfilled' ? etfHoldingsRes.value : null;
-    const etfHistoryVal   = etfHistoryRes.status === 'fulfilled' ? etfHistoryRes.value : null;
-    const cotData         = cotRes.status === 'fulfilled' ? cotRes.value : null;
-    const tenYearYield    = yield10yRes.status === 'fulfilled' ? yield10yRes.value : null;
-    const dxy             = dxyRes.status === 'fulfilled' ? dxyRes.value : null;
-    const sp500           = sp500Res.status === 'fulfilled' ? sp500Res.value : null;
-    const vix             = vixRes.status === 'fulfilled' ? vixRes.value : null;
-    const qqq             = qqqRes.status === 'fulfilled' ? qqqRes.value : null;
-    const fngData         = fngRes.status === 'fulfilled' ? fngRes.value : null;
-    const cvdHistory24h   = cvd24hRes.status === 'fulfilled' ? cvd24hRes.value : null;
-    const cvdHistory7d   = cvd7dRes.status === 'fulfilled' ? cvd7dRes.value : null;
-    const cvdHistory30d   = cvd30dRes.status === 'fulfilled' ? cvd30dRes.value : null;
-    const btcDailyKlinesAll = btcDailyKlinesAllRes.status === 'fulfilled' ? btcDailyKlinesAllRes.value : null;
+      const settled = (res) => (res?.status === 'fulfilled' ? res.value : null);
 
-    const now = new Date().toLocaleString('vi-VN');
-    addLog(`Đồng bộ hoàn tất lúc ${now}`, 'system');
+      // ── COLD: FRED macro (slow-moving) ────────────────────────────────────
+      let fedFundsRateVal = null;
+      let cpiVal = null;
+      let unrateVal = null;
+      let m2SupplyVal = null;
+      let highYieldVal = null;
+      let walclVal = null;
+      let tgaVal = null;
+      let rrpVal = null;
 
-    if (etfHoldingsVal) {
-      setEtfHoldings(etfHoldingsVal);
-      localStorage.setItem('etf-holdings', JSON.stringify(etfHoldingsVal));
+      if (wantCold) {
+        addLog('Đang đồng bộ chỉ số vĩ mô từ FRED...', 'system');
+        const macroResults = await Promise.allSettled([
+          fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Lãi suất Fed', force),
+          fetchCached('cpi', () => getFREDMetric('CPIAUCSL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'CPI Inflation', force),
+          fetchCached('unrate', () => getFREDMetric('UNRATE', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Tỷ lệ thất nghiệp', force),
+          fetchCached('m2Supply', () => getFREDMetric('M2SL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'M2 Money Supply', force),
+          fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'High Yield Spread', force),
+          fetchCached('walcl', () => getFREDMetric('WALCL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Fed Assets', force),
+          fetchCached('tga', () => getFREDMetric('WDTGAL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'TGA Treasury Account', force),
+          fetchCached('rrp', () => getFREDMetric('RRPONTSYD', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Reverse Repo', force),
+        ]);
+        fedFundsRateVal = settled(macroResults[0]);
+        cpiVal = settled(macroResults[1]);
+        unrateVal = settled(macroResults[2]);
+        m2SupplyVal = settled(macroResults[3]);
+        highYieldVal = settled(macroResults[4]);
+        walclVal = settled(macroResults[5]);
+        tgaVal = settled(macroResults[6]);
+        rrpVal = settled(macroResults[7]);
+      }
+
+      if (wantHot || wantWarm || wantCold) {
+        addLog('Đang đồng bộ dữ liệu thị trường / phái sinh / context...', 'system');
+      }
+
+      const tasks = [];
+      const keys = [];
+      const push = (key, promise) => {
+        keys.push(key);
+        tasks.push(promise);
+      };
+
+      if (wantHot) {
+        // Short TTL — WS drives live price; REST is charts + offline fallback
+        push('btc', fetchCached('binanceTicker', () => getBTCTicker24h('BTCUSDT'), CACHE_TTL.binanceTicker, addLog, 'BTC Ticker (Binance)', force));
+        push('klines', fetchCached('binanceKlines1h', () => getBTCKlines('BTCUSDT', '1h', 48), CACHE_TTL.binanceKlines, addLog, 'BTC Klines 48h (Binance)', force));
+        push('ls', fetchCached('binanceLs', () => getLongShortRatio('BTCUSDT', '1h', 24), CACHE_TTL.binanceLs, addLog, 'L/S Ratio 24h (Binance)', force));
+        push('fund', fetchCached('binanceFunding', () => getFundingRate('BTCUSDT'), CACHE_TTL.binanceFunding, addLog, 'Funding Rate (Binance)', force));
+        push('oi', fetchCached('binanceOi', () => getOpenInterest('BTCUSDT'), CACHE_TTL.binanceOi, addLog, 'Open Interest (Binance)', force));
+        push('oiHist', fetchCached('binanceOiHist', () => getOIHistory('BTCUSDT', '1h', 24), CACHE_TTL.binanceOiHist, addLog, 'OI History 24h (Binance)', force));
+      }
+
+      if (wantWarm) {
+        push('global', fetchCached('globalCryptoData', () => getGlobalCryptoData(), CACHE_TTL.globalCrypto, addLog, 'Global Market (CoinGecko)', force));
+        push('stable', fetchCached('stablecoinData', () => getStablecoinData(), CACHE_TTL.stablecoin, addLog, 'Stablecoins (CoinGecko)', force));
+        push('news', fetchCached('realtimeFeed', () => fetchRealtimeFeed(), CACHE_TTL.news, addLog, 'News RSS (rss2json)', force));
+        push('yield10y', fetchCached('yield10y', () => getFREDMetric('DGS10', apiKeys.fred), CACHE_TTL.yield10y, addLog, 'Yield 10Y (Yahoo Finance)', force));
+        push('dxy', fetchCached('dxyQuote', () => getDXYQuote(), CACHE_TTL.dxy, addLog, 'Chỉ số DXY (Yahoo Finance)', force));
+        push('sp500', fetchCached('sp500Quote', () => getFREDStockQuote('SP500', apiKeys.fred), CACHE_TTL.sp500, addLog, 'S&P 500 Index (Yahoo Finance)', force));
+        push('vix', fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS', apiKeys.fred), CACHE_TTL.vix, addLog, 'VIX Volatility Index (Yahoo Finance)', force));
+        push('qqq', fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100', apiKeys.fred), CACHE_TTL.qqq, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force));
+        push('cvd24h', fetchCached('cvdHistory24h_v2', () => getHistoricalCVD('BTCUSDT', '1h', 24), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h (Binance)', force));
+        push('cvd7d', fetchCached('cvdHistory7d', () => getHistoricalCVD('BTCUSDT', '4h', 42), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d (Binance)', force));
+      }
+
+      if (wantCold) {
+        push('onChain', fetchCached('btcOnChain', () => getBTCOnChain(), CACHE_TTL.onChain, addLog, 'BTC Network (blockchain.info)', force));
+        push('onChainMetrics', fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), CACHE_TTL.onChain, addLog, 'On-chain Metrics (CoinMetrics)', force));
+        push('ethOnChainMetrics', fetchCached('ethOnChainMetrics', () => getETHOnChainMetrics(), CACHE_TTL.onChain, addLog, 'ETH On-chain Metrics (CoinMetrics)', force));
+        push('etfHoldings', fetchCached('etfHoldings', () => getETFHoldings(), CACHE_TTL.etf, addLog, 'Spot ETF Holdings (Bitbo)', force));
+        push('etfHistory', fetchCached('etfFlowHistory_v4', () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force));
+        push('cot', fetchCached('cmeCot', () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force));
+        push('fng', fetchCached('fearAndGreed', () => getFearAndGreed(), CACHE_TTL.fng, addLog, 'Chỉ số Fear & Greed (alternative.me)', force));
+        push('cvd30d', fetchCached('cvdHistory30d', () => getHistoricalCVD('BTCUSDT', '1d', 30), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d (Binance)', force));
+        push('dailyKlines', fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), CACHE_TTL.dailyKlines, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force));
+      }
+
+      const results = tasks.length > 0 ? await Promise.allSettled(tasks) : [];
+      const byKey = Object.fromEntries(keys.map((k, i) => [k, results[i]]));
+
+      const btc = wantHot ? settled(byKey.btc) : null;
+      const klines = wantHot ? (settled(byKey.klines) || []) : [];
+      const lsHistory = wantHot ? (settled(byKey.ls) || []) : [];
+      const fundingRate = wantHot ? settled(byKey.fund) : null;
+      const openInterest = wantHot ? settled(byKey.oi) : null;
+      const oiHistory = wantHot ? (settled(byKey.oiHist) || []) : [];
+
+      const globalData = wantWarm ? settled(byKey.global) : null;
+      const stablecoins = wantWarm ? settled(byKey.stable) : null;
+      const news = wantWarm ? (settled(byKey.news) || []) : [];
+      const tenYearYield = wantWarm ? settled(byKey.yield10y) : null;
+      const dxy = wantWarm ? settled(byKey.dxy) : null;
+      const sp500 = wantWarm ? settled(byKey.sp500) : null;
+      const vix = wantWarm ? settled(byKey.vix) : null;
+      const qqq = wantWarm ? settled(byKey.qqq) : null;
+      const cvdHistory24h = wantWarm ? settled(byKey.cvd24h) : null;
+      const cvdHistory7d = wantWarm ? settled(byKey.cvd7d) : null;
+
+      const onChain = wantCold ? settled(byKey.onChain) : null;
+      const onChainMetrics = wantCold ? settled(byKey.onChainMetrics) : null;
+      const ethOnChainMetrics = wantCold ? settled(byKey.ethOnChainMetrics) : null;
+      const etfHoldingsVal = wantCold ? settled(byKey.etfHoldings) : null;
+      const etfHistoryVal = wantCold ? settled(byKey.etfHistory) : null;
+      const cotData = wantCold ? settled(byKey.cot) : null;
+      const fngData = wantCold ? settled(byKey.fng) : null;
+      const cvdHistory30d = wantCold ? settled(byKey.cvd30d) : null;
+      const btcDailyKlinesAll = wantCold ? settled(byKey.dailyKlines) : null;
+
+      const now = new Date().toLocaleString('vi-VN');
+      addLog(`Đồng bộ hoàn tất [${tierLabel}] lúc ${now}`, 'system');
+
+      if (etfHoldingsVal) {
+        setEtfHoldings(etfHoldingsVal);
+        localStorage.setItem('etf-holdings', JSON.stringify(etfHoldingsVal));
+      }
+      if (etfHistoryVal) {
+        setEtfHistory(etfHistoryVal);
+        localStorage.setItem('etf-flow-history', JSON.stringify(etfHistoryVal));
+      }
+
+      let netLiquidity = null;
+      if (walclVal != null && tgaVal != null && rrpVal != null) {
+        netLiquidity = parseFloat(((walclVal / 1000) - (tgaVal / 1000) - rrpVal).toFixed(2));
+      }
+
+      // REST price fallback for favicon when WS not yet connected
+      if (btc?.price != null) {
+        updateBrowserChromeImmediate(btc.price, btc.change ?? 0);
+      }
+
+      setData((prev) => ({
+        btc: btc ?? prev.btc,
+        klines: klines.length > 0 ? klines : prev.klines,
+        lsHistory: lsHistory.length > 0 ? lsHistory : prev.lsHistory,
+        fundingRate: fundingRate ?? prev.fundingRate,
+        openInterest: openInterest ?? prev.openInterest,
+        oiHistory: oiHistory.length > 0 ? oiHistory : prev.oiHistory,
+        globalData: globalData ?? prev.globalData,
+        stablecoins: stablecoins ?? prev.stablecoins,
+        news: news.length > 0 ? news : prev.news,
+        logs: [...logsRef.current],
+        onChain: onChain ?? prev.onChain,
+        onChainMetrics: onChainMetrics ?? prev.onChainMetrics,
+        ethOnChainMetrics: ethOnChainMetrics ?? prev.ethOnChainMetrics,
+        fedFundsRate: fedFundsRateVal ?? prev.fedFundsRate,
+        cpi: cpiVal ?? prev.cpi,
+        unrate: unrateVal ?? prev.unrate,
+        tenYearYield: tenYearYield ?? prev.tenYearYield,
+        dxy: dxy ?? prev.dxy,
+        m2Supply: m2SupplyVal ?? prev.m2Supply,
+        highYield: highYieldVal ?? prev.highYield,
+        sp500: sp500 ?? prev.sp500,
+        vix: vix ?? prev.vix,
+        qqq: qqq ?? prev.qqq,
+        netLiquidity: netLiquidity ?? prev.netLiquidity,
+        cotData: cotData ?? prev.cotData,
+        fngData: fngData ?? prev.fngData,
+        cvdHistory24h: cvdHistory24h?.length > 0 ? cvdHistory24h : prev.cvdHistory24h,
+        cvdHistory7d: cvdHistory7d?.length > 0 ? cvdHistory7d : prev.cvdHistory7d,
+        cvdHistory30d: cvdHistory30d?.length > 0 ? cvdHistory30d : prev.cvdHistory30d,
+        btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
+      }));
+
+      setLastSync(now);
+      window.appLastSync = now;
+      setLastSyncTime(now);
+      if (wantHot) {
+        setIsOnline(btc != null || klines.length > 0);
+      }
+    } catch (err) {
+      addLog(`✗ Đồng bộ lỗi: ${err?.message || err}`, 'error');
+    } finally {
+      releaseLocks();
     }
-    if (etfHistoryVal) {
-      setEtfHistory(etfHistoryVal);
-      localStorage.setItem('etf-flow-history', JSON.stringify(etfHistoryVal));
-    }
+  }, [addLog, setLastSyncTime, apiKeys.fred]);
 
-    let netLiquidity = null;
-    if (walclVal != null && tgaVal != null && rrpVal != null) {
-      netLiquidity = (walclVal / 1000) - (tgaVal / 1000) - rrpVal;
-      netLiquidity = parseFloat(netLiquidity.toFixed(2));
-    }
-
-    setData(prev => ({
-      btc:            btc          ?? prev.btc,
-      klines:         klines.length > 0 ? klines : prev.klines,
-      lsHistory:      lsHistory.length > 0 ? lsHistory : prev.lsHistory,
-      fundingRate:    fundingRate   ?? prev.fundingRate,
-      openInterest:   openInterest  ?? prev.openInterest,
-      oiHistory:      oiHistory.length > 0 ? oiHistory : prev.oiHistory,
-      globalData:     globalData   ?? prev.globalData,
-      stablecoins:    stablecoins  ?? prev.stablecoins,
-      news:           news.length > 0 ? news : prev.news,
-      logs:           [...logsRef.current],
-      onChain:        onChain      ?? prev.onChain,
-      onChainMetrics: onChainMetrics ?? prev.onChainMetrics,
-      ethOnChainMetrics: ethOnChainMetrics ?? prev.ethOnChainMetrics,
-      fedFundsRate:   fedFundsRateVal ?? prev.fedFundsRate,
-      cpi:            cpiVal          ?? prev.cpi,
-      unrate:         unrateVal       ?? prev.unrate,
-      tenYearYield:   tenYearYield    ?? prev.tenYearYield,
-      dxy:            dxy             ?? prev.dxy,
-      m2Supply:       m2SupplyVal     ?? prev.m2Supply,
-      highYield:      highYieldVal    ?? prev.highYield,
-      sp500:          sp500           ?? prev.sp500,
-      vix:            vix             ?? prev.vix,
-      qqq:            qqq             ?? prev.qqq,
-      netLiquidity:   netLiquidity    ?? prev.netLiquidity,
-      cotData:        cotData         ?? prev.cotData,
-      fngData:        fngData         ?? prev.fngData,
-      cvdHistory24h:  cvdHistory24h?.length > 0 ? cvdHistory24h : prev.cvdHistory24h,
-      cvdHistory7d:   cvdHistory7d?.length > 0 ? cvdHistory7d : prev.cvdHistory7d,
-      cvdHistory30d:  cvdHistory30d?.length > 0 ? cvdHistory30d : prev.cvdHistory30d,
-      btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
-    }));
-
-    setLastSync(now);
-    window.appLastSync = now;
-    setLastSyncTime(now);
-    setIsOnline(btc != null || klines.length > 0);
-    setIsSyncing(false);
-  }, [isSyncing, addLog, apiKeys, setLastSyncTime]);
-
-  // Tự động đồng bộ hàng ngày lúc 08:00 AM
+  // Daily force-sync at 08:00 local
   useEffect(() => {
     const checkAutoSync = () => {
       const now = new Date();
       const currentHour = now.getHours();
       const currentDateStr = now.toLocaleDateString('vi-VN');
-      
       const lastAutoSyncDate = localStorage.getItem('last-auto-sync-date');
-      
+
       if (currentHour >= 8 && lastAutoSyncDate !== currentDateStr) {
-        addLog('[Auto-Sync] Đến giờ đồng bộ hàng ngày (08:00 AM). Đang tự động cập nhật...', 'system');
-        syncData(true);
+        addLog('[Auto-Sync] Đồng bộ hàng ngày 08:00 — full force...', 'system');
+        syncData(true, ['hot', 'warm', 'cold']);
         localStorage.setItem('last-auto-sync-date', currentDateStr);
       }
     };
 
     checkAutoSync();
-    const interval = setInterval(checkAutoSync, 60 * 1000);
+    const interval = setInterval(checkAutoSync, SYNC_INTERVAL.dailyCheck);
     return () => clearInterval(interval);
   }, [syncData, addLog]);
 
-  // Initial load + auto-refresh every 5 min
+  // Tiered auto-refresh: initial full load, then staggered intervals
   useEffect(() => {
-    syncData(false);
-    const timer = setInterval(() => syncData(false), 5 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, []); // eslint-disable-line
+    // First paint: everything once (respects per-key TTL → mostly network only on cold start)
+    syncData(false, ['hot', 'warm', 'cold']);
+
+    const hotTimer = setInterval(() => syncData(false, ['hot']), SYNC_INTERVAL.hot);
+    const warmTimer = setInterval(() => syncData(false, ['warm']), SYNC_INTERVAL.warm);
+    const coldTimer = setInterval(() => syncData(false, ['cold']), SYNC_INTERVAL.cold);
+
+    return () => {
+      clearInterval(hotTimer);
+      clearInterval(warmTimer);
+      clearInterval(coldTimer);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
 
@@ -755,33 +759,8 @@ function AppContent() {
     volume: liveVolume ?? data.btc?.volume,
   } : data.btc;
 
-  // Cập nhật Document Title và Dynamic Favicon theo giá Bitcoin (Trực tiếp từ WebSocket & REST)
-  useEffect(() => {
-    if (!btcDisplay?.price) return;
-    const price = parseFloat(btcDisplay.price);
-    const change = parseFloat(btcDisplay.change || 0);
-    const priceFormatted = price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    
-    // Cập nhật Title tab trình duyệt
-    document.title = `$${priceFormatted} | BTC ${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
-
-    // Cập nhật Favicon SVG động
-    const shortPrice = price >= 1000 ? `${(price / 1000).toFixed(price >= 100000 ? 0 : 1)}k` : `$${Math.round(price)}`;
-    const bgColor = change >= 0 ? '#10b981' : '#ef4444'; // Xanh lá nếu tăng, Đỏ nếu giảm
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-      <rect width="64" height="64" rx="14" fill="${bgColor}"/>
-      <text x="50%" y="54%" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="800" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${shortPrice}</text>
-    </svg>`;
-    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-    
-    let link = document.querySelector("link[rel~='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.href = dataUrl;
-  }, [btcDisplay?.price, btcDisplay?.change]);
+  // Favicon + document.title: updated from WebSocket (browserChrome) and REST fallback in syncData.
+  // Intentionally NOT tied to React re-renders — avoids lag on background tabs.
 
   // ── ETF AUM & Holdings History Calculations ─────────────────────────────────
   const holdingsHistory = useMemo(() => {
@@ -1063,8 +1042,8 @@ function AppContent() {
               ? <React.Fragment><Radio size={10} className="spinning" /> WS...</React.Fragment>  
               : <React.Fragment><Radio size={10} /> WS OFF</React.Fragment>}
             </div>
-          <div className="auto-refresh-badge font-mono">REST ⟳ 5MIN</div>
-          <button className="btn-sync font-mono" onClick={() => syncData(true)} disabled={isSyncing}>
+          <div className="auto-refresh-badge font-mono" title="HOT 5m · WARM 15m · COLD 60m (TTL cache)">REST ⟳ TIERED</div>
+          <button className="btn-sync font-mono" onClick={() => syncData(true, ['hot', 'warm', 'cold'])} disabled={isSyncing}>
             <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
             {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
           </button>
@@ -1360,7 +1339,7 @@ function AppContent() {
                 etfFlowChartOpts={etfFlowChartOpts}
                 etfAumChartData={etfAumChartData}
                 etfAumChartOpts={etfAumChartOpts}
-              );
+              />
             )}
 
             {/* ══ HFT RADAR TAB ══════════════════════════════════════════════ */}
@@ -1373,7 +1352,7 @@ function AppContent() {
                 data={data} fundingRate={fund}
                 liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
                 liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
-              );
+              />
             )}
 
             {/* ══ CASCADE TAB ════════════════════════════════════════════════ */}
@@ -1386,7 +1365,7 @@ function AppContent() {
                 fund={fund}
                 CASCADE_KEY_MAP={CASCADE_KEY_MAP}
                 METRIC_METADATA={METRIC_METADATA}
-              );
+              />
             )}
 
             {/* ══ AI SUMMARY TAB ═════════════════════════════════════════════ */}
@@ -1408,7 +1387,7 @@ function AppContent() {
                 ethNupl={ethNuplVal?.aiStr || 'N/A'}
                 btcSupplyProfit={btcSupplyProfitEst?.aiStr || 'N/A'}
                 ethSupplyProfit={ethSupplyProfitEst?.aiStr || 'N/A'}
-              );
+              />
             )}
 
             {/* ══ GLOSSARY TAB ═══════════════════════════════════════════════ */}
@@ -1427,7 +1406,7 @@ function AppContent() {
                 fmt={fmt}
                 fngColor={fngColor}
                 theme={theme}
-              );
+              />
             )}
 
           </div>
@@ -1484,7 +1463,7 @@ function AppContent() {
                   localStorage.setItem('app-api-keys', JSON.stringify(apiKeys));
                   setShowSettings(false);
                   addLog('Đã lưu cấu hình API Keys thành công. Đang tải lại dữ liệu...', 'ok');
-                  syncData(true);
+                  syncData(true, ['hot', 'warm', 'cold']);
                 }}
               >
                 LƯU & ĐỒNG BỘ

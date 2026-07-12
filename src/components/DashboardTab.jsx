@@ -182,7 +182,7 @@ export default function DashboardTab({
             }}>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>BTC Dominance</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
-                {data?.globalData?.btcDominance ? `${data.globalData.btcDominance.toFixed(1)}%` : '---'}
+                {data?.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
                 Market Structure
@@ -210,8 +210,9 @@ export default function DashboardTab({
                     {' '}{data.btc.change >= 0 ? '+' : ''}{data.btc.change.toFixed(2)}%
                   </span>
                 )}
-              </div>
+              </span>
             </div>
+          </div>
           <div className="chart-body">
             {data.klines.length > 0
               ? <Line data={btcChartData} options={{
