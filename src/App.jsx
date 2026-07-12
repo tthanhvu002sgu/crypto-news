@@ -352,6 +352,13 @@ function useDraggableScroll() {
     slider.addEventListener('mousemove', onMouseMove);
     slider.addEventListener('click', onClick, true); // capture phase
 
+    slider.style.cursor = 'grab';
+    slider.addEventListener('mousedown', onMouseDown);
+    slider.addEventListener('mouseleave', onMouseLeave);
+    slider.addEventListener('mouseup', onMouseUp);
+    slider.addEventListener('mousemove', onMouseMove);
+    slider.addEventListener('click', onClick, true); // capture phase
+
     return () => {
       slider.removeEventListener('mousedown', onMouseDown);
       slider.removeEventListener('mouseleave', onMouseLeave);
@@ -460,11 +467,6 @@ function AppContent() {
     localStorage.setItem('app-theme', theme);
   }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-  };
-
-  // API Keys state for macro data
   const [apiKeys, setApiKeys] = useState(() => {
     try {
       const saved = localStorage.getItem('app-api-keys');
@@ -531,7 +533,7 @@ function AppContent() {
       cotRes,
       yield10yRes, dxyRes, sp500Res, vixRes, qqqRes, fngRes,
       cvd24hRes, cvd7dRes, cvd30dRes, btcDailyKlinesAllRes
-    ] = await Promise.allSettled([
+    ] = await Promise.allSettlement([
       getBTCTicker24h('BTCUSDT'),
       getBTCKlines('BTCUSDT', '1h', 48),
       getLongShortRatio('BTCUSDT', '1h', 24),
@@ -595,7 +597,7 @@ function AppContent() {
     const qqq             = qqqRes.status === 'fulfilled' ? qqqRes.value : null;
     const fngData         = fngRes.status === 'fulfilled' ? fngRes.value : null;
     const cvdHistory24h   = cvd24hRes.status === 'fulfilled' ? cvd24hRes.value : null;
-    const cvdHistory7d    = cvd7dRes.status === 'fulfilled' ? cvd7dRes.value : null;
+    const cvdHistory7d   = cvd7dRes.status === 'fulfilled' ? cvd7dRes.value : null;
     const cvdHistory30d   = cvd30dRes.status === 'fulfilled' ? cvd30dRes.value : null;
     const btcDailyKlinesAll = btcDailyKlinesAllRes.status === 'fulfilled' ? btcDailyKlinesAllRes.value : null;
 
@@ -726,7 +728,7 @@ function AppContent() {
       data: data.oiHistory.map(r => parseFloat(r.sumOpenInterest).toFixed(0)),
       backgroundColor: (ctx) => {
         const i = ctx.dataIndex;
-        if (i === 0) return theme === 'light' ? 'rgba(49, 46, 129, 0.7)' : 'rgba(99,102,241,0.6)';
+        if (i === 0) return theme === 'light' ? '#047857' : '#10b981';
         const prev = parseFloat(ctx.dataset.data[i - 1]);
         const curr = parseFloat(ctx.dataset.data[i]);
         if (curr >= prev) {
@@ -962,6 +964,7 @@ function AppContent() {
     }
   }), [theme]);
 
+  // ── NUPL & Supply in Profit Calculations (Improved) ────────────────────────
   const btcNuplVal = useMemo(() => {
     const mvrv = parseFloat(data.onChainMetrics?.mvrv);
     if (!mvrv || isNaN(mvrv) || mvrv === 0) return null;
@@ -986,27 +989,36 @@ function AppContent() {
     };
   }, [data.ethOnChainMetrics?.mvrv]);
 
+  // Improved Supply in Profit estimation (better calibrated quadratic)
+  const calculateSupplyInProfit = (mvrv) => {
+    if (!mvrv || isNaN(mvrv) || mvrv <= 0) return null;
+    // Improved formula: less aggressive quadratic, better fit in MVRV 1.5-3.0 zone
+    let est = -8 + 47 * mvrv - 1.1 * mvrv * mvrv;
+    est = Math.max(28, Math.min(98.5, est));
+    return parseFloat(est.toFixed(1));
+  };
+
   const btcSupplyProfitEst = useMemo(() => {
     const mvrv = parseFloat(data.onChainMetrics?.mvrv);
-    if (!mvrv || isNaN(mvrv) || mvrv === 0) return null;
-    const est = Math.min(99.5, Math.max(20, -10 + 52 * mvrv - 1.5 * mvrv * mvrv));
+    const est = calculateSupplyInProfit(mvrv);
+    if (est === null) return null;
     return {
-      valStr: `${est.toFixed(1)}%`,
-      subStr: `Mô hình từ MVRV`,
+      valStr: `${est}%`,
+      subStr: `Mô hình từ MVRV (cải tiến)`,
       cls: est > 95 ? 'text-rose' : est < 50 ? 'text-emerald' : 'text-slate-400',
-      aiStr: `${est.toFixed(1)}% (Estimated)`
+      aiStr: `${est}% (Estimated)`
     };
   }, [data.onChainMetrics?.mvrv]);
 
   const ethSupplyProfitEst = useMemo(() => {
     const mvrv = parseFloat(data.ethOnChainMetrics?.mvrv);
-    if (!mvrv || isNaN(mvrv) || mvrv === 0) return null;
-    const est = Math.min(99.5, Math.max(20, -10 + 52 * mvrv - 1.5 * mvrv * mvrv));
+    const est = calculateSupplyInProfit(mvrv);
+    if (est === null) return null;
     return {
-      valStr: `${est.toFixed(1)}%`,
-      subStr: `Mô hình từ MVRV`,
+      valStr: `${est}%`,
+      subStr: `Mô hình từ MVRV (cải tiến)`,
       cls: est > 95 ? 'text-rose' : est < 50 ? 'text-emerald' : 'text-slate-400',
-      aiStr: `${est.toFixed(1)}% (Estimated)`
+      aiStr: `${est}% (Estimated)`
     };
   }, [data.ethOnChainMetrics?.mvrv]);
 
@@ -1041,8 +1053,8 @@ function AppContent() {
           <div className="status-box font-mono">
             <LiveDot active={isOnline} />
             <span className="text-slate-400">{isOnline ? 'LIVE' : 'OFFLINE'}</span>
-            {lastSync && <><span className="text-slate-500">•</span><span className="sync-time">{lastSync}</span></>}
-          </div>
+            {lastSync && <><span className="text-slate-500">•</span><span className="sync-time">{lastSync}</span>}
+            </div>
           {/* WebSocket status badge */}
           <div className={`ws-badge font-mono ws-${wsStatus}`}>
             {wsStatus === 'connected'
@@ -1050,7 +1062,7 @@ function AppContent() {
               : wsStatus === 'connecting'
               ? <><Radio size={10} className="spinning" /> WS...</>  
               : <><Radio size={10} /> WS OFF</>}
-          </div>
+            </div>
           <div className="auto-refresh-badge font-mono">REST ⟳ 5MIN</div>
           <button className="btn-sync font-mono" onClick={() => syncData(true)} disabled={isSyncing}>
             <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
@@ -1348,7 +1360,7 @@ function AppContent() {
                 etfFlowChartOpts={etfFlowChartOpts}
                 etfAumChartData={etfAumChartData}
                 etfAumChartOpts={etfAumChartOpts}
-              />
+              );
             )}
 
             {/* ══ HFT RADAR TAB ══════════════════════════════════════════════ */}
@@ -1361,7 +1373,7 @@ function AppContent() {
                 data={data} fundingRate={fund}
                 liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
                 liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
-              />
+              );
             )}
 
             {/* ══ CASCADE TAB ════════════════════════════════════════════════ */}
@@ -1374,7 +1386,7 @@ function AppContent() {
                 fund={fund}
                 CASCADE_KEY_MAP={CASCADE_KEY_MAP}
                 METRIC_METADATA={METRIC_METADATA}
-              />
+              );
             )}
 
             {/* ══ AI SUMMARY TAB ═════════════════════════════════════════════ */}
@@ -1396,7 +1408,7 @@ function AppContent() {
                 ethNupl={ethNuplVal?.aiStr || 'N/A'}
                 btcSupplyProfit={btcSupplyProfitEst?.aiStr || 'N/A'}
                 ethSupplyProfit={ethSupplyProfitEst?.aiStr || 'N/A'}
-              />
+              );
             )}
 
             {/* ══ GLOSSARY TAB ═══════════════════════════════════════════════ */}
@@ -1415,7 +1427,7 @@ function AppContent() {
                 fmt={fmt}
                 fngColor={fngColor}
                 theme={theme}
-              />
+              );
             )}
 
           </div>
@@ -1433,7 +1445,7 @@ function AppContent() {
             </div>
             
             <p className="font-mono text-slate-400" style={{ fontSize: '0.62rem', margin: 0, lineHeight: 1.4 }}>
-              Nhập các khóa API cá nhân để Terminal đồng bộ trực tiếp dữ liệu vĩ mô &amp; chứng khoán thực tế từ nguồn FRED &amp; Alpha Vantage.
+              Nhập các khóa API cá nhân để Terminal đồng bộ trực tiếp dữ liệu vĩ mô & chứng khoán thực tế từ nguồn FRED & Alpha Vantage.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1464,20 +1476,6 @@ function AppContent() {
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>GEMINI API KEY</label>
-              <input
-                type="password"
-                placeholder="Nhập Gemini API key..."
-                value={apiKeys.gemini || ''}
-                onChange={(e) => setApiKeys(p => ({ ...p, gemini: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
-              />
-              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
-                Lấy miễn phí tại: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>Google AI Studio</a>
-              </span>
-            </div>
-
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button
                 className="btn-sync font-mono"
@@ -1489,7 +1487,7 @@ function AppContent() {
                   syncData(true);
                 }}
               >
-                LƯU &amp; ĐỒNG BỘ
+                LƯU & ĐỒNG BỘ
               </button>
             </div>
 
