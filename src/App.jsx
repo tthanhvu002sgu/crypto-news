@@ -1236,8 +1236,24 @@ function AppContent() {
                   />
                   <MetricCard
                     label="PRODUCTION COST"
-                    value={data.onChain?.productionCost ? `$${parseInt(data.onChain.productionCost).toLocaleString()}` : '---'}
-                    sub="1 BTC (Est.)"
+                    value={(() => {
+                      const pc = data.onChain?.productionCost;
+                      if (!pc) return '---';
+                      // New range object { low, mid, high }; legacy cache may still be a string/number
+                      if (typeof pc === 'object' && pc.low != null && pc.high != null) {
+                        const fmt = (n) => `$${Math.round(n / 1000)}k`;
+                        return `${fmt(pc.low)} → ${fmt(pc.high)}`;
+                      }
+                      const n = parseInt(pc, 10);
+                      return Number.isFinite(n) ? `$${n.toLocaleString()}` : '---';
+                    })()}
+                    sub={(() => {
+                      const pc = data.onChain?.productionCost;
+                      if (pc && typeof pc === 'object' && pc.mid != null) {
+                        return `mid ~$${Math.round(pc.mid / 1000)}k · 1 BTC est.`;
+                      }
+                      return '1 BTC (range est.)';
+                    })()}
                     subCls="text-slate-400"
                     tooltipId="productionCost"
                   />

@@ -11,6 +11,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **Advanced Price Action:** Biểu đồ TradingView tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản) và Liquidity Zones (Vùng thanh lý đòn bẩy).
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
 - **AI Summary & Nupl / Supply in Profit:** Tích hợp AI (Gemini) để phân tích báo cáo thị trường, tâm lý, cảnh báo các mốc kháng cự/hỗ trợ. Hỗ trợ chọn **ngôn ngữ báo cáo** (Tiếng Việt / English) và 3 style (Professional / Tactical / Educational).
+- **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** (không hiển thị một số “chính xác giả”), dựa trên difficulty + energy model (J/TH, $/kWh, opex) với biên assumption hợp lý quanh baseline.
 - **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
@@ -46,13 +47,25 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/aiPrompts.js`: System prompt EN + VI cho 3 style phân tích.
 
 ### Dịch vụ / Utils
-- `services/api.js` — REST multi-source (Binance, FRED, ETF, COT, …).
+- `services/api.js` — REST multi-source (Binance, FRED, ETF, COT, …); on-chain BTC gồm `estimateBtcProductionCost` / `estimateBtcProductionCostRange` (energy model → `{ low, mid, high }`).
 - `services/websocket.js` — `useBinanceWebSocket` (giá/funding, throttle UI + browser chrome) + `useCVDStream` (aggTrade).
 - `config/syncConfig.js` — TTL cache + interval HOT/WARM/COLD.
 - `utils/cache.js` — `fetchCached` / đọc cache localStorage.
 - `utils/browserChrome.js` — document title + favicon giá BTC (canvas, không phụ thuộc re-render).
+- `components/Tooltip.jsx` — metadata metric (def + formula), gồm PRODUCTION COST range.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-07-12] Production Cost hiển thị dạng khoảng low → high `(FAST)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Thay số production cost “điểm” bằng khoảng ước tính phản ánh sai số assumption (efficiency / điện / opex), tránh ảo giác độ chính xác.
+- **Thay đổi chính:**
+  - `estimateBtcProductionCost` + `estimateBtcProductionCostRange` trong `api.js` (baseline mid 26 J/TH @ $0.05 + 10% opex; low/high siết quanh mid).
+  - UI MetricCard: `$XXk → $YYk`, sub `mid ~$ZZk · 1 BTC est.`; tương thích cache legacy (string/number).
+  - Tooltip productionCost: giải thích range + formula energy model.
+- **Files / areas chạm:** `src/services/api.js`, `src/App.jsx`, `src/components/Tooltip.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §3, §4
+- **Verify:** logic range sanity-check (Node); UI fallback legacy
 
 ### [2026-07-12] AI Summary chọn ngôn ngữ VI/EN `(FAST)`
 - **Lane / Mode:** FEATURE FAST

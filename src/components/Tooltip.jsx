@@ -65,7 +65,8 @@ export const METRIC_METADATA = {
   },
   productionCost: {
     api: 'Blockchain.info (Tính toán dựa trên Độ khó Mạng lưới)',
-    def: 'Ước tính chi phí trung bình để khai thác 1 Bitcoin hiện tại, dựa trên công thức năng lượng (giả định điện $0.05/kWh và hiệu suất máy đào 26 J/TH) cộng thêm 10% hao mòn thiết bị.'
+    def: 'Khoảng ước tính chi phí điện (+ opex thô) để khai thác 1 BTC mới — không phải giá điểm chính xác. Low ≈ 20 J/TH @ $0.04/kWh; Mid ≈ 26 J/TH @ $0.05 + 10% opex; High ≈ 32 J/TH @ $0.065 + opex cao hơn. Biên phản ánh sai số assumption hợp lý (~±30–50% quanh mid). Không gồm pool fee, CapEx ASIC đầy đủ hay transaction fees.',
+    formula: 'Cost = (D × 2³² × J/hash × $/kWh) / (3.6e6 × 3.125) × opex  →  range [low → high]'
   },
   mvrv: {
     api: 'CoinMetrics Community API (REST)',

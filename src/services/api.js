@@ -299,6 +299,61 @@ export const getStablecoinData = async () => {
 
 // ─── BLOCKCHAIN.INFO — BTC On-chain Network Stats (No API key required) ───────
 
+/** Expected hashes per unit difficulty (Bitcoin: difficulty × 2^32). */
+const BTC_HASHES_PER_DIFFICULTY = 2 ** 32;
+const JOULES_PER_KWH = 3.6e6;
+const BTC_BLOCK_SUBSIDY = 3.125; // post-2024 halving
+
+/**
+ * Ước tính chi phí sản xuất 1 BTC (chỉ điện + opex thô) theo assumption mining.
+ * Cost = (D × 2^32 × J/hash × $/kWh) / (J/kWh × block subsidy) × opex
+ *
+ * @param {number} difficulty - raw Bitcoin network difficulty
+ * @param {number} jPerTh - miner efficiency in J/TH
+ * @param {number} usdPerKwh - electricity price USD/kWh
+ * @param {number} opexMult - non-power overhead multiplier (cooling, maint, etc.)
+ */
+export function estimateBtcProductionCost(difficulty, jPerTh, usdPerKwh, opexMult = 1.1) {
+  if (!difficulty || difficulty <= 0) return null;
+  const joulesPerHash = jPerTh * 1e-12;
+  const energyCostPerBlock =
+    (difficulty * BTC_HASHES_PER_DIFFICULTY * joulesPerHash * usdPerKwh) / JOULES_PER_KWH;
+  return (energyCostPerBlock / BTC_BLOCK_SUBSIDY) * opexMult;
+}
+
+/**
+ * Khoảng chi phí sản xuất 1 BTC — phản ánh sai số assumption (efficiency + điện + opex),
+ * không phải điểm số "chính xác giả".
+ *
+ * Biên được siết quanh baseline (không lấy min–max cực đoan toàn ngành) để UI hữu dụng:
+ * - low:  fleet khá hiệu quả + điện rẻ hơn một chút
+ * - mid:  baseline network-average (26 J/TH @ $0.05 + 10% opex)
+ * - high: fleet kém hơn + điện/opex cao hơn trong biên hợp lý
+ * → khoảng ~±30–50% quanh mid (sai số chấp nhận được cho proxy model)
+ */
+export function estimateBtcProductionCostRange(difficulty) {
+  if (!difficulty || difficulty <= 0) return null;
+
+  const low = estimateBtcProductionCost(difficulty, 20, 0.04, 1.08);
+  const mid = estimateBtcProductionCost(difficulty, 26, 0.05, 1.1);
+  const high = estimateBtcProductionCost(difficulty, 32, 0.065, 1.18);
+
+  // Làm tròn về nghìn USD cho UI gọn và tránh ảo giác độ chính xác
+  const roundK = (n) => Math.round(n / 1000) * 1000;
+
+  return {
+    low: roundK(low),
+    mid: roundK(mid),
+    high: roundK(high),
+    // Assumptions documented for tooltip / debugging
+    assumptions: {
+      low: { jPerTh: 20, usdPerKwh: 0.04, opex: 1.08 },
+      mid: { jPerTh: 26, usdPerKwh: 0.05, opex: 1.1 },
+      high: { jPerTh: 32, usdPerKwh: 0.065, opex: 1.18 },
+    },
+  };
+}
+
 /**
  * Lấy dữ liệu mạng lưới Bitcoin trực tiếp từ blockchain.info
  * Hash rate, Difficulty, Transaction count, Mempool, Avg fee
@@ -317,7 +372,8 @@ export const getBTCOnChain = async () => {
         ? parseFloat(d.minutes_between_blocks).toFixed(1) : null,
       // Mempool: trung bình fee (satoshi/byte) từ estimated_transaction_volume
       avgTxSizeBytes: d.median_fee || null,
-      productionCost: d.difficulty ? ((d.difficulty * 4294967296 * 26.0e-12 * 0.05) / (3.6e6 * 3.125) * 1.1).toFixed(0) : null,
+      // Range estimate (not a false-precision point) — see estimateBtcProductionCostRange
+      productionCost: d.difficulty ? estimateBtcProductionCostRange(d.difficulty) : null,
     };
   } catch (e) {
     console.error('[API] Blockchain.info:', e.message);
