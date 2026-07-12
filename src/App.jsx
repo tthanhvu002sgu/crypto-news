@@ -695,7 +695,7 @@ function AppContent() {
 
   // ── Derived chart data ──────────────────────────────────────────────────────
   const btcChartData = useMemo(() => ({
-    labels: data.klines.map(k => k.time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
+    labels: data.klines.map(k => new Date(k.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
     datasets: [{
       data: data.klines.map(k => k.close),
       borderColor: theme === 'light' ? '#047857' : '#10b981',
