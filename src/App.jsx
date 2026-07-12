@@ -1058,10 +1058,10 @@ function AppContent() {
           {/* WebSocket status badge */}
           <div className={`ws-badge font-mono ws-${wsStatus}`}>
             {wsStatus === 'connected'
-              ? <><Zap size={10} /> WS LIVE</>
+              ? <React.Fragment><Zap size={10} /> WS LIVE</React.Fragment>
               : wsStatus === 'connecting'
-              ? <><Radio size={10} className="spinning" /> WS...</>  
-              : <><Radio size={10} /> WS OFF</>}
+              ? <React.Fragment><Radio size={10} className="spinning" /> WS...</React.Fragment>  
+              : <React.Fragment><Radio size={10} /> WS OFF</React.Fragment>}
             </div>
           <div className="auto-refresh-badge font-mono">REST ⟳ 5MIN</div>
           <button className="btn-sync font-mono" onClick={() => syncData(true)} disabled={isSyncing}>
