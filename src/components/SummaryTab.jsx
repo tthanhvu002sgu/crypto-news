@@ -246,8 +246,7 @@ MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
 
 3. ON-CHAIN VALUATION & STABLECOIN PURCHASING POWER:
    - Evaluate Network Valuation using MVRV (Market Value to Realized Value), NUPL (Net Unrealized Profit/Loss), and Supply in Profit for both BTC and ETH. Highlight if MVRV indicates an overvalued (> 3.5) or undervalued (< 1.0) zone, and interpret NUPL zones (Capitulation < 0, Belief/Optimism > 0, Euphoria > 0.75) to assess market cycle positioning. Analyze Supply in Profit to gauge the percentage of the network holding unrealized gains (high values > 80-90% often align with tops, low values < 50% with bottoms).
-   - DO NOT consider Total Market Cap / Circulating Supply of USDT/Stablecoins as immediate latent demand ready to absorb BTC selling pressure. Explain clearly that: The circulating supply of USDT/Stablecoins might be in DeFi pools, used as collateral, or sitting in long-term wallets.
-   - Point out that to analyze the potential direct demand for buying BTC, one must use Stablecoin Exchange Reserves. Since the current system does not provide this metric, you must highlight this limitation rather than extrapolating from Total Stablecoin Market Cap.
+   - IMPORTANT: The circulating supply of USDT/Stablecoins is NOT immediate latent buying power for BTC. Much of it sits in DeFi, used as collateral, or in long-term wallets. Do NOT treat total stablecoin market cap as direct demand. Highlight this limitation clearly.
 
 4. CME COT (COMMITMENT OF TRADERS) COMPREHENSIVE BREAKDOWN & LAG:
    - MANDATORY EXHAUSTIVE BREAKDOWN: You MUST explicitly report, analyze, and interpret the Net positioning and weekly Change for ALL 5 trader categories: (1) Dealer Intermediary, (2) Asset Manager/Institutional, (3) Leveraged Funds, (4) Other Reportables, and (5) Nonreportable Positions. DO NOT skip, merge, or omit any category.
@@ -288,7 +287,7 @@ MANDATORY ANALYSIS PRINCIPLES (SYSTEM CONSTRAINTS):
    - You must print this scorecard specifically in section 5. YOU MUST use actual newline characters ('\n') for each row of the table (header, separator :---, and each data row). Absolutely do not compress all table rows onto a single line. Write a proper markdown table comprising: Line 1: Header (| Col 1 | Col 2 |), Line 2: Separator (| :--- | :---: |), Line 3+: Data rows.
 
 8. FINANCIAL CAUSALITY PRINCIPLES (REAL CAUSAL FACTORS IN FINANCE):
-   - You MUST analyze the market and explain price action using the following real causal factors from financial science:
+   - YOU MUST analyze the market and explain price action using the following real causal factors from financial science:
      * Mechanical Supply-Demand Imbalance (Order Flow Imbalance): Asset price increases are the direct result of active buy volume fully matching passive limit sell orders and pushing prices to higher levels. This is a direct, mechanical causal relationship.
      * Information Asymmetry: Accurate analysis of macroeconomic data and capital flows helps traders discover the underlying causes of asset mispricing before the market self-corrects toward its intrinsic value.
      * Forced Dynamics from Market Structure: Understanding why a specific group of investor positions is forced to stop out or get liquidated (Liquidation) at a particular price zone helps traders identify high-probability reversal or trend continuation areas, driven by this forced liquidity.
@@ -321,7 +320,7 @@ Bitcoin is [describe price/onchain environment, e.g., structural distribution/ac
 
 * **Market Structure**: Bitcoin Dominance stands at [BTC Dominance]%, while ETH Dominance is [ETH Dominance]% (with ETH and SOL pricing [describe trend or availability]). Network fundamentals: BTC Hashrate is [Hashrate] EH/s and [Active Addresses] Active Addresses.
 * **On-chain Valuation (MVRV, NUPL, Supply in Profit)**: [Provide a dedicated assessment of BTC and ETH using their respective MVRV ratios, NUPL values, and Supply in Profit percentages. Explain whether these metrics suggest an accumulation phase, a mid-cycle progression, or a distribution phase].
-* **Stablecoin Purchasing Power & Data Limitations**: The circulating supply of USDT stands at $[USDT Supply]B out of a Total Market Cap of $[Total Cap]B. It is critical to state that this total supply must not be considered immediate latent demand ready to absorb BTC selling pressure. The circulating supply of USDT/Stablecoins might be locked in DeFi pools, utilized as capital collateral, or sitting inertly in long-term cold wallets. Accurate analysis of direct, immediate purchasing demand requires Stablecoin Exchange Reserves. Because the current dataset does not provide this specific metric, this presents a severe analytical limitation that prevents any extrapolation regarding immediate buying support from total stablecoin capitalization.
+* **Stablecoin Purchasing Power & Data Limitations**: The circulating supply of USDT stands at $[USDT Supply]B. IMPORTANT: This total supply must NOT be treated as immediate latent demand ready to absorb BTC selling pressure. Stablecoin supply is often locked in DeFi, used as collateral, or held in long-term wallets. Accurate analysis of direct buying demand requires Stablecoin Exchange Reserves (which is not available in current data).
 
 ---
 
