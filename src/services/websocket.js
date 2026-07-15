@@ -249,9 +249,14 @@ export function useCVDStream() {
   const buyRef = useRef(0);
   const sellRef = useRef(0);
 
-  const historyRef = useRef(
-    loadTodayJson('hft_cvd_history', 'hft_cvd_history_date', [])
-  );
+  const historyRef = useRef((() => {
+    const loaded = loadTodayJson('hft_cvd_history', 'hft_cvd_history_date', []);
+    // Drop stale samples so 1H rolling window stays lean after reload
+    const keepFrom = Date.now() - 70 * 60 * 1000;
+    return Array.isArray(loaded)
+      ? loaded.filter((h) => h.timestamp == null || h.timestamp >= keepFrom)
+      : [];
+  })());
   const volNodeRef = useRef(
     loadTodayMap('hft_vol_nodes', 'hft_vol_nodes_date')
   );
@@ -363,6 +368,11 @@ export function useCVDStream() {
             ...historyRef.current,
             { time: timeStr, cvd: cvdRef.current, price, timestamp: data.T },
           ];
+          // Keep ~70 minutes of samples for rolling 1H CVD (1 point / minute)
+          const keepFrom = data.T - 70 * 60 * 1000;
+          historyRef.current = historyRef.current.filter(
+            (h) => h.timestamp == null || h.timestamp >= keepFrom
+          );
         } else if (historyRef.current.length > 0) {
           const last = historyRef.current[historyRef.current.length - 1];
           last.cvd = cvdRef.current;

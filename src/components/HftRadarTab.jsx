@@ -129,18 +129,62 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
   }
   const delta30d = (sessionCvd || 0) - baseSession30dRef.current;
 
-  // Normalize 1H rolling window so Net CVD delta starts from baseline 60 mins ago
+  // True rolling 1H: only samples in the last 60 minutes, rebased so Net CVD = 0 at window start
   const list1h = useMemo(() => {
     if (!cvdHistory || cvdHistory.length === 0) return [];
-    const base1h = cvdHistory[0]?.cvd || 0;
-    return cvdHistory.map((item, idx) => {
-      const isLast = idx === cvdHistory.length - 1;
+
+    const MS_1H = 60 * 60 * 1000;
+    const now = Date.now();
+    const cutoff = now - MS_1H;
+
+    const withTs = cvdHistory.filter((item) => item.timestamp != null);
+    let window;
+    let base1h;
+
+    if (withTs.length > 0) {
+      // Last sample at or before the 60-minute mark = true "CVD 1h ago" baseline
+      let baseSample = null;
+      for (let i = 0; i < withTs.length; i++) {
+        if (withTs[i].timestamp <= cutoff) baseSample = withTs[i];
+        else break;
+      }
+      window = withTs.filter((item) => item.timestamp >= cutoff);
+      if (window.length === 0) {
+        window = [withTs[withTs.length - 1]];
+      }
+      // Full hour available → baseline at cutoff; partial session → first point in window
+      base1h = baseSample != null ? baseSample.cvd : (window[0]?.cvd || 0);
+    } else {
+      // Legacy samples without timestamp: approximate last ~60 minute bars
+      window = cvdHistory.slice(-60);
+      base1h = window[0]?.cvd || 0;
+    }
+
+    const points = window.map((item, idx) => {
+      const isLast = idx === window.length - 1;
       return {
         ...item,
-        cvd: (isLast ? cvd : item.cvd) - base1h,
-        price: isLast ? (livePrice || item.price) : item.price
+        cvd: (isLast ? (cvd ?? item.cvd) : item.cvd) - base1h,
+        price: isLast ? (livePrice || item.price) : item.price,
       };
     });
+
+    // Start chart at 0 when baseline sits just before the window (cleaner 1h delta line)
+    if (
+      withTs.length > 0 &&
+      points.length > 0 &&
+      points[0].cvd !== 0 &&
+      points[0].timestamp > cutoff
+    ) {
+      const t = new Date(cutoff);
+      const timeStr = t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      return [
+        { time: timeStr, cvd: 0, price: points[0].price, timestamp: cutoff },
+        ...points,
+      ];
+    }
+
+    return points;
   }, [cvdHistory, cvd, livePrice]);
 
   const chartList = useMemo(() => {
