@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
-import { getSystemPrompt, AI_STYLE_LABELS } from '../services/aiPrompts';
+import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 
@@ -21,15 +21,61 @@ const cleanLatex = (text) => {
     .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 '); // Prevent 4-space indent from creating code blocks
 };
 
+const toFiniteNumber = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const parsed = Number.parseFloat(value.replace(/[$,%\s]/g, '').replace(/,/g, ''));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatNumber = (value, digits = 2) => {
+  const number = toFiniteNumber(value);
+  if (number === null) return 'N/A';
+  return number.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+};
+
+const formatSigned = (value, digits = 2, suffix = '') => {
+  const number = toFiniteNumber(value);
+  if (number === null) return 'N/A';
+  return `${number > 0 ? '+' : ''}${formatNumber(number, digits)}${suffix}`;
+};
+
+const safeIsoTime = (value) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'N/A' : date.toISOString();
+};
+
+const parseMarketDate = (value) => {
+  if (!value) return null;
+  const text = String(value).trim();
+  const dayFirstMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
+  if (dayFirstMatch) {
+    const [, day, month, rawYear] = dayFirstMatch;
+    const year = rawYear.length === 2 ? 2000 + Number(rawYear) : Number(rawYear);
+    const date = new Date(Date.UTC(year, Number(month) - 1, Number(day)));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const ageInDays = (value, now = new Date()) => {
+  const date = parseMarketDate(value);
+  if (!date) return null;
+  return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 86400000));
+};
+
 export default function SummaryTab({ 
   data, apiKeys, cvd, buyVolume, sellVolume, etfHoldings, etfHistory,
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
   btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit
 }) {
   const { isModuleHidden } = useModuleVisibility();
-  if (isModuleHidden('tab_summary')) return null;
-
-  const provider = 'gemini';
+  const isSummaryHidden = isModuleHidden('tab_summary');
   const [selectedModel, setSelectedModel] = useState(() => {
     return localStorage.getItem('ai-model') || 'gemini-2.5-flash';
   });
@@ -63,181 +109,455 @@ export default function SummaryTab({
   const styleLabels = AI_STYLE_LABELS[selectedLang] || AI_STYLE_LABELS.en;
 
   const preparePromptAndData = async () => {
-    // Fetch HFT Data + multi-timeframe klines + latest calendar/news for the report
     let orderBook = null;
     let whaleWalls = null;
-    let klines7d = [], klines30d = [], klines90d = [], klines1y = [];
-    let cvd7d = [], cvd30d = [];
+    let klines7d = [];
+    let klines30d = [];
+    let klines90d = [];
+    let klines1y = [];
+    let cvd7d = [];
+    let cvd30d = [];
     let latestNews = [];
+
     try {
-      [orderBook, whaleWalls, klines7d, klines30d, klines90d, klines1y, cvd7d, cvd30d, latestNews] = await Promise.all([
+      [
+        orderBook,
+        whaleWalls,
+        klines7d,
+        klines30d,
+        klines90d,
+        klines1y,
+        cvd7d,
+        cvd30d,
+        latestNews,
+      ] = await Promise.all([
         getOrderBookDepth('BTCUSDT', 100),
         getWhaleWalls(),
-        getBTCKlines('BTCUSDT', '4h', 42),   // 7d  = 42 x 4h candles
-        getBTCKlines('BTCUSDT', '1d', 30),   // 30d = 30 x 1d candles
-        getBTCKlines('BTCUSDT', '1d', 90),   // 90d = 90 x 1d candles
-        getBTCKlines('BTCUSDT', '1w', 52),   // 1y  = 52 x 1w candles
+        getBTCKlines('BTCUSDT', '4h', 42),
+        getBTCKlines('BTCUSDT', '1d', 30),
+        getBTCKlines('BTCUSDT', '1d', 90),
+        getBTCKlines('BTCUSDT', '1w', 52),
         getHistoricalCVD('BTCUSDT', '4h', 42),
         getHistoricalCVD('BTCUSDT', '1d', 30),
         fetchRealtimeFeed(),
       ]);
-    } catch (e) {
-      console.warn("Error fetching data for report:", e);
+    } catch (error) {
+      console.warn('Error fetching data for report:', error);
     }
 
     const activeCvd7d = cvd7d.length > 0 ? cvd7d : (data.cvdHistory7d || []);
     const activeCvd30d = cvd30d.length > 0 ? cvd30d : (data.cvdHistory30d || []);
-    const activeNews = latestNews && latestNews.length > 0 ? latestNews : (data.news || []);
+    const activeNews = latestNews?.length > 0 ? latestNews : (data.news || []);
+    const klines48h = Array.isArray(data.klines) ? data.klines : [];
+    const priceNow =
+      toFiniteNumber(data.btc?.price) ??
+      toFiniteNumber(klines48h[klines48h.length - 1]?.close);
 
-    // --- Historical Data Helpers ---
-    const klines48h = data.klines || [];
-    // Sample every 4 candles (1h each = every 4h) to reduce tokens
-    const klinesSampled = klines48h.filter((_, i) => i % 4 === 0).slice(-12);
-    const klinesStr = klinesSampled.length > 0
-      ? klinesSampled.map(k => `  ${new Date(k.time).toLocaleString('en-US', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}: ${k.close.toFixed(0)}`).join('\n')
-      : 'N/A';
-
-    const priceNow = data.btc?.price || klines48h[klines48h.length - 1]?.close || 0;
-    const price48hAgo = klines48h[0]?.close || 0;
-    const price48hChange = price48hAgo > 0 ? (((priceNow - price48hAgo) / price48hAgo) * 100).toFixed(2) : 'N/A';
-    const priceHigh48h = klines48h.length > 0 ? Math.max(...klines48h.map(k => k.high)).toFixed(0) : 'N/A';
-    const priceLow48h = klines48h.length > 0 ? Math.min(...klines48h.map(k => k.low)).toFixed(0) : 'N/A';
-
-    const lsHistory24h = data.lsHistory || [];
-    // Sample every 4 records (1h each = every 4h)
-    const lsSampled = lsHistory24h.filter((_, i) => i % 4 === 0).slice(-6);
-    const lsStr = lsSampled.length > 0
-      ? lsSampled.map(r => `  ${new Date(r.timestamp).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })}: Ratio=${parseFloat(r.longShortRatio).toFixed(2)} (Long ${(parseFloat(r.longAccount)*100).toFixed(1)}% / Short ${(parseFloat(r.shortAccount)*100).toFixed(1)}%)`).join('\n')
-      : 'N/A';
-
-    const oiHistory24h = data.oiHistory || [];
-    const oiSampled = oiHistory24h.filter((_, i) => i % 4 === 0).slice(-6);
-    const oiStr = oiSampled.length > 0
-      ? oiSampled.map(r => `  ${new Date(r.timestamp).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })}: ${parseFloat(r.sumOpenInterest).toFixed(0)} BTC ($${parseFloat(r.sumOpenInterestValue).toFixed(0)})`).join('\n')
-      : 'N/A';
-    const oiFirst = oiSampled[0] ? parseFloat(oiSampled[0].sumOpenInterest) : null;
-    const oiLast = oiSampled[oiSampled.length - 1] ? parseFloat(oiSampled[oiSampled.length - 1].sumOpenInterest) : null;
-    const oiTrend = oiFirst && oiLast ? (oiLast > oiFirst ? 'UP' : 'DOWN') : 'N/A';
-
-    const etfFlow7d = etfHistory?.slice(-7) || [];
-    const etfFlowStr = etfFlow7d.length > 0
-      ? etfFlow7d.map(h => `  ${h.date}: ${h.flow > 0 ? '+' : ''}${h.flow}M USD`).join('\n')
-      : 'N/A';
-    const etfNetTotal = etfFlow7d.reduce((sum, h) => sum + (h.flow || 0), 0);
-
-    // --- Multi-timeframe price stats helper ---
-    const tfStats = (candles, label) => {
-      if (!candles || candles.length === 0) return `${label}: N/A`;
-      const first = candles[0].close;
-      const last = candles[candles.length - 1].close;
-      const high = Math.max(...candles.map(k => k.high));
-      const low  = Math.min(...candles.map(k => k.low));
-      const chg  = first > 0 ? (((last - first) / first) * 100).toFixed(2) : '?';
-      const startDate = new Date(candles[0].time).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit' });
-      return `${label}: Initial Price on ${startDate}: $${first.toFixed(0)} → Current: $${last.toFixed(0)} (${chg > 0 ? '+' : ''}${chg}%) | High: $${high.toFixed(0)} | Low: $${low.toFixed(0)}`;
+    const sampleSeries = (items, maxPoints = 10) => {
+      if (!Array.isArray(items) || items.length === 0) return [];
+      const pointCount = Math.min(maxPoints, items.length);
+      if (pointCount === 1) return [items[0]];
+      return Array.from({ length: pointCount }, (_, index) => {
+        const sourceIndex = Math.round((index * (items.length - 1)) / (pointCount - 1));
+        return items[sourceIndex];
+      });
     };
 
-    // --- Sampled candles for 7d trend line (sample every 2 of 42 = 21 points) ---
-    const klines7dSampled = klines7d.filter((_, i) => i % 2 === 0);
-    const klines7dStr = klines7dSampled.length > 0
-      ? klines7dSampled.map(k => `  ${new Date(k.time).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' })}: $${k.close.toFixed(0)}`).join('\n')
-      : 'N/A';
+    const priceStats = (candles, label) => {
+      const valid = (candles || []).filter((candle) =>
+        [candle.open, candle.high, candle.low, candle.close].every(
+          (value) => toFiniteNumber(value) !== null
+        )
+      );
+      if (valid.length === 0) {
+        return { label, text: `- ${label}: N/A`, changePct: null, rangePosition: null };
+      }
 
-    // --- Whale Walls price-level details ---
-    const fmtWalls = (walls) => {
-      if (!walls || walls.length === 0) return '  No data';
-      return walls.slice(0, 5).map(w => {
-        const srcStr = Object.entries(w.sources || {})
-          .map(([name, val]) => `${name}: $${(val/1e6).toFixed(1)}M`)
+      const open = toFiniteNumber(valid[0].open);
+      const close = toFiniteNumber(valid[valid.length - 1].close);
+      const high = Math.max(...valid.map((candle) => toFiniteNumber(candle.high)));
+      const low = Math.min(...valid.map((candle) => toFiniteNumber(candle.low)));
+      const changePct = open > 0 ? ((close - open) / open) * 100 : null;
+      const rangePosition = high > low ? ((close - low) / (high - low)) * 100 : null;
+      const start = safeIsoTime(valid[0].time);
+      const end = safeIsoTime(valid[valid.length - 1].time);
+
+      return {
+        label,
+        changePct,
+        rangePosition,
+        text:
+          `- ${label}: ${start} -> ${end} | Open $${formatNumber(open, 0)} | ` +
+          `Close $${formatNumber(close, 0)} | Change ${formatSigned(changePct, 2, '%')} | ` +
+          `High $${formatNumber(high, 0)} | Low $${formatNumber(low, 0)} | ` +
+          `Close location in range ${formatNumber(rangePosition, 1)}%`,
+      };
+    };
+
+    const pricePath = (candles, maxPoints = 10) => {
+      const sampled = sampleSeries(candles || [], maxPoints);
+      if (sampled.length === 0) return '  N/A';
+      return sampled
+        .map(
+          (candle) =>
+            `  - ${safeIsoTime(candle.time)} | Close $${formatNumber(candle.close, 0)} | ` +
+            `Volume ${formatNumber(candle.volume, 2)} BTC`
+        )
+        .join('\n');
+    };
+
+    const cvdBlock = (series, label) => {
+      const valid = (series || []).filter(
+        (point) =>
+          toFiniteNumber(point.cvd) !== null &&
+          toFiniteNumber(point.price) !== null
+      );
+      if (valid.length === 0) {
+        return `### ${label}\n- Summary: N/A\n- Sampled path: N/A`;
+      }
+
+      const firstPrice = toFiniteNumber(valid[0].price);
+      const lastPrice = toFiniteNumber(valid[valid.length - 1].price);
+      const priceChange =
+        firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : null;
+      const finalCvd = toFiniteNumber(valid[valid.length - 1].cvd);
+      const midpoint = Math.floor(valid.length / 2);
+      const firstHalfDelta = valid
+        .slice(0, midpoint)
+        .reduce((sum, point) => sum + (toFiniteNumber(point.delta) || 0), 0);
+      const secondHalfDelta = valid
+        .slice(midpoint)
+        .reduce((sum, point) => sum + (toFiniteNumber(point.delta) || 0), 0);
+      const path = sampleSeries(valid, 10)
+        .map(
+          (point) =>
+            `  - ${safeIsoTime(point.time)} | Price $${formatNumber(point.price, 0)} | ` +
+            `Rebased cumulative CVD ${formatSigned(point.cvd, 0, ' USD')}`
+        )
+        .join('\n');
+
+      return `### ${label}
+- Scope: Binance BTCUSDT klines; taker-buy quote volume minus taker-sell quote volume; cumulative series rebased at the start of this window.
+- Price change across window: ${formatSigned(priceChange, 2, '%')}
+- Final rebased cumulative CVD: ${formatSigned(finalCvd, 0, ' USD')}
+- First-half net taker delta: ${formatSigned(firstHalfDelta, 0, ' USD')}
+- Second-half net taker delta: ${formatSigned(secondHalfDelta, 0, ' USD')}
+- Sampled paired path:
+${path}`;
+    };
+
+    const wallQuality = (usdValue) => {
+      const millions = (toFiniteNumber(usdValue) || 0) / 1e6;
+      if (millions < 10) return 'Sub-10M / usually immaterial for BTC';
+      if (millions < 30) return '10M-30M / weak tactical liquidity';
+      if (millions < 50) return '30M-50M / medium';
+      if (millions < 100) return '50M-100M / strong displayed wall';
+      return '100M+ / extremely large displayed wall';
+    };
+
+    const formatWalls = (walls) => {
+      if (!Array.isArray(walls) || walls.length === 0) return '  N/A';
+      return walls.slice(0, 5).map((wall) => {
+        const wallPrice = toFiniteNumber(wall.price);
+        const usdValue = toFiniteNumber(wall.usdValue);
+        const distancePct =
+          priceNow > 0 && wallPrice !== null
+            ? ((wallPrice - priceNow) / priceNow) * 100
+            : null;
+        const sources = Object.entries(wall.sources || {})
+          .map(([name, value]) => `${name}: $${formatNumber((toFiniteNumber(value) || 0) / 1e6, 1)}M`)
           .join(', ');
-        return `  $${w.price.toFixed(0)} — ${(w.usdValue/1e6).toFixed(2)}M USD (${w.qty.toFixed(2)} BTC) [Aggregated from: ${srcStr}]`;
+
+        return (
+          `  - $${formatNumber(wallPrice, 0)} | $${formatNumber((usdValue || 0) / 1e6, 2)}M | ` +
+          `${formatSigned(distancePct, 2, '%')} from spot | ${wallQuality(usdValue)} | ` +
+          `${formatNumber(wall.qty, 2)} BTC | Sources: ${sources || 'N/A'}`
+        );
       }).join('\n');
     };
 
-    const formatCotRow = (name, r) => {
-      if (!r) return '';
-      return `  * ${name}: Long ${r.long} (${r.longChange}), Short ${r.short} (${r.shortChange}), Spread ${r.spread || 0} (${r.spreadChange || 0}), Net ${r.net} (${r.netChange})`;
+    const formatCotRow = (name, row) => {
+      if (!row) return `  - ${name}: N/A`;
+      return (
+        `  - ${name}: Long ${row.long ?? 'N/A'} (${row.longChange ?? 'N/A'}), ` +
+        `Short ${row.short ?? 'N/A'} (${row.shortChange ?? 'N/A'}), ` +
+        `Spread ${row.spread ?? 'N/A'} (${row.spreadChange ?? 'N/A'}), ` +
+        `Net ${row.net ?? 'N/A'} (${row.netChange ?? 'N/A'})`
+      );
     };
-    const cotStr = data.cotData ? 
-      `Date: ${data.cotData.date}\n${formatCotRow('Dealer Intermediary', data.cotData.dealerIntermediary)}\n${formatCotRow('Asset Manager/Institutional', data.cotData.assetManager)}\n${formatCotRow('Leveraged Funds', data.cotData.leveragedFunds)}\n${formatCotRow('Other Reportables', data.cotData.otherReportables)}\n${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}` : 'N/A';
 
-    // Format Data for Prompt
+    const cotStr = data.cotData
+      ? `- Observation date: ${data.cotData.date || 'N/A'}
+${formatCotRow('Dealer Intermediary', data.cotData.dealerIntermediary)}
+${formatCotRow('Asset Manager / Institutional', data.cotData.assetManager)}
+${formatCotRow('Leveraged Funds', data.cotData.leveragedFunds)}
+${formatCotRow('Other Reportables', data.cotData.otherReportables)}
+${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
+      : '- CME COT: N/A';
+
+    const lsHistory24h = Array.isArray(data.lsHistory) ? data.lsHistory : [];
+    const lsSampled = sampleSeries(lsHistory24h, 7);
+    const lsFirst = toFiniteNumber(lsHistory24h[0]?.longShortRatio);
+    const lsLast = toFiniteNumber(lsHistory24h[lsHistory24h.length - 1]?.longShortRatio);
+    const lsChange = lsFirst !== null && lsLast !== null ? lsLast - lsFirst : null;
+    const lsStr = lsSampled.length > 0
+      ? lsSampled.map((row) => {
+          const ratio = toFiniteNumber(row.longShortRatio);
+          const longAccount = toFiniteNumber(row.longAccount);
+          const shortAccount = toFiniteNumber(row.shortAccount);
+          return (
+            `  - ${safeIsoTime(row.timestamp)} | Ratio ${formatNumber(ratio, 3)} | ` +
+            `Long ${longAccount === null ? 'N/A' : formatNumber(longAccount * 100, 1) + '%'} | ` +
+            `Short ${shortAccount === null ? 'N/A' : formatNumber(shortAccount * 100, 1) + '%'}`
+          );
+        }).join('\n')
+      : '  N/A';
+
+    const oiHistory24h = Array.isArray(data.oiHistory) ? data.oiHistory : [];
+    const oiSampled = sampleSeries(oiHistory24h, 7);
+    const oiFirst = toFiniteNumber(oiHistory24h[0]?.sumOpenInterest);
+    const oiLast = toFiniteNumber(oiHistory24h[oiHistory24h.length - 1]?.sumOpenInterest);
+    const oiChangePct =
+      oiFirst > 0 && oiLast !== null ? ((oiLast - oiFirst) / oiFirst) * 100 : null;
+    const oiStr = oiSampled.length > 0
+      ? oiSampled.map(
+          (row) =>
+            `  - ${safeIsoTime(row.timestamp)} | ${formatNumber(row.sumOpenInterest, 0)} BTC | ` +
+            `$${formatNumber(row.sumOpenInterestValue, 0)} notional`
+        ).join('\n')
+      : '  N/A';
+
+    const etfFlow7d = Array.isArray(etfHistory) ? etfHistory.slice(-7) : [];
+    const etfFlows = etfFlow7d
+      .map((row) => ({ ...row, numericFlow: toFiniteNumber(row.flow) }))
+      .filter((row) => row.numericFlow !== null);
+    const etfNetTotal = etfFlows.reduce((sum, row) => sum + row.numericFlow, 0);
+    const etfPositiveDays = etfFlows.filter((row) => row.numericFlow > 0).length;
+    const etfNegativeDays = etfFlows.filter((row) => row.numericFlow < 0).length;
+    const etfFlowStr = etfFlows.length > 0
+      ? etfFlows
+          .map((row) => `  - ${row.date}: ${formatSigned(row.numericFlow, 1, 'M USD')}`)
+          .join('\n')
+      : '  N/A';
+    const latestEtfDate = etfFlows[etfFlows.length - 1]?.date || null;
+    const etfObservationAgeDays = ageInDays(latestEtfDate);
+    const cotObservationAgeDays = ageInDays(data.cotData?.date);
+
+    const fedRate = toFiniteNumber(data.fedFundsRate);
+    const cpi = toFiniteNumber(data.cpi);
+    const realRateProxy =
+      fedRate !== null && cpi !== null ? fedRate - cpi : null;
+
+    const price48h = priceStats(klines48h, '48 hours');
+    const price7d = priceStats(klines7d, '7 days');
+    const price30d = priceStats(klines30d, '30 days');
+    const price90d = priceStats(klines90d, '90 days');
+    const price1y = priceStats(klines1y, '1 year');
+
+    const productionCost = data.onChain?.productionCost;
+    const productionCostStr = productionCost
+      ? `$${formatNumber(productionCost.low, 0)} - $${formatNumber(productionCost.high, 0)} ` +
+        `(mid $${formatNumber(productionCost.mid, 0)}; model estimate using fixed power/efficiency assumptions)`
+      : 'N/A';
+
+    const coverageGroups = {
+      Macro: [
+        data.netLiquidity,
+        data.fedFundsRate,
+        data.tenYearYield,
+        data.dxy,
+        data.vix?.price,
+        data.highYield,
+        data.cpi,
+        data.unrate,
+        data.sp500?.price,
+        data.qqq?.price,
+        data.m2Supply,
+      ],
+      Onchain: [
+        data.onChain?.hashRate,
+        data.onChain?.difficulty,
+        data.onChainMetrics?.mvrv,
+        data.onChainMetrics?.activeAddresses,
+        data.ethOnChainMetrics?.mvrv,
+      ],
+      Flows: [
+        etfFlows.length > 0 ? etfNetTotal : null,
+        data.cotData?.date,
+      ],
+      Microstructure: [
+        data.fundingRate,
+        data.openInterest,
+        lsLast,
+        cvd,
+        orderBook?.obiPercent,
+        whaleWalls?.bidRatio,
+      ],
+    };
+
+    const coverageStr = Object.entries(coverageGroups)
+      .map(([name, values]) => {
+        const available = values.filter((value) => {
+          if (typeof value === 'number') return Number.isFinite(value);
+          return value !== null && value !== undefined && value !== '' && value !== 'N/A';
+        }).length;
+        return `${name} ${available}/${values.length}`;
+      })
+      .join(' | ');
+
+    const formatNews = (items) => {
+      if (!Array.isArray(items) || items.length === 0) return '- N/A';
+      return items.slice(0, 15).map((item) => {
+        let source = 'Unknown source';
+        try {
+          source = item.link ? new URL(item.link).hostname.replace(/^www\./, '') : source;
+        } catch {
+          source = 'Unknown source';
+        }
+        const snippet = item.snippet
+          ? ` | Snippet: ${String(item.snippet).replace(/\s+/g, ' ').slice(0, 220)}`
+          : '';
+        return (
+          `- [${item.timeStr || safeIsoTime(item.time)}] ${item.title || 'Untitled'} | ` +
+          `Tag: ${item.tag || 'N/A'} | Source: ${source}${snippet}`
+        );
+      }).join('\n');
+    };
+
     const promptData = `
-# MARKET DATA
+# MARKET ANALYSIS INPUT
 
-## 1. MACRO
-- US Net Liquidity: ${data.netLiquidity ? '$' + data.netLiquidity + 'B' : 'N/A'}
-- Fed Funds Rate: ${data.fedFundsRate ? data.fedFundsRate + '%' : 'N/A'}
-- 10Y Bond Yield: ${data.tenYearYield ? data.tenYearYield + '%' : 'N/A'}
-- DXY Index: ${data.dxy ? data.dxy.toFixed(2) : 'N/A'}
-- VIX (Volatility Index): ${data.vix?.price != null ? data.vix.price.toFixed(2) : 'N/A'}
-- High Yield Spread (Default Risk): ${data.highYield ? data.highYield + '%' : 'N/A'}
-- Inflation (CPI): ${data.cpi ? data.cpi : 'N/A'}
-- US Unemployment: ${data.unrate ? data.unrate + '%' : 'N/A'}
-- Equities: S&P 500 (${data.sp500?.price || 'N/A'}), Nasdaq 100 (${data.qqq?.price || 'N/A'})
-- M2 Supply: ${data.m2Supply ? '$' + data.m2Supply + 'B' : 'N/A'}
+## 0. SNAPSHOT, COVERAGE & PROVENANCE
+- Report generated at: ${new Date().toISOString()}
+- Dashboard last successful sync/fetch: ${safeIsoTime(lastSync)}
+- Coverage summary: ${coverageStr}
+- BTC spot/klines, funding, OI, global L/S accounts, and historical CVD venue: Binance BTCUSDT.
+- OBI and whale-wall scope: multi-exchange aggregation returned by the dashboard; composition is shown where available.
+- Macro observations may have publication lag. The dashboard currently supplies values but not every source observation date.
+- ETF history contains the latest seven available dashboard observations, which may include non-trading-day gaps or fallback data. Compare the latest observation date with the report timestamp.
+- ETF holdings snapshot date is not supplied; freshness is unknown.
+- News is headline/snippet input, not independently verified full-text reporting.
+- Historical CVD is cumulative taker delta rebased at the start of each requested window. Cross-window absolute levels are not comparable.
+- BTC/ETH NUPL shown below is algebraically derived from MVRV by the dashboard. Supply in Profit is also a model estimate from MVRV. These are dependent signals and must not be triple-counted.
+- Order-book liquidity can be cancelled or spoofed. Treat walls as conditional, not guaranteed.
 
-## 2. CRYPTO GLOBAL & ON-CHAIN
-### Current BTC Price & 48h Volatility
-- Current Price: ${data.btc?.price ? '$' + data.btc.price : 'N/A'} | 24h Change: ${data.btc?.change ? data.btc.change + '%' : 'N/A'} | 24h Volume: ${data.btc?.volume ? '$' + (data.btc.volume/1e9).toFixed(2) + 'B' : 'N/A'}
-- 48h Change: ${price48hChange !== 'N/A' ? price48hChange + '%' : 'N/A'} | High: $${priceHigh48h} | Low: $${priceLow48h}
-- BTC Price History (sampled every 4 hours in the last 48h):
-${klinesStr}
+## 1. MACRO & CROSS-ASSET
+- US Net Liquidity: ${data.netLiquidity !== null && data.netLiquidity !== undefined ? '$' + formatNumber(data.netLiquidity, 2) + 'B' : 'N/A'}
+- Fed Funds Rate: ${fedRate === null ? 'N/A' : formatNumber(fedRate, 2) + '%'}
+- Headline CPI: ${cpi === null ? 'N/A' : formatNumber(cpi, 2) + '%'}
+- Derived ex-post real-rate proxy (Fed Funds - CPI): ${realRateProxy === null ? 'N/A' : formatSigned(realRateProxy, 2, '%')}
+- US 10Y Yield: ${toFiniteNumber(data.tenYearYield) === null ? 'N/A' : formatNumber(data.tenYearYield, 2) + '%'}
+- DXY: ${formatNumber(data.dxy, 2)}
+- VIX: ${formatNumber(data.vix?.price, 2)}
+- US High-Yield Spread: ${toFiniteNumber(data.highYield) === null ? 'N/A' : formatNumber(data.highYield, 2) + '%'}
+- US Unemployment: ${toFiniteNumber(data.unrate) === null ? 'N/A' : formatNumber(data.unrate, 2) + '%'}
+- S&P 500: ${formatNumber(data.sp500?.price, 2)} | Change: ${formatSigned(data.sp500?.changePercent, 2, '%')}
+- Nasdaq proxy / QQQ: ${formatNumber(data.qqq?.price, 2)} | Change: ${formatSigned(data.qqq?.changePercent, 2, '%')}
+- M2 Supply: ${data.m2Supply !== null && data.m2Supply !== undefined ? '$' + formatNumber(data.m2Supply, 2) + 'B' : 'N/A'}
+- Crypto Fear & Greed: ${data.fngData?.value ?? 'N/A'} (${data.fngData?.sentiment || 'N/A'})
 
-### BTC Price Multi-timeframe Comparison
-- ${tfStats(klines7d,  '7 days ')}
-- ${tfStats(klines30d, '30 days')}
-- ${tfStats(klines90d, '90 days')}
-- ${tfStats(klines1y,  '1 year ')}
-- 7-day price trend (sampled every 8 hours):
-${klines7dStr}
+## 2. BTC PRICE STRUCTURE & CRYPTO BREADTH
+- BTC spot: ${priceNow === null ? 'N/A' : '$' + formatNumber(priceNow, 2)}
+- BTC 24h change: ${formatSigned(data.btc?.change, 2, '%')}
+- BTC 24h high / low: $${formatNumber(data.btc?.high, 0)} / $${formatNumber(data.btc?.low, 0)}
+- BTC 24h quote volume: ${toFiniteNumber(data.btc?.volume) === null ? 'N/A' : '$' + formatNumber(data.btc.volume / 1e9, 2) + 'B'}
+${price48h.text}
+${price7d.text}
+${price30d.text}
+${price90d.text}
+${price1y.text}
 
-### Major Altcoins (Risk Appetite)
-- ETH: ${data.ethPrice?.price ? '$' + data.ethPrice.price + ' (' + (data.ethPrice.change || 'N/A') + '%)' : 'N/A'}
-- SOL: ${data.solPrice?.price ? '$' + data.solPrice.price + ' (' + (data.solPrice.change || 'N/A') + '%)' : 'N/A'}
+### Sampled 48h BTC Path
+${pricePath(klines48h, 12)}
 
-### On-chain Valuation & Network Data
-- Dominance: BTC (${data.globalData?.btcDominance || 'N/A'}%), ETH (${data.globalData?.ethDominance || 'N/A'}%)
-- Total Market Cap: ${data.globalData?.totalMarketCap ? '$' + (data.globalData.totalMarketCap/1e9).toFixed(0) + 'B' : 'N/A'}
-- Stablecoin Supply (Purchasing Power): USDT (${data.stablecoins?.usdt ? '$' + (data.stablecoins.usdt/1e9).toFixed(1) + 'B' : 'N/A'})
-- BTC Hashrate: ${data.onChain?.hashRate || 'N/A'} EH/s | Active Addresses: ${data.onChainMetrics?.activeAddresses || 'N/A'}
-- BTC MVRV: ${data.onChainMetrics?.mvrv || 'N/A'} | BTC NUPL: ${btcNupl || 'N/A'} | BTC Supply in Profit (Est): ${btcSupplyProfit || 'N/A'}
-- ETH MVRV: ${data.ethOnChainMetrics?.mvrv || 'N/A'} | ETH NUPL: ${ethNupl || 'N/A'} | ETH Supply in Profit (Est): ${ethSupplyProfit || 'N/A'}
+### Sampled 7d BTC Path
+${pricePath(klines7d, 12)}
 
-## 3. INSTITUTIONAL FLOWS (CME & ETF)
-- Total BTC ETF Holdings: ${etfHoldings?.total ? etfHoldings.total.toLocaleString() + ' BTC (~$' + ((etfHoldings.total * (data.btc?.price || 0)) / 1e9).toFixed(1) + 'B)' : 'N/A'}
-- 7-day ETF Net Flow (Total: ${etfNetTotal > 0 ? '+' : ''}${etfNetTotal.toFixed(0)}M USD):
+- ETH: $${formatNumber(data.ethPrice?.price, 2)} | 24h ${formatSigned(data.ethPrice?.change, 2, '%')}
+- SOL: $${formatNumber(data.solPrice?.price, 2)} | 24h ${formatSigned(data.solPrice?.change, 2, '%')}
+- BTC Dominance: ${toFiniteNumber(data.globalData?.btcDominance) === null ? 'N/A' : formatNumber(data.globalData.btcDominance, 1) + '%'}
+- ETH Dominance: ${toFiniteNumber(data.globalData?.ethDominance) === null ? 'N/A' : formatNumber(data.globalData.ethDominance, 1) + '%'}
+- Total Crypto Market Cap: ${toFiniteNumber(data.globalData?.totalMarketCap) === null ? 'N/A' : '$' + formatNumber(data.globalData.totalMarketCap / 1e9, 1) + 'B'}
+
+## 3. ON-CHAIN, NETWORK & STABLECOINS
+- BTC CoinMetrics observation date: ${data.onChainMetrics?.date || 'N/A'}
+- BTC MVRV: ${data.onChainMetrics?.mvrv || 'N/A'}
+- BTC NUPL: ${btcNupl || 'N/A'} | Provenance: derived from MVRV, not independent.
+- BTC Supply in Profit: ${btcSupplyProfit || 'N/A'} | Provenance: model-estimated from MVRV, not independent.
+- BTC Active Addresses: ${data.onChainMetrics?.activeAddresses || 'N/A'}
+- BTC Transactions: ${data.onChainMetrics?.txCount || data.onChain?.txCount24h || 'N/A'}
+- BTC Hashrate: ${data.onChain?.hashRate || 'N/A'} EH/s
+- BTC Difficulty: ${data.onChain?.difficulty || 'N/A'}T
+- BTC Production Cost Range: ${productionCostStr}
+- ETH CoinMetrics observation date: ${data.ethOnChainMetrics?.date || 'N/A'}
+- ETH MVRV: ${data.ethOnChainMetrics?.mvrv || 'N/A'}
+- ETH NUPL: ${ethNupl || 'N/A'} | Provenance: derived from MVRV, not independent.
+- ETH Supply in Profit: ${ethSupplyProfit || 'N/A'} | Provenance: model-estimated from MVRV, not independent.
+- ETH Active Addresses: ${data.ethOnChainMetrics?.activeAddresses || 'N/A'}
+- ETH Transactions: ${data.ethOnChainMetrics?.txCount || 'N/A'}
+- USDT Market Cap: ${toFiniteNumber(data.stablecoins?.usdt) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.usdt / 1e9, 2) + 'B'}
+- USDC Market Cap: ${toFiniteNumber(data.stablecoins?.usdc) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.usdc / 1e9, 2) + 'B'}
+- Combined USDT + USDC Market Cap: ${toFiniteNumber(data.stablecoins?.total) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.total / 1e9, 2) + 'B'}
+- Stablecoin exchange reserves and transfer activity: N/A
+
+## 4. INSTITUTIONAL FLOWS & CME POSITIONING
+- Total BTC ETF Holdings: ${etfHoldings?.total ? etfHoldings.total.toLocaleString('en-US') + ' BTC' : 'N/A'}
+- Approximate ETF Holdings Value at current BTC spot: ${
+      etfHoldings?.total && priceNow
+        ? '$' + formatNumber((etfHoldings.total * priceNow) / 1e9, 2) + 'B'
+        : 'N/A'
+    }
+- Seven-observation ETF Net Flow: ${etfFlows.length > 0 ? formatSigned(etfNetTotal, 1, 'M USD') : 'N/A'}
+- Positive / negative observations: ${etfFlows.length > 0 ? etfPositiveDays + ' / ' + etfNegativeDays : 'N/A'}
+- Latest ETF observation date / age: ${latestEtfDate || 'N/A'} / ${etfObservationAgeDays === null ? 'N/A' : etfObservationAgeDays + ' days'}
 ${etfFlowStr}
-- CME COT (Futures Only):
+
+### CME COT Futures Only
 ${cotStr}
+- CME COT open interest: ${data.cotData?.openInterest ?? 'N/A'}
+- COT observation age at report time: ${cotObservationAgeDays === null ? 'N/A' : cotObservationAgeDays + ' days'}
+- COT release caveat: Friday release reflects Tuesday positions, approximately 3-7 days lagged.
 
-## 4. DERIVATIVES & HIGH-FREQUENCY TRADING (HFT)
-- Funding Rate: ${data.fundingRate != null ? (data.fundingRate * 100).toFixed(4) + '%' : 'N/A'}
-- Current Open Interest: ${data.openInterest ? (data.openInterest / 1000).toFixed(1) + 'K BTC' : 'N/A'} (24h Trend: ${oiTrend})
-- 24h Open Interest History (sampled every 4 hours):
+## 5. DERIVATIVES
+- BTC 24h price change input for price/OI matrix: ${formatSigned(data.btc?.change, 2, '%')}
+- Current Funding Rate: ${toFiniteNumber(data.fundingRate) === null ? 'N/A' : formatSigned(data.fundingRate * 100, 4, '%')}
+- Current Open Interest: ${toFiniteNumber(data.openInterest) === null ? 'N/A' : formatNumber(data.openInterest, 0) + ' BTC'}
+- OI change across supplied history: ${formatSigned(oiChangePct, 2, '%')}
+- OI history:
 ${oiStr}
-- Current Long/Short Ratio: ${lsHistory24h.length > 0 ? parseFloat(lsHistory24h[lsHistory24h.length - 1].longShortRatio).toFixed(3) : 'N/A'}
-- 24h L/S Ratio History:
+- Current Global Long/Short Account Ratio: ${formatNumber(lsLast, 3)}
+- Change in L/S ratio across supplied history: ${formatSigned(lsChange, 3)}
+- L/S account history:
 ${lsStr}
-- CVD (Cumulative Volume Delta Intraday): ${cvd >= 0 ? '+' : ''}$${(cvd/1000).toFixed(1)}K (Buy: $${(buyVolume/1000).toFixed(1)}K, Sell: $${(sellVolume/1000).toFixed(1)}K)
-- 7-day CVD Array (4h TF accumulation): [${activeCvd7d.map(c => c.cvd).join(', ')}]
-- 7-day BTC Price Array corresponding: [${activeCvd7d.map(c => c.price).join(', ')}]
-- 30-day CVD Array (1d TF accumulation): [${activeCvd30d.map(c => c.cvd).join(', ')}]
-- 30-day BTC Price Array corresponding: [${activeCvd30d.map(c => c.price).join(', ')}]
-- Aggregated Order Book Imbalance (OBI): ${orderBook ? orderBook.obiPercent + '%' : 'N/A'} (Signal: ${orderBook?.signal || 'N/A'})
-  Multi-exchange OBI Breakdown:
-${orderBook?.exchanges ? orderBook.exchanges.map(ex => `  * ${ex.name}: ${ex.obi >= 0 ? '+' : ''}${ex.obi}%`).join('\n') : '  * N/A'}
-- Whale Walls Bid/Ask Ratio: ${whaleWalls ? (whaleWalls.bidRatio * 100).toFixed(1) + '% Bid' : 'N/A'} — Signal: ${whaleWalls?.signal || 'N/A'}
-- Whale Support Walls (Bids):
-${whaleWalls ? fmtWalls(whaleWalls.whaleBids) : '  N/A'}
-- Whale Resistance Walls (Asks):
-${whaleWalls ? fmtWalls(whaleWalls.whaleAsks) : '  N/A'}
+- Intraday CVD: ${formatSigned(cvd, 0, ' USD')}
+- Intraday taker buy volume: ${formatNumber(buyVolume, 0)} USD
+- Intraday taker sell volume: ${formatNumber(sellVolume, 0)} USD
 
-## 5. TOP NEWS & MACRO EVENTS TODAY (LATEST)
-${activeNews.slice(0, 30).map(n => '- [' + (n.timeStr || new Date(n.time).toLocaleString('en-US')) + '] ' + n.title + ' (' + n.tag + ')').join('\n')}
-    `;
+## 6. HISTORICAL PRICE / CVD
+${cvdBlock(activeCvd7d, '7-Day CVD / Price (4h)')}
 
-    // System prompt by style + language (vi | en)
+${cvdBlock(activeCvd30d, '30-Day CVD / Price (1d)')}
+
+## 7. DISPLAYED LIQUIDITY & ORDER BOOK
+- Aggregated OBI: ${orderBook?.obiPercent !== undefined ? formatSigned(orderBook.obiPercent, 2, '%') : 'N/A'}
+- Dashboard OBI label: ${orderBook?.signal || 'N/A'}
+- OBI exchange breakdown:
+${orderBook?.exchanges?.length
+  ? orderBook.exchanges.map((exchange) => `  - ${exchange.name}: ${formatSigned(exchange.obi, 2, '%')}`).join('\n')
+  : '  N/A'}
+- Whale bid share: ${whaleWalls?.bidRatio !== undefined ? formatNumber(whaleWalls.bidRatio * 100, 1) + '%' : 'N/A'}
+- Dashboard whale-wall label: ${whaleWalls?.signal || 'N/A'}
+
+### Largest Displayed Bid Walls
+${formatWalls(whaleWalls?.whaleBids)}
+
+### Largest Displayed Ask Walls
+${formatWalls(whaleWalls?.whaleAsks)}
+
+## 8. LATEST HEADLINES & EVENT RISK
+${formatNews(activeNews)}
+`;
+
     const systemPrompt = getSystemPrompt(selectedStyle, selectedLang);
     return { promptData, systemPrompt };
   };
@@ -348,10 +668,7 @@ ${promptData}
             parts: { text: systemPrompt },
           },
           contents: [{ role: 'user', parts: [{ text: promptData }] }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 3000,
-          },
+          generationConfig: getGenerationConfig(selectedStyle),
         }),
       });
 
@@ -452,11 +769,13 @@ ${promptData}
     }
   };
 
+  if (isSummaryHidden) return null;
+
   return (
     <div className="summary-tab glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <h3 className="panel-title font-mono text-emerald" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-          <Sparkles size={18} /> AI MACRO & HFT SUMMARY
+          <Sparkles size={18} /> AI MARKET DECISION LAB
         </h3>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Language Selector */}
@@ -595,8 +914,8 @@ ${promptData}
               content={{
                 api: 'Gemini API',
                 def: isVi
-                  ? 'Gemini đọc dữ liệu và lập báo cáo vĩ mô & HFT bằng ngôn ngữ đã chọn, theo cấu trúc system prompt.'
-                  : 'Gemini reads market data and writes a macro & HFT report in the selected language.',
+                  ? 'Gemini kiểm định giả thuyết, phản biện narrative và lập playbook quyết định từ dữ liệu vĩ mô, on-chain, flow, phái sinh và HFT.'
+                  : 'Gemini tests competing hypotheses and builds a decision playbook from macro, on-chain, flow, derivatives, and HFT data.',
               }}
               lastUpdated={lastSync}
             >
@@ -609,11 +928,11 @@ ${promptData}
                 {isAiLoading ? <Loader2 size={14} className="spinning" /> : <Sparkles size={14} />}
                 {isAiLoading
                   ? isVi
-                    ? 'ĐANG TẠO BÁO CÁO...'
-                    : 'GENERATING REPORT...'
+                    ? 'ĐANG KIỂM ĐỊNH...'
+                    : 'TESTING THESIS...'
                   : isVi
-                    ? 'TẠO BÁO CÁO AI'
-                    : 'GENERATE AI REPORT'}
+                    ? 'PHÂN TÍCH & RA QUYẾT ĐỊNH'
+                    : 'ANALYZE & DECIDE'}
               </button>
             </Tooltip>
             <ModuleMenu moduleId="tab_summary" />
@@ -643,16 +962,16 @@ ${promptData}
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>
             {isVi ? (
               <>
-                Bấm &quot;TẠO BÁO CÁO AI&quot; để Gemini tóm tắt và phân tích dữ liệu thị trường hiện tại
-                (theo ngôn ngữ đã chọn).
+                Bấm &quot;PHÂN TÍCH &amp; RA QUYẾT ĐỊNH&quot; để AI kiểm định các giả thuyết thị trường,
+                chỉ ra edge, phản-thesis, điều kiện vô hiệu và hành động phù hợp theo từng khung thời gian.
                 <br />
                 <br />
                 (Cần Gemini API Key trong Settings)
               </>
             ) : (
               <>
-                Click &quot;GENERATE AI REPORT&quot; to have the AI (Gemini) summarize and analyze the
-                current market data (in the selected language).
+                Click &quot;ANALYZE &amp; DECIDE&quot; to test competing market hypotheses and produce
+                an evidence-ranked, conditional decision playbook.
                 <br />
                 <br />
                 (Requires Gemini API Key in Settings)

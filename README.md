@@ -10,7 +10,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản) và Liquidity Zones (Vùng thanh lý đòn bẩy).
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
-- **AI Summary & Nupl / Supply in Profit:** Tích hợp AI (Gemini) để phân tích báo cáo thị trường, tâm lý, cảnh báo các mốc kháng cự/hỗ trợ. Hỗ trợ chọn **ngôn ngữ báo cáo** (Tiếng Việt / English) và 3 style (Professional / Tactical / Educational).
+- **AI Market Decision Lab:** Tích hợp Gemini để kiểm định giả thuyết vĩ mô/on-chain/flow/phái sinh/HFT, phân biệt quan sát với suy luận, phản biện narrative, chấm chất lượng bằng chứng và tạo playbook quyết định có trigger/invalidation. Hỗ trợ **Tiếng Việt / English** và 3 chế độ: Investment Committee / Skeptical Execution Desk / Socratic Market Mentor.
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%** (không dùng min–max fleet toàn ngành).
 - **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
 
@@ -31,7 +31,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
-- `App.jsx`: Component gốc quản lý Routing/Tabs (HFT Radar, Cascade, AI Summary) và quản lý kết nối WebSocket tổng.
+- `App.jsx`: Component gốc quản lý Routing/Tabs (HFT Radar, Cascade, AI Market Decision Lab) và quản lý kết nối WebSocket tổng.
 - `Dashboard.jsx`: Có thể là layout chính bao bọc các thành phần.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
@@ -43,8 +43,8 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - `TargetLiquidityPanel`: Tích hợp vào trong Advanced Chart, hiển thị cụm lệnh chờ Limit Walls theo mức Gap do người dùng chọn.
   - `OrderBookPanel`: Phân tích sổ lệnh tổng hợp (OBI) từ các sàn với khả năng mở rộng/thu hẹp depth levels, hiển thị vùng giá và màu sắc heatmap theo Volume.
 - `CascadeTab.jsx`: Bảng Heatmap/Grid hiển thị các chỉ số phái sinh đa khung.
-- `SummaryTab.jsx`: Báo cáo AI (Gemini streaming) — chọn ngôn ngữ VI/EN, style, model; export Markdown.
-- `services/aiPrompts.js`: System prompt EN + VI cho 3 style phân tích.
+- `SummaryTab.jsx`: AI Market Decision Lab (Gemini streaming) — chuẩn hóa provenance/coverage, dữ liệu đa khung, CVD/OI/ETF/wall distance; chọn ngôn ngữ, chế độ, model và export Markdown.
+- `services/aiPrompts.js`: Research constitution EN + VI dùng chung và 3 playbook chuyên biệt; có skeptical hypothesis testing, causal guardrails, scenario weights, evidence scorecard và quyết định theo khung thời gian.
 
 ### Dịch vụ / Utils
 - `services/api.js` — REST multi-source (Binance, FRED, ETF, COT, …); on-chain BTC gồm `estimateBtcProductionCost` / `estimateBtcProductionCostRange` (energy model → `{ low, mid, high }`).
@@ -55,6 +55,20 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `components/Tooltip.jsx` — metadata metric (def + formula), gồm PRODUCTION COST range.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-07-16] Nâng AI Summary thành Market Decision Lab `(FULL)`
+- **Lane / Mode:** FEATURE FULL
+- **Tóm tắt:** Viết lại toàn bộ 3 system prompt theo phong cách chuyên gia buy-side hoài nghi; thay báo cáo checklist bằng quy trình kiểm định giả thuyết, phản-thesis, điều kiện vô hiệu và quyết định có điều kiện.
+- **Thay đổi chính:**
+  - Thêm evidence taxonomy: Quan sát / Suy dẫn / Giả thuyết / Chưa biết; cấm biến tương quan thành nhân quả chắc chắn.
+  - Bổ sung caveat chuyên môn cho L/S account ratio, CVD Binance rebased, OBI/whale-wall spoofing, ETF flow, COT lag, stablecoin market cap và các metric NUPL/Supply in Profit suy ra từ MVRV.
+  - Tách ba khung 0–24h / 1–7 ngày / 2–12 tuần; cho phép quyết định `WAIT`, `NO TRADE`, `REDUCE RISK`, `ACCUMULATE SPOT CONDITIONALLY`.
+  - Nâng input AI với timestamp, coverage, real-rate proxy, range position đa khung, OI change, ETF persistence, sampled price/CVD path, wall distance/quality/source và headline provenance.
+  - Tạo ba chế độ mới: Investment Committee, Skeptical Execution Desk, Socratic Market Mentor; cấu hình temperature/output token riêng theo độ sâu.
+  - Sửa hooks ordering trong `SummaryTab` và đổi UI thành **AI MARKET DECISION LAB**.
+- **Files / areas chạm:** `src/services/aiPrompts.js`, `src/components/SummaryTab.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §3, §4
+- **Verify:** targeted ESLint pass; `npm run build` pass. Full-repo lint còn fail do technical debt có sẵn ngoài phạm vi task.
 
 ### [2026-07-12] Production Cost hiển thị dạng khoảng low → high `(FAST)`
 - **Lane / Mode:** FEATURE FAST
