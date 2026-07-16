@@ -1,8 +1,12 @@
-import React from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import PolymarketWhales from './PolymarketWhales';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+
+const isPlausibleCpiYoY = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= -20 && number <= 50;
+};
 
 export default function DashboardTab({
   data,
@@ -126,12 +130,12 @@ export default function DashboardTab({
               <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>10Y Yield / Real Rate</div>
               <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
                 {data?.tenYearYield ? `${data.tenYearYield}%` : '---'}
-                {data?.fedFundsRate != null && data?.cpi != null && (
+                {data?.fedFundsRate != null && isPlausibleCpiYoY(data?.cpi) && (
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-slate-400)' }}> / {(data.fedFundsRate - data.cpi).toFixed(1)}%</span>
                 )}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                Real Rate = Fed - CPI
+                Proxy lãi suất thực = Fed - CPI YoY
               </div>
             </div>
 

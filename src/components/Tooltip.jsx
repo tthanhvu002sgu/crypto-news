@@ -123,8 +123,9 @@ export const METRIC_METADATA = {
     def: 'Lãi suất liên bang do Ngân hàng Trung ương Mỹ (FED) ấn định.'
   },
   cpi: {
-    api: 'FRED API (REST - Series CPIAUCSL)',
-    def: 'Chỉ số giá tiêu dùng (Consumer Price Index) của Hoa Kỳ, đo lường lạm phát.'
+    api: 'FRED API (CPIAUCSL, transformation pc1)',
+    def: 'Lạm phát CPI headline của Hoa Kỳ theo phần trăm thay đổi so với cùng kỳ năm trước. Giá trị này là CPI YoY, không phải mức chỉ số CPI 1982–1984=100.',
+    formula: 'CPI YoY = (CPI hiện tại / CPI cùng kỳ năm trước - 1) × 100'
   },
   unrate: {
     api: 'FRED API (REST - Series UNRATE)',

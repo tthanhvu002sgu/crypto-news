@@ -56,6 +56,19 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-16] Sửa CPI index bị dùng nhầm thành lạm phát YoY `(FIX)`
+- **Lane / Mode:** FIX
+- **Tóm tắt:** Sửa lỗi `CPIAUCSL = 332.57` (index 1982–1984=100) bị gắn `%` và trừ trực tiếp khỏi Fed Funds, khiến AI tạo real-rate `-328.94%` và narrative hyperinflation sai.
+- **Thay đổi chính:**
+  - Chuẩn hóa CPI về **Percent Change from Year Ago** bằng FRED API transformation `pc1`; Trading Economics là fallback %, còn FRED CSV keyless được tự tính YoY từ hai mức index cách nhau 12 tháng.
+  - Đổi cache key thành `cpiYoYCalculatedV2` để không tái sử dụng bất kỳ cache index/transform cũ nào.
+  - Thêm plausibility guard `-20% → 50%` tại API, state và AI prompt; dữ liệu sai đơn vị bị từ chối thay vì đưa vào real-rate.
+  - UI đổi thành `CPI YOY`, hiển thị dấu `%`; Dashboard/Cascade chỉ tính real-rate khi CPI hợp lệ.
+  - Đổi typography sang **Be Vietnam Pro + Roboto Mono** và đặt tài liệu HTML `lang="vi"` để dấu tiếng Việt rõ, đồng nhất hơn.
+- **Files / areas chạm:** `src/services/api.js`, `src/App.jsx`, `src/components/SummaryTab.jsx`, `src/components/Tooltip.jsx`, `src/components/DashboardTab.jsx`, `src/components/CascadeTab.jsx`, `src/components/HftRadarTab.jsx`, `src/components/PolymarketWhales.jsx`, `src/index.css`, `index.html`, `README.md`
+- **Ảnh hưởng README:** §4
+- **Verify:** FRED CPIAUCSL `pc1`; targeted checks; production build.
+
 ### [2026-07-16] Nâng AI Summary thành Market Decision Lab `(FULL)`
 - **Lane / Mode:** FEATURE FULL
 - **Tóm tắt:** Viết lại toàn bộ 3 system prompt theo phong cách chuyên gia buy-side hoài nghi; thay báo cáo checklist bằng quy trình kiểm định giả thuyết, phản-thesis, điều kiện vô hiệu và quyết định có điều kiện.

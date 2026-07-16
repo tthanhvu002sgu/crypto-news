@@ -344,7 +344,12 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
     const cotObservationAgeDays = ageInDays(data.cotData?.date);
 
     const fedRate = toFiniteNumber(data.fedFundsRate);
-    const cpi = toFiniteNumber(data.cpi);
+    const rawCpi = toFiniteNumber(data.cpi);
+    const cpi = rawCpi !== null && rawCpi >= -20 && rawCpi <= 50 ? rawCpi : null;
+    const cpiValidation =
+      rawCpi !== null && cpi === null
+        ? `REJECTED (${formatNumber(rawCpi, 2)} is not a plausible U.S. YoY inflation rate)`
+        : 'Valid YoY percentage';
     const realRateProxy =
       fedRate !== null && cpi !== null ? fedRate - cpi : null;
 
@@ -368,7 +373,7 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
         data.dxy,
         data.vix?.price,
         data.highYield,
-        data.cpi,
+        cpi,
         data.unrate,
         data.sp500?.price,
         data.qqq?.price,
@@ -444,7 +449,8 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
 ## 1. MACRO & CROSS-ASSET
 - US Net Liquidity: ${data.netLiquidity !== null && data.netLiquidity !== undefined ? '$' + formatNumber(data.netLiquidity, 2) + 'B' : 'N/A'}
 - Fed Funds Rate: ${fedRate === null ? 'N/A' : formatNumber(fedRate, 2) + '%'}
-- Headline CPI: ${cpi === null ? 'N/A' : formatNumber(cpi, 2) + '%'}
+- Headline CPI inflation (YoY, FRED CPIAUCSL transformed with pc1): ${cpi === null ? 'N/A' : formatNumber(cpi, 2) + '%'}
+- CPI unit validation: ${cpiValidation}
 - Derived ex-post real-rate proxy (Fed Funds - CPI): ${realRateProxy === null ? 'N/A' : formatSigned(realRateProxy, 2, '%')}
 - US 10Y Yield: ${toFiniteNumber(data.tenYearYield) === null ? 'N/A' : formatNumber(data.tenYearYield, 2) + '%'}
 - DXY: ${formatNumber(data.dxy, 2)}

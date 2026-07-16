@@ -1087,7 +1087,7 @@ export const getTGATreasuryAPI = async () => {
 };
 
 // ─── OFFICIAL FRED API CLIENT HELPER ──────────────────────────────────────────
-export const getFredAPIMetric = async (seriesId, apiKey) => {
+export const getFredAPIMetric = async (seriesId, apiKey, units = 'lin') => {
   const key = apiKey || (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_FRED_API_KEY : null);
   if (!key || key === 'your_fred_key_here') return null;
 
@@ -1099,7 +1099,8 @@ export const getFredAPIMetric = async (seriesId, apiKey) => {
         api_key: key,
         file_type: 'json',
         sort_order: 'desc',
-        limit: 1
+        limit: 1,
+        ...(units !== 'lin' ? { units } : {}),
       },
       timeout: 8000
     });
@@ -1116,28 +1117,26 @@ export const getFredAPIMetric = async (seriesId, apiKey) => {
 
 
 // ─── KEYLESS FRED CSV PARSER ──────────────────────────────────────────────────
-export const getFredCSVMetric = async (seriesId, units = 'lin') => {
+const parseFredCSVSeries = (csvText) => {
+  if (!csvText) return [];
+  const lines = csvText.trim().split(/\r?\n/);
+  return lines.slice(1).map((line) => {
+    const [date, rawValue] = line.split(',');
+    const value = parseFloat(rawValue);
+    return {
+      date,
+      value: Number.isFinite(value) ? value : null,
+    };
+  }).filter((observation) => observation.date);
+};
+
+const fetchFredCSVSeries = async (seriesId, units = 'lin') => {
   const url = getFredGraphUrl(seriesId, units);
-  
-  const parseFredCSV = (csvText) => {
-    if (!csvText) return null;
-    const lines = csvText.trim().split('\n').map(l => l.split(','));
-    for (let i = lines.length - 1; i >= 1; i--) {
-      if (lines[i] && lines[i][1]) {
-        const val = lines[i][1].trim();
-        if (val && val !== '.' && val !== '') {
-          const parsed = parseFloat(val);
-          if (!isNaN(parsed)) return parsed;
-        }
-      }
-    }
-    return null;
-  };
 
   try {
     const res = await axios.get(url, { timeout: 8000 });
     if (res.data && typeof res.data === 'string') {
-      return parseFredCSV(res.data);
+      return parseFredCSVSeries(res.data);
     }
   } catch (e) {
     if (isLocal) {
@@ -1152,10 +1151,18 @@ export const getFredCSVMetric = async (seriesId, units = 'lin') => {
     try {
       const unitsParam = units !== 'lin' ? `&units=${units}` : '';
       const text = await fetchTextWithProxyFallback(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}${unitsParam}`);
-      return parseFredCSV(text);
+      return parseFredCSVSeries(text);
     } catch (proxyError) {
       console.error(`[API] FRED CSV proxy request failed for ${seriesId}:`, proxyError.message);
     }
+  }
+  return [];
+};
+
+export const getFredCSVMetric = async (seriesId, units = 'lin') => {
+  const observations = await fetchFredCSVSeries(seriesId, units);
+  for (let index = observations.length - 1; index >= 0; index--) {
+    if (observations[index].value !== null) return observations[index].value;
   }
   return null;
 };
@@ -1299,7 +1306,55 @@ export const getReverseRepo = async () => {
 
 
 // ─── BACKWARD COMPATIBILITY FRED API WRAPPERS ─────────────────────────────────
+const isPlausibleUSInflationRate = (value) =>
+  Number.isFinite(value) && value >= -20 && value <= 50;
+
+const getUSCPIInflationYoYFromIndexCSV = async () => {
+  const observations = (await fetchFredCSVSeries('CPIAUCSL'))
+    .filter((observation) => observation.value !== null);
+  if (observations.length < 13) return null;
+
+  const latest = observations[observations.length - 1];
+  const latestDate = new Date(`${latest.date}T00:00:00Z`);
+  if (Number.isNaN(latestDate.getTime())) return null;
+
+  const yearAgoDate = new Date(latestDate);
+  yearAgoDate.setUTCFullYear(yearAgoDate.getUTCFullYear() - 1);
+  const yearAgoKey = yearAgoDate.toISOString().slice(0, 10);
+  const yearAgo = observations.find((observation) => observation.date === yearAgoKey);
+
+  if (!yearAgo || yearAgo.value <= 0) return null;
+  return ((latest.value / yearAgo.value) - 1) * 100;
+};
+
+/**
+ * U.S. headline CPI inflation, normalized to percent change from one year ago.
+ *
+ * CPIAUCSL's native FRED unit is an index (1982-1984=100), so the raw level
+ * must never be treated as a percentage. FRED's `pc1` transformation returns
+ * the YoY percent change used by the real-rate proxy.
+ */
+export const getUSCPIInflationYoY = async (apiKey) => {
+  const officialYoY = await getFredAPIMetric('CPIAUCSL', apiKey, 'pc1');
+  if (isPlausibleUSInflationRate(officialYoY)) return officialYoY;
+
+  const teYoY = await getTEMetric('inflation-cpi');
+  if (isPlausibleUSInflationRate(teYoY)) return teYoY;
+
+  // The keyless fredgraph.csv endpoint may ignore transformation parameters,
+  // so calculate YoY explicitly from the raw index levels 12 months apart.
+  const csvYoY = await getUSCPIInflationYoYFromIndexCSV();
+  if (isPlausibleUSInflationRate(csvYoY)) return csvYoY;
+
+  console.error('[API] CPI YoY normalization failed: no plausible percentage value returned');
+  return null;
+};
+
 export const getFREDMetric = async (seriesId, apiKey) => {
+  if (seriesId === 'CPIAUCSL') {
+    return getUSCPIInflationYoY(apiKey);
+  }
+
   // 1. Try official FRED API if apiKey is provided or available in env
   const officialVal = await getFredAPIMetric(seriesId, apiKey);
   if (officialVal !== null) return officialVal;
@@ -1322,7 +1377,6 @@ export const getFREDMetric = async (seriesId, apiKey) => {
   
   const teMap = {
     'FEDFUNDS': 'interest-rate',
-    'CPIAUCSL': 'inflation-cpi',
     'UNRATE': 'unemployment-rate',
     'M2SL': 'money-supply-m2',
     'WALCL': 'central-bank-balance-sheet'

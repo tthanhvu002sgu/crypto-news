@@ -40,6 +40,10 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, C
 const fmt = (n, decimals = 2) => n != null ? Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : '---';
 const fmtB = (n) => n != null ? `$${(n / 1e9).toFixed(1)}B` : '---';
 const fmtT = (n) => n != null ? `$${(n / 1e12).toFixed(2)}T` : '---';
+const isPlausibleCpiYoY = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= -20 && number <= 50;
+};
 
 const fmtCvdUsd = (n) => {
   if (n == null) return '---';
@@ -98,11 +102,11 @@ const getChartOpts = (theme) => {
     scales: {
       x: {
         grid: { color: gridColor },
-        ticks: { color: tickColor, maxTicksLimit: 8, font: { family: 'JetBrains Mono', size: 9 } },
+        ticks: { color: tickColor, maxTicksLimit: 8, font: { family: 'Roboto Mono', size: 9 } },
       },
       y: {
         grid: { color: gridColor },
-        ticks: { color: tickColor, font: { family: 'JetBrains Mono', size: 9 } },
+        ticks: { color: tickColor, font: { family: 'Roboto Mono', size: 9 } },
       },
     },
   };
@@ -492,7 +496,7 @@ function AppContent() {
         addLog('Đang đồng bộ chỉ số vĩ mô từ FRED...', 'system');
         const macroResults = await Promise.allSettled([
           fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Lãi suất Fed', force),
-          fetchCached('cpi', () => getFREDMetric('CPIAUCSL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'CPI Inflation', force),
+          fetchCached('cpiYoYCalculatedV2', () => getFREDMetric('CPIAUCSL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'CPI Inflation YoY', force),
           fetchCached('unrate', () => getFREDMetric('UNRATE', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Tỷ lệ thất nghiệp', force),
           fetchCached('m2Supply', () => getFREDMetric('M2SL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'M2 Money Supply', force),
           fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'High Yield Spread', force),
@@ -502,6 +506,10 @@ function AppContent() {
         ]);
         fedFundsRateVal = settled(macroResults[0]);
         cpiVal = settled(macroResults[1]);
+        if (cpiVal !== null && !isPlausibleCpiYoY(cpiVal)) {
+          addLog(`⚠ CPI YoY bị từ chối do sai đơn vị hoặc ngoài phạm vi hợp lý: ${cpiVal}`, 'warning');
+          cpiVal = null;
+        }
         unrateVal = settled(macroResults[2]);
         m2SupplyVal = settled(macroResults[3]);
         highYieldVal = settled(macroResults[4]);
@@ -624,7 +632,7 @@ function AppContent() {
         onChainMetrics: onChainMetrics ?? prev.onChainMetrics,
         ethOnChainMetrics: ethOnChainMetrics ?? prev.ethOnChainMetrics,
         fedFundsRate: fedFundsRateVal ?? prev.fedFundsRate,
-        cpi: cpiVal ?? prev.cpi,
+        cpi: cpiVal ?? (isPlausibleCpiYoY(prev.cpi) ? prev.cpi : null),
         unrate: unrateVal ?? prev.unrate,
         tenYearYield: tenYearYield ?? prev.tenYearYield,
         dxy: dxy ?? prev.dxy,
@@ -1171,9 +1179,9 @@ function AppContent() {
                 </div>
                 <div className="metrics-grid">
                   <MetricCard
-                    label="CPI"
-                    value={data.cpi ? data.cpi.toFixed(2) : '---'}
-                    sub="Chỉ số giá tiêu dùng"
+                    label="CPI YOY"
+                    value={isPlausibleCpiYoY(data.cpi) ? `${Number(data.cpi).toFixed(2)}%` : '---'}
+                    sub="Lạm phát so với cùng kỳ"
                     subCls="text-slate-400"
                     tooltipId="cpi"
                   />

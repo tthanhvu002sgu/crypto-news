@@ -1,8 +1,13 @@
-import React from 'react';
+import { Fragment } from 'react';
 import { motion } from 'framer-motion';
 import Tooltip from './Tooltip';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+
+const isPlausibleCpiYoY = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= -20 && number <= 50;
+};
 
 export default function CascadeTab({
   data,
@@ -43,9 +48,9 @@ export default function CascadeTab({
               status: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? '[🔴 RESTRICTIVE]' : '[🟢 ACCOMMODATIVE]') : '[🔴 RESTRICTIVE]',
               statusColor: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? '#f43f5e' : '#10b981') : '#f43f5e',
               items: [
-                { k: 'Economic Cycle Phase', v: data.fedFundsRate > 4.0 ? (data.cpi > 3.5 ? 'Thắt chặt tiền tệ' : 'Lãi suất cao / Quan sát') : (data.fedFundsRate < 2.5 ? 'Nới lỏng tiền tệ' : 'Tăng trưởng kinh tế'), note: '4 Giai đoạn dòng tiền' },
+                { k: 'Economic Cycle Phase', v: data.fedFundsRate > 4.0 ? (isPlausibleCpiYoY(data.cpi) && data.cpi > 3.5 ? 'Thắt chặt tiền tệ' : 'Lãi suất cao / Quan sát') : (data.fedFundsRate < 2.5 ? 'Nới lỏng tiền tệ' : 'Tăng trưởng kinh tế'), note: '4 giai đoạn dòng tiền' },
                 { k: 'Fed Funds Rate', v: data.fedFundsRate ? `${data.fedFundsRate}%` : '4.25–4.50%', note: 'Lãi suất điều hành' },
-                { k: 'CPI Inflation', v: data.cpi ? data.cpi.toFixed(2) : '---', note: 'Chỉ số giá tiêu dùng' },
+                { k: 'CPI Inflation YoY', v: isPlausibleCpiYoY(data.cpi) ? `${Number(data.cpi).toFixed(2)}%` : '---', note: 'Lạm phát so với cùng kỳ' },
                 { k: 'Unemployment Rate', v: data.unrate ? `${data.unrate}%` : '---', note: 'Tỷ lệ thất nghiệp' },
                 { k: 'M2 Supply (Billion $)', v: data.m2Supply ? `$${fmt(data.m2Supply, 0)}` : '---', note: 'Tổng cung tiền M2' },
                 { k: 'US Net Liquidity (Billion $)', v: data.netLiquidity ? `$${fmt(data.netLiquidity, 0)}B` : '---', note: 'WALCL - TGA - RRP' },
@@ -93,7 +98,7 @@ export default function CascadeTab({
               color: '#f43f5e',
             },
           ].map((tier, idx) => (
-            <React.Fragment key={idx}>
+            <Fragment key={idx}>
               <motion.div 
                 className="cascade-tier" 
                 style={{ '--tier-color': tier.color }}
@@ -144,7 +149,7 @@ export default function CascadeTab({
                   </div>
                 </motion.div>
               )}
-            </React.Fragment>
+            </Fragment>
           ))}
         </div>
       </div>

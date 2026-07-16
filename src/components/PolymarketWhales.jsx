@@ -226,7 +226,7 @@ export default function PolymarketWhales({ fmt, moduleId }) {
                 border: 'none',
                 borderRadius: 6,
                 cursor: 'pointer',
-                fontFamily: 'JetBrains Mono',
+                fontFamily: 'Roboto Mono',
                 fontSize: '0.7rem'
               }}
             >
@@ -246,7 +246,7 @@ export default function PolymarketWhales({ fmt, moduleId }) {
                   color: 'var(--color-emerald-400)',
                   borderRadius: 6,
                   cursor: 'pointer',
-                  fontFamily: 'JetBrains Mono',
+                  fontFamily: 'Roboto Mono',
                   fontSize: '0.68rem'
                 }}
               >

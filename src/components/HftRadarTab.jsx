@@ -60,11 +60,11 @@ const getChartOptsBase = (theme) => {
     scales: {
       x: {
         grid: { color: gridColor },
-        ticks: { color: tickColor, maxTicksLimit: 12, font: { family: 'Outfit, JetBrains Mono', size: 10 } },
+        ticks: { color: tickColor, maxTicksLimit: 12, font: { family: 'Be Vietnam Pro, Roboto Mono', size: 10 } },
       },
       y: {
         grid: { color: gridColor },
-        ticks: { color: tickColor, font: { family: 'Outfit, JetBrains Mono', size: 10 } },
+        ticks: { color: tickColor, font: { family: 'Be Vietnam Pro, Roboto Mono', size: 10 } },
       },
     },
   };
