@@ -77,7 +77,11 @@ export default function SummaryTab({
   const { isModuleHidden } = useModuleVisibility();
   const isSummaryHidden = isModuleHidden('tab_summary');
   const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem('ai-model') || 'gemini-2.5-flash';
+    const saved = localStorage.getItem('ai-model');
+    if (saved === 'gemini-flash-lite-latest' || saved === 'gemini-flash-latest') {
+      return saved;
+    }
+    return 'gemini-flash-lite-latest';
   });
 
   const handleModelChange = (newModel) => {
@@ -657,108 +661,139 @@ ${promptData}
     setIsAiLoading(true);
     setAiSummary('');
 
+    // Determine candidate models and order of attempts
+    const modelAttempts = selectedModel === 'gemini-flash-lite-latest'
+      ? ['gemini-flash-lite-latest', 'gemini-flash-latest']
+      : ['gemini-flash-latest', 'gemini-flash-lite-latest'];
+
+    let success = false;
+    let finalError = null;
+    let actualModelUsed = selectedModel;
+
     try {
       const { promptData, systemPrompt } = await preparePromptAndData();
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:streamGenerateContent?alt=sse&key=${geminiKey}`;
-      const headers = {
-        'Content-Type': 'application/json',
-      };
+      for (let attempt = 0; attempt < modelAttempts.length; attempt++) {
+        const model = modelAttempts[attempt];
+        actualModelUsed = model;
 
-      console.log(`[AI] model=${selectedModel} lang=${selectedLang} style=${selectedStyle}`);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          system_instruction: {
-            parts: { text: systemPrompt },
-          },
-          contents: [{ role: 'user', parts: [{ text: promptData }] }],
-          generationConfig: getGenerationConfig(selectedStyle),
-        }),
-      });
+        const fallbackPrefix = isVi
+          ? `*Đang tự động chuyển sang model dự phòng: **${model}** do model trước lỗi...*\n\n`
+          : `*Automatically falling back to backup model: **${model}** due to previous model error...*\n\n`;
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || `HTTP status ${res.status}`);
-      }
+        if (attempt > 0) {
+          setAiSummary(fallbackPrefix);
+        } else {
+          setAiSummary('');
+        }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${geminiKey}`;
+          const headers = {
+            'Content-Type': 'application/json',
+          };
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+          console.log(`[AI] Attempt ${attempt + 1}: model=${model} lang=${selectedLang} style=${selectedStyle}`);
+          const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              system_instruction: {
+                parts: { text: systemPrompt },
+              },
+              contents: [{ role: 'user', parts: [{ text: promptData }] }],
+              generationConfig: getGenerationConfig(selectedStyle),
+            }),
+          });
 
-        const lines = buffer.split(/\r?\n|\r/);
-        buffer = lines.pop() || '';
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(errText || `HTTP status ${res.status}`);
+          }
 
-        for (const line of lines) {
-          const cleaned = line.trim();
-          if (!cleaned) continue;
-          if (cleaned.startsWith('data: ')) {
-            const dataStr = cleaned.slice(6).trim();
-            if (!dataStr) continue;
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+          let currentText = '';
 
-            let parsed = null;
-            try {
-              parsed = JSON.parse(dataStr);
-            } catch {
-              continue;
-            }
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
 
-            if (parsed.error) {
-              throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-            }
-            const choice = parsed.candidates?.[0];
-            if (choice) {
-              const text = choice.content?.parts?.[0]?.text || '';
-              if (text) {
-                setAiSummary((prev) => cleanLatex(prev + text));
-              }
-              if (choice.finishReason && choice.finishReason !== 'STOP') {
-                if (choice.finishReason === 'SAFETY') {
-                  setAiSummary((prev) =>
-                    prev +
-                    (isVi
-                      ? '\n\n**[Báo cáo dừng do bộ lọc an toàn AI]**'
-                      : '\n\n**[Report stopped due to AI Safety Filter]**')
-                  );
-                } else if (choice.finishReason === 'MAX_TOKENS') {
-                  setAiSummary((prev) =>
-                    prev +
-                    (isVi
-                      ? '\n\n**[Báo cáo dừng: đã đạt giới hạn token đầu ra]**'
-                      : '\n\n**[Report stopped: Max Output Tokens limit reached]**')
-                  );
-                } else {
-                  setAiSummary((prev) =>
-                    prev +
-                    (isVi
-                      ? `\n\n**[Báo cáo dừng sớm. Lý do: ${choice.finishReason}]**`
-                      : `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`)
-                  );
+            const lines = buffer.split(/\r?\n|\r/);
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              const cleaned = line.trim();
+              if (!cleaned) continue;
+              if (cleaned.startsWith('data: ')) {
+                const dataStr = cleaned.slice(6).trim();
+                if (!dataStr) continue;
+
+                let parsed = null;
+                try {
+                  parsed = JSON.parse(dataStr);
+                } catch {
+                  continue;
+                }
+
+                if (parsed.error) {
+                  throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+                }
+                const choice = parsed.candidates?.[0];
+                if (choice) {
+                  const text = choice.content?.parts?.[0]?.text || '';
+                  if (text) {
+                    currentText = cleanLatex(currentText + text);
+                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + currentText);
+                  }
+                  if (choice.finishReason && choice.finishReason !== 'STOP') {
+                    if (choice.finishReason === 'SAFETY') {
+                      currentText += isVi
+                        ? '\n\n**[Báo cáo dừng do bộ lọc an toàn AI]**'
+                        : '\n\n**[Report stopped due to AI Safety Filter]**';
+                    } else if (choice.finishReason === 'MAX_TOKENS') {
+                      currentText += isVi
+                        ? '\n\n**[Báo cáo dừng: đã đạt giới hạn token đầu ra]**'
+                        : '\n\n**[Report stopped: Max Output Tokens limit reached]**';
+                    } else {
+                      currentText += isVi
+                        ? `\n\n**[Báo cáo dừng sớm. Lý do: ${choice.finishReason}]**`
+                        : `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`;
+                    }
+                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + currentText);
+                  }
                 }
               }
             }
           }
+
+          success = true;
+          break; // Break the outer loop because this attempt succeeded
+        } catch (err) {
+          console.error(`[AI] Attempt ${attempt + 1} (${model}) failed:`, err);
+          finalError = err;
+          // Continue to next model in modelAttempts
         }
       }
 
-      const footer = isVi
-        ? `\n\n---\n*Báo cáo tạo bởi model: **${selectedModel}** (Gemini API) · Ngôn ngữ: Tiếng Việt*`
-        : `\n\n---\n*Report generated by model: **${selectedModel}** (Gemini API) · Language: English*`;
-      setAiSummary((prev) => prev + footer);
+      if (success) {
+        const footer = isVi
+          ? `\n\n---\n*Báo cáo tạo bởi model: **${actualModelUsed}** (Gemini API) · Ngôn ngữ: Tiếng Việt*`
+          : `\n\n---\n*Report generated by model: **${actualModelUsed}** (Gemini API) · Language: English*`;
+        setAiSummary((prev) => prev + footer);
+      } else {
+        throw finalError || new Error('All models failed to generate content');
+      }
     } catch (err) {
-      console.error(err);
-      let friendlyError = err.message;
+      console.error('[AI] All attempts failed:', err);
+      let friendlyError = err.message || '';
       if (
-        err.message.includes('429') ||
-        err.message.toLowerCase().includes('quota') ||
-        err.message.toLowerCase().includes('rate limit') ||
-        err.message.toLowerCase().includes('exhausted')
+        friendlyError.includes('429') ||
+        friendlyError.toLowerCase().includes('quota') ||
+        friendlyError.toLowerCase().includes('rate limit') ||
+        friendlyError.toLowerCase().includes('exhausted')
       ) {
         friendlyError = isVi
           ? `Rate limit hoặc hết hạn mức API.\n\n**Hướng khắc phục:** Kiểm tra hạn mức trên Google AI Studio hoặc thử lại sau.`
@@ -767,7 +802,7 @@ ${promptData}
       setAiSummary(
         (prev) =>
           prev +
-          (isVi ? '\n\n**Lỗi tạo báo cáo:** ' : '\n\n**Error generating report:** ') +
+          (isVi ? '\n\n**Lỗi tạo báo cáo sau khi thử tất cả các model:** ' : '\n\n**Error generating report after trying all models:** ') +
           friendlyError
       );
     } finally {
@@ -854,10 +889,8 @@ ${promptData}
                 cursor: 'pointer',
               }}
             >
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
-              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
-              <option value="gemma-4-31b-it">Gemma 4 31B</option>
+              <option value="gemini-flash-lite-latest">Gemini Flash Lite (Latest)</option>
+              <option value="gemini-flash-latest">Gemini Flash (Latest)</option>
             </select>
           </div>
 
