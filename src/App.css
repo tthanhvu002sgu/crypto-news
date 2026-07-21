@@ -1720,6 +1720,93 @@
   color: #e2e8f0;
 }
 
+/* ─── Light Theme Overrides for AI Summary Markdown ──────────────────────── */
+
+[data-theme='light'] .markdown-body {
+  color: #334155;
+}
+
+[data-theme='light'] .markdown-body h1 {
+  color: #047857;
+  border-bottom: 1px solid rgba(4, 120, 87, 0.25);
+}
+
+[data-theme='light'] .markdown-body h2 {
+  color: #0284c7;
+}
+
+[data-theme='light'] .markdown-body h3 {
+  color: #0f172a;
+}
+
+[data-theme='light'] .markdown-body h4 {
+  color: #475569;
+}
+
+[data-theme='light'] .markdown-body p,
+[data-theme='light'] .markdown-body ul,
+[data-theme='light'] .markdown-body ol {
+  color: #334155;
+}
+
+[data-theme='light'] .markdown-body li::marker {
+  color: #059669;
+}
+
+[data-theme='light'] .markdown-body strong,
+[data-theme='light'] .markdown-body b {
+  color: #0f172a;
+}
+
+[data-theme='light'] .markdown-body em,
+[data-theme='light'] .markdown-body i {
+  color: #64748b;
+}
+
+[data-theme='light'] .markdown-body hr {
+  background: linear-gradient(90deg, rgba(4, 120, 87, 0.35) 0%, rgba(2, 132, 199, 0.2) 50%, transparent 100%);
+}
+
+[data-theme='light'] .markdown-body blockquote {
+  background: rgba(241, 245, 249, 0.8);
+  border-left: 3px solid #059669;
+  color: #475569;
+}
+
+[data-theme='light'] .markdown-body table {
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme='light'] .markdown-body th {
+  background: #f8fafc;
+  color: #047857;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+[data-theme='light'] .markdown-body td {
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+[data-theme='light'] .markdown-body tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+[data-theme='light'] .markdown-body code {
+  background: rgba(2, 132, 199, 0.08);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.2);
+}
+
+[data-theme='light'] .markdown-body pre {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme='light'] .markdown-body pre code {
+  color: #0f172a;
+}
+
 /* ─── Summary Tab specific styles ───────────────────────────────────────── */
 .summary-tab {
   position: relative;
