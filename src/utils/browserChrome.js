@@ -84,18 +84,6 @@ function applyNow(price, change) {
   });
 
   document.title = `$${priceFormatted} | BTC ${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`;
-
-  const shortPrice = formatShortPrice(p);
-  const bgColor = ch >= 0 ? '#10b981' : '#ef4444';
-  const visualKey = `${shortPrice}|${bgColor}`;
-
-  // Skip icon rewrite if nothing visible changed (reduces browser throttling)
-  if (visualKey === lastVisualKey) return;
-
-  if (paintFavicon(shortPrice, bgColor)) {
-    lastVisualKey = visualKey;
-    lastApplied = { shortPrice, bgColor };
-  }
 }
 
 function flushPending() {
@@ -111,15 +99,12 @@ function ensureVisibilityHook() {
   visibilityHooked = true;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    // Re-apply last icon when user focuses tab (fixes "stale until click")
-    if (lastApplied.shortPrice) {
-      paintFavicon(lastApplied.shortPrice, lastApplied.bgColor);
-    }
     if (pending) {
       flushPending();
     }
   });
 }
+
 
 /**
  * Update tab title + favicon from live BTC price.
