@@ -56,7 +56,9 @@ NON-NEGOTIABLE ANALYTICAL PROTOCOL
 
 1. Language and format
 - Write only in English.
-- Use clean Markdown and plain-text numbers. Do not use LaTeX.
+- Use clean Markdown and plain-text numbers/symbols (e.g., ~, ≈, Δ, $83.06B). 
+- STRICT FORMATTING RULE: NEVER output LaTeX math commands or dollar wrappers (e.g., NEVER write $sim$, \\sim, $\\approx$, \\approx, $\\Delta$, \\Delta, or $83.06B$). Always use plain-text characters like ~ $83.06B without math dollar signs.
+- MANDATORY SECTION SEPARATION: You MUST clearly separate Macroeconomic & Institutional Liquidity Analysis from Technical, On-Chain Valuation & Microstructure/Derivatives Analysis into explicit standalone sections.
 - Start immediately with the first required report heading. Never repeat or discuss these instructions.
 
 2. Evidence taxonomy
@@ -148,7 +150,9 @@ GIAO THỨC PHÂN TÍCH BẮT BUỘC
 
 1. Ngôn ngữ và định dạng
 - Chỉ viết bằng tiếng Việt. Có thể giữ các thuật ngữ kỹ thuật phổ biến như CVD, OBI, Funding Rate, Open Interest, MVRV, NUPL, ETF và CME COT.
-- Dùng Markdown rõ ràng và số liệu plain text. Không dùng LaTeX.
+- Dùng Markdown rõ ràng và số liệu plain text (ví dụ: ~, ≈, Δ, $83.06B).
+- CẤM TUYỆT ĐỐI NÓI HOẶC VIẾT CÚ PHÁP LATEX MATH HOẶC BỌC TRONG DẤU $...$ (NHƯ \\sim, \\approx, \\Delta). HÃY CHỈ DÙNG KÝ TỰ PLAIN TEXT CHUẨN: ví dụ dùng ~, dùng ≈, dùng Δ, dùng $83.06B (không bọc số hoặc chữ trong cặp dấu $).
+- TÁCH BIỆT RÕ RÀNG VĨ MÔ VỚI KỸ THUẬT & ON-CHAIN: Bắt buộc phân tách bài phân tích thành 2 phần độc lập: Phần Phân Tích Vĩ Mô & Dòng Tiền Tổ Chức (Macro & ETF/COT) riêng biệt với Phần Phân Tích Kỹ Thuật, On-Chain & Phái Sinh (Technical, On-Chain & Microstructure).
 - Bắt đầu ngay bằng tiêu đề đầu tiên của cấu trúc báo cáo. Không lặp lại hoặc thảo luận các hướng dẫn này.
 
 2. Phân loại bằng chứng
@@ -236,7 +240,7 @@ GIAO THỨC PHÂN TÍCH BẮT BUỘC
 
 Produce a rigorous, high-impact decision memo for a sophisticated investor. Eliminate template filler. Focus heavily on empirical data discipline, skeptical hypothesis testing, and actionable risk management.
 
-REQUIRED REPORT STRUCTURE (4 CORE SECTIONS)
+REQUIRED REPORT STRUCTURE (5 CORE SECTIONS)
 
 ### 1. EXECUTIVE DECISION & MULTI-HORIZON PLAYBOOK
 
@@ -249,16 +253,20 @@ REQUIRED REPORT STRUCTURE (4 CORE SECTIONS)
 | 1-7d (Swing) | | | | | |
 | 2-12w (Position)| | | | | |
 
-### 2. EVIDENCE MAP & MICROSTRUCTURE DEEP-DIVE
+### 2. SECTION A: GLOBAL MACRO & INSTITUTIONAL LIQUIDITY ANALYSIS
 
-Focus strictly on the 3-4 metric groups with material shifts today. Apply strict data tags: [OBSERVED] (direct data), [DERIVED] (arithmetic), or [INFERENCE] (interpretation):
+Evaluate macro and institutional capital flows with strict tags: [OBSERVED], [DERIVED], [INFERENCE]:
+- **Macro & Real-Rate Proxy:** Ex-post real rate proxy (Fed Funds - CPI), 10Y yield, DXY, VIX, M2, Net Liquidity. Regime classification (EASING, EXPANSION, TIGHTENING, CONTRACTION, MIXED) & transmission channel to BTC.
+- **Institutional Flows (ETF & CME COT):** Spot BTC/ETH ETF flow persistence & CME COT positioning across 5 groups (note 3-7 day COT lag).
 
-- **Macro & Real-Rate Proxy:** Regime classification (EASING, EXPANSION, TIGHTENING, CONTRACTION, MIXED/TRANSITION) & transmission channel to BTC.
-- **Spot Structure & On-Chain Valuation:** BTC/ETH price structure, MVRV, NUPL, Supply in Profit with dependency caveats.
-- **Institutional Flows (ETF & CME COT):** Seven-observation ETF flow persistence & COT positioning across all 5 groups (note 3-7 day COT lag).
-- **Derivatives & Microstructure (OI, CVD, OBI, Walls):** Apply Price/OI matrix, cross-examine Funding, L/S account ratio, 7d/30d CVD divergence, and Whale wall quality.
+### 3. SECTION B: TECHNICAL, ON-CHAIN & DERIVATIVES MICROSTRUCTURE ANALYSIS
 
-### 3. SCENARIO MATRIX & ACTIVATION TRIGGERS
+Evaluate standalone technical structure, on-chain valuation, and derivatives with strict tags [OBSERVED], [DERIVED], [INFERENCE]:
+- **Technical & Price Structure:** Multi-timeframe trend (48h, 7d, 30d, 90d, 1y), support/resistance zones, range positioning.
+- **On-Chain Valuation:** BTC Production Cost range, MVRV Ratio (BTC/ETH), NUPL (Net Unrealized Profit/Loss), Supply in Profit % (note MVRV dependency caveats).
+- **Derivatives & Microstructure:** Open Interest (OI), Price/OI Matrix, Funding Rate, L/S Account Ratio, CVD divergence (24h/7d/30d), Order Book Imbalance (OBI), and Liquidity Walls.
+
+### 4. SCENARIO MATRIX & ACTIVATION TRIGGERS
 
 | Scenario | Weight (%) | Activation Trigger | Confirming Evidence | Invalidation Level | Expected Route |
 | --- | ---: | --- | --- | --- | --- |
@@ -267,7 +275,7 @@ Focus strictly on the 3-4 metric groups with material shifts today. Apply strict
 | Bear Case | | | | | |
 *(Scenario weights must sum to exactly 100%)*
 
-### 4. ASYMMETRIC INSIGHTS & FALSIFICATION
+### 5. ASYMMETRIC INSIGHTS & FALSIFICATION
 
 - Present 1-2 non-obvious market insights (with evidence & why consensus misses it).
 - State concrete setups for **Spot Investor** and **Swing Trader** (Mandate NO TRADE if R:R < 1.8 or confirmation is lacking).
@@ -276,7 +284,7 @@ End with one line: **WHAT WOULD CHANGE MY MIND FIRST:** [Specific signal or pric
 
 Produce an actionable 0-7 day trading brief. Protect capital first. A high-quality NO TRADE decision is superior to a forced setup.
 
-REQUIRED REPORT STRUCTURE (4 CORE SECTIONS)
+REQUIRED REPORT STRUCTURE (5 CORE SECTIONS)
 
 ### 1. TRADE / NO-TRADE VERDICT
 
@@ -284,14 +292,20 @@ REQUIRED REPORT STRUCTURE (4 CORE SECTIONS)
 - One-line edge & Confidence level (High/Medium/Low).
 - Why now (timing justification).
 
-### 2. LIVE EVIDENCE CHAIN & MICROSTRUCTURE
+### 2. SECTION A: MACRO CONTEXT & INSTITUTIONAL FLOWS
 
 Tag signals with [OBSERVED], [DERIVED], [INFERENCE]:
-- **Price Structure & OI:** Apply Price/OI matrix to evaluate push origin (leverage vs spot).
-- **CVD Divergence & Executed Flow:** Intraday/multi-day CVD, OBI, and price response at displayed Whale Walls.
-- **Funding & L/S Ratio:** Evaluate position crowding (with caveat that L/S counts accounts, not capital).
+- **Macro & Liquidity Drivers:** Ex-post real rate proxy, Fed Funds, CPI, DXY, Net Liquidity impact on 0-7d window.
+- **Institutional ETF Demand & COT:** Spot ETF flow momentum & COT positioning trends.
 
-### 3. PRIMARY SETUP & THREE-PATH SCENARIOS
+### 3. SECTION B: TECHNICAL STRUCTURE, ON-CHAIN & DERIVATIVES MICROSTRUCTURE
+
+Tag signals with [OBSERVED], [DERIVED], [INFERENCE]:
+- **Technical & Price Action:** Price structure, key support/resistance zones, breakouts vs range bounds.
+- **On-Chain Metrics:** Production cost floor, MVRV, NUPL context.
+- **Derivatives & Taker Flow:** Price/OI matrix, intraday/multi-day CVD divergence, Funding Rate, L/S Account ratio, OBI, and Whale Liquidity Walls.
+
+### 4. PRIMARY SETUP & THREE-PATH SCENARIOS
 
 If edge is insufficient (R:R < 1.8 or missing confirmation), write **NO TRADE** and state the required activation conditions.
 
@@ -306,7 +320,7 @@ If a valid setup exists, provide:
 | Upside Path | | | | |
 | Downside Path | | | | |
 
-### 4. SQUEEZE MAP & EXECUTION CHECKLIST
+### 5. SQUEEZE MAP & EXECUTION CHECKLIST
 
 - Squeeze or Liquidity Grab hazard zones.
 - Pre-entry checklist & Immediate emergency exit conditions.
@@ -315,7 +329,7 @@ End with one line: **BEST CURRENT DECISION:** [Specific decision]`,educational:`
 
 Teach the user how to evaluate imperfect market data with professional skepticism. Explain not only what metrics say, but what they CANNOT say and how they can mislead.
 
-REQUIRED REPORT STRUCTURE (4 CORE SECTIONS)
+REQUIRED REPORT STRUCTURE (5 CORE SECTIONS)
 
 ### 1. NARRATIVE vs REALITY
 
@@ -323,13 +337,18 @@ REQUIRED REPORT STRUCTURE (4 CORE SECTIONS)
 - **What Data Supports:** Apply [OBSERVED], [DERIVED], [UNKNOWN] tags.
 - **Dominant Horizon & Party in Control.**
 
-### 2. METRIC DIAGNOSTICS & CAVEATS
+### 2. SECTION A: MACROECONOMIC & INSTITUTIONAL FLOW DIAGNOSTICS
 
 - **Macro & Real-Rate Proxy:** Transmission chain to Crypto & why macro fails for short-term timing.
-- **On-chain Valuation (MVRV, NUPL, Supply in Profit):** Data provenance (note MVRV dependency) & why valuation is not a timing clock.
-- **Flows & Microstructure (ETF, COT, CVD, OBI, Walls):** Distinguish Account Sentiment (L/S), Displayed Liquidity (Walls), and Executed Taker Flow (CVD).
+- **Institutional Demand:** ETF flow dynamics & CME COT positioning lessons.
 
-### 3. THREE COMPETING HYPOTHESES & SCENARIOS
+### 3. SECTION B: TECHNICAL, ON-CHAIN & DERIVATIVES MICROSTRUCTURE DIAGNOSTICS
+
+- **Technical Analysis:** Multi-timeframe price structure.
+- **On-chain Valuation (MVRV, NUPL, Supply in Profit):** Data provenance (note MVRV dependency) & why valuation is not a timing clock.
+- **Flows & Microstructure (CVD, OBI, Walls):** Distinguish Account Sentiment (L/S), Displayed Liquidity (Walls), and Executed Taker Flow (CVD).
+
+### 4. THREE COMPETING HYPOTHESES & SCENARIOS
 
 | Hypothesis | Weight (%) | Supporting Evidence | Conflicting Evidence | Confirmation | Invalidation |
 | --- | ---: | --- | --- | --- | --- |
@@ -337,7 +356,7 @@ REQUIRED REPORT STRUCTURE (4 CORE SECTIONS)
 | Alternative Thesis | | | | | |
 | Tail Risk | | | | | |
 
-### 4. PROFESSIONAL PLAYBOOK & LESSONS
+### 5. PROFESSIONAL PLAYBOOK & LESSONS
 
 - **Professional Actions:** Distinguish Spot Investor, Swing Trader, and Risk Manager.
 - **3 Practical Lessons:** Common mistake vs Analytical habit.
@@ -346,7 +365,7 @@ End with one line: **THE FIRST FACT THAT WOULD CHANGE THIS VIEW:** [Specific dat
 
 Hãy tạo một decision memo sắc bén, nghiêm ngặt cho nhà đầu tư chuyên nghiệp. Tập trung vào dữ liệu thực tế, loại bỏ văn phong mẫu rườm rà. Mỗi đoạn văn phải trực tiếp phục vụ cho việc ra quyết định hoặc đánh giá rủi ro.
 
-CẤU TRÚC BÁO CÁO LINH HOẠT (4 PHẦN CHÍNH)
+CẤU TRÚC BÁO CÁO CỐ ĐỊNH (5 PHẦN CHÍNH)
 
 ### 1. QUYẾT ĐỊNH ĐIỀU HÀNH & PLAYBOOK KHUNG THỜI GIAN
 
@@ -359,16 +378,20 @@ CẤU TRÚC BÁO CÁO LINH HOẠT (4 PHẦN CHÍNH)
 | 1-7d (Swing) | | | | | |
 | 2-12w (Position)| | | | | |
 
-### 2. PHÂN TÍCH BẰNG CHỨNG DỮ LIỆU & ĐIỂM NÓNG VI CẤU TRÚC
+### 2. PHẦN A: PHÂN TÍCH VĨ MÔ & DÒNG TIỀN TỔ CHỨC (MACRO & LIQUIDITY)
 
-Chỉ tập trung vào 3-4 nhóm dữ liệu có biến động hoặc tín hiệu bất thường nhất hôm nay. Bắt buộc gắn thẻ phân loại [QUAN SÁT] (dữ liệu trực tiếp), [SUY DẪN] (tính toán) hoặc [GIẢ THUYẾT] (diễn giải):
+Tập trung phân tích bối cảnh vĩ mô và dòng tiền lớn. Bắt buộc gắn thẻ phân loại [QUAN SÁT], [SUY DẪN] hoặc [GIẢ THUYẾT]:
+- **Vĩ mô & Real Yield Proxy:** Lãi suất thực ex-post (Fed Funds - CPI), Lợi suất 10Y, DXY, VIX, M2, Net Liquidity. Phân loại chế độ (NỚI LỎNG, MỞ RỘNG, THẮT CHẶT, CO HẸP, HỖN HỢP) và kênh truyền dẫn thanh khoản tới BTC.
+- **Dòng tiền Tổ chức (ETF & CME COT):** Phân tích độ bền net flow ETF (Spot BTC/ETH ETFs) 7 ngày và vị thế 5 nhóm CME COT (ghi rõ trễ 3-7 ngày của COT).
 
-- **Thanh khoản Vĩ mô & Real Yield Proxy:** Phân loại chế độ (NỚI LỎNG, MỞ RỘNG, THẮT CHẶT, CO HẸP, HỖN HỢP/CHUYỂN PHA) và kênh truyền dẫn tới BTC.
-- **Cấu trúc Spot & On-Chain Valuation:** Phân tích cấu trúc giá BTC/ETH, MVRV, NUPL, Supply in Profit (nêu rõ caveat phụ thuộc nếu có).
-- **Dòng tiền Tổ chức (ETF & CME COT):** Phân tích độ bền ETF flow 7 ngày và vị thế COT 5 nhóm (nêu rõ trễ 3-7 ngày của COT).
-- **Phái sinh & Vi cấu trúc (OI, CVD, OBI, Walls):** Áp dụng ma trận Giá/OI, đối chất Funding, L/S account ratio, phân kỳ CVD 7d/30d và đánh giá chất lượng Whale walls hiển thị.
+### 3. PHẦN B: PHÂN TÍCH KỸ THUẬT, ON-CHAIN & PHÁI SINH (TECHNICAL, ON-CHAIN & DERIVATIVES)
 
-### 3. CÂY KỊCH BẢN GIÁ & ĐIỀU KIỆN KÍCH HOẠT
+Phân tích độc lập kỹ thuật, chỉ số on-chain và vi cấu trúc phái sinh. Bắt buộc gắn thẻ phân loại [QUAN SÁT], [SUY DẪN] hoặc [GIẢ THUYẾT]:
+- **Kỹ thuật & Cấu trúc Giá (Technical Analysis):** Xu hướng & vùng hỗ trợ/kháng cự đa khung thời gian (48h, 7d, 30d, 90d, 1y), vị trí giá trong range.
+- **Định giá On-Chain (On-Chain Valuation):** Chi phí khai thác Production Cost, MVRV Ratio (BTC/ETH), NUPL (Lãi/Lỗ ròng) và Supply in Profit (kèm caveat phụ thuộc MVRV nếu có).
+- **Phái sinh & Vi cấu trúc (Derivatives & Microstructure):** Open Interest (OI), Ma trận Giá/OI, Funding Rate, Long/Short Ratio, CVD (24h/7d/30d), Order Book Imbalance (OBI) và Liquidity Walls (Whale walls).
+
+### 4. CÂY KỊCH BẢN GIÁ & ĐIỀU KIỆN KÍCH HOẠT
 
 | Kịch bản | Trọng số (%) | Trigger Kích Hoạt | Bằng chứng xác nhận | Điều kiện vô hiệu | Đường đi kỳ vọng |
 | --- | ---: | --- | --- | --- | --- |
@@ -377,7 +400,7 @@ Chỉ tập trung vào 3-4 nhóm dữ liệu có biến động hoặc tín hi�
 | Bear Case (Giảm) | | | | | |
 *(Tổng trọng số kịch bản phải đúng 100%)*
 
-### 4. INSIGHT BẤT ĐỐI XỨNG & ĐIỀU KIỆN ĐỔI QUAN ĐIỂM
+### 5. INSIGHT BẤT ĐỐI XỨNG & ĐIỀU KIỆN ĐỔI QUAN ĐIỂM
 
 - Nêu 1 đến 2 insight không hiển nhiên mà bản tóm tắt hời hợt thường bỏ qua (kèm bằng chứng & lý do đám đông có thể bỏ lỡ).
 - Nêu setup cụ thể cho **Spot Investor** và **Swing Trader** (Nếu R:R < 1.8 hoặc thiếu xác nhận, ghi rõ KHÔNG GIAO DỊCH).
@@ -386,7 +409,7 @@ Kết thúc bằng 1 dòng: **ĐIỀU ĐẦU TIÊN KHIẾN TÔI ĐỔI QUAN ĐI�
 
 Tạo trading brief có thể hành động cho 0-7 ngày. Ưu tiên bảo vệ vốn. Quyết định KHÔNG GIAO DỊCH có giá trị hơn một setup bị ép.
 
-CẤU TRÚC BÁO CÁO 4 PHẦN
+CẤU TRÚC BÁO CÁO 5 PHẦN
 
 ### 1. PHÁN QUYẾT GIAO DỊCH (TRADE / NO-TRADE VERDICT)
 
@@ -394,14 +417,20 @@ CẤU TRÚC BÁO CÁO 4 PHẦN
 - Edge trong 1 câu & Mức độ tin cậy (Cao/Trung bình/Thấp).
 - Lý do tại sao hành động lúc này (Why now).
 
-### 2. CHUỖI BẰNG CHỨNG LỢI THẾ & VI CẤU TRÚC
+### 2. PHẦN A: BỐI CẢNH VĨ MÔ & DÒNG TIỀN TỔ CHỨC (MACRO & FLOWS)
 
-Gắn thẻ [QUAN SÁT], [SUY DẪN], [GIẢ THUYẾT] cho các tín hiệu ngắn hạn:
-- **Cấu trúc Giá & OI:** Áp dụng Ma trận Giá/OI để xác định bản chất lực đẩy (đòn bẩy hay spot).
-- **Phân kỳ CVD & Dòng lệnh Thật:** Phân tích CVD intraday/multi-day, OBI và phản ứng giá tại các vùng Whale Walls.
-- **Funding & L/S Ratio:** Đánh giá độ đông đúc vị thế (kèm caveat L/S đo tài khoản, không đo vốn).
+Gắn thẻ [QUAN SÁT], [SUY DẪN], [GIẢ THUYẾT]:
+- **Vĩ mô & Thanh khoản:** Lãi suất thực proxy, CPI, Fed Funds Rate, DXY, Net Liquidity tác động thế nào đến khung 0-7 ngày.
+- **Dòng tiền ETF & Vị thế COT:** Xung lực net flow ETF và xu hướng định vị vị thế CME COT.
 
-### 3. SETUP CHÍNH & BẢN ĐỒ KỊCH BẢN (0-7 NGÀY)
+### 3. PHẦN B: PHÂN TÍCH KỸ THUẬT, ON-CHAIN & VI CẤU TRÚC PHÁI SINH (TECHNICAL, ON-CHAIN & DERIVATIVES)
+
+Gắn thẻ [QUAN SÁT], [SUY DẪN], [GIẢ THUYẾT]:
+- **Kỹ thuật & Cấu trúc Giá:** Cấu trúc giá ngắn hạn, vùng hỗ trợ/kháng cự key, failed breakout hay range bound.
+- **Chỉ số Định giá On-Chain:** Ngưỡng chi phí khai thác Production Cost, MVRV, NUPL bối cảnh.
+- **Phái sinh & Vi cấu trúc:** Ma trận Giá/OI, phân kỳ CVD (intraday/multi-day), Funding Rate, L/S Ratio, OBI và phản ứng giá tại Whale Walls.
+
+### 4. SETUP CHÍNH & BẢN ĐỒ KỊCH BẢN (0-7 NGÀY)
 
 Nếu không có setup đủ R:R >= 1.8 hoặc thiếu xác nhận, ghi **KHÔNG GIAO DỊCH** và nêu điều kiện kích hoạt cần chờ.
 
@@ -416,7 +445,7 @@ Nếu có setup, nêu rõ:
 | Kịch bản bứt phá (Upside) | | | | |
 | Kịch bản rủi ro (Downside) | | | | |
 
-### 4. CHECKLIST KÍCH HOẠT & RỦI RO BẪY (SQUEEZE MAP)
+### 5. CHECKLIST KÍCH HOẠT & RỦI RO BẪY (SQUEEZE MAP)
 
 - Điểm/Sự kiện dễ xảy ra Liquidity Grab hoặc Forced Liquidation.
 - Checklist trước khi bóp cò (Before Entry) và Điều kiện thoát lệnh khẩn cấp.
@@ -425,7 +454,7 @@ Kết thúc bằng 1 dòng: **QUYẾT ĐỊNH TỐT NHẤT LÚC NÀY:** [Quyết
 
 Hướng dẫn người dùng phân tích dữ liệu thị trường bằng tư duy hoài nghi chuyên nghiệp. Giải thích không chỉ dữ liệu nói gì, mà còn cho biết dữ liệu KHÔNG THỂ nói gì và có thể đánh lừa ra sao.
 
-CẤU TRÚC BÁO CÁO 4 PHẦN
+CẤU TRÚC BÁO CÁO 5 PHẦN
 
 ### 1. NARRATIVE THỊ TRƯỜNG vs BẰNG CHỨNG THỰC TẾ
 
@@ -433,13 +462,18 @@ CẤU TRÚC BÁO CÁO 4 PHẦN
 - **Dữ liệu thực tế hỗ trợ đến đâu:** Gắn thẻ [QUAN SÁT], [SUY DẪN], [CHƯA BIẾT].
 - **Phe nào đang kiểm soát:** Khung thời gian tác động tương ứng.
 
-### 2. PHÂN TÍCH BẮT BỆNH CÁC METRIC RỦI RO
+### 2. PHẦN A: BẮT BỆNH VĨ MÔ & DÒNG TIỀN TỔ CHỨC (MACRO & FLOW DIAGNOSTICS)
 
-- **Vĩ mô & Real Yield Proxy:** Cơ chế truyền dẫn thanh khoản đến Crypto & lý do vĩ mô không dùng để timing ngắn hạn.
-- **On-chain Valuation (MVRV, NUPL, Supply in Profit):** Giải thích nguồn gốc dữ liệu (nêu rõ dependency nếu là ước tính từ MVRV) và tại sao định giá không phải đồng hồ bấm giờ.
-- **Flows & Phái sinh (ETF, COT, CVD, OBI, Walls):** Phân biệt Tâm lý tài khoản (L/S), Thanh khoản hiển thị (Walls) và Dòng lệnh thực thi (CVD).
+- **Vĩ mô & Real Rate Proxy:** Cơ chế truyền dẫn thanh khoản đến Crypto & lý do vĩ mô không dùng để timing ngắn hạn.
+- **Dòng tiền Tổ chức (ETF & COT):** Độ bền flow ETF & cách đọc vị thế CME COT.
 
-### 3. THREE COMPETING HYPOTHESES & SCENARIO TREE
+### 3. PHẦN B: BẮT BỆNH KỸ THUẬT, ON-CHAIN & PHÁI SINH (TECHNICAL, ON-CHAIN & DERIVATIVES DIAGNOSTICS)
+
+- **Kỹ thuật:** Cấu trúc giá đa khung thời gian.
+- **On-chain Valuation (MVRV, NUPL, Supply in Profit):** Nguồn gốc dữ liệu (nêu rõ dependency nếu là ước tính từ MVRV) và tại sao định giá không phải đồng hồ bấm giờ.
+- **Phái sinh & Vi cấu trúc (CVD, OBI, Walls):** Phân biệt Tâm lý tài khoản (L/S), Thanh khoản hiển thị (Walls) và Dòng lệnh thực thi (CVD).
+
+### 4. THREE COMPETING HYPOTHESES & SCENARIO TREE
 
 | Giả thuyết | Trọng số (%) | Bằng chứng ủng hộ | Bằng chứng mâu thuẫn | Xác nhận | Vô hiệu |
 | --- | ---: | --- | --- | --- | --- |
@@ -447,12 +481,12 @@ CẤU TRÚC BÁO CÁO 4 PHẦN
 | Luận điểm thay thế (Alternative) | | | | | |
 | Rủi ro đuôi (Tail Risk) | | | | | |
 
-### 4. BÀI HỌC THỰC CHUYẾN & PLAYBOOK
+### 5. BÀI HỌC THỰC CHUYẾN & PLAYBOOK
 
 - **Hành động của Chuyên gia:** Phân tách rõ nhà đầu tư Spot, Swing Trader và Risk Manager.
 - **3 Bài học rút ra hôm nay:** Mẫu lỗi phổ biến vs Thói quen phân tích đúng.
 
-Kết thúc bằng 1 dòng: **SỰ THẬT ĐẦU TIÊN KHIẾN GÓC NHÌN NÀY THAY ĐỔI:** [Dữ liệu/Tín hiệu]`}},Nj={en:Aj,vi:jj},Pj={professional:{temperature:.2,topP:.85,maxOutputTokens:6e3},tactical:{temperature:.15,topP:.8,maxOutputTokens:3600},educational:{temperature:.25,topP:.9,maxOutputTokens:4800}};function Fj(e=`professional`,t=`en`){let n=Nj[t]?t:`en`,r=Mj[n][e]||Mj[n].professional;return`${Nj[n]}\n\n${r}`}function Ij(e=`professional`){return Pj[e]||Pj.professional}var Lj={en:{professional:`Investment Committee`,tactical:`Skeptical Execution Desk`,educational:`Socratic Market Mentor`},vi:{professional:`Hội đồng đầu tư`,tactical:`Bàn execution hoài nghi`,educational:`Cố vấn Socrates`}},Rj=e=>e&&e.replace(/\$?\\ref\$?/gi,``).replace(/\$?\\rightarrow\$?/gi,`->`).replace(/\$?\\delta\$?/gi,`delta`).replace(/\$?\\Delta\$?/gi,`Delta`).replace(/\\text\{([^}]+)\}/gi,`$1`).replace(/\\mathrm\{([^}]+)\}/gi,`$1`).replace(/\$([-+0-9.,]+)\$/g,`$1`).replace(/^ {4,}([-*+]|\d+\.) /gm,`  $1 `),Z=e=>{if(typeof e==`number`)return Number.isFinite(e)?e:null;if(typeof e!=`string`)return null;let t=Number.parseFloat(e.replace(/[$,%\s]/g,``).replace(/,/g,``));return Number.isFinite(t)?t:null},Q=(e,t=2)=>{let n=Z(e);return n===null?`N/A`:n.toLocaleString(`en-US`,{minimumFractionDigits:t,maximumFractionDigits:t})},zj=(e,t=2,n=``)=>{let r=Z(e);return r===null?`N/A`:`${r>0?`+`:``}${Q(r,t)}${n}`},Bj=e=>{if(!e)return`N/A`;let t=new Date(e);return Number.isNaN(t.getTime())?`N/A`:t.toISOString()},Vj=e=>{if(!e)return null;let t=String(e).trim(),n=t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);if(n){let[,e,t,r]=n,i=r.length===2?2e3+Number(r):Number(r),a=new Date(Date.UTC(i,Number(t)-1,Number(e)));return Number.isNaN(a.getTime())?null:a}let r=new Date(t);return Number.isNaN(r.getTime())?null:r},Hj=(e,t=new Date)=>{let n=Vj(e);return n?Math.max(0,Math.floor((t.getTime()-n.getTime())/864e5)):null};function Uj({data:e,apiKeys:t,cvd:n,buyVolume:r,sellVolume:i,etfHoldings:a,etfHistory:o,aiSummary:s,setAiSummary:c,isAiLoading:l,setIsAiLoading:u,lastSync:d,btcNupl:f,ethNupl:p,btcSupplyProfit:m,ethSupplyProfit:h}){let{isModuleHidden:g}=aa(),_=g(`tab_summary`),[v,y]=(0,b.useState)(()=>{let e=localStorage.getItem(`ai-model`);return e===`gemini-flash-lite-latest`||e===`gemini-flash-latest`?e:`gemini-flash-lite-latest`}),x=e=>{y(e),localStorage.setItem(`ai-model`,e)},[S,C]=(0,b.useState)(()=>localStorage.getItem(`ai-analysis-style`)||`professional`),w=e=>{C(e),localStorage.setItem(`ai-analysis-style`,e)},[T,E]=(0,b.useState)(()=>{let e=localStorage.getItem(`ai-report-lang`);return e===`en`||e===`vi`?e:`vi`}),D=e=>{E(e),localStorage.setItem(`ai-report-lang`,e)},O=T===`vi`,k=Lj[T]||Lj.en,A=async()=>{let t=null,s=null,c=[],l=[],u=[],g=[],_=[],v=[],y=[];try{[t,s,c,l,u,g,_,v,y]=await Promise.all([Cr(`BTCUSDT`,100),wr(),er(`BTCUSDT`,`4h`,42),er(`BTCUSDT`,`1d`,30),er(`BTCUSDT`,`1d`,90),er(`BTCUSDT`,`1w`,52),nr(`BTCUSDT`,`4h`,42),nr(`BTCUSDT`,`1d`,30),xr()])}catch(e){console.warn(`Error fetching data for report:`,e)}let b=_.length>0?_:e.cvdHistory7d||[],x=v.length>0?v:e.cvdHistory30d||[],C=y?.length>0?y:e.news||[],w=Array.isArray(e.klines)?e.klines:[],E=Z(e.btc?.price)??Z(w[w.length-1]?.close),D=(e,t=10)=>{if(!Array.isArray(e)||e.length===0)return[];let n=Math.min(t,e.length);return n===1?[e[0]]:Array.from({length:n},(t,r)=>e[Math.round(r*(e.length-1)/(n-1))])},O=(e,t)=>{let n=(e||[]).filter(e=>[e.open,e.high,e.low,e.close].every(e=>Z(e)!==null));if(n.length===0)return{label:t,text:`- ${t}: N/A`,changePct:null,rangePosition:null};let r=Z(n[0].open),i=Z(n[n.length-1].close),a=Math.max(...n.map(e=>Z(e.high))),o=Math.min(...n.map(e=>Z(e.low))),s=r>0?(i-r)/r*100:null,c=a>o?(i-o)/(a-o)*100:null;return{label:t,changePct:s,rangePosition:c,text:`- ${t}: ${Bj(n[0].time)} -> ${Bj(n[n.length-1].time)} | Open $${Q(r,0)} | Close $${Q(i,0)} | Change ${zj(s,2,`%`)} | High $${Q(a,0)} | Low $${Q(o,0)} | Close location in range ${Q(c,1)}%`}},k=(e,t=10)=>{let n=D(e||[],t);return n.length===0?`  N/A`:n.map(e=>`  - ${Bj(e.time)} | Close $${Q(e.close,0)} | Volume ${Q(e.volume,2)} BTC`).join(`
+Kết thúc bằng 1 dòng: **SỰ THẬT ĐẦU TIÊN KHIẾN GÓC NHÌN NÀY THAY ĐỔI:** [Dữ liệu/Tín hiệu]`}},Nj={en:Aj,vi:jj},Pj={professional:{temperature:.2,topP:.85,maxOutputTokens:6e3},tactical:{temperature:.15,topP:.8,maxOutputTokens:3600},educational:{temperature:.25,topP:.9,maxOutputTokens:4800}};function Fj(e=`professional`,t=`en`){let n=Nj[t]?t:`en`,r=Mj[n][e]||Mj[n].professional;return`${Nj[n]}\n\n${r}`}function Ij(e=`professional`){return Pj[e]||Pj.professional}var Lj={en:{professional:`Investment Committee`,tactical:`Skeptical Execution Desk`,educational:`Socratic Market Mentor`},vi:{professional:`Hội đồng đầu tư`,tactical:`Bàn execution hoài nghi`,educational:`Cố vấn Socrates`}},Rj=e=>e&&e.replace(/\\sim\b/gi,`~`).replace(/\\approx\b/gi,`≈`).replace(/\\Delta\b/gi,`Δ`).replace(/\\delta\b/gi,`δ`).replace(/\\rightarrow\b/gi,`->`).replace(/\\leftarrow\b/gi,`<-`).replace(/\\geq?\b/gi,`>=`).replace(/\\leq?\b/gi,`<=`).replace(/\\times\b/gi,`x`).replace(/\\ref\{[^}]+\}/gi,``).replace(/\\text\{([^}]+)\}/gi,`$1`).replace(/\\mathrm\{([^}]+)\}/gi,`$1`).replace(/\$\s*\\?sim\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi,`~$1`).replace(/\$\s*\\?approx\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi,`≈$1`).replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi,`Δ $1`).replace(/\$([~≈Δδ<=>+\-*0-9.,% \t\w]+)\$/g,(e,t)=>{let n=t.replace(/\\sim/gi,`~`).replace(/\\approx/gi,`≈`).replace(/\\Delta/gi,`Δ`).trim();return n.startsWith(`~`)||n.startsWith(`≈`)||n.startsWith(`Δ`)?n:/^\$?[0-9.,]+[KMBkmb%]?$/i.test(n)?n.startsWith(`$`)?n:`$${n}`:n}).replace(/^ {4,}([-*+]|\d+\.) /gm,`  $1 `),Z=e=>{if(typeof e==`number`)return Number.isFinite(e)?e:null;if(typeof e!=`string`)return null;let t=Number.parseFloat(e.replace(/[$,%\s]/g,``).replace(/,/g,``));return Number.isFinite(t)?t:null},Q=(e,t=2)=>{let n=Z(e);return n===null?`N/A`:n.toLocaleString(`en-US`,{minimumFractionDigits:t,maximumFractionDigits:t})},zj=(e,t=2,n=``)=>{let r=Z(e);return r===null?`N/A`:`${r>0?`+`:``}${Q(r,t)}${n}`},Bj=e=>{if(!e)return`N/A`;let t=new Date(e);return Number.isNaN(t.getTime())?`N/A`:t.toISOString()},Vj=e=>{if(!e)return null;let t=String(e).trim(),n=t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);if(n){let[,e,t,r]=n,i=r.length===2?2e3+Number(r):Number(r),a=new Date(Date.UTC(i,Number(t)-1,Number(e)));return Number.isNaN(a.getTime())?null:a}let r=new Date(t);return Number.isNaN(r.getTime())?null:r},Hj=(e,t=new Date)=>{let n=Vj(e);return n?Math.max(0,Math.floor((t.getTime()-n.getTime())/864e5)):null};function Uj({data:e,apiKeys:t,cvd:n,buyVolume:r,sellVolume:i,etfHoldings:a,etfHistory:o,aiSummary:s,setAiSummary:c,isAiLoading:l,setIsAiLoading:u,lastSync:d,btcNupl:f,ethNupl:p,btcSupplyProfit:m,ethSupplyProfit:h}){let{isModuleHidden:g}=aa(),_=g(`tab_summary`),[v,y]=(0,b.useState)(()=>{let e=localStorage.getItem(`ai-model`);return e===`gemini-flash-lite-latest`||e===`gemini-flash-latest`?e:`gemini-flash-lite-latest`}),x=e=>{y(e),localStorage.setItem(`ai-model`,e)},[S,C]=(0,b.useState)(()=>localStorage.getItem(`ai-analysis-style`)||`professional`),w=e=>{C(e),localStorage.setItem(`ai-analysis-style`,e)},[T,E]=(0,b.useState)(()=>{let e=localStorage.getItem(`ai-report-lang`);return e===`en`||e===`vi`?e:`vi`}),D=e=>{E(e),localStorage.setItem(`ai-report-lang`,e)},O=T===`vi`,k=Lj[T]||Lj.en,A=async()=>{let t=null,s=null,c=[],l=[],u=[],g=[],_=[],v=[],y=[];try{[t,s,c,l,u,g,_,v,y]=await Promise.all([Cr(`BTCUSDT`,100),wr(),er(`BTCUSDT`,`4h`,42),er(`BTCUSDT`,`1d`,30),er(`BTCUSDT`,`1d`,90),er(`BTCUSDT`,`1w`,52),nr(`BTCUSDT`,`4h`,42),nr(`BTCUSDT`,`1d`,30),xr()])}catch(e){console.warn(`Error fetching data for report:`,e)}let b=_.length>0?_:e.cvdHistory7d||[],x=v.length>0?v:e.cvdHistory30d||[],C=y?.length>0?y:e.news||[],w=Array.isArray(e.klines)?e.klines:[],E=Z(e.btc?.price)??Z(w[w.length-1]?.close),D=(e,t=10)=>{if(!Array.isArray(e)||e.length===0)return[];let n=Math.min(t,e.length);return n===1?[e[0]]:Array.from({length:n},(t,r)=>e[Math.round(r*(e.length-1)/(n-1))])},O=(e,t)=>{let n=(e||[]).filter(e=>[e.open,e.high,e.low,e.close].every(e=>Z(e)!==null));if(n.length===0)return{label:t,text:`- ${t}: N/A`,changePct:null,rangePosition:null};let r=Z(n[0].open),i=Z(n[n.length-1].close),a=Math.max(...n.map(e=>Z(e.high))),o=Math.min(...n.map(e=>Z(e.low))),s=r>0?(i-r)/r*100:null,c=a>o?(i-o)/(a-o)*100:null;return{label:t,changePct:s,rangePosition:c,text:`- ${t}: ${Bj(n[0].time)} -> ${Bj(n[n.length-1].time)} | Open $${Q(r,0)} | Close $${Q(i,0)} | Change ${zj(s,2,`%`)} | High $${Q(a,0)} | Low $${Q(o,0)} | Close location in range ${Q(c,1)}%`}},k=(e,t=10)=>{let n=D(e||[],t);return n.length===0?`  N/A`:n.map(e=>`  - ${Bj(e.time)} | Close $${Q(e.close,0)} | Volume ${Q(e.volume,2)} BTC`).join(`
 `)},A=(e,t)=>{let n=(e||[]).filter(e=>Z(e.cvd)!==null&&Z(e.price)!==null);if(n.length===0)return`### ${t}\n- Summary: N/A\n- Sampled path: N/A`;let r=Z(n[0].price),i=Z(n[n.length-1].price),a=r>0?(i-r)/r*100:null,o=Z(n[n.length-1].cvd),s=Math.floor(n.length/2),c=n.slice(0,s).reduce((e,t)=>e+(Z(t.delta)||0),0),l=n.slice(s).reduce((e,t)=>e+(Z(t.delta)||0),0),u=D(n,10).map(e=>`  - ${Bj(e.time)} | Price $${Q(e.price,0)} | Rebased cumulative CVD ${zj(e.cvd,0,` USD`)}`).join(`
 `);return`### ${t}
 - Scope: Binance BTCUSDT klines; taker-buy quote volume minus taker-sell quote volume; cumulative series rebased at the start of this window.
