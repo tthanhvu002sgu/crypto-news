@@ -15,7 +15,8 @@ import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
-  Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff
+  Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
+  ChevronDown, ChevronRight
 } from 'lucide-react';
 import GlossaryTab from './components/GlossaryTab';
 import HftRadarTab from './components/HftRadarTab';
@@ -136,25 +137,42 @@ const CASCADE_KEY_MAP = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId }) {
+const FreshnessBadge = React.memo(function FreshnessBadge({ type }) {
+  if (type === 'live') {
+    return <span className="freshness-badge badge-live">⚡ LIVE</span>;
+  }
+  if (type === '5m' || type === 'hot') {
+    return <span className="freshness-badge badge-cached-5m">⏱️ 5m</span>;
+  }
+  if (type === '1h' || type === 'cold') {
+    return <span className="freshness-badge badge-cached-cold">📅 1h</span>;
+  }
+  return null;
+});
+
+const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId, freshness }) {
   const metadata = tooltipId ? METRIC_METADATA[tooltipId] : null;
   return (
     <div className="metric-card">
-      {metadata ? (
-        <Tooltip content={metadata}>
-          <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
-            {label}
-          </span>
-        </Tooltip>
-      ) : (
-        <span className="metric-label font-mono">{label}</span>
-      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '2px' }}>
+        {metadata ? (
+          <Tooltip content={metadata}>
+            <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
+              {label}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="metric-label font-mono">{label}</span>
+        )}
+        {freshness && <FreshnessBadge type={freshness} />}
+      </div>
       <span className="metric-value font-mono">{value}</span>
       {sub && <span className={`metric-sub font-mono ${subCls || 'text-slate-400'}`}>{sub}</span>}
       {badge && <span className={`metric-badge font-mono ${badgeCls || ''}`}>{badge}</span>}
     </div>
   );
 });
+
 
 const LiveDot = React.memo(function LiveDot({ active = true }) {
   return (
@@ -434,6 +452,25 @@ function AppContent() {
     }
   });
   const [showSettings, setShowSettings] = useState(false);
+
+  // ── Sidebar Accordion State ────────────────────────────────────────────────
+  const [accordionOpen, setAccordionOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sidebar_accordion');
+      return saved ? JSON.parse(saved) : { derivatives: true, macro: true, onchain: true };
+    } catch {
+      return { derivatives: true, macro: true, onchain: true };
+    }
+  });
+
+  const toggleAccordion = useCallback((key) => {
+    setAccordionOpen(prev => {
+      const updated = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('sidebar_accordion', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
 
   // ── Binance WebSocket — realtime prices + funding rate ──────────────────
   const { livePrice, liveChange, liveHigh, liveLow, liveVolume, liveFunding, liveEthPrice, liveSolPrice, liveLinkPrice, wsStatus } =
@@ -1096,222 +1133,261 @@ function AppContent() {
 
             <div className="sidebar-divider" />
 
-            {/* Metrics grid — Derivatives */}
+            {/* ── Sidebar Accordion Group 1: Derivatives & Market Sentiment ── */}
             {!isModuleHidden('sidebar_derivatives') && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 className="widget-title font-mono" style={{ margin: 0 }}>
-                    <LiveDot /> PHÁI SINH REALTIME
-                  </h3>
-                  <ModuleMenu moduleId="sidebar_derivatives" />
-                </div>
-                <div className="metrics-grid">
-                  <MetricCard
-                    label="FUNDING RATE"
-                    value={fund != null ? `${(fund * 100).toFixed(4)}%` : '---'}
-                    sub={fundInfo.text}
-                    subCls={fundInfo.cls}
-                    badge={liveFunding != null ? '⚡WS' : null}
-                    badgeCls="badge-ws"
-                    tooltipId="funding"
-                  />
-                  <MetricCard
-                    label="OPEN INTEREST"
-                    value={data.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
-                    sub="Derivatives"
-                    subCls="text-slate-400"
-                    tooltipId="oi"
-                  />
-                  <MetricCard
-                    label="L/S RATIO"
-                    value={currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
-                    sub={currentLS ? `Long ${(parseFloat(currentLS.longAccount) * 100).toFixed(1)}%` : ''}
-                    subCls={currentLS && parseFloat(currentLS.longAccount) > 0.55 ? 'text-rose' : 'text-emerald'}
-                    tooltipId="lsRatio"
-                  />
-                  <MetricCard
-                    label="BTC DOMINANCE"
-                    value={data.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---'}
-                    sub={data.globalData?.ethDominance ? `ETH ${data.globalData.ethDominance}%` : ''}
-                    subCls="text-slate-400"
-                    tooltipId="btcDom"
-                  />
-                  <MetricCard
-                    label="STABLECOIN CAP"
-                    value={data.stablecoins ? fmtB(data.stablecoins.total) : '---'}
-                    sub={data.stablecoins ? `USDT ${fmtB(data.stablecoins.usdt)}` : ''}
-                    subCls="text-slate-400"
-                    tooltipId="stablecoin"
-                  />
-                  <MetricCard
-                    label="TOTAL MARKET CAP"
-                    value={data.globalData ? fmtT(data.globalData.totalMarketCap) : '---'}
-                    sub={data.globalData?.marketCapChange24h ? `${data.globalData.marketCapChange24h}% 24h` : ''}
-                    subCls={data.globalData?.marketCapChange24h > 0 ? 'text-emerald' : 'text-rose'}
-                    tooltipId="totalMcap"
-                  />
-                  <MetricCard
-                    label="BTC 24H VOL"
-                    value={btcDisplay ? fmtB(btcDisplay.volume) : '---'}
-                    sub="USDT Volume"
-                    subCls="text-slate-400"
-                    tooltipId="volume24h"
-                  />
-                  <MetricCard
-                    label="24H RANGE"
-                    value={btcDisplay ? `${fmt(btcDisplay.low, 0)}` : '---'}
-                    sub={btcDisplay ? `H: ${fmt(btcDisplay.high, 0)}` : ''}
-                    subCls="text-slate-400"
-                    tooltipId="range24h"
-                  />
-                </div>
-                <div className="sidebar-divider" />
-              </>
+              <div className="sidebar-accordion">
+                <button className="sidebar-accordion-header" onClick={() => toggleAccordion('derivatives')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <LiveDot /> PHÁI SINH & TÂM LÝ (DERIVATIVES)
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <ModuleMenu moduleId="sidebar_derivatives" />
+                    {accordionOpen.derivatives ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                </button>
+                {accordionOpen.derivatives && (
+                  <div className="sidebar-accordion-body">
+                    <div className="metrics-grid">
+                      <MetricCard
+                        label="FUNDING RATE"
+                        value={fund != null ? `${(fund * 100).toFixed(4)}%` : '---'}
+                        sub={fundInfo.text}
+                        subCls={fundInfo.cls}
+                        badge={liveFunding != null ? '⚡WS' : null}
+                        badgeCls="badge-ws"
+                        tooltipId="funding"
+                        freshness="live"
+                      />
+                      <MetricCard
+                        label="OPEN INTEREST"
+                        value={data.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
+                        sub="Derivatives"
+                        subCls="text-slate-400"
+                        tooltipId="oi"
+                        freshness="live"
+                      />
+                      <MetricCard
+                        label="L/S RATIO"
+                        value={currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
+                        sub={currentLS ? `Long ${(parseFloat(currentLS.longAccount) * 100).toFixed(1)}%` : ''}
+                        subCls={currentLS && parseFloat(currentLS.longAccount) > 0.55 ? 'text-rose' : 'text-emerald'}
+                        tooltipId="lsRatio"
+                        freshness="5m"
+                      />
+                      <MetricCard
+                        label="BTC DOMINANCE"
+                        value={data.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---'}
+                        sub={data.globalData?.ethDominance ? `ETH ${data.globalData.ethDominance}%` : ''}
+                        subCls="text-slate-400"
+                        tooltipId="btcDom"
+                        freshness="5m"
+                      />
+                      <MetricCard
+                        label="STABLECOIN CAP"
+                        value={data.stablecoins ? fmtB(data.stablecoins.total) : '---'}
+                        sub={data.stablecoins ? `USDT ${fmtB(data.stablecoins.usdt)}` : ''}
+                        subCls="text-slate-400"
+                        tooltipId="stablecoin"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="TOTAL MARKET CAP"
+                        value={data.globalData ? fmtT(data.globalData.totalMarketCap) : '---'}
+                        sub={data.globalData?.marketCapChange24h ? `${data.globalData.marketCapChange24h}% 24h` : ''}
+                        subCls={data.globalData?.marketCapChange24h > 0 ? 'text-emerald' : 'text-rose'}
+                        tooltipId="totalMcap"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="BTC 24H VOL"
+                        value={btcDisplay ? fmtB(btcDisplay.volume) : '---'}
+                        sub="USDT Volume"
+                        subCls="text-slate-400"
+                        tooltipId="volume24h"
+                        freshness="live"
+                      />
+                      <MetricCard
+                        label="24H RANGE"
+                        value={btcDisplay ? `${fmt(btcDisplay.low, 0)}` : '---'}
+                        sub={btcDisplay ? `H: ${fmt(btcDisplay.high, 0)}` : ''}
+                        subCls="text-slate-400"
+                        tooltipId="range24h"
+                        freshness="live"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
+            {/* ── Sidebar Accordion Group 2: US Macro Economics ── */}
             {!isModuleHidden('sidebar_macro') && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 className="widget-title font-mono" style={{ margin: 0 }}>
-                    <LiveDot /> DỮ LIỆU KINH TẾ MỸ (HÀNG THÁNG)
-                  </h3>
-                  <ModuleMenu moduleId="sidebar_macro" />
-                </div>
-                <div className="metrics-grid">
-                  <MetricCard
-                    label="CPI YOY"
-                    value={isPlausibleCpiYoY(data.cpi) ? `${Number(data.cpi).toFixed(2)}%` : '---'}
-                    sub="Lạm phát so với cùng kỳ"
-                    subCls="text-slate-400"
-                    tooltipId="cpi"
-                  />
-                  <MetricCard
-                    label="UNEMPLOYMENT"
-                    value={data.unrate ? `${data.unrate}%` : '---'}
-                    sub="Tỷ lệ thất nghiệp"
-                    subCls="text-slate-400"
-                    tooltipId="unrate"
-                  />
-                </div>
-                <div className="sidebar-divider" />
-              </>
+              <div className="sidebar-accordion">
+                <button className="sidebar-accordion-header" onClick={() => toggleAccordion('macro')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <LiveDot /> VĨ MÔ KINH TẾ MỸ (MACRO)
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <ModuleMenu moduleId="sidebar_macro" />
+                    {accordionOpen.macro ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                </button>
+                {accordionOpen.macro && (
+                  <div className="sidebar-accordion-body">
+                    <div className="metrics-grid">
+                      <MetricCard
+                        label="CPI YOY"
+                        value={isPlausibleCpiYoY(data.cpi) ? `${Number(data.cpi).toFixed(2)}%` : '---'}
+                        sub="Lạm phát so với cùng kỳ"
+                        subCls="text-slate-400"
+                        tooltipId="cpi"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="UNEMPLOYMENT"
+                        value={data.unrate ? `${data.unrate}%` : '---'}
+                        sub="Tỷ lệ thất nghiệp"
+                        subCls="text-slate-400"
+                        tooltipId="unrate"
+                        freshness="1h"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
-            {/* On-chain Network Stats — Blockchain.info */}
+            {/* ── Sidebar Accordion Group 3: BTC Network & On-chain ── */}
             {!isModuleHidden('sidebar_onchain') && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 className="widget-title font-mono" style={{ margin: 0 }}>
-                    <LiveDot /> BTC NETWORK (ON-CHAIN)
-                  </h3>
-                  <ModuleMenu moduleId="sidebar_onchain" />
-                </div>
-                <div className="metrics-grid">
-                  <MetricCard
-                    label="HASH RATE"
-                    value={data.onChain?.hashRate ? `${data.onChain.hashRate} EH/s` : '---'}
-                    sub="Mining Power"
-                    subCls="text-slate-400"
-                    tooltipId="hashRate"
-                  />
-                  <MetricCard
-                    label="DIFFICULTY"
-                    value={data.onChain?.difficulty ? `${data.onChain.difficulty}T` : '---'}
-                    sub="Mining Difficulty"
-                    subCls="text-slate-400"
-                    tooltipId="difficulty"
-                  />
-                  <MetricCard
-                    label="TX / 24H"
-                    value={data.onChain?.txCount24h ? data.onChain.txCount24h.toLocaleString() : '---'}
-                    sub="Transactions"
-                    subCls="text-slate-400"
-                    tooltipId="txCount"
-                  />
-                  <MetricCard
-                    label="BLOCK TIME"
-                    value={data.onChain?.minutesBetweenBlocks ? `${data.onChain.minutesBetweenBlocks}m` : '---'}
-                    sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Fast ↑' : 'Normal'}
-                    subCls={data.onChain?.minutesBetweenBlocks < 10 ? 'text-emerald' : 'text-slate-400'}
-                    tooltipId="blockTime"
-                  />
-                  <MetricCard
-                    label="ACTIVE ADDR"
-                    value={data.onChainMetrics?.activeAddresses || '---'}
-                    sub="Unique senders/day"
-                    subCls="text-slate-400"
-                    tooltipId="activeAddr"
-                  />
-                  <MetricCard
-                    label="PRODUCTION COST"
-                    value={(() => {
-                      const pc = data.onChain?.productionCost;
-                      if (!pc) return '---';
-                      // New range object { low, mid, high }; legacy cache may still be a string/number
-                      if (typeof pc === 'object' && pc.low != null && pc.high != null) {
-                        const fmt = (n) => `$${Math.round(n / 1000)}k`;
-                        return `${fmt(pc.low)} → ${fmt(pc.high)}`;
-                      }
-                      const n = parseInt(pc, 10);
-                      return Number.isFinite(n) ? `$${n.toLocaleString()}` : '---';
-                    })()}
-                    sub={(() => {
-                      const pc = data.onChain?.productionCost;
-                      if (pc && typeof pc === 'object' && pc.mid != null) {
-                        return `mid ~$${Math.round(pc.mid / 1000)}k · 1 BTC est.`;
-                      }
-                      return '1 BTC (range est.)';
-                    })()}
-                    subCls="text-slate-400"
-                    tooltipId="productionCost"
-                  />
-                  <MetricCard
-                    label="BTC MVRV"
-                    value={data.onChainMetrics?.mvrv || '---'}
-                    sub={data.onChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.onChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
-                    subCls={data.onChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.onChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
-                    tooltipId="mvrv"
-                  />
-                  <MetricCard
-                    label="ETH MVRV"
-                    value={data.ethOnChainMetrics?.mvrv || '---'}
-                    sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
-                    subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
-                    tooltipId="ethMvrv"
-                  />
-                  <MetricCard
-                    label="BTC NUPL (LÃI/LỖ)"
-                    value={btcNuplVal?.percentStr || '---'}
-                    sub={btcNuplVal?.subStr || 'Net Unrealized Profit'}
-                    subCls={btcNuplVal?.cls || 'text-slate-400'}
-                    tooltipId="btcNupl"
-                  />
-                  <MetricCard
-                    label="ETH NUPL (LÃI/LỖ)"
-                    value={ethNuplVal?.percentStr || '---'}
-                    sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
-                    subCls={ethNuplVal?.cls || 'text-slate-400'}
-                    tooltipId="ethNupl"
-                  />
-                  <MetricCard
-                    label="BTC COIN LỜI (EST)"
-                    value={btcSupplyProfitEst?.valStr || '---'}
-                    sub={btcSupplyProfitEst?.subStr || 'Supply in Profit'}
-                    subCls={btcSupplyProfitEst?.cls || 'text-slate-400'}
-                    tooltipId="btcSupplyProfit"
-                  />
-                  <MetricCard
-                    label="ETH COIN LỜI (EST)"
-                    value={ethSupplyProfitEst?.valStr || '---'}
-                    sub={ethSupplyProfitEst?.subStr || 'Supply in Profit'}
-                    subCls={ethSupplyProfitEst?.cls || 'text-slate-400'}
-                    tooltipId="ethSupplyProfit"
-                  />
-                </div>
-              </>
+              <div className="sidebar-accordion">
+                <button className="sidebar-accordion-header" onClick={() => toggleAccordion('onchain')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <LiveDot /> BTC NETWORK & ON-CHAIN
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <ModuleMenu moduleId="sidebar_onchain" />
+                    {accordionOpen.onchain ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                </button>
+                {accordionOpen.onchain && (
+                  <div className="sidebar-accordion-body">
+                    <div className="metrics-grid">
+                      <MetricCard
+                        label="HASH RATE"
+                        value={data.onChain?.hashRate ? `${data.onChain.hashRate} EH/s` : '---'}
+                        sub="Mining Power"
+                        subCls="text-slate-400"
+                        tooltipId="hashRate"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="DIFFICULTY"
+                        value={data.onChain?.difficulty ? `${data.onChain.difficulty}T` : '---'}
+                        sub="Mining Difficulty"
+                        subCls="text-slate-400"
+                        tooltipId="difficulty"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="TX / 24H"
+                        value={data.onChain?.txCount24h ? data.onChain.txCount24h.toLocaleString() : '---'}
+                        sub="Transactions"
+                        subCls="text-slate-400"
+                        tooltipId="txCount"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="BLOCK TIME"
+                        value={data.onChain?.minutesBetweenBlocks ? `${data.onChain.minutesBetweenBlocks}m` : '---'}
+                        sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Fast ↑' : 'Normal'}
+                        subCls={data.onChain?.minutesBetweenBlocks < 10 ? 'text-emerald' : 'text-slate-400'}
+                        tooltipId="blockTime"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="ACTIVE ADDR"
+                        value={data.onChainMetrics?.activeAddresses || '---'}
+                        sub="Unique senders/day"
+                        subCls="text-slate-400"
+                        tooltipId="activeAddr"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="PRODUCTION COST"
+                        value={(() => {
+                          const pc = data.onChain?.productionCost;
+                          if (!pc) return '---';
+                          if (typeof pc === 'object' && pc.low != null && pc.high != null) {
+                            const fmt = (n) => `$${Math.round(n / 1000)}k`;
+                            return `${fmt(pc.low)} → ${fmt(pc.high)}`;
+                          }
+                          const n = parseInt(pc, 10);
+                          return Number.isFinite(n) ? `$${n.toLocaleString()}` : '---';
+                        })()}
+                        sub={(() => {
+                          const pc = data.onChain?.productionCost;
+                          if (pc && typeof pc === 'object' && pc.mid != null) {
+                            return `mid ~$${Math.round(pc.mid / 1000)}k · 1 BTC est.`;
+                          }
+                          return '1 BTC (range est.)';
+                        })()}
+                        subCls="text-slate-400"
+                        tooltipId="productionCost"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="BTC MVRV"
+                        value={data.onChainMetrics?.mvrv || '---'}
+                        sub={data.onChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.onChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                        subCls={data.onChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.onChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
+                        tooltipId="mvrv"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="ETH MVRV"
+                        value={data.ethOnChainMetrics?.mvrv || '---'}
+                        sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                        subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
+                        tooltipId="ethMvrv"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="BTC NUPL (LÃI/LỖ)"
+                        value={btcNuplVal?.percentStr || '---'}
+                        sub={btcNuplVal?.subStr || 'Net Unrealized Profit'}
+                        subCls={btcNuplVal?.cls || 'text-slate-400'}
+                        tooltipId="btcNupl"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="ETH NUPL (LÃI/LỖ)"
+                        value={ethNuplVal?.percentStr || '---'}
+                        sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
+                        subCls={ethNuplVal?.cls || 'text-slate-400'}
+                        tooltipId="ethNupl"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="BTC COIN LỜI (EST)"
+                        value={btcSupplyProfitEst?.valStr || '---'}
+                        sub={btcSupplyProfitEst?.subStr || 'Supply in Profit'}
+                        subCls={btcSupplyProfitEst?.cls || 'text-slate-400'}
+                        tooltipId="btcSupplyProfit"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="ETH COIN LỜI (EST)"
+                        value={ethSupplyProfitEst?.valStr || '---'}
+                        sub={ethSupplyProfitEst?.subStr || 'Supply in Profit'}
+                        subCls={ethSupplyProfitEst?.cls || 'text-slate-400'}
+                        tooltipId="ethSupplyProfit"
+                        freshness="1h"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
-
-
 
           </div>
         </aside>
@@ -1339,8 +1415,8 @@ function AppContent() {
 
           <div className="tab-content">
 
-            {/* ══ DASHBOARD TAB ══════════════════════════════════════════════ */}
-            {activeTab === 'dashboard' && (
+            {/* ══ DASHBOARD TAB — Keep-Alive State ════════════════════════════ */}
+            <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
               <DashboardTab
                 data={data}
                 theme={theme}
@@ -1364,10 +1440,10 @@ function AppContent() {
                 etfAumChartData={etfAumChartData}
                 etfAumChartOpts={etfAumChartOpts}
               />
-            )}
+            </div>
 
-            {/* ══ HFT RADAR TAB ══════════════════════════════════════════════ */}
-            {activeTab === 'hft' && (
+            {/* ══ HFT RADAR TAB — Keep-Alive State ════════════════════════════ */}
+            <div style={{ display: activeTab === 'hft' ? 'block' : 'none' }}>
               <HftRadarTab
                 cvd={cvd} sessionCvd={sessionCvd} buyVolume={buyVolume} sellVolume={sellVolume}
                 cvdHistory={cvdHistory} cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
@@ -1377,10 +1453,10 @@ function AppContent() {
                 liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
                 liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
               />
-            )}
+            </div>
 
-            {/* ══ CASCADE TAB ════════════════════════════════════════════════ */}
-            {activeTab === 'cascade' && (
+            {/* ══ CASCADE TAB — Keep-Alive State ══════════════════════════════ */}
+            <div style={{ display: activeTab === 'cascade' ? 'block' : 'none' }}>
               <CascadeTab
                 data={data}
                 fmt={fmt}
@@ -1390,10 +1466,10 @@ function AppContent() {
                 CASCADE_KEY_MAP={CASCADE_KEY_MAP}
                 METRIC_METADATA={METRIC_METADATA}
               />
-            )}
+            </div>
 
-            {/* ══ AI SUMMARY TAB ═════════════════════════════════════════════ */}
-            {activeTab === 'summary' && (
+            {/* ══ AI SUMMARY TAB — Keep-Alive State ═══════════════════════════ */}
+            <div style={{ display: activeTab === 'summary' ? 'block' : 'none' }}>
               <SummaryTab 
                 data={data} 
                 apiKeys={apiKeys} 
@@ -1412,15 +1488,15 @@ function AppContent() {
                 btcSupplyProfit={btcSupplyProfitEst?.aiStr || 'N/A'}
                 ethSupplyProfit={ethSupplyProfitEst?.aiStr || 'N/A'}
               />
-            )}
+            </div>
 
-            {/* ══ GLOSSARY TAB ═══════════════════════════════════════════════ */}
-            {activeTab === 'glossary' && (
+            {/* ══ GLOSSARY TAB — Keep-Alive State ═════════════════════════════ */}
+            <div style={{ display: activeTab === 'glossary' ? 'block' : 'none' }}>
               <GlossaryTab />
-            )}
+            </div>
 
-            {/* ══ TERMINAL TAB ═══════════════════════════════════════════════ */}
-            {activeTab === 'terminal' && (
+            {/* ══ TERMINAL TAB — Keep-Alive State ═════════════════════════════ */}
+            <div style={{ display: activeTab === 'terminal' ? 'block' : 'none' }}>
               <TerminalTab
                 data={data}
                 btcDisplay={btcDisplay}
@@ -1431,11 +1507,32 @@ function AppContent() {
                 fngColor={fngColor}
                 theme={theme}
               />
-            )}
+            </div>
 
           </div>
         </main>
+
+        {/* ── Mobile Bottom Navigation Bar ──────────────────────────────────── */}
+        <nav className="mobile-bottom-nav">
+          {[
+            { id: 'dashboard', icon: <BarChart2 size={16} />, label: 'Dashboard' },
+            { id: 'hft',       icon: <Crosshair size={16} />, label: 'Data HFT' },
+            { id: 'cascade',   icon: <Layers size={16} />,    label: 'Thác TK', moduleId: 'tab_cascade' },
+            { id: 'summary',   icon: <Sparkles size={16} />,  label: 'AI Summary', moduleId: 'tab_summary' },
+            { id: 'glossary',  icon: <HelpCircle size={16} />, label: 'Thuật ngữ', moduleId: 'tab_glossary' },
+          ].filter(t => !t.moduleId || !isModuleHidden(t.moduleId)).map(t => (
+            <button
+              key={t.id}
+              className={`mobile-nav-btn ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.icon}
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </nav>
       </div>
+
 
       {showSettings && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>

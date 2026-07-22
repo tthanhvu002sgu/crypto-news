@@ -979,7 +979,14 @@ ${promptData}
         </div>
       </div>
 
+      {!apiKeys?.gemini && (
+        <div className="font-mono" style={{ background: 'var(--bg-amber-badge)', border: '1px solid var(--border-badge-warn)', color: 'var(--color-amber-400)', padding: '10px 14px', borderRadius: '6px', fontSize: '0.75rem', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>⚠️ {isVi ? 'Chưa nhập Gemini API Key. Vui lòng bấm biểu tượng ⚙️ Cài đặt ở thanh Header để cấu hình API Key.' : 'Gemini API Key missing. Please click the ⚙️ Settings icon in the top header to configure your API key.'}</span>
+        </div>
+      )}
+
       <div
+
         className="summary-content font-mono"
         style={{
           background: 'var(--bg-slate-950)',

@@ -379,3 +379,146 @@ body::after {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* ═══════════════════════════════════════════════════════════ */
+/* ── DATA FRESHNESS BADGES ───────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+.freshness-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--card-radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+
+.badge-live {
+  background: var(--bg-badge-live);
+  color: var(--color-badge-live);
+  border: 1px solid var(--border-badge-live);
+}
+
+.badge-live::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--color-badge-live);
+  animation: ping-slow 1.5s infinite;
+}
+
+.badge-cached-5m {
+  background: var(--bg-badge-api);
+  color: var(--color-badge-api);
+  border: 1px solid var(--border-badge-api);
+}
+
+.badge-cached-cold {
+  background: var(--bg-badge-warn);
+  color: var(--color-badge-warn);
+  border: 1px solid var(--border-badge-warn);
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* ── ACCORDION SIDEBAR STYLES ────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+.sidebar-accordion {
+  border: 1px solid var(--border-panel);
+  border-radius: var(--card-radius-sm);
+  background: rgba(0, 0, 0, 0.15);
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.sidebar-accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  color: var(--text-slate-200);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: background 0.15s ease;
+  min-height: 38px;
+}
+
+.sidebar-accordion-header:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-accordion-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* ── MOBILE BOTTOM NAVIGATION ────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════ */
+
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: var(--bg-header);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border-panel);
+  z-index: 99;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.mobile-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  color: var(--text-slate-400);
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 4px 8px;
+  border-radius: var(--card-radius-xs);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.mobile-nav-btn.active {
+  color: var(--color-emerald-400);
+  background: var(--bg-active-tab);
+}
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    display: flex;
+  }
+  body {
+    padding-bottom: 60px;
+  }
+}
+
