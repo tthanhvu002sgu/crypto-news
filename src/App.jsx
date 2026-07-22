@@ -1273,46 +1273,7 @@ function AppContent() {
                 {accordionOpen.onchain && (
                   <div className="sidebar-accordion-body">
                     <div className="metrics-grid">
-                      <MetricCard
-                        label="HASH RATE"
-                        value={data.onChain?.hashRate ? `${data.onChain.hashRate} EH/s` : '---'}
-                        sub="Mining Power"
-                        subCls="text-slate-400"
-                        tooltipId="hashRate"
-                        freshness="1h"
-                      />
-                      <MetricCard
-                        label="DIFFICULTY"
-                        value={data.onChain?.difficulty ? `${data.onChain.difficulty}T` : '---'}
-                        sub="Mining Difficulty"
-                        subCls="text-slate-400"
-                        tooltipId="difficulty"
-                        freshness="1h"
-                      />
-                      <MetricCard
-                        label="TX / 24H"
-                        value={data.onChain?.txCount24h ? data.onChain.txCount24h.toLocaleString() : '---'}
-                        sub="Transactions"
-                        subCls="text-slate-400"
-                        tooltipId="txCount"
-                        freshness="1h"
-                      />
-                      <MetricCard
-                        label="BLOCK TIME"
-                        value={data.onChain?.minutesBetweenBlocks ? `${data.onChain.minutesBetweenBlocks}m` : '---'}
-                        sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Fast ↑' : 'Normal'}
-                        subCls={data.onChain?.minutesBetweenBlocks < 10 ? 'text-emerald' : 'text-slate-400'}
-                        tooltipId="blockTime"
-                        freshness="1h"
-                      />
-                      <MetricCard
-                        label="ACTIVE ADDR"
-                        value={data.onChainMetrics?.activeAddresses || '---'}
-                        sub="Unique senders/day"
-                        subCls="text-slate-400"
-                        tooltipId="activeAddr"
-                        freshness="1h"
-                      />
+                      {/* Top Priority Valuation & Supply Metrics */}
                       <MetricCard
                         label="PRODUCTION COST"
                         value={(() => {
@@ -1345,27 +1306,11 @@ function AppContent() {
                         freshness="1h"
                       />
                       <MetricCard
-                        label="ETH MVRV"
-                        value={data.ethOnChainMetrics?.mvrv || '---'}
-                        sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
-                        subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
-                        tooltipId="ethMvrv"
-                        freshness="1h"
-                      />
-                      <MetricCard
                         label="BTC NUPL (LÃI/LỖ)"
                         value={btcNuplVal?.percentStr || '---'}
                         sub={btcNuplVal?.subStr || 'Net Unrealized Profit'}
                         subCls={btcNuplVal?.cls || 'text-slate-400'}
                         tooltipId="btcNupl"
-                        freshness="1h"
-                      />
-                      <MetricCard
-                        label="ETH NUPL (LÃI/LỖ)"
-                        value={ethNuplVal?.percentStr || '---'}
-                        sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
-                        subCls={ethNuplVal?.cls || 'text-slate-400'}
-                        tooltipId="ethNupl"
                         freshness="1h"
                       />
                       <MetricCard
@@ -1377,6 +1322,22 @@ function AppContent() {
                         freshness="1h"
                       />
                       <MetricCard
+                        label="ETH MVRV"
+                        value={data.ethOnChainMetrics?.mvrv || '---'}
+                        sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                        subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
+                        tooltipId="ethMvrv"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="ETH NUPL (LÃI/LỖ)"
+                        value={ethNuplVal?.percentStr || '---'}
+                        sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
+                        subCls={ethNuplVal?.cls || 'text-slate-400'}
+                        tooltipId="ethNupl"
+                        freshness="1h"
+                      />
+                      <MetricCard
                         label="ETH COIN LỜI (EST)"
                         value={ethSupplyProfitEst?.valStr || '---'}
                         sub={ethSupplyProfitEst?.subStr || 'Supply in Profit'}
@@ -1384,6 +1345,48 @@ function AppContent() {
                         tooltipId="ethSupplyProfit"
                         freshness="1h"
                       />
+                      {/* Secondary Network & Miner Metrics */}
+                      <MetricCard
+                        label="HASH RATE"
+                        value={data.onChain?.hashRate ? `${data.onChain.hashRate} EH/s` : '---'}
+                        sub="Mining Power"
+                        subCls="text-slate-400"
+                        tooltipId="hashRate"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="ACTIVE ADDR"
+                        value={data.onChainMetrics?.activeAddresses || '---'}
+                        sub="Unique senders/day"
+                        subCls="text-slate-400"
+                        tooltipId="activeAddr"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="DIFFICULTY"
+                        value={data.onChain?.difficulty ? `${data.onChain.difficulty}T` : '---'}
+                        sub="Mining Difficulty"
+                        subCls="text-slate-400"
+                        tooltipId="difficulty"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="TX / 24H"
+                        value={data.onChain?.txCount24h ? data.onChain.txCount24h.toLocaleString() : '---'}
+                        sub="Transactions"
+                        subCls="text-slate-400"
+                        tooltipId="txCount"
+                        freshness="1h"
+                      />
+                      <MetricCard
+                        label="BLOCK TIME"
+                        value={data.onChain?.minutesBetweenBlocks ? `${data.onChain.minutesBetweenBlocks}m` : '---'}
+                        sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Fast ↑' : 'Normal'}
+                        subCls={data.onChain?.minutesBetweenBlocks < 10 ? 'text-emerald' : 'text-slate-400'}
+                        tooltipId="blockTime"
+                        freshness="1h"
+                      />
+
                     </div>
                   </div>
                 )}
