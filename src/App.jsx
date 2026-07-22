@@ -23,7 +23,6 @@ import SummaryTab from './components/SummaryTab';
 import DashboardTab from './components/DashboardTab';
 import CascadeTab from './components/CascadeTab';
 import TerminalTab from './components/TerminalTab';
-import Specimen3DAtlasTab from './components/Specimen3DAtlasTab';
 import Tooltip, { METRIC_METADATA, useTooltipSettings } from './components/Tooltip';
 import { ModuleVisibilityProvider, useModuleVisibility, MODULES_CONFIG } from './context/ModuleVisibilityContext';
 import ModuleMenu from './components/ModuleMenu';
@@ -1325,7 +1324,6 @@ function AppContent() {
               { id: 'hft',       icon: <Crosshair size={13} />, label: 'DATA' },
               { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN', moduleId: 'tab_cascade' },
               { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY', moduleId: 'tab_summary' },
-              { id: 'specimen',  icon: <Sparkles size={13} />,  label: '3D SPECIMEN ATLAS' },
               { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ', moduleId: 'tab_glossary' },
               { id: 'terminal',  icon: <Terminal size={13} />,  label: 'TERMINAL LOGS', moduleId: 'tab_terminal' },
             ].filter(t => !t.moduleId || !isModuleHidden(t.moduleId)).map(t => (
@@ -1413,16 +1411,6 @@ function AppContent() {
                 ethNupl={ethNuplVal?.aiStr || 'N/A'}
                 btcSupplyProfit={btcSupplyProfitEst?.aiStr || 'N/A'}
                 ethSupplyProfit={ethSupplyProfitEst?.aiStr || 'N/A'}
-              />
-            )}
-
-            {/* ══ 3D SPECIMEN ATLAS TAB ═══════════════════════════════════════ */}
-            {activeTab === 'specimen' && (
-              <Specimen3DAtlasTab
-                data={data}
-                btcDisplay={btcDisplay}
-                fund={fund}
-                theme={theme}
               />
             )}
 

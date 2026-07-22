@@ -8,7 +8,6 @@ import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
-import OrderBook3DViewer from './OrderBook3DViewer';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1580,7 +1579,6 @@ export default function HftRadarTab({
     const saved = localStorage.getItem('hft-depth-limit');
     return saved ? Number(saved) : 100;
   });
-  const [is3DAtlasOpen, setIs3DAtlasOpen] = useState(false);
 
   // ── Signal Log State ──────────────────────────────────────────────────────
   const [signals, setSignals] = useState([]);
@@ -1749,52 +1747,14 @@ export default function HftRadarTab({
 
   return (
     <div className="hft-radar-layout">
-      <div className="hft-radar-header glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h2 className="hft-radar-title font-mono" style={{ margin: 0 }}>
-            <span className="hft-icon-lg">🎯</span> DATA — DERIVATIVES ORDER FLOW
-          </h2>
-          <p className="hft-radar-desc font-mono" style={{ marginTop: '4px', marginBottom: 0 }}>
-            Phân tích dòng tiền phái sinh theo thời gian thực: CVD, Target Liquidity &amp; Order Book Imbalance
-          </p>
-        </div>
-
-        <button
-          onClick={() => setIs3DAtlasOpen(!is3DAtlasOpen)}
-          className="font-mono"
-          style={{
-            background: is3DAtlasOpen ? 'var(--color-emerald-400)' : 'var(--gradient-aurora)',
-            color: is3DAtlasOpen ? '#000' : '#ffffff',
-            border: 'none',
-            padding: '10px 20px',
-            borderRadius: '10px',
-            fontSize: '0.8rem',
-            fontWeight: 800,
-            cursor: 'pointer',
-            boxShadow: '0 4px 20px rgba(16, 185, 129, 0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'all 0.25s ease'
-          }}
-        >
-          <span style={{ fontSize: '1rem' }}>🧊</span>
-          {is3DAtlasOpen ? 'ĐÓNG 3D ATLAS' : 'MỞ 3D LIQUIDITY ATLAS'}
-        </button>
+      <div className="hft-radar-header glass-panel">
+        <h2 className="hft-radar-title font-mono">
+          <span className="hft-icon-lg">🎯</span> DATA — DERIVATIVES ORDER FLOW
+        </h2>
+        <p className="hft-radar-desc font-mono">
+          Phân tích dòng tiền phái sinh theo thời gian thực: CVD, Target Liquidity &amp; Order Book Imbalance
+        </p>
       </div>
-
-      {is3DAtlasOpen && (
-        <div style={{ marginBottom: '24px' }}>
-          <OrderBook3DViewer
-            orderBookData={orderBook}
-            whaleWallsData={whaleData}
-            btcPrice={livePrice || data?.btc?.price || 66500}
-            btcChange24h={liveChange || data?.btc?.changePercent || 2.5}
-            theme={theme}
-            onClose={() => setIs3DAtlasOpen(false)}
-          />
-        </div>
-      )}
 
       <div className="hft-grid">
         {!isModuleHidden('hft_cvd') && (
