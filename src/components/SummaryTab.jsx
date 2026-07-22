@@ -10,10 +10,14 @@ import ModuleMenu from './ModuleMenu';
 
 const renderTextWithTags = (text) => {
   if (typeof text !== 'string') return text;
-  const tagRegex = /(\[(?:QUAN SÁT|OBSERVED|SUY DẪN|DERIVED|GIẢ THUYẾT|INFERENCE|CHƯA BIẾT|UNKNOWN)\])/g;
-  const parts = text.split(tagRegex);
+
+  // Match evidence tags, dollar amounts ($92,450, $83.06B), percentages (+1.5%, -3.2%, 100%), ratios (1.8x, 2.5x)
+  const combinedRegex = /(\[(?:QUAN SÁT|OBSERVED|SUY DẪN|DERIVED|GIẢ THUYẾT|INFERENCE|CHƯA BIẾT|UNKNOWN)\]|\$[0-9.,]+[KMBkmb]?|[+-][0-9.,]+%|[0-9.,]+%|[0-9.]+(?:x|X)\b)/g;
+  const parts = text.split(combinedRegex);
   if (parts.length === 1) return text;
+
   return parts.map((part, i) => {
+    // 1. Evidence Tags
     if (part === '[QUAN SÁT]' || part === '[OBSERVED]') {
       return <span key={i} className="data-tag tag-observed">{part}</span>;
     }
@@ -26,6 +30,20 @@ const renderTextWithTags = (text) => {
     if (part === '[CHƯA BIẾT]' || part === '[UNKNOWN]') {
       return <span key={i} className="data-tag tag-unknown">{part}</span>;
     }
+
+    // 2. Positive & Negative Percentages
+    if (part.startsWith('+')) {
+      return <span key={i} className="num-highlight positive">{part}</span>;
+    }
+    if (part.startsWith('-') && part.endsWith('%')) {
+      return <span key={i} className="num-highlight negative">{part}</span>;
+    }
+
+    // 3. Currencies, Ratios & Plain Percentages
+    if (part.startsWith('$') || part.endsWith('%') || part.toLowerCase().endsWith('x')) {
+      return <span key={i} className="num-highlight">{part}</span>;
+    }
+
     return part;
   });
 };
@@ -38,6 +56,7 @@ const markdownComponents = {
   ),
   p: ({ children }) => <p>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</p>,
   li: ({ children }) => <li>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</li>,
+  td: ({ children }) => <td>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</td>,
   strong: ({ children }) => <strong>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</strong>,
   h2: ({ children }) => <h2>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h2>,
   h3: ({ children }) => <h3>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h3>,
