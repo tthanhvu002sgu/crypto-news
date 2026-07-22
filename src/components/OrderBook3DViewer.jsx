@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Sparkles, RotateCcw, Layers, Maximize2, ShieldAlert, Activity, ArrowUpRight, ArrowDownRight, Camera, Play, Pause, Box, Eye, Check } from 'lucide-react';
+import { Sparkles, RotateCcw, Maximize2, ShieldAlert, Activity, ArrowUpRight, ArrowDownRight, Camera, Play, Pause, Eye, Check, Activity as WaveIcon } from 'lucide-react';
 
-// Pseudo-random deterministic noise generator for fallback depth
+// Deterministic pseudo-noise fallback generator
 function pseudoNoise(seed) {
   const x = Math.sin(seed * 9999 + 1) * 10000;
   return x - Math.floor(x);
@@ -23,15 +23,25 @@ export default function OrderBook3DViewer({
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const reqIdRef = useRef(null);
-  const wallGroupRef = useRef(null);
 
   // UI state
-  const [viewMode, setViewMode] = useState('columns'); // 'columns' | 'surface' | 'wireframe'
+  const [viewMode, setViewMode] = useState('surface'); // 'surface' | 'ribbon' | 'wireframe'
   const [isAutoRotate, setIsAutoRotate] = useState(true);
   const [focusedWall, setFocusedWall] = useState(null);
   const [snapshotToast, setSnapshotToast] = useState(false);
 
-  // Derive Bids & Asks data from props or generate high-fidelity fallback
+  // Safely parse spot price
+  const spotPriceNum = useMemo(() => {
+    const parsed = Number(btcPrice);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 66500;
+  }, [btcPrice]);
+
+  const change24hNum = useMemo(() => {
+    const parsed = Number(btcChange24h);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [btcChange24h]);
+
+  // Derive Bids & Asks data safely with zero NaN risk
   const { bids, asks, maxVol } = useMemo(() => {
     const rawBids = orderBookData?.bids || [];
     const rawAsks = orderBookData?.asks || [];
@@ -39,34 +49,34 @@ export default function OrderBook3DViewer({
     const parsedBids = [];
     const parsedAsks = [];
 
-    const spot = Number(btcPrice) || 66500;
+    const spot = spotPriceNum;
 
     if (rawBids.length > 0) {
-      rawBids.slice(0, 30).forEach((b, i) => {
-        const px = Number(b[0]) || spot - (i + 1) * 50;
+      rawBids.slice(0, 35).forEach((b, i) => {
+        const px = Number(b[0]) || (spot - (i + 1) * 40);
         const qty = Number(b[1]) || (pseudoNoise(i + 1) * 5 + 1);
         parsedBids.push({ price: px, qty, notional: px * qty });
       });
     } else {
-      // Fallback Bids
-      for (let i = 0; i < 30; i++) {
-        const px = spot - (i + 1) * 40;
-        const qty = Math.pow(pseudoNoise(i * 1.5 + 2), 2) * 12 + 1 + (i % 7 === 0 ? 15 : 0);
+      // High-fidelity fallback Bids
+      for (let i = 0; i < 35; i++) {
+        const px = spot - (i + 1) * 35;
+        const qty = Math.pow(pseudoNoise(i * 1.5 + 2), 2) * 12 + 1 + (i % 7 === 0 ? 18 : 0);
         parsedBids.push({ price: px, qty, notional: px * qty });
       }
     }
 
     if (rawAsks.length > 0) {
-      rawAsks.slice(0, 30).forEach((a, i) => {
-        const px = Number(a[0]) || spot + (i + 1) * 50;
-        const qty = Number(a[1]) || (pseudoNoise(i + 30) * 5 + 1);
+      rawAsks.slice(0, 35).forEach((a, i) => {
+        const px = Number(a[0]) || (spot + (i + 1) * 40);
+        const qty = Number(a[1]) || (pseudoNoise(i + 35) * 5 + 1);
         parsedAsks.push({ price: px, qty, notional: px * qty });
       });
     } else {
-      // Fallback Asks
-      for (let i = 0; i < 30; i++) {
-        const px = spot + (i + 1) * 40;
-        const qty = Math.pow(pseudoNoise(i * 2.1 + 5), 2) * 12 + 1 + (i % 6 === 0 ? 14 : 0);
+      // High-fidelity fallback Asks
+      for (let i = 0; i < 35; i++) {
+        const px = spot + (i + 1) * 35;
+        const qty = Math.pow(pseudoNoise(i * 2.1 + 5), 2) * 12 + 1 + (i % 6 === 0 ? 16 : 0);
         parsedAsks.push({ price: px, qty, notional: px * qty });
       }
     }
@@ -75,38 +85,52 @@ export default function OrderBook3DViewer({
     const maxV = Math.max(...allVols, 1);
 
     return { bids: parsedBids, asks: parsedAsks, maxVol: maxV };
-  }, [orderBookData, btcPrice]);
+  }, [orderBookData, spotPriceNum]);
 
-  // Major Whale Walls for HUD
+  // Major Whale Walls for HUD with ZERO NaN risk
   const whaleBids = useMemo(() => {
-    if (whaleWallsData?.whaleBids?.length) return whaleWallsData.whaleBids.slice(0, 3);
-    return bids
+    const spot = spotPriceNum;
+    const rawList = (whaleWallsData?.whaleBids?.length ? whaleWallsData.whaleBids : bids.map(b => ({ price: b.price, qty: b.qty, usdValue: b.notional })));
+
+    return rawList
       .slice()
-      .sort((a, b) => b.qty - a.qty)
+      .sort((a, b) => (Number(b.usdValue || b.notional) || 0) - (Number(a.usdValue || a.notional) || 0))
       .slice(0, 3)
-      .map(b => ({
-        price: b.price,
-        qty: b.qty,
-        usdVal: b.notional,
-        distPct: (((btcPrice - b.price) / btcPrice) * 100).toFixed(2)
-      }));
-  }, [whaleWallsData, bids, btcPrice]);
+      .map(b => {
+        const px = Number(b.price) || spot;
+        const val = Number(b.usdValue || b.notional || (px * (b.qty || 0))) || 0;
+        const dist = spot > 0 ? Math.abs(((spot - px) / spot) * 100) : 0;
+        return {
+          price: px,
+          qty: Number(b.qty) || 0,
+          usdVal: val,
+          distPct: Number.isFinite(dist) ? dist.toFixed(2) : '0.00'
+        };
+      });
+  }, [whaleWallsData, bids, spotPriceNum]);
 
   const whaleAsks = useMemo(() => {
-    if (whaleWallsData?.whaleAsks?.length) return whaleWallsData.whaleAsks.slice(0, 3);
-    return asks
-      .slice()
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 3)
-      .map(a => ({
-        price: a.price,
-        qty: a.qty,
-        usdVal: a.notional,
-        distPct: (((a.price - btcPrice) / btcPrice) * 100).toFixed(2)
-      }));
-  }, [whaleWallsData, asks, btcPrice]);
+    const spot = spotPriceNum;
+    const rawList = (whaleWallsData?.whaleAsks?.length ? whaleWallsData.whaleAsks : asks.map(a => ({ price: a.price, qty: a.qty, usdValue: a.notional })));
 
-  // Three.js Scene Setup & Animation Loop
+    return rawList
+      .slice()
+      .sort((a, b) => (Number(b.usdValue || b.notional) || 0) - (Number(a.usdValue || a.notional) || 0))
+      .slice(0, 3)
+      .map(a => {
+        const px = Number(a.price) || spot;
+        const val = Number(a.usdValue || a.notional || (px * (a.qty || 0))) || 0;
+        const dist = spot > 0 ? Math.abs(((px - spot) / spot) * 100) : 0;
+        return {
+          price: px,
+          qty: Number(a.qty) || 0,
+          usdVal: val,
+          distPct: Number.isFinite(dist) ? dist.toFixed(2) : '0.00'
+        };
+      });
+  }, [whaleWallsData, asks, spotPriceNum]);
+
+  // Three.js Scene Setup — Institutional 3D Surface Wave Mesh
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -117,13 +141,14 @@ export default function OrderBook3DViewer({
     // 1. Scene
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.background = new THREE.Color(theme === 'light' ? 0xf7f6f3 : 0x090a0f);
-    scene.fog = new THREE.FogExp2(theme === 'light' ? 0xf7f6f3 : 0x090a0f, 0.015);
+    const isDark = theme !== 'light';
+    scene.background = new THREE.Color(isDark ? 0x07090e : 0xf4f3ef);
+    scene.fog = new THREE.FogExp2(isDark ? 0x07090e : 0xf4f3ef, 0.012);
 
     // 2. Camera
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
     cameraRef.current = camera;
-    camera.position.set(0, 25, 45);
+    camera.position.set(0, 24, 42);
 
     // 3. Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -138,161 +163,185 @@ export default function OrderBook3DViewer({
     const controls = new OrbitControls(camera, renderer.domElement);
     controlsRef.current = controls;
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2.05; // Prevent camera going below ground
+    controls.dampingFactor = 0.06;
+    controls.maxPolarAngle = Math.PI / 2.05;
     controls.minDistance = 10;
-    controls.maxDistance = 100;
-    controls.target.set(0, 5, 0);
+    controls.maxDistance = 90;
+    controls.target.set(0, 4, 0);
 
-    // 5. Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    // 5. Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, isDark ? 0.7 : 1.1);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    dirLight.position.set(20, 40, 20);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    dirLight.position.set(25, 45, 25);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
     scene.add(dirLight);
 
-    const pointLightGreen = new THREE.PointLight(0x10b981, 3, 40);
-    pointLightGreen.position.set(-15, 10, 0);
-    scene.add(pointLightGreen);
+    const pointGreen = new THREE.PointLight(0x10b981, 4, 45);
+    pointGreen.position.set(-18, 12, 0);
+    scene.add(pointGreen);
 
-    const pointLightRed = new THREE.PointLight(0xf43f5e, 3, 40);
-    pointLightRed.position.set(15, 10, 0);
-    scene.add(pointLightRed);
+    const pointRed = new THREE.PointLight(0xf43f5e, 4, 45);
+    pointRed.position.set(18, 12, 0);
+    scene.add(pointRed);
 
-    // 6. Ground Grid Plane
-    const gridHelper = new THREE.GridHelper(80, 40, 0x10b981, theme === 'light' ? 0xcccccc : 0x1e293b);
+    // 6. Ground Grid Base
+    const gridHelper = new THREE.GridHelper(90, 45, 0x38bdf8, isDark ? 0x1e293b : 0xd1d5db);
     gridHelper.position.y = 0;
     scene.add(gridHelper);
 
-    // Ground reflector shadow plane
-    const planeGeo = new THREE.PlaneGeometry(100, 100);
-    const planeMat = new THREE.MeshStandardMaterial({
-      color: theme === 'light' ? 0xefefe9 : 0x07080c,
-      roughness: 0.8,
-      metalness: 0.2
-    });
-    const groundPlane = new THREE.Mesh(planeGeo, planeMat);
-    groundPlane.rotation.x = -Math.PI / 2;
-    groundPlane.receiveShadow = true;
-    scene.add(groundPlane);
-
-    // 7. Center Spot Price Pillar
-    const spotPillarGeo = new THREE.CylinderGeometry(0.3, 0.3, 20, 16);
+    // 7. Center Spot Price Pillar & Pulsing Canyon Ring
+    const spotPillarGeo = new THREE.CylinderGeometry(0.2, 0.2, 22, 16);
     const spotPillarMat = new THREE.MeshStandardMaterial({
       color: 0x38bdf8,
       emissive: 0x0284c7,
-      emissiveIntensity: 0.8,
-      roughness: 0.2
+      emissiveIntensity: 0.9,
+      roughness: 0.1
     });
     const spotPillar = new THREE.Mesh(spotPillarGeo, spotPillarMat);
-    spotPillar.position.set(0, 10, 0);
+    spotPillar.position.set(0, 11, 0);
     scene.add(spotPillar);
 
-    // Spot ring indicator
-    const ringGeo = new THREE.RingGeometry(0.8, 1.2, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide });
-    const spotRing = new THREE.Mesh(ringGeo, ringMat);
+    const spotRingGeo = new THREE.RingGeometry(0.6, 1.4, 32);
+    const spotRingMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    const spotRing = new THREE.Mesh(spotRingGeo, spotRingMat);
     spotRing.rotation.x = -Math.PI / 2;
-    spotRing.position.set(0, 0.05, 0);
+    spotRing.position.set(0, 0.08, 0);
     scene.add(spotRing);
 
-    // 8. 3D Order Book Terrain Group
-    const wallGroup = new THREE.Group();
-    wallGroupRef.current = wallGroup;
-    scene.add(wallGroup);
+    // 8. Build 3D Liquidity Surface Mesh (Continuous Wave Surface)
+    const segmentsX = 70; // 35 Bids + 35 Asks
+    const segmentsZ = 20; // Depth history layers
+    const widthX = 70;
+    const depthZ = 24;
 
-    // Build 3D Bids & Asks
-    const spacing = 1.0;
+    const surfaceGeo = new THREE.PlaneGeometry(widthX, depthZ, segmentsX, segmentsZ);
+    surfaceGeo.rotateX(-Math.PI / 2); // Make horizontal
 
-    // Build Bids (Green / Emerald - Left side)
-    bids.forEach((bid, idx) => {
-      const heightVal = Math.max((bid.qty / maxVol) * 16, 0.5);
-      const posX = -(idx + 1) * spacing - 1.2;
+    const posAttr = surfaceGeo.attributes.position;
+    const colors = new Float32Array(posAttr.count * 3);
 
-      let geo;
-      if (viewMode === 'columns') {
-        geo = new THREE.BoxGeometry(0.7, heightVal, 1.2);
-      } else {
-        geo = new THREE.CylinderGeometry(0.35, 0.45, heightVal, 12);
+    // Vertex deformation based on Bids & Asks volume wave
+    for (let i = 0; i <= segmentsZ; i++) {
+      for (let j = 0; j <= segmentsX; j++) {
+        const vertexIdx = i * (segmentsX + 1) + j;
+        const xPos = posAttr.getX(vertexIdx);
+        const zPos = posAttr.getZ(vertexIdx);
+
+        let heightVal;
+        let r, g, b;
+
+        if (xPos < -0.5) {
+          // Bids Side (Left - Green/Emerald)
+          const bidIdx = Math.min(Math.floor(Math.abs(xPos + 0.5) / (widthX / 2) * bids.length), bids.length - 1);
+          const rawQty = bids[bidIdx]?.qty || 0;
+          const decay = Math.max(1 - (Math.abs(zPos) / (depthZ / 2)) * 0.4, 0.3);
+          heightVal = Math.pow(rawQty / maxVol, 0.7) * 14 * decay;
+
+          // Color gradient: deeper green for higher liquidity peaks
+          const intensity = Math.min(heightVal / 14, 1);
+          r = 0.05 + intensity * 0.1;
+          g = 0.6 + intensity * 0.4;
+          b = 0.4 + intensity * 0.2;
+
+          // Check if Whale Wall peak
+          if (bids[bidIdx] && whaleBids.some(w => Math.abs(w.price - bids[bidIdx].price) < 25)) {
+            heightVal += 2.5;
+            g = 0.95;
+            b = 0.6;
+          }
+        } else if (xPos > 0.5) {
+          // Asks Side (Right - Red/Rose)
+          const askIdx = Math.min(Math.floor((xPos - 0.5) / (widthX / 2) * asks.length), asks.length - 1);
+          const rawQty = asks[askIdx]?.qty || 0;
+          const decay = Math.max(1 - (Math.abs(zPos) / (depthZ / 2)) * 0.4, 0.3);
+          heightVal = Math.pow(rawQty / maxVol, 0.7) * 14 * decay;
+
+          // Color gradient: deeper red for higher liquidity peaks
+          const intensity = Math.min(heightVal / 14, 1);
+          r = 0.7 + intensity * 0.3;
+          g = 0.1 + intensity * 0.2;
+          b = 0.25 + intensity * 0.25;
+
+          // Check if Whale Wall peak
+          if (asks[askIdx] && whaleAsks.some(w => Math.abs(w.price - asks[askIdx].price) < 25)) {
+            heightVal += 2.5;
+            r = 0.98;
+            g = 0.25;
+          }
+        } else {
+          // Spot Price Canyon Valley (Center)
+          heightVal = 0.2;
+          r = 0.2; g = 0.7; b = 0.95;
+        }
+
+        posAttr.setY(vertexIdx, heightVal);
+
+        colors[vertexIdx * 3] = r;
+        colors[vertexIdx * 3 + 1] = g;
+        colors[vertexIdx * 3 + 2] = b;
       }
+    }
 
-      const isWhale = whaleBids.some(w => Math.abs(w.price - bid.price) < 10);
-      const colorHex = isWhale ? 0x34d399 : 0x10b981;
+    surfaceGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    surfaceGeo.computeVertexNormals();
 
-      const mat = new THREE.MeshStandardMaterial({
-        color: colorHex,
-        roughness: 0.3,
-        metalness: isWhale ? 0.6 : 0.2,
-        wireframe: viewMode === 'wireframe',
-        emissive: isWhale ? 0x059669 : 0x000000,
-        emissiveIntensity: isWhale ? 0.4 : 0
+    // Surface Mesh Material
+    const surfaceMat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.3,
+      metalness: 0.2,
+      wireframe: viewMode === 'wireframe',
+      side: THREE.DoubleSide
+    });
+
+    const surfaceMesh = new THREE.Mesh(surfaceGeo, surfaceMat);
+    surfaceMesh.castShadow = true;
+    surfaceMesh.receiveShadow = true;
+    scene.add(surfaceMesh);
+
+    // Subtle Contour Wireframe Overlay for crisp institutional topography look
+    if (viewMode !== 'wireframe') {
+      const wireMat = new THREE.MeshBasicMaterial({
+        color: isDark ? 0xffffff : 0x000000,
+        wireframe: true,
+        transparent: true,
+        opacity: isDark ? 0.12 : 0.08
       });
+      const wireMesh = new THREE.Mesh(surfaceGeo, wireMat);
+      wireMesh.position.y += 0.02;
+      scene.add(wireMesh);
+    }
 
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(posX, heightVal / 2, 0);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData = { type: 'bid', price: bid.price, qty: bid.qty, isWhale };
-      wallGroup.add(mesh);
-
-      // Beacon ring for Whale Wall
-      if (isWhale) {
-        const beaconGeo = new THREE.TorusGeometry(0.6, 0.06, 8, 24);
+    // 9. Add Whale Wall Beacons (Glowing Rings above peaks)
+    whaleBids.forEach(wb => {
+      const bIdx = bids.findIndex(b => Math.abs(b.price - wb.price) < 30);
+      if (bIdx >= 0) {
+        const xPos = -((bIdx + 1) / bids.length) * (widthX / 2) - 1.0;
+        const beaconGeo = new THREE.TorusGeometry(0.7, 0.08, 12, 30);
         const beaconMat = new THREE.MeshBasicMaterial({ color: 0x34d399 });
         const beacon = new THREE.Mesh(beaconGeo, beaconMat);
         beacon.rotation.x = Math.PI / 2;
-        beacon.position.set(posX, heightVal + 0.5, 0);
-        wallGroup.add(beacon);
+        beacon.position.set(xPos, 12, 0);
+        scene.add(beacon);
       }
     });
 
-    // Build Asks (Rose / Red - Right side)
-    asks.forEach((ask, idx) => {
-      const heightVal = Math.max((ask.qty / maxVol) * 16, 0.5);
-      const posX = (idx + 1) * spacing + 1.2;
-
-      let geo;
-      if (viewMode === 'columns') {
-        geo = new THREE.BoxGeometry(0.7, heightVal, 1.2);
-      } else {
-        geo = new THREE.CylinderGeometry(0.35, 0.45, heightVal, 12);
-      }
-
-      const isWhale = whaleAsks.some(w => Math.abs(w.price - ask.price) < 10);
-      const colorHex = isWhale ? 0xf43f5e : 0xe11d48;
-
-      const mat = new THREE.MeshStandardMaterial({
-        color: colorHex,
-        roughness: 0.3,
-        metalness: isWhale ? 0.6 : 0.2,
-        wireframe: viewMode === 'wireframe',
-        emissive: isWhale ? 0xbe123c : 0x000000,
-        emissiveIntensity: isWhale ? 0.4 : 0
-      });
-
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(posX, heightVal / 2, 0);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData = { type: 'ask', price: ask.price, qty: ask.qty, isWhale };
-      wallGroup.add(mesh);
-
-      // Beacon ring for Whale Wall
-      if (isWhale) {
-        const beaconGeo = new THREE.TorusGeometry(0.6, 0.06, 8, 24);
+    whaleAsks.forEach(wa => {
+      const aIdx = asks.findIndex(a => Math.abs(a.price - wa.price) < 30);
+      if (aIdx >= 0) {
+        const xPos = ((aIdx + 1) / asks.length) * (widthX / 2) + 1.0;
+        const beaconGeo = new THREE.TorusGeometry(0.7, 0.08, 12, 30);
         const beaconMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
         const beacon = new THREE.Mesh(beaconGeo, beaconMat);
         beacon.rotation.x = Math.PI / 2;
-        beacon.position.set(posX, heightVal + 0.5, 0);
-        wallGroup.add(beacon);
+        beacon.position.set(xPos, 12, 0);
+        scene.add(beacon);
       }
     });
 
-    // 9. Resize Listener
+    // 10. Resize Listener
     const handleResize = () => {
       if (!container) return;
       const w = container.clientWidth;
@@ -303,13 +352,13 @@ export default function OrderBook3DViewer({
     };
     window.addEventListener('resize', handleResize);
 
-    // 10. Animation Loop
+    // 11. Animation Loop
     const animate = () => {
       reqIdRef.current = requestAnimationFrame(animate);
 
       if (controlsRef.current) {
         controlsRef.current.autoRotate = isAutoRotate;
-        controlsRef.current.autoRotateSpeed = 0.8;
+        controlsRef.current.autoRotateSpeed = 0.6;
         controlsRef.current.update();
       }
 
@@ -333,16 +382,15 @@ export default function OrderBook3DViewer({
     };
   }, [bids, asks, maxVol, theme, viewMode, isAutoRotate, whaleBids, whaleAsks]);
 
-  // Focus Camera on specific Whale Wall
+  // Focus Camera smoothly on specific Whale Wall
   const focusOnWall = (wall, type) => {
     setFocusedWall({ ...wall, type });
     if (!cameraRef.current || !controlsRef.current) return;
 
     const targetX = type === 'bid'
-      ? -((Math.max(bids.findIndex(b => Math.abs(b.price - wall.price) < 20), 0) + 1) * 1.0 + 1.2)
-      : (Math.max(asks.findIndex(a => Math.abs(a.price - wall.price) < 20), 0) + 1) * 1.0 + 1.2;
+      ? -((Math.max(bids.findIndex(b => Math.abs(b.price - wall.price) < 30), 0) + 1) / bids.length) * 35 - 1.0
+      : ((Math.max(asks.findIndex(a => Math.abs(a.price - wall.price) < 30), 0) + 1) / asks.length) * 35 + 1.0;
 
-    // Smooth camera target shift
     const targetPos = new THREE.Vector3(targetX, 4, 0);
     const camPos = new THREE.Vector3(targetX, 12, 18);
 
@@ -354,8 +402,8 @@ export default function OrderBook3DViewer({
   const resetCamera = () => {
     setFocusedWall(null);
     if (!cameraRef.current || !controlsRef.current) return;
-    controlsRef.current.target.set(0, 5, 0);
-    cameraRef.current.position.set(0, 25, 45);
+    controlsRef.current.target.set(0, 4, 0);
+    cameraRef.current.position.set(0, 24, 42);
   };
 
   // Take Canvas Snapshot
@@ -363,7 +411,7 @@ export default function OrderBook3DViewer({
     if (!rendererRef.current) return;
     const url = rendererRef.current.domElement.toDataURL('image/png');
     const link = document.createElement('a');
-    link.download = `3D_Liquidity_Atlas_${new Date().toISOString().split('T')[0]}.png`;
+    link.download = `3D_Liquidity_Surface_${new Date().toISOString().split('T')[0]}.png`;
     link.href = url;
     link.click();
 
@@ -371,8 +419,9 @@ export default function OrderBook3DViewer({
     setTimeout(() => setSnapshotToast(false), 2500);
   };
 
-  // Calculate OBI summary
-  const obiVal = orderBookData?.obiPercent !== undefined ? orderBookData.obiPercent : 12.4;
+  // Calculate OBI summary safely
+  const obiRaw = orderBookData?.obiPercent;
+  const obiVal = Number.isFinite(Number(obiRaw)) ? Number(obiRaw) : 12.4;
   const isObiBullish = obiVal >= 0;
 
   return (
@@ -384,7 +433,7 @@ export default function OrderBook3DViewer({
         minHeight: '650px',
         borderRadius: '12px',
         overflow: 'hidden',
-        background: theme === 'light' ? '#f7f6f3' : '#090a0f',
+        background: theme === 'light' ? '#f4f3ef' : '#07090e',
         border: '1px solid var(--border-panel)',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
         fontFamily: 'var(--font-sans)',
@@ -439,11 +488,11 @@ export default function OrderBook3DViewer({
           </div>
           <div>
             <div style={{ fontSize: '0.82rem', fontWeight: 800, letterSpacing: '0.05em', color: 'var(--text-contrast)' }} className="font-mono">
-              3D LIQUIDITY &amp; ORDERBOOK ATLAS
+              3D LIQUIDITY WAVE SURFACE
             </div>
             <div style={{ fontSize: '0.65rem', color: 'var(--color-emerald-400)', display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-emerald-400)', display: 'inline-block' }} />
-              REAL-TIME WEBGL MESH
+              TOPOGRAPHIC MARKET DEPTH MESH
             </div>
           </div>
         </div>
@@ -467,7 +516,7 @@ export default function OrderBook3DViewer({
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.6rem', color: 'var(--text-slate-400)' }}>BITCOIN SPOT</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8' }}>
-              ${Number(btcPrice).toLocaleString('en-US')}
+              ${spotPriceNum.toLocaleString('en-US')}
             </div>
           </div>
           <div style={{ height: '24px', width: '1px', background: 'var(--border-panel)' }} />
@@ -478,11 +527,11 @@ export default function OrderBook3DViewer({
               gap: '4px',
               fontSize: '0.75rem',
               fontWeight: 700,
-              color: btcChange24h >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)'
+              color: change24hNum >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)'
             }}
           >
-            {btcChange24h >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-            {btcChange24h >= 0 ? `+${btcChange24h}%` : `${btcChange24h}%`}
+            {change24hNum >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+            {change24hNum >= 0 ? `+${change24hNum}%` : `${change24hNum}%`}
           </div>
         </div>
 
@@ -570,8 +619,8 @@ export default function OrderBook3DViewer({
         {/* Bid/Ask Volume Visual Bar */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'var(--text-slate-400)', marginBottom: '6px' }} className="font-mono">
-            <span style={{ color: 'var(--color-emerald-400)' }}>BIDS: 56.2%</span>
-            <span style={{ color: 'var(--color-rose-400)' }}>ASKS: 43.8%</span>
+            <span style={{ color: 'var(--color-emerald-400)' }}>BIDS (MUA): 56.2%</span>
+            <span style={{ color: 'var(--color-rose-400)' }}>ASKS (BÁN): 43.8%</span>
           </div>
           <div style={{ height: '6px', borderRadius: '3px', width: '100%', background: 'var(--bg-slate-800)', display: 'flex', overflow: 'hidden' }}>
             <div style={{ width: '56.2%', background: 'var(--color-emerald-400)' }} />
@@ -581,19 +630,19 @@ export default function OrderBook3DViewer({
 
         {/* Data Provenance & Model */}
         <div style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)', lineHeight: 1.6 }} className="font-mono">
-          <div>• Nguồn: Top 4 Sàn Futures (Binance/Bybit/OKX/Bitget)</div>
-          <div>• Mô hình Mesh: Cylinder Dynamic Geometry</div>
-          <div>• Tần số quét: 1,000ms WebSocket</div>
+          <div>• Mô hình: Smooth Surface Mesh 3D</div>
+          <div>• Nguồn: Binance/Bybit/OKX/Bitget</div>
+          <div>• Đỉnh sóng: Vùng tập trung thanh khoản</div>
         </div>
       </div>
 
-      {/* ─── FLOATING RIGHT HUD CARD (WHALE WALLS INTERACTIVE SELECTOR) ────────── */}
+      {/* ─── FLOATING RIGHT HUD CARD (WHALE WALLS SELECTOR WITH ZERO NaN) ────────── */}
       <div
         style={{
           position: 'absolute',
           top: '80px',
           right: '16px',
-          width: '280px',
+          width: '285px',
           background: 'var(--bg-header)',
           backdropFilter: 'blur(20px)',
           border: '1px solid var(--border-panel)',
@@ -627,7 +676,7 @@ export default function OrderBook3DViewer({
                 key={i}
                 onClick={() => focusOnWall(wb, 'bid')}
                 style={{
-                  background: focusedWall?.price === wb.price ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-slate-900)',
+                  background: focusedWall?.price === wb.price ? 'rgba(16, 185, 129, 0.18)' : 'var(--bg-slate-900)',
                   border: focusedWall?.price === wb.price ? '1px solid var(--color-emerald-400)' : '1px solid var(--border-panel)',
                   padding: '8px 10px',
                   borderRadius: '6px',
@@ -672,7 +721,7 @@ export default function OrderBook3DViewer({
                 key={i}
                 onClick={() => focusOnWall(wa, 'ask')}
                 style={{
-                  background: focusedWall?.price === wa.price ? 'rgba(244, 63, 94, 0.15)' : 'var(--bg-slate-900)',
+                  background: focusedWall?.price === wa.price ? 'rgba(244, 63, 94, 0.18)' : 'var(--bg-slate-900)',
                   border: focusedWall?.price === wa.price ? '1px solid var(--color-rose-400)' : '1px solid var(--border-panel)',
                   padding: '8px 10px',
                   borderRadius: '6px',
@@ -708,13 +757,12 @@ export default function OrderBook3DViewer({
         {/* View Mode Toggle Controls */}
         <div>
           <div style={{ fontSize: '0.62rem', fontWeight: 800, color: 'var(--text-slate-400)', marginBottom: '6px' }} className="font-mono">
-            CHẾ ĐỘ HIỂN THỊ 3D:
+            CHẾ ĐỘ 3D:
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
             {[
-              { id: 'columns', label: 'Cột 3D', icon: Box },
-              { id: 'surface', label: 'Mặt phẳng', icon: Layers },
-              { id: 'wireframe', label: 'Khung lưới', icon: Eye }
+              { id: 'surface', label: 'Thảm 3D Surface', icon: WaveIcon },
+              { id: 'wireframe', label: 'Lưới Topo 3D', icon: Eye }
             ].map(m => {
               const Icon = m.icon;
               return (
