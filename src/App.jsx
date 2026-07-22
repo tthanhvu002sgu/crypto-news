@@ -139,16 +139,17 @@ const CASCADE_KEY_MAP = {
 
 const FreshnessBadge = React.memo(function FreshnessBadge({ type }) {
   if (type === 'live') {
-    return <span className="freshness-badge badge-live">⚡ LIVE</span>;
+    return <span className="freshness-badge badge-live">LIVE</span>;
   }
   if (type === '5m' || type === 'hot') {
-    return <span className="freshness-badge badge-cached-5m">⏱️ 5m</span>;
+    return <span className="freshness-badge badge-cached-5m">5m</span>;
   }
   if (type === '1h' || type === 'cold') {
-    return <span className="freshness-badge badge-cached-cold">📅 1h</span>;
+    return <span className="freshness-badge badge-cached-cold">1h</span>;
   }
   return null;
 });
+
 
 const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId, freshness }) {
   const metadata = tooltipId ? METRIC_METADATA[tooltipId] : null;

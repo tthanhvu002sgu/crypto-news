@@ -387,14 +387,17 @@ body::after {
 .freshness-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
+  gap: 3px;
+  padding: 1px 5px;
   border-radius: var(--card-radius-xs);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  line-height: 1.2;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .badge-live {
@@ -405,11 +408,11 @@ body::after {
 
 .badge-live::before {
   content: '';
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background-color: var(--color-badge-live);
-  animation: ping-slow 1.5s infinite;
+  display: inline-block;
 }
 
 .badge-cached-5m {
@@ -429,12 +432,10 @@ body::after {
 /* ═══════════════════════════════════════════════════════════ */
 
 .sidebar-accordion {
-  border: 1px solid var(--border-panel);
-  border-radius: var(--card-radius-sm);
-  background: rgba(0, 0, 0, 0.15);
-  margin-bottom: 12px;
-  overflow: hidden;
-  transition: all 0.2s ease;
+  border: none;
+  background: transparent;
+  margin-bottom: 14px;
+  overflow: visible;
 }
 
 .sidebar-accordion-header {
@@ -442,30 +443,33 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 0 8px 0;
+  background: transparent;
   border: none;
+  border-bottom: 1px solid var(--border-panel);
   color: var(--text-slate-200);
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  transition: background 0.15s ease;
-  min-height: 38px;
+  transition: opacity 0.15s ease;
+  min-height: 32px;
+  margin-bottom: 8px;
 }
 
 .sidebar-accordion-header:hover {
-  background: rgba(255, 255, 255, 0.06);
+  opacity: 0.85;
 }
 
 .sidebar-accordion-body {
-  padding: 10px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+
 
 /* ═══════════════════════════════════════════════════════════ */
 /* ── MOBILE BOTTOM NAVIGATION ────────────────────────────── */
