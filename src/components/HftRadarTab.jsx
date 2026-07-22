@@ -14,11 +14,14 @@ import OrderBook3DViewer from './OrderBook3DViewer';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmtUsd = (n) => {
-  if (n == null) return '---';
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
+  if (n == null || !Number.isFinite(Number(n))) return '---';
+  const num = Number(n);
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num);
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
 };
 
 const fmtCvdUsd = (n) => {
@@ -1037,7 +1040,7 @@ function WhaleTradesPanel({ whaleTrades, volume24h }) {
               fontSize: '1.1rem', fontWeight: 700,
               color: netFlow > 0 ? 'var(--color-emerald-400)' : netFlow < 0 ? 'var(--color-rose-400)' : 'var(--text-slate-300)'
             }}>
-              {netFlow >= 0 ? '+' : ''}{fmtUsd(netFlow)}
+              {netFlow > 0 ? '+' : ''}{fmtUsd(netFlow)}
             </div>
             {volume24h > 0 && (
               <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '3px' }}>
