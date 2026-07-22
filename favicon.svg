@@ -1,51 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <defs>
-    <!-- Background Gradient -->
-    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#0f172a" />
-      <stop offset="100%" stop-color="#020617" />
-    </radialGradient>
-    
-    <!-- Accent Gradient (Emerald to Purple/Indigo) -->
-    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10b981" />
-      <stop offset="50%" stop-color="#6366f1" />
-      <stop offset="100%" stop-color="#a78bfa" />
-    </linearGradient>
-
-    <!-- Gold/Amber Gradient for Crypto Vibes -->
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fbbf24" />
-      <stop offset="100%" stop-color="#f59e0b" />
-    </linearGradient>
-    
-    <!-- Glow Filter -->
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="12" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
-  </defs>
-
-  <!-- Base Hexagon Background for Crypto/Node aesthetic -->
-  <path d="M 256,16 L 464,120 L 464,392 L 256,496 L 48,392 L 48,120 Z" fill="url(#bgGrad)" stroke="url(#accentGrad)" stroke-width="8" stroke-linejoin="round" />
-  
-  <!-- Inner Hexagon Ring -->
-  <path d="M 256,36 L 436,136 L 436,376 L 256,476 L 76,376 L 76,136 Z" fill="none" stroke="url(#goldGrad)" stroke-width="4" stroke-linejoin="round" opacity="0.6" filter="url(#glow)" />
-
-  <!-- A rising financial chart overlaid with a stylized 'C' and 'N' (Crypto News) -->
-  <!-- Candle 1 (Red/Amber) -->
-  <rect x="160" y="240" width="24" height="100" rx="12" fill="url(#goldGrad)" />
-  <rect x="170" y="200" width="4" height="180" rx="2" fill="#fbbf24" opacity="0.5" />
-
-  <!-- Candle 2 (Green/Emerald - Lead/Main) -->
-  <rect x="244" y="160" width="24" height="180" rx="12" fill="url(#accentGrad)" />
-  <rect x="254" y="110" width="4" height="260" rx="2" fill="#10b981" opacity="0.6" filter="url(#glow)" />
-  
-  <!-- Candle 3 (Purple/Violet - Rising) -->
-  <rect x="328" y="200" width="24" height="110" rx="12" fill="#a78bfa" />
-  <rect x="338" y="160" width="4" height="180" rx="2" fill="#a78bfa" opacity="0.5" />
-
-  <!-- Connecting Trendline -->
-  <path d="M 172,290 L 256,250 L 340,255" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)" />
-  <circle cx="340" cy="255" r="10" fill="#ffffff" filter="url(#glow)" />
+  <style>
+    :root {
+      --bg: #111111;
+      --icon: #f7f6f3;
+      --border: rgba(0, 0, 0, 0.1);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #ffffff;
+        --icon: #0a0a0c;
+        --border: rgba(255, 255, 255, 0.15);
+      }
+    }
+    .bg-rect {
+      fill: var(--bg);
+      stroke: var(--border);
+      stroke-width: 16;
+    }
+    .icon-polyline {
+      stroke: var(--icon);
+      stroke-width: 26;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+  </style>
+  <rect class="bg-rect" x="16" y="16" width="480" height="480" rx="80" ry="80" />
+  <polyline class="icon-polyline" points="136 256 184 256 220 148 292 364 328 256 376 256" />
 </svg>
