@@ -11,15 +11,37 @@ import ModuleMenu from './ModuleMenu';
 const cleanLatex = (text) => {
   if (!text) return text;
   return text
-    .replace(/\$?\\ref\$?/gi, '')
-    .replace(/\$?\\rightarrow\$?/gi, '->')
-    .replace(/\$?\\delta\$?/gi, 'delta')
-    .replace(/\$?\\Delta\$?/gi, 'Delta')
+    // Replace LaTeX command strings
+    .replace(/\\sim\b/gi, '~')
+    .replace(/\\approx\b/gi, '≈')
+    .replace(/\\Delta\b/gi, 'Δ')
+    .replace(/\\delta\b/gi, 'δ')
+    .replace(/\\rightarrow\b/gi, '->')
+    .replace(/\\leftarrow\b/gi, '<-')
+    .replace(/\\geq?\b/gi, '>=')
+    .replace(/\\leq?\b/gi, '<=')
+    .replace(/\\times\b/gi, 'x')
+    .replace(/\\ref\{[^}]+\}/gi, '')
     .replace(/\\text\{([^}]+)\}/gi, '$1')
     .replace(/\\mathrm\{([^}]+)\}/gi, '$1')
-    .replace(/\$([-+0-9.,]+)\$/g, '$1')
+    // Fix dollar math wrappers like $\sim $83.06B$) or $\sim$ $83.06B$ or $~83.06B$
+    .replace(/\$\s*\\?sim\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '~$1')
+    .replace(/\$\s*\\?approx\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '≈$1')
+    .replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi, 'Δ $1')
+    // Strip dollar wrappers around simple text/numbers: $\sim$ -> ~, $83.06B$ -> $83.06B
+    .replace(/\$([~≈Δδ<=>+\-*0-9.,% \t\w]+)\$/g, (match, inner) => {
+      let cleaned = inner.replace(/\\sim/gi, '~').replace(/\\approx/gi, '≈').replace(/\\Delta/gi, 'Δ').trim();
+      if (cleaned.startsWith('~') || cleaned.startsWith('≈') || cleaned.startsWith('Δ')) {
+        return cleaned;
+      }
+      if (/^\$?[0-9.,]+[KMBkmb%]?$/i.test(cleaned)) {
+        return cleaned.startsWith('$') ? cleaned : `$${cleaned}`;
+      }
+      return cleaned;
+    })
     .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 '); // Prevent 4-space indent from creating code blocks
 };
+
 
 const toFiniteNumber = (value) => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
