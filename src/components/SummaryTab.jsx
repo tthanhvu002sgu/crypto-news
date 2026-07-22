@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download } from 'lucide-react';
@@ -8,7 +8,43 @@ import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../servic
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 
+const renderTextWithTags = (text) => {
+  if (typeof text !== 'string') return text;
+  const tagRegex = /(\[(?:QUAN SÁT|OBSERVED|SUY DẪN|DERIVED|GIẢ THUYẾT|INFERENCE|CHƯA BIẾT|UNKNOWN)\])/g;
+  const parts = text.split(tagRegex);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) => {
+    if (part === '[QUAN SÁT]' || part === '[OBSERVED]') {
+      return <span key={i} className="data-tag tag-observed">{part}</span>;
+    }
+    if (part === '[SUY DẪN]' || part === '[DERIVED]') {
+      return <span key={i} className="data-tag tag-derived">{part}</span>;
+    }
+    if (part === '[GIẢ THUYẾT]' || part === '[INFERENCE]') {
+      return <span key={i} className="data-tag tag-inference">{part}</span>;
+    }
+    if (part === '[CHƯA BIẾT]' || part === '[UNKNOWN]') {
+      return <span key={i} className="data-tag tag-unknown">{part}</span>;
+    }
+    return part;
+  });
+};
+
+const markdownComponents = {
+  table: ({ children }) => (
+    <div className="table-responsive-wrapper">
+      <table>{children}</table>
+    </div>
+  ),
+  p: ({ children }) => <p>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</p>,
+  li: ({ children }) => <li>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</li>,
+  strong: ({ children }) => <strong>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</strong>,
+  h2: ({ children }) => <h2>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h2>,
+  h3: ({ children }) => <h3>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h3>,
+};
+
 const cleanLatex = (text) => {
+
   if (!text) return text;
   return text
     // Replace LaTeX command strings
@@ -1008,23 +1044,22 @@ ${promptData}
       )}
 
       <div
-
-        className="summary-content font-mono"
+        className="summary-content"
         style={{
           background: 'var(--bg-slate-950)',
-          padding: '20px',
+          padding: '24px',
           borderRadius: '8px',
           border: '1px solid var(--border-panel)',
           minHeight: '300px',
           color: 'var(--text-contrast)',
-          lineHeight: '1.6',
-          fontSize: '0.85rem',
+          lineHeight: '1.7',
+          fontSize: '0.88rem',
           overflowY: 'auto',
         }}
       >
         {aiSummary ? (
           <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiSummary}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{aiSummary}</ReactMarkdown>
           </div>
         ) : (
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>
