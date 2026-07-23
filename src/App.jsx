@@ -24,6 +24,7 @@ import SummaryTab from './components/SummaryTab';
 import DashboardTab from './components/DashboardTab';
 import CascadeTab from './components/CascadeTab';
 import TerminalTab from './components/TerminalTab';
+import ScannerTab from './components/ScannerTab';
 import Tooltip, { METRIC_METADATA, useTooltipSettings } from './components/Tooltip';
 import { ModuleVisibilityProvider, useModuleVisibility, MODULES_CONFIG } from './context/ModuleVisibilityContext';
 import ModuleMenu from './components/ModuleMenu';
@@ -365,7 +366,7 @@ function AppContent() {
   });
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
-    const validTabs = ['dashboard', 'data', 'cascade', 'summary', 'glossary', 'terminal'];
+    const validTabs = ['dashboard', 'scanner', 'data', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
     return validTabs.includes(hash) ? hash : 'dashboard';
   });
 
@@ -413,7 +414,7 @@ function AppContent() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      const validTabs = ['dashboard', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
+      const validTabs = ['dashboard', 'scanner', 'data', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
       if (validTabs.includes(hash)) {
         setActiveTab(hash);
       }
@@ -1401,6 +1402,7 @@ function AppContent() {
           <nav className="tabs-nav font-mono">
             {[
               { id: 'dashboard', icon: <BarChart2 size={13} />, label: 'DASHBOARD' },
+              { id: 'scanner',   icon: <Zap size={13} />,       label: 'SCANNER' },
               { id: 'hft',       icon: <Crosshair size={13} />, label: 'DATA' },
               { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN', moduleId: 'tab_cascade' },
               { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY', moduleId: 'tab_summary' },
@@ -1443,6 +1445,14 @@ function AppContent() {
                 etfFlowChartOpts={etfFlowChartOpts}
                 etfAumChartData={etfAumChartData}
                 etfAumChartOpts={etfAumChartOpts}
+              />
+            </div>
+
+            {/* ══ SCANNER TAB — Keep-Alive State ══════════════════════════════ */}
+            <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
+              <ScannerTab
+                data={data}
+                etfHistory={etfHistory}
               />
             </div>
 
@@ -1520,6 +1530,7 @@ function AppContent() {
         <nav className="mobile-bottom-nav">
           {[
             { id: 'dashboard', icon: <BarChart2 size={16} />, label: 'Dashboard' },
+            { id: 'scanner',   icon: <Zap size={16} />,       label: 'Scanner' },
             { id: 'hft',       icon: <Crosshair size={16} />, label: 'Data HFT' },
             { id: 'cascade',   icon: <Layers size={16} />,    label: 'Thác TK', moduleId: 'tab_cascade' },
             { id: 'summary',   icon: <Sparkles size={16} />,  label: 'AI Summary', moduleId: 'tab_summary' },
