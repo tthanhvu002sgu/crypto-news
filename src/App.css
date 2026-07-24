@@ -2868,6 +2868,13 @@
   position: relative;
 }
 
+.bias-hero-box {
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  border-radius: var(--card-radius-sm);
+  padding: 12px 16px;
+}
+
 .bias-score-label {
   font-size: 1.2rem;
   font-weight: 800;

@@ -6,9 +6,6 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
   const [expanded, setExpanded] = useState(false);
   const bias = calculateMarketBias(data, etfHistory);
 
-  // Position of gauge needle from 0% (at -100) to 100% (at +100)
-  const pointerPct = Math.min(100, Math.max(0, ((bias.score + 100) / 200) * 100));
-
   const formatPillarScore = (val) => {
     return `${val >= 0 ? '+' : ''}${val}`;
   };
@@ -42,94 +39,21 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         </div>
       </div>
 
-      {/* Hero Section: Score Box + Segmented Spectrum Gauge */}
-      <div className="bias-hero-grid">
-        {/* Main Score Badge */}
-        <div className="bias-score-box" style={{ borderColor: `${bias.color}40` }}>
-          <div className="bias-score-label" style={{ color: bias.color }}>
-            <span>{bias.label}</span>
-          </div>
-          <div className="bias-score-number" style={{ color: bias.color }}>
-            {bias.score >= 0 ? `+${bias.score}` : bias.score}
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-slate-400)', fontWeight: 500, marginLeft: '4px' }}>/ 100</span>
-          </div>
-          <div className="bias-score-sub font-mono">
-            Chỉ số xu hướng BTC tổng hợp 4 trụ cột
-          </div>
-        </div>
-
-        {/* Pro Segmented Spectrum Meter */}
-        <div className="bias-spectrum-wrapper">
-          {/* Top Moving Badge Marker */}
-          <div className="bias-marker-track">
-            <div 
-              className="bias-marker-badge font-mono" 
-              style={{ left: `${pointerPct}%`, color: bias.color, borderColor: bias.color }}
-            >
-              ▲ {bias.score >= 0 ? `+${bias.score}` : bias.score}
+      {/* Main Score Box & Description */}
+      <div className="bias-hero-box" style={{ borderColor: `${bias.color}35`, marginBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <span style={{ fontSize: '1.35rem', fontWeight: 800, color: bias.color, letterSpacing: '-0.02em' }}>
+              {bias.label}
+            </span>
+            <div className="bias-score-number" style={{ color: bias.color }}>
+              {bias.score >= 0 ? `+${bias.score}` : bias.score}
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-slate-400)', fontWeight: 500, marginLeft: '4px' }}>/ 100</span>
             </div>
           </div>
-
-          {/* 20 Segment Blocks */}
-          <div className="bias-segments-bar">
-            {Array.from({ length: 20 }).map((_, i) => {
-              const blockMin = (i - 10) * 10;
-              const blockMax = blockMin + 10;
-              const isCenter = i === 9 || i === 10;
-              
-              let isActive = false;
-              let blockColor = 'rgba(255, 255, 255, 0.08)';
-              let blockGlow = 'none';
-
-              if (bias.score >= 0) {
-                if (blockMin >= 0 && blockMin < bias.score) {
-                  isActive = true;
-                  blockColor = bias.score >= 60 ? '#10b981' : '#34d399';
-                  blockGlow = `0 0 8px ${blockColor}`;
-                }
-              } else {
-                if (blockMax <= 0 && blockMax > bias.score) {
-                  isActive = true;
-                  blockColor = bias.score <= -60 ? '#f43f5e' : '#f87171';
-                  blockGlow = `0 0 8px ${blockColor}`;
-                }
-              }
-
-              return (
-                <div 
-                  key={i}
-                  className={`bias-segment-block ${isActive ? 'active' : ''} ${isCenter ? 'center-divider' : ''}`}
-                  style={{
-                    background: isActive ? blockColor : undefined,
-                    boxShadow: blockGlow,
-                  }}
-                />
-              );
-            })}
-          </div>
-
-          {/* Notch Ticks and Labels */}
-          <div className="bias-ticks-row font-mono">
-            <div className="bias-tick-item" style={{ left: '0%' }}>
-              <div className="bias-tick-notch" />
-              <span style={{ color: 'var(--color-rose-400)' }}>-100 BEAR</span>
-            </div>
-            <div className="bias-tick-item" style={{ left: '25%' }}>
-              <div className="bias-tick-notch" />
-              <span>-50</span>
-            </div>
-            <div className="bias-tick-item" style={{ left: '50%' }}>
-              <div className="bias-tick-notch center" />
-              <span style={{ color: 'var(--text-contrast)', fontWeight: 700 }}>0 NEUTRAL</span>
-            </div>
-            <div className="bias-tick-item" style={{ left: '75%' }}>
-              <div className="bias-tick-notch" />
-              <span>+50</span>
-            </div>
-            <div className="bias-tick-item" style={{ left: '100%' }}>
-              <div className="bias-tick-notch" />
-              <span style={{ color: 'var(--color-emerald-400)' }}>+100 BULL</span>
-            </div>
+          
+          <div className="bias-score-sub font-mono" style={{ margin: 0 }}>
+            Chỉ số xu hướng BTC tổng hợp 4 trụ cột (Microstructure, On-Chain, Flow & News)
           </div>
         </div>
       </div>
