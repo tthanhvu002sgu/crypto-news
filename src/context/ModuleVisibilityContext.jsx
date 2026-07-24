@@ -8,6 +8,7 @@ export const MODULES_CONFIG = {
   sidebar_onchain: { id: 'sidebar_onchain', label: 'BTC Network (On-chain)', category: 'Sidebar' },
   
   // Dashboard Tab
+  dash_bias: { id: 'dash_bias', label: 'Market Bias Engine (Công Thức Bias Total)', category: 'Dashboard' },
   dash_news: { id: 'dash_news', label: 'Tin Tức Vĩ Mô & Thị Trường', category: 'Dashboard' },
   dash_polymarket: { id: 'dash_polymarket', label: 'Polymarket — Whale Tracker', category: 'Dashboard' },
   dash_btc_chart: { id: 'dash_btc_chart', label: 'BTC/USDT — Giá 48 Giờ Gần Nhất (1H)', category: 'Dashboard' },

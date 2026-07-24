@@ -1,4 +1,5 @@
 import { Line, Bar } from 'react-chartjs-2';
+import MarketBiasCard from './MarketBiasCard';
 import PolymarketWhales from './PolymarketWhales';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
@@ -45,6 +46,10 @@ export default function DashboardTab({
 
   return (
     <div className="dashboard-layout">
+      {/* Market Bias Engine Card */}
+      {!isModuleHidden('dash_bias') && (
+        <MarketBiasCard data={data} etfHistory={etfHistory} moduleId="dash_bias" />
+      )}
       {/* News Slider */}
       {!isModuleHidden('dash_news') && data.news && data.news.length > 0 && (
         <div className="news-slider-wrapper glass-panel" style={{ position: 'relative' }}>
