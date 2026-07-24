@@ -13,35 +13,28 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
     return `${val >= 0 ? '+' : ''}${val}`;
   };
 
+  const getPillarColor = (val) => {
+    if (val >= 15) return 'var(--color-emerald-400)';
+    if (val > 0) return '#34d399';
+    if (val === 0) return 'var(--text-slate-400)';
+    if (val > -15) return '#f87171';
+    return 'var(--color-rose-400)';
+  };
+
   return (
-    <div className="glass-panel bias-card" style={{ marginBottom: '16px', background: bias.bgGradient, border: `1px solid ${bias.color}33` }}>
-      {/* Card Header */}
-      <div className="bias-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-contrast)' }} className="font-mono">
-            📊 MARKET BIAS ENGINE
-          </span>
-          <span className="font-mono" style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-slate-400)' }}>
-            CONFIDENCE: {bias.confidence}%
-          </span>
+    <div className="bias-card-container" style={{ '--bias-accent-color': bias.color }}>
+      {/* Header Bar */}
+      <div className="bias-header">
+        <div className="bias-title-group">
+          <div className="bias-pulse-dot" />
+          <span className="bias-title">MARKET BIAS ENGINE</span>
+          <span className="bias-confidence-pill">CONFIDENCE: {bias.confidence}%</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button 
-            className="font-mono"
+            className="bias-toggle-btn"
             onClick={() => setExpanded(!expanded)}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border-panel)',
-              color: 'var(--text-slate-300)',
-              borderRadius: '4px',
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
           >
             {expanded ? '▲ Thu gọn' : '▼ Chi tiết'}
           </button>
@@ -49,103 +42,108 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         </div>
       </div>
 
-      {/* Main Score Row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', margin: '12px 0 8px 0' }}>
-        {/* Large Label & Score */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
-          <span style={{ fontSize: '1.4rem', fontWeight: 800, color: bias.color, letterSpacing: '-0.02em' }}>
-            {bias.label}
-          </span>
-          <span className="font-mono" style={{ fontSize: '1.2rem', fontWeight: 700, color: bias.color }}>
-            {bias.score >= 0 ? `+${bias.score}` : bias.score} / 100
-          </span>
+      {/* Hero Section: Score Box + Spectrum Gauge */}
+      <div className="bias-hero-grid">
+        {/* Main Score Badge */}
+        <div className="bias-score-box" style={{ borderColor: `${bias.color}40` }}>
+          <div className="bias-score-label" style={{ color: bias.color }}>
+            <span>{bias.label}</span>
+          </div>
+          <div className="bias-score-number" style={{ color: bias.color }}>
+            {bias.score >= 0 ? `+${bias.score}` : bias.score}
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-slate-400)', fontWeight: 500, marginLeft: '4px' }}>/ 100</span>
+          </div>
+          <div className="bias-score-sub font-mono">
+            Trạng thái thị trường BTC tổng hợp 4 trụ cột
+          </div>
         </div>
 
-        {/* Pillar Mini Badges */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div className="font-mono" style={{ fontSize: '0.68rem', padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)' }}>
-            <span style={{ color: 'var(--text-slate-400)' }}>Micro: </span>
-            <span style={{ fontWeight: 700, color: bias.pillars.microstructure >= 0 ? '#34d399' : '#f87171' }}>
+        {/* Visual Spectrum Meter */}
+        <div className="bias-spectrum-wrapper">
+          <div className="bias-spectrum-bar">
+            <div 
+              className="bias-spectrum-pin" 
+              style={{ left: `${pointerPct}%` }}
+              title={`Score: ${bias.score}`}
+            />
+          </div>
+          <div className="bias-spectrum-labels">
+            <span style={{ color: 'var(--color-rose-400)' }}>-100 STRONG BEAR</span>
+            <span>-50 BEAR</span>
+            <span style={{ color: 'var(--text-contrast)' }}>0 NEUTRAL</span>
+            <span>+50 BULL</span>
+            <span style={{ color: 'var(--color-emerald-400)' }}>+100 STRONG BULL</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4 Pillars Cards Grid */}
+      <div className="bias-pillars-grid">
+        <div className="bias-pillar-card">
+          <div className="bias-pillar-header">
+            <span className="bias-pillar-name">⚡ Microstructure (35%)</span>
+            <span className="bias-pillar-score" style={{ color: getPillarColor(bias.pillars.microstructure) }}>
               {formatPillarScore(bias.pillars.microstructure)}
             </span>
           </div>
+          <div className="bias-pillar-desc">CVD 24h, Funding, OI</div>
+        </div>
 
-          <div className="font-mono" style={{ fontSize: '0.68rem', padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)' }}>
-            <span style={{ color: 'var(--text-slate-400)' }}>On-Chain: </span>
-            <span style={{ fontWeight: 700, color: bias.pillars.onChain >= 0 ? '#34d399' : '#f87171' }}>
+        <div className="bias-pillar-card">
+          <div className="bias-pillar-header">
+            <span className="bias-pillar-name">🔗 On-Chain (25%)</span>
+            <span className="bias-pillar-score" style={{ color: getPillarColor(bias.pillars.onChain) }}>
               {formatPillarScore(bias.pillars.onChain)}
             </span>
           </div>
+          <div className="bias-pillar-desc">MVRV, Active Addrs, Mining Cost</div>
+        </div>
 
-          <div className="font-mono" style={{ fontSize: '0.68rem', padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)' }}>
-            <span style={{ color: 'var(--text-slate-400)' }}>Institutional: </span>
-            <span style={{ fontWeight: 700, color: bias.pillars.institutional >= 0 ? '#34d399' : '#f87171' }}>
+        <div className="bias-pillar-card">
+          <div className="bias-pillar-header">
+            <span className="bias-pillar-name">🏛️ Institutional (20%)</span>
+            <span className="bias-pillar-score" style={{ color: getPillarColor(bias.pillars.institutional) }}>
               {formatPillarScore(bias.pillars.institutional)}
             </span>
           </div>
+          <div className="bias-pillar-desc">ETF Net Flow, Stablecoins</div>
+        </div>
 
-          <div className="font-mono" style={{ fontSize: '0.68rem', padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)' }}>
-            <span style={{ color: 'var(--text-slate-400)' }}>News/Risk: </span>
-            <span style={{ fontWeight: 700, color: bias.pillars.newsRisk >= 0 ? '#34d399' : '#f87171' }}>
+        <div className="bias-pillar-card">
+          <div className="bias-pillar-header">
+            <span className="bias-pillar-name">📰 News & Risk (20%)</span>
+            <span className="bias-pillar-score" style={{ color: getPillarColor(bias.pillars.newsRisk) }}>
               {formatPillarScore(bias.pillars.newsRisk)}
             </span>
           </div>
+          <div className="bias-pillar-desc">Calendar Risk, FnG, L/S Ratio</div>
         </div>
       </div>
 
-      {/* Visual Gauge Bar */}
-      <div style={{ position: 'relative', width: '100%', height: '8px', background: 'var(--bg-slate-950)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-panel)', margin: '8px 0' }}>
-        <div style={{
-          width: '100%',
-          height: '100%',
-          background: 'linear-gradient(90deg, #f43f5e 0%, #f87171 25%, #94a3b8 50%, #34d399 75%, #10b981 100%)',
-          opacity: 0.85
-        }} />
-        {/* Pointer indicator */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          bottom: 0,
-          left: `${pointerPct}%`,
-          width: '4px',
-          background: '#ffffff',
-          boxShadow: '0 0 8px rgba(255,255,255,0.9)',
-          transform: 'translateX(-50%)',
-          borderRadius: '2px'
-        }} />
-      </div>
-
-      {/* Scale markers */}
-      <div className="font-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-slate-400)', marginBottom: expanded ? '12px' : '0' }}>
-        <span>-100 STRONG BEAR</span>
-        <span>0 NEUTRAL</span>
-        <span>+100 STRONG BULL</span>
-      </div>
-
-      {/* Upcoming Event Risk Banner */}
+      {/* Upcoming Event Alert Banner */}
       {bias.upcomingEvents.length > 0 && (
-        <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fbbf24', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div className="bias-alert-banner">
           <span>⚠️</span>
-          <span><b>CẢNH BÁO EVENT RISK:</b> Có sự kiện vĩ mô High Impact ({bias.upcomingEvents[0].title}) trong vòng 24h tới. Nên tiết chế đòn bẩy!</span>
+          <span><b>CẢNH BÁO LỊCH SỰ KIỆN:</b> Có sự kiện vĩ mô High Impact (<b>{bias.upcomingEvents[0].title}</b>) diễn ra trong 24h tới. Nên thận trọng tỷ lệ đòn bẩy!</span>
         </div>
       )}
 
-      {/* Detailed Signals Expand Table */}
+      {/* Expandable Signal Breakdown Drawer */}
       {expanded && (
-        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-panel)' }}>
-          <div className="font-mono" style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', marginBottom: '8px', fontWeight: 600 }}>
-            CHI TIẾT 10+ TÍN HIỆU ĐÓNG GÓP BIAS
+        <div className="bias-drawer">
+          <div className="font-mono" style={{ fontSize: '0.72rem', color: 'var(--text-slate-400)', marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Chi tiết 10+ Tín Hiệu Thành Phần
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '8px' }}>
+          <div className="bias-signals-list">
             {bias.signals.map((sig, idx) => (
-              <div key={idx} style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '6px 10px', fontSize: '0.72rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text-contrast)' }}>{sig.name}</span>
-                  <span className="font-mono" style={{ color: sig.score >= 0 ? '#34d399' : '#f87171', fontWeight: 700 }}>
-                    {sig.score >= 0 ? `+${sig.score.toFixed(1)}` : sig.score.toFixed(1)} pt ({sig.weight})
+              <div key={idx} className="bias-signal-item">
+                <div className="bias-signal-top">
+                  <span className="bias-signal-title">{sig.name}</span>
+                  <span className="bias-signal-pts" style={{ color: sig.score >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)' }}>
+                    {sig.score >= 0 ? `+${sig.score.toFixed(1)}` : sig.score.toFixed(1)} pt <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)', fontWeight: 400 }}>({sig.weight})</span>
                   </span>
                 </div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }}>
+                <div className="bias-signal-status font-mono">
                   {sig.status}
                 </div>
               </div>
