@@ -199,39 +199,6 @@ export default function DashboardTab({
       {/* Polymarket Whales Tracker */}
       <PolymarketWhales moduleId="dash_polymarket" fmt={fmt} />
 
-      {/* BTC Price Chart */}
-      {!isModuleHidden('dash_btc_chart') && (
-        <div className="glass-panel chart-panel">
-          <div className="chart-header">
-            <h3 className="chart-title font-mono text-emerald">
-              <span className="dot dot-emerald" /> BTC/USDT — GIÁ 48 GIờ GẦN NHẤT (1H)
-            </h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="chart-badge font-mono">
-                {data.btc ? `$${fmt(data.btc.price, 0)}` : '---'}
-                {data.btc?.change != null && (
-                  <span className={data.btc.change >= 0 ? 'text-emerald' : 'text-rose'}>
-                    {' '}{data.btc.change >= 0 ? '+' : ''}{data.btc.change.toFixed(2)}%
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-          <div className="chart-body">
-            {data.klines.length > 0
-              ? <Line data={btcChartData} options={{
-                  ...getChartOpts(theme),
-                  scales: {
-                    ...getChartOpts(theme).scales,
-                    y: { ...getChartOpts(theme).scales.y, ticks: { ...getChartOpts(theme).scales.y.ticks, callback: v => `$${(v/1000).toFixed(1)}k` } }
-                  }
-                }} />
-              : <div className="chart-empty font-mono">Đang tải dữ liệu biểu đồ...</div>
-            }
-          </div>
-        </div>
-      )}
-
       {/* L/S Ratio & OI Charts */}
       {(!isModuleHidden('dash_ls_chart') || !isModuleHidden('dash_oi_chart')) && (
         <div className="charts-row">
