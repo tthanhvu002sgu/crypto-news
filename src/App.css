@@ -2891,42 +2891,98 @@
   margin-top: 4px;
 }
 
-/* Spectrum Bar Gauge */
+/* Pro Segmented Spectrum Meter */
 .bias-spectrum-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  width: 100%;
 }
 
-.bias-spectrum-bar {
+.bias-marker-track {
   position: relative;
-  height: 12px;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #f43f5e 0%, #f87171 25%, #94a3b8 50%, #34d399 75%, #10b981 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  height: 20px;
+  width: 100%;
 }
 
-.bias-spectrum-pin {
+.bias-marker-badge {
   position: absolute;
-  top: -4px;
-  bottom: -4px;
-  width: 8px;
-  background: #ffffff;
-  border: 2px solid var(--bg-slate-950);
-  border-radius: 4px;
+  top: 0;
   transform: translateX(-50%);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-slate-950);
+  border: 1.5px solid currentColor;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  z-index: 2;
 }
 
-.bias-spectrum-labels {
+.bias-segments-bar {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 3px;
+  height: 14px;
+  align-items: center;
+  padding: 3px;
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  border-radius: var(--card-radius-sm);
+}
+
+.bias-segment-block {
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+[data-theme='light'] .bias-segment-block {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Tick marks row */
+.bias-ticks-row {
+  position: relative;
+  height: 22px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.bias-tick-item {
+  position: absolute;
+  transform: translateX(-50%);
   display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
+  flex-direction: column;
+  align-items: center;
   font-size: 0.62rem;
   color: var(--text-slate-400);
-  font-weight: 600;
+}
+
+.bias-tick-item:first-child {
+  transform: translateX(0);
+  align-items: flex-start;
+}
+
+.bias-tick-item:last-child {
+  transform: translateX(-100%);
+  align-items: flex-end;
+}
+
+.bias-tick-notch {
+  width: 1px;
+  height: 5px;
+  background: var(--border-panel);
+  margin-bottom: 2px;
+}
+
+.bias-tick-notch.center {
+  height: 7px;
+  width: 2px;
+  background: var(--text-contrast);
 }
 
 /* 4 Pillar Cards Grid */

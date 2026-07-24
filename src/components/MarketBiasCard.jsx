@@ -42,7 +42,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         </div>
       </div>
 
-      {/* Hero Section: Score Box + Spectrum Gauge */}
+      {/* Hero Section: Score Box + Segmented Spectrum Gauge */}
       <div className="bias-hero-grid">
         {/* Main Score Badge */}
         <div className="bias-score-box" style={{ borderColor: `${bias.color}40` }}>
@@ -54,25 +54,82 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             <span style={{ fontSize: '0.85rem', color: 'var(--text-slate-400)', fontWeight: 500, marginLeft: '4px' }}>/ 100</span>
           </div>
           <div className="bias-score-sub font-mono">
-            Trạng thái thị trường BTC tổng hợp 4 trụ cột
+            Chỉ số xu hướng BTC tổng hợp 4 trụ cột
           </div>
         </div>
 
-        {/* Visual Spectrum Meter */}
+        {/* Pro Segmented Spectrum Meter */}
         <div className="bias-spectrum-wrapper">
-          <div className="bias-spectrum-bar">
+          {/* Top Moving Badge Marker */}
+          <div className="bias-marker-track">
             <div 
-              className="bias-spectrum-pin" 
-              style={{ left: `${pointerPct}%` }}
-              title={`Score: ${bias.score}`}
-            />
+              className="bias-marker-badge font-mono" 
+              style={{ left: `${pointerPct}%`, color: bias.color, borderColor: bias.color }}
+            >
+              ▲ {bias.score >= 0 ? `+${bias.score}` : bias.score}
+            </div>
           </div>
-          <div className="bias-spectrum-labels">
-            <span style={{ color: 'var(--color-rose-400)' }}>-100 STRONG BEAR</span>
-            <span>-50 BEAR</span>
-            <span style={{ color: 'var(--text-contrast)' }}>0 NEUTRAL</span>
-            <span>+50 BULL</span>
-            <span style={{ color: 'var(--color-emerald-400)' }}>+100 STRONG BULL</span>
+
+          {/* 20 Segment Blocks */}
+          <div className="bias-segments-bar">
+            {Array.from({ length: 20 }).map((_, i) => {
+              const blockMin = (i - 10) * 10;
+              const blockMax = blockMin + 10;
+              const isCenter = i === 9 || i === 10;
+              
+              let isActive = false;
+              let blockColor = 'rgba(255, 255, 255, 0.08)';
+              let blockGlow = 'none';
+
+              if (bias.score >= 0) {
+                if (blockMin >= 0 && blockMin < bias.score) {
+                  isActive = true;
+                  blockColor = bias.score >= 60 ? '#10b981' : '#34d399';
+                  blockGlow = `0 0 8px ${blockColor}`;
+                }
+              } else {
+                if (blockMax <= 0 && blockMax > bias.score) {
+                  isActive = true;
+                  blockColor = bias.score <= -60 ? '#f43f5e' : '#f87171';
+                  blockGlow = `0 0 8px ${blockColor}`;
+                }
+              }
+
+              return (
+                <div 
+                  key={i}
+                  className={`bias-segment-block ${isActive ? 'active' : ''} ${isCenter ? 'center-divider' : ''}`}
+                  style={{
+                    background: isActive ? blockColor : undefined,
+                    boxShadow: blockGlow,
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          {/* Notch Ticks and Labels */}
+          <div className="bias-ticks-row font-mono">
+            <div className="bias-tick-item" style={{ left: '0%' }}>
+              <div className="bias-tick-notch" />
+              <span style={{ color: 'var(--color-rose-400)' }}>-100 BEAR</span>
+            </div>
+            <div className="bias-tick-item" style={{ left: '25%' }}>
+              <div className="bias-tick-notch" />
+              <span>-50</span>
+            </div>
+            <div className="bias-tick-item" style={{ left: '50%' }}>
+              <div className="bias-tick-notch center" />
+              <span style={{ color: 'var(--text-contrast)', fontWeight: 700 }}>0 NEUTRAL</span>
+            </div>
+            <div className="bias-tick-item" style={{ left: '75%' }}>
+              <div className="bias-tick-notch" />
+              <span>+50</span>
+            </div>
+            <div className="bias-tick-item" style={{ left: '100%' }}>
+              <div className="bias-tick-notch" />
+              <span style={{ color: 'var(--color-emerald-400)' }}>+100 BULL</span>
+            </div>
           </div>
         </div>
       </div>
