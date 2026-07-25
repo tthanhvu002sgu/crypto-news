@@ -17,6 +17,14 @@ const WHALE_USD_MIN = 100_000;
 const WHALE_KEEP = 5000;
 const RECONNECT_MS = 4000;
 
+// Trade subscribers for real-time move tracking
+const tradeSubscribers = new Set();
+
+export function subscribeAggTrades(callback) {
+  tradeSubscribers.add(callback);
+  return () => tradeSubscribers.delete(callback);
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function createReconnectingWS(url, onMessage, onStatusChange, mountedRef) {
@@ -299,6 +307,15 @@ export function useCVDStream() {
         const price = parseFloat(data.p);
         const qty = parseFloat(data.q);
         const usdtVol = price * qty;
+
+        // Broadcast trade event to real-time move tracker
+        tradeSubscribers.forEach((cb) => {
+          try {
+            cb({ price, qty, usdtVol, isTakerSell: data.m, timestamp: data.T });
+          } catch {
+            /* ignore subscriber error */
+          }
+        });
 
         // Midnight UTC reset
         const today = getTodayStr();

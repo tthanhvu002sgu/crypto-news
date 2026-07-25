@@ -38,6 +38,7 @@ export const SIGNAL_TYPE = {
   MACRO_EVENT: 'MACRO_EVENT',
   FNG_EXTREME: 'FNG_EXTREME',
   PERIODIC_SNAPSHOT: 'PERIODIC_SNAPSHOT',
+  MOVE_REPORT: 'MOVE_REPORT',
 };
 
 // ─── Cooldown tracking — prevent spam ─────────────────────────────────────────

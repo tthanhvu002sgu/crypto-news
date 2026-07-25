@@ -8,6 +8,8 @@ import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import { subscribeMoveTracker, updateMoveTrackerSettings, MOVE_CONFIG } from '../services/moveTracker';
+import { getCurrentATR } from '../services/atrCalculator';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1548,7 +1550,236 @@ function AdvancedChartWrapper({ theme, whaleData, whaleGap, children }) {
   return <AdvancedChart theme={theme} whaleData={clusteredWhaleData} moduleId="hft_heatmap">{children}</AdvancedChart>;
 }
 
+// ─── PANEL: Move Tracker (Pump & Dump Signal Log) ──────────────────────────────
 
+function MoveTrackerPanel() {
+  const [trackerState, setTrackerState] = useState({
+    status: 'IDLE',
+    activeMove: null,
+    moveHistory: [],
+    settings: {
+      mode: MOVE_CONFIG.MODE_ATR,
+      atrMult: MOVE_CONFIG.DEFAULT_ATR_MULT,
+      fixedUsd: MOVE_CONFIG.DEFAULT_FIXED_USD,
+      enabled: true,
+    },
+  });
+
+  const [expandedMoveId, setExpandedMoveId] = useState(null);
+  const [currentAtr, setCurrentAtr] = useState(getCurrentATR());
+
+  useEffect(() => {
+    const unsubscribe = subscribeMoveTracker((state) => {
+      setTrackerState(state);
+      setCurrentAtr(getCurrentATR());
+    });
+    return unsubscribe;
+  }, []);
+
+  const { status, activeMove, moveHistory, settings } = trackerState;
+  const displayMove = activeMove || (moveHistory.length > 0 ? moveHistory[0] : null);
+
+  const statusBadge = useMemo(() => {
+    if (status === 'TRACKING') return { label: '⚡ ĐANG TRACKING MOVE', cls: 'status-tag--tracking' };
+    if (status === 'POST_RECOVERY') return { label: '⏳ TÍNH RECOVERY 60S', cls: 'status-tag--recovery' };
+    return { label: '● ĐANG CHỜ TÍN HIỆU', cls: 'status-tag--idle' };
+  }, [status]);
+
+  return (
+    <div className="hft-panel glass-panel move-tracker-panel">
+      {/* Panel Header & Controls */}
+      <div className="hft-panel-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
+        <div className="hft-panel-title font-mono" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="hft-icon">⚡</span> PUMP &amp; DUMP MOVE TRACKER (TRACKING TÍN HIỆU MẠNH)
+          <span className={`move-status-badge ${statusBadge.cls}`}>{statusBadge.label}</span>
+        </div>
+
+        <div className="move-controls font-mono" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span className="move-control-label" style={{ color: 'var(--text-slate-400)', fontSize: '0.8rem' }}>Bộ Lọc:</span>
+          <select
+            className="move-select"
+            value={settings.mode}
+            onChange={(e) => updateMoveTrackerSettings({ mode: e.target.value })}
+          >
+            <option value={MOVE_CONFIG.MODE_ATR}>ATR Dynamic (5m)</option>
+            <option value={MOVE_CONFIG.MODE_FIXED}>Cố Định (Fixed USD)</option>
+          </select>
+
+          {settings.mode === MOVE_CONFIG.MODE_ATR ? (
+            <select
+              className="move-select"
+              value={settings.atrMult}
+              onChange={(e) => updateMoveTrackerSettings({ atrMult: Number(e.target.value) })}
+            >
+              <option value={1.0}>1.0 × ATR (${(currentAtr * 1.0).toFixed(0)})</option>
+              <option value={1.5}>1.5 × ATR (${(currentAtr * 1.5).toFixed(0)})</option>
+              <option value={2.0}>2.0 × ATR (${(currentAtr * 2.0).toFixed(0)})</option>
+              <option value={3.0}>3.0 × ATR (${(currentAtr * 3.0).toFixed(0)})</option>
+            </select>
+          ) : (
+            <select
+              className="move-select"
+              value={settings.fixedUsd}
+              onChange={(e) => updateMoveTrackerSettings({ fixedUsd: Number(e.target.value) })}
+            >
+              <option value={300}>≥ $300</option>
+              <option value={500}>≥ $500</option>
+              <option value={1000}>≥ $1,000</option>
+              <option value={1500}>≥ $1,500</option>
+            </select>
+          )}
+
+          <span className="move-atr-info" style={{ color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>ATR(14): ${currentAtr.toFixed(0)}</span>
+        </div>
+      </div>
+
+      {/* Main Content: Current / Latest Move Report */}
+      {displayMove ? (
+        <div className={`move-card move-card--${displayMove.direction ? displayMove.direction.toLowerCase() : 'pump'}`}>
+          <div className="move-card-header">
+            <div className="move-main-title">
+              <span className={`move-dir-tag move-dir-tag--${displayMove.direction ? displayMove.direction.toLowerCase() : 'pump'}`}>
+                {displayMove.direction === 'PUMP' ? '🚀 PUMP MẠNH' : '💥 DUMP MẠNH'}
+              </span>
+              <span className="move-price-delta font-mono">
+                {displayMove.direction === 'PUMP' ? '+' : ''}${Math.round(displayMove.endPrice - displayMove.startPrice).toLocaleString()} ({displayMove.direction === 'PUMP' ? '+' : ''}{displayMove.pctChange != null ? displayMove.pctChange : (((displayMove.endPrice - displayMove.startPrice)/displayMove.startPrice)*100).toFixed(2)}%)
+              </span>
+            </div>
+
+            {displayMove.verdictLabel && (
+              <div className="move-verdict-badge" style={{ backgroundColor: `${displayMove.verdictColor}20`, borderColor: displayMove.verdictColor, color: displayMove.verdictColor }}>
+                <span className="verdict-icon">{displayMove.verdictIcon}</span>
+                <span className="verdict-label font-mono">{displayMove.verdictLabel}</span>
+              </div>
+            )}
+          </div>
+
+          {displayMove.verdictReason && (
+            <div className="move-verdict-reason font-mono">
+              💡 <strong>Đánh giá:</strong> {displayMove.verdictReason}
+            </div>
+          )}
+
+          {/* Metric Grid */}
+          <div className="move-metrics-grid font-mono">
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">GIÁ MỞ / ĐÓNG</span>
+              <span className="move-metric-val">${displayMove.startPrice?.toLocaleString()} → ${displayMove.endPrice?.toLocaleString()}</span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">ĐỈNH / ĐÁY MOVE</span>
+              <span className="move-metric-val">${displayMove.peakPrice?.toLocaleString()} / ${displayMove.troughPrice?.toLocaleString()}</span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">THỜI GIAN MOVE</span>
+              <span className="move-metric-val">{displayMove.durationSec || Math.round(((displayMove.endTime || Date.now()) - displayMove.startTime)/1000)} giây</span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">TỔNG VOLUME</span>
+              <span className="move-metric-val">${(displayMove.totalVolume / 1e6).toFixed(2)}M USDT</span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">SỐ LỆNH KHỚP</span>
+              <span className="move-metric-val">{displayMove.tradeCount?.toLocaleString()} lệnh (${Math.round((displayMove.totalVolume || 0)/(displayMove.tradeCount||1)).toLocaleString()}/lệnh)</span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">TAKER BUY / SELL</span>
+              <span className="move-metric-val">
+                <span className="text-emerald">{displayMove.takerBuyRatio != null ? displayMove.takerBuyRatio : Math.round((displayMove.takerBuyVol/displayMove.totalVolume)*100)}% Buy</span> vs <span className="text-rose">{100 - (displayMove.takerBuyRatio != null ? displayMove.takerBuyRatio : Math.round((displayMove.takerBuyVol/displayMove.totalVolume)*100))}% Sell</span>
+              </span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">CVD DELTA</span>
+              <span className={`move-metric-val ${(displayMove.cvdDelta != null ? displayMove.cvdDelta : (displayMove.takerBuyVol - displayMove.takerSellVol)) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                {(displayMove.cvdDelta != null ? displayMove.cvdDelta : (displayMove.takerBuyVol - displayMove.takerSellVol)) >= 0 ? '+' : ''}${(((displayMove.cvdDelta != null ? displayMove.cvdDelta : (displayMove.takerBuyVol - displayMove.takerSellVol))) / 1e6).toFixed(2)}M
+              </span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">LỆNH LỚN &gt; $100K</span>
+              <span className="move-metric-val">
+                {displayMove.largeTradesCount || 0} lệnh (${((displayMove.largeTradesVol || 0)/1e6).toFixed(2)}M = {displayMove.largeTradeRatio || 0}%)
+              </span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">LỆNH LỚN NHẤT</span>
+              <span className="move-metric-val">
+                ${((displayMove.maxSingleTradeUsd || 0)/1e6).toFixed(2)}M ({displayMove.maxSingleTradeSide})
+              </span>
+            </div>
+
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">% HỒI GIÁ (RECOVERY)</span>
+              <span className="move-metric-val highlight">
+                {displayMove.recoveryPct != null ? `${displayMove.recoveryPct}% (sau 60s)` : 'Đang theo dõi...'}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="move-empty-state font-mono">
+          <span>⚡ Hệ thống đang lắng nghe dòng lệnh realtime... Khi có đợt di chuyển giá mạnh (Pump/Dump vượt {settings.mode === 'ATR' ? `${settings.atrMult}x ATR` : `$${settings.fixedUsd}`}), báo cáo phân tích chi tiết sẽ tự động xuất hiện tại đây.</span>
+        </div>
+      )}
+
+      {/* Move History Table */}
+      {moveHistory.length > 0 && (
+        <div className="move-history-section" style={{ marginTop: '16px' }}>
+          <div className="move-history-title font-mono" style={{ fontSize: '0.8rem', color: 'var(--text-slate-400)', marginBottom: '8px' }}>📜 LỊCH SỬ CÁC ĐỢT DI CHUYỂN GIÁ (7 NGÀY GẦN NHẤT)</div>
+          <div className="move-table-container">
+            <table className="move-table font-mono">
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Loại</th>
+                  <th>Biến động</th>
+                  <th>Volume</th>
+                  <th>Lệnh lớn</th>
+                  <th>CVD Δ</th>
+                  <th>Recovery</th>
+                  <th>Đánh giá (Verdict)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {moveHistory.map((m) => (
+                  <tr key={m.id} onClick={() => setExpandedMoveId(expandedMoveId === m.id ? null : m.id)} className="move-tr">
+                    <td>{new Date(m.startTime).toLocaleTimeString('vi-VN')}</td>
+                    <td>
+                      <span className={`move-badge move-badge--${m.direction ? m.direction.toLowerCase() : 'pump'}`}>
+                        {m.direction}
+                      </span>
+                    </td>
+                    <td className={m.direction === 'PUMP' ? 'text-emerald' : 'text-rose'}>
+                      {m.direction === 'PUMP' ? '+' : ''}${Math.round(m.endPrice - m.startPrice)} ({m.pctChange}%)
+                    </td>
+                    <td>${(m.totalVolume / 1e6).toFixed(1)}M</td>
+                    <td>{m.largeTradesCount} (${(m.largeTradesVol / 1e6).toFixed(1)}M)</td>
+                    <td className={m.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>
+                      {m.cvdDelta >= 0 ? '+' : ''}${(m.cvdDelta / 1e6).toFixed(1)}M
+                    </td>
+                    <td>{m.recoveryPct}%</td>
+                    <td>
+                      <span className="verdict-inline" style={{ color: m.verdictColor }}>
+                        {m.verdictIcon} {m.verdictLabel}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main HFT Radar Tab Component
@@ -1561,6 +1792,7 @@ const MemoOrderBookPanel = React.memo(OrderBookPanel);
 const MemoAdvancedChartWrapper = React.memo(AdvancedChartWrapper);
 const MemoWhaleTradesPanel = React.memo(WhaleTradesPanel);
 const MemoSignalLogPanel = React.memo(SignalLogPanel);
+const MemoMoveTrackerPanel = React.memo(MoveTrackerPanel);
 
 export default function HftRadarTab({
   cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, whaleTrades, theme, volNodes,
@@ -1772,6 +2004,10 @@ export default function HftRadarTab({
             volNodes={volNodes}
             theme={theme}
           />
+        )}
+
+        {!isModuleHidden('hft_move_tracker') && (
+          <MemoMoveTrackerPanel />
         )}
 
         {(!isModuleHidden('hft_heatmap') || !isModuleHidden('hft_whale_walls')) && (

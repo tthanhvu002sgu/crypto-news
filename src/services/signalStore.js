@@ -148,11 +148,11 @@ export async function getSignalCount() {
 }
 
 /**
- * Delete signals older than X days.
+ * Delete signals older than X days (default 7 days).
  * @param {number} daysToKeep - Keep signals newer than this many days
  * @returns {Promise<number>} - Number of deleted signals
  */
-export async function clearOldSignals(daysToKeep = 30) {
+export async function clearOldSignals(daysToKeep = 7) {
   try {
     const db = await openDB();
     const cutoff = Date.now() - daysToKeep * 24 * 60 * 60 * 1000;
@@ -209,3 +209,14 @@ export async function exportSignals() {
   const signals = await getSignals(10000);
   return JSON.stringify(signals, null, 2);
 }
+
+/**
+ * Get move report signals specifically
+ * @param {number} limit
+ * @returns {Promise<Array>}
+ */
+export async function getMoveReports(limit = 100) {
+  const allSignals = await getSignals(500);
+  return allSignals.filter((s) => s.type === 'MOVE_REPORT').slice(0, limit);
+}
+
