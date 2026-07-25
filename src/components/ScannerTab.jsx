@@ -148,38 +148,32 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
       </div>
 
       {/* ── DUAL DIRECTION TAB SWITCHER ─────────────────────────────────────── */}
-      <div className="flex items-center gap-3 my-1">
-        <button
-          onClick={() => setActiveDirection('BUY')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-            activeDirection === 'BUY'
-              ? 'bg-emerald-600/20 text-emerald-400 border-2 border-emerald-500 shadow-lg shadow-emerald-900/20'
-              : 'bg-slate-800/40 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
-          }`}
-        >
-          <TrendingUp size={16} className={activeDirection === 'BUY' ? 'text-emerald-400' : ''} />
-          <span>🟢 PHO LỰC MUA (LONG SWING)</span>
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold">
-            {scanResult.topBuy?.length || 0} COIN
-          </span>
-        </button>
+      <div className="scanner-direction-bar">
+        <div className="direction-toggle-group">
+          <button
+            onClick={() => setActiveDirection('BUY')}
+            className={`btn-direction-tab ${activeDirection === 'BUY' ? 'active buy-active' : ''}`}
+          >
+            <TrendingUp size={16} />
+            <span>🟢 PHO LỰC MUA (LONG SWING)</span>
+            <span className="chip-count buy">
+              {scanResult.topBuy?.length || 0} COIN
+            </span>
+          </button>
 
-        <button
-          onClick={() => setActiveDirection('SELL')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-            activeDirection === 'SELL'
-              ? 'bg-rose-600/20 text-rose-400 border-2 border-rose-500 shadow-lg shadow-rose-900/20'
-              : 'bg-slate-800/40 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
-          }`}
-        >
-          <TrendingDown size={16} className={activeDirection === 'SELL' ? 'text-rose-400' : ''} />
-          <span>🔴 PHONG BA BÁN (SHORT SWING)</span>
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-rose-500/20 text-rose-300 font-extrabold">
-            {scanResult.topSell?.length || 0} COIN
-          </span>
-        </button>
+          <button
+            onClick={() => setActiveDirection('SELL')}
+            className={`btn-direction-tab ${activeDirection === 'SELL' ? 'active sell-active' : ''}`}
+          >
+            <TrendingDown size={16} />
+            <span>🔴 PHONG BA BÁN (SHORT SWING)</span>
+            <span className="chip-count sell">
+              {scanResult.topSell?.length || 0} COIN
+            </span>
+          </button>
+        </div>
 
-        <div className="ml-auto flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-900/50 px-3 py-1.5 rounded-md border border-slate-800">
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-900/60 px-3.5 py-2 rounded-lg border border-slate-800/80 backdrop-blur-md">
           <ShieldCheck size={14} className="text-amber-400" />
           <span>Lọc Cứng: MCap &gt;$100M | Vol30D &gt;$100M | VolCV &le;1.3 | Spread &le;0.15% | Score &ge;10/25</span>
         </div>
