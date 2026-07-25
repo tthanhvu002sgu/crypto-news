@@ -113,39 +113,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
         </div>
       </div>
 
-      {/* ── MACRO CONTEXT STRIP ───────────────────────────────────────────── */}
-      <div className="scanner-macro-bar glass-panel">
-        <div className="macro-item">
-          <span className="macro-label">Bối Cảnh BTC:</span>
-          <span className={`macro-val ${data.btcChange24h >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            BTC ${Number(data.btcPrice || 0).toLocaleString()} ({data.btcChange24h >= 0 ? '+' : ''}{Number(data.btcChange24h || 0).toFixed(2)}%)
-          </span>
-        </div>
-        <div className="macro-divider">|</div>
-        <div className="macro-item">
-          <span className="macro-label">ETF Net Flow:</span>
-          <span className={`macro-val ${(etfHistory[0]?.netFlow ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {(etfHistory[0]?.netFlow ?? 0) >= 0 ? '+' : ''}${((etfHistory[0]?.netFlow ?? 0)).toFixed(1)}M
-          </span>
-        </div>
-        <div className="macro-divider">|</div>
-        <div className="macro-item">
-          <span className="macro-label">Fear &amp; Greed:</span>
-          <span className="macro-val text-amber">{data.fngValue ?? '---'} ({data.fngClass ?? 'Neutral'})</span>
-        </div>
-        <div className="macro-divider">|</div>
-        <div className="macro-item">
-          <span className="macro-label">Lọc Chất Lượng:</span>
-          <span className="macro-val text-cyan">
-            {scanResult.qualifiedCount || 0} / {scanResult.scannedCount || 0} Coins Vượt Gate
-          </span>
-        </div>
-        <div className="macro-divider">|</div>
-        <div className="macro-item">
-          <span className="macro-label">Cập nhật:</span>
-          <span className="macro-val macro-time">{lastUpdatedStr}</span>
-        </div>
-      </div>
+
 
       {/* ── DUAL DIRECTION TAB SWITCHER ─────────────────────────────────────── */}
       <div className="scanner-direction-bar">
