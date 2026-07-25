@@ -385,42 +385,56 @@ export const getBTCOnChain = async () => {
 // ─── COINMETRICS COMMUNITY — On-chain Metrics nâng cao (No API key required) ──
 
 /**
+ * Helper fetch dữ liệu từ CoinMetrics Community API (hỗ trợ thử URL trực tiếp + proxy fallback)
+ */
+const fetchCoinMetricsData = async (asset) => {
+  const params = {
+    assets: asset,
+    metrics: 'AdrActCnt,TxCnt,CapMVRVCur',
+    frequency: '1d',
+    page_size: 10,
+  };
+
+  const urls = [
+    'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics',
+    getCoinMetricsUrl(),
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await axios.get(url, { params, timeout: 8000 });
+      if (res.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
+        return res.data.data;
+      }
+    } catch (e) {
+      console.warn(`[API] CoinMetrics fetch failed for ${url}:`, e.message);
+    }
+  }
+  return null;
+};
+
+/**
  * Lấy on-chain metrics từ CoinMetrics Community API (miễn phí, không cần key)
- * Active Addresses, Transaction Count, NVT Ratio (proxy cho định giá on-chain)
+ * Active Addresses, Transaction Count, MVRV
  */
 export const getBTCOnChainMetrics = async () => {
   try {
-    const res = await axios.get(
-      getCoinMetricsUrl(),
-      {
-        params: {
-          assets: 'btc',
-          metrics: 'AdrActCnt,TxCnt,CapMVRVCur',
-          frequency: '1d',
-          page_size: 2,
-        },
-        timeout: 10000,
-      }
-    );
-
-    const items = res.data?.data;
+    const items = await fetchCoinMetricsData('btc');
     if (!items || items.length === 0) return null;
 
-    // Lấy entry mới nhất có đủ data
-    const latest = [...items].reverse().find(
-      d => d.AdrActCnt && d.TxCnt
-    );
-    if (!latest) return null;
+    const reversed = [...items].reverse();
+    const latestMvrv = reversed.find(d => d.CapMVRVCur != null && d.CapMVRVCur !== '');
+    const latestTx = reversed.find(d => d.AdrActCnt && d.TxCnt) || latestMvrv || reversed[0];
 
     return {
-      activeAddresses: latest.AdrActCnt ? parseInt(latest.AdrActCnt).toLocaleString('en-US') : null,
-      txCount: latest.TxCnt ? parseInt(latest.TxCnt).toLocaleString('en-US') : null,
+      activeAddresses: latestTx.AdrActCnt ? parseInt(latestTx.AdrActCnt).toLocaleString('en-US') : null,
+      txCount: latestTx.TxCnt ? parseInt(latestTx.TxCnt).toLocaleString('en-US') : null,
       nvtRatio: null, // NVTAdj là chỉ số Pro, đặt null để tránh lỗi 403
-      mvrv: latest.CapMVRVCur ? parseFloat(latest.CapMVRVCur).toFixed(2) : null,
-      date: latest.time ? latest.time.split('T')[0] : null,
+      mvrv: latestMvrv?.CapMVRVCur ? parseFloat(latestMvrv.CapMVRVCur).toFixed(2) : null,
+      date: (latestMvrv || latestTx).time ? (latestMvrv || latestTx).time.split('T')[0] : null,
     };
   } catch (e) {
-    console.error('[API] CoinMetrics:', e.message);
+    console.error('[API] CoinMetrics BTC:', e.message);
     return null;
   }
 };
@@ -430,32 +444,18 @@ export const getBTCOnChainMetrics = async () => {
  */
 export const getETHOnChainMetrics = async () => {
   try {
-    const res = await axios.get(
-      getCoinMetricsUrl(),
-      {
-        params: {
-          assets: 'eth',
-          metrics: 'AdrActCnt,TxCnt,CapMVRVCur',
-          frequency: '1d',
-          page_size: 2,
-        },
-        timeout: 10000,
-      }
-    );
-
-    const items = res.data?.data;
+    const items = await fetchCoinMetricsData('eth');
     if (!items || items.length === 0) return null;
 
-    const latest = [...items].reverse().find(
-      d => d.CapMVRVCur || (d.AdrActCnt && d.TxCnt)
-    );
-    if (!latest) return null;
+    const reversed = [...items].reverse();
+    const latestMvrv = reversed.find(d => d.CapMVRVCur != null && d.CapMVRVCur !== '');
+    const latestTx = reversed.find(d => d.AdrActCnt && d.TxCnt) || latestMvrv || reversed[0];
 
     return {
-      activeAddresses: latest.AdrActCnt ? parseInt(latest.AdrActCnt).toLocaleString('en-US') : null,
-      txCount: latest.TxCnt ? parseInt(latest.TxCnt).toLocaleString('en-US') : null,
-      mvrv: latest.CapMVRVCur ? parseFloat(latest.CapMVRVCur).toFixed(2) : null,
-      date: latest.time ? latest.time.split('T')[0] : null,
+      activeAddresses: latestTx.AdrActCnt ? parseInt(latestTx.AdrActCnt).toLocaleString('en-US') : null,
+      txCount: latestTx.TxCnt ? parseInt(latestTx.TxCnt).toLocaleString('en-US') : null,
+      mvrv: latestMvrv?.CapMVRVCur ? parseFloat(latestMvrv.CapMVRVCur).toFixed(2) : null,
+      date: (latestMvrv || latestTx).time ? (latestMvrv || latestTx).time.split('T')[0] : null,
     };
   } catch (e) {
     console.error('[API] CoinMetrics ETH:', e.message);
