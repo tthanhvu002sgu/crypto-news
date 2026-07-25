@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { runFullScan } from '../services/coinScanner';
-import { RefreshCw, Zap, ExternalLink } from 'lucide-react';
+import { RefreshCw, Zap, ExternalLink, TrendingUp, TrendingDown, ShieldCheck } from 'lucide-react';
 
 const fmtUsd = (n) => {
   if (n == null) return '---';
@@ -20,9 +20,10 @@ const fmtCvd = (n) => {
 };
 
 export default function ScannerTab({ data = {}, etfHistory = [] }) {
-  const [scanResult, setScanResult] = useState({ top5: [], scannedCount: 0, timestamp: 0 });
+  const [scanResult, setScanResult] = useState({ topBuy: [], topSell: [], scannedCount: 0, qualifiedCount: 0, timestamp: 0 });
   const [isScanning, setIsScanning] = useState(false);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(3600); // 60 mins countdown
+  const [activeDirection, setActiveDirection] = useState('BUY'); // 'BUY' | 'SELL'
 
   // Macro context evaluation
   const macroContext = {
@@ -35,7 +36,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
     try {
       const res = await runFullScan(macroContext, force);
       setScanResult(res);
-      setSecondsUntilRefresh(3600); // Reset timer to 60 minutes
+      setSecondsUntilRefresh(3600);
     } catch (e) {
       console.error('[ScannerTab] Scan error:', e);
     } finally {
@@ -48,12 +49,12 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
     executeScan(false);
   }, []);
 
-  // 1-hour interval auto refresh + 1-second countdown tick
+  // Countdown timer & auto-refresh
   useEffect(() => {
     const timer = setInterval(() => {
       setSecondsUntilRefresh(prev => {
         if (prev <= 1) {
-          executeScan(true); // Auto trigger scan when countdown hits zero
+          executeScan(true);
           return 3600;
         }
         return prev - 1;
@@ -73,6 +74,10 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
     ? new Date(scanResult.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     : 'Chưa quét';
 
+  const currentCoins = activeDirection === 'BUY' 
+    ? (scanResult.topBuy || []) 
+    : (scanResult.topSell || []);
+
   return (
     <div className="scanner-tab-container font-mono">
       {/* ── HEADER CONTROL BAR ────────────────────────────────────────────── */}
@@ -83,9 +88,9 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
               <Zap size={18} className="text-amber" />
             </span>
             <div>
-              <h2 className="scanner-title">SCANNER — TOP 5 COIN NHÂN DUYÊN SWING</h2>
+              <h2 className="scanner-title">SCANNER — NHÂN DUYÊN 2 CHIỀU (BUY &amp; SELL)</h2>
               <p className="scanner-subtitle">
-                Lọc Top 50 coin theo <strong>Volume Bền Vững 30 Ngày</strong> (chống coin bơm ảo ngắn hạn) → 1-Click mở Chart TradingView.
+                Lọc Top Coin theo <strong>Vol 30D + Vol Consistency (volCV) + Funding Rate + MCap + Multi-TF</strong>. Chỉ giữ coin vượt Quality Gate.
               </p>
             </div>
           </div>
@@ -103,7 +108,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
             disabled={isScanning}
           >
             <RefreshCw size={14} className={isScanning ? 'spin' : ''} />
-            <span>{isScanning ? 'Đang Lọc Vol 30D...' : 'Quét Ngay'}</span>
+            <span>{isScanning ? 'Đang Lọc 2 Chiều...' : 'Quét Ngay'}</span>
           </button>
         </div>
       </div>
@@ -118,7 +123,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
         </div>
         <div className="macro-divider">|</div>
         <div className="macro-item">
-          <span className="macro-label">ETF Net Flow (Dù):</span>
+          <span className="macro-label">ETF Net Flow:</span>
           <span className={`macro-val ${(etfHistory[0]?.netFlow ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
             {(etfHistory[0]?.netFlow ?? 0) >= 0 ? '+' : ''}${((etfHistory[0]?.netFlow ?? 0)).toFixed(1)}M
           </span>
@@ -130,21 +135,70 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
         </div>
         <div className="macro-divider">|</div>
         <div className="macro-item">
-          <span className="macro-label">Lần cuối quét:</span>
-          <span className="macro-val text-slate-400">{lastUpdatedStr} (Quét {scanResult.scannedCount} coins vol 30d)</span>
+          <span className="macro-label">Lọc Chất Lượng:</span>
+          <span className="macro-val text-cyan">
+            {scanResult.qualifiedCount || 0} / {scanResult.scannedCount || 0} Coins Vượt Gate
+          </span>
+        </div>
+        <div className="macro-divider">|</div>
+        <div className="macro-item">
+          <span className="macro-label">Cập nhật:</span>
+          <span className="macro-val text-slate-400">{lastUpdatedStr}</span>
         </div>
       </div>
 
-      {/* ── MAIN TOP 5 SCANNER TABLE ──────────────────────────────────────── */}
+      {/* ── DUAL DIRECTION TAB SWITCHER ─────────────────────────────────────── */}
+      <div className="flex items-center gap-3 my-1">
+        <button
+          onClick={() => setActiveDirection('BUY')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+            activeDirection === 'BUY'
+              ? 'bg-emerald-600/20 text-emerald-400 border-2 border-emerald-500 shadow-lg shadow-emerald-900/20'
+              : 'bg-slate-800/40 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
+          }`}
+        >
+          <TrendingUp size={16} className={activeDirection === 'BUY' ? 'text-emerald-400' : ''} />
+          <span>🟢 PHO LỰC MUA (LONG SWING)</span>
+          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold">
+            {scanResult.topBuy?.length || 0} COIN
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveDirection('SELL')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+            activeDirection === 'SELL'
+              ? 'bg-rose-600/20 text-rose-400 border-2 border-rose-500 shadow-lg shadow-rose-900/20'
+              : 'bg-slate-800/40 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
+          }`}
+        >
+          <TrendingDown size={16} className={activeDirection === 'SELL' ? 'text-rose-400' : ''} />
+          <span>🔴 PHONG BA BÁN (SHORT SWING)</span>
+          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-rose-500/20 text-rose-300 font-extrabold">
+            {scanResult.topSell?.length || 0} COIN
+          </span>
+        </button>
+
+        <div className="ml-auto flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-900/50 px-3 py-1.5 rounded-md border border-slate-800">
+          <ShieldCheck size={14} className="text-amber-400" />
+          <span>Lọc Cứng: MCap &gt;$100M | Vol30D &gt;$100M | VolCV &le;1.3 | Spread &le;0.15% | Score &ge;10/25</span>
+        </div>
+      </div>
+
+      {/* ── MAIN SCANNER TABLE ──────────────────────────────────────── */}
       <div className="scanner-table-wrapper glass-panel">
-        {isScanning && scanResult.top5.length === 0 ? (
+        {isScanning && currentCoins.length === 0 ? (
           <div className="scanner-skeleton-loader">
             <RefreshCw size={24} className="spin text-amber" />
-            <p>Đang tính Volume 30 Ngày &amp; phân tích Orderbook Spread 50 coins...</p>
+            <p>Đang tính toán VolCV 30D, Funding Rate &amp; Multi-TF 50 coins...</p>
           </div>
-        ) : scanResult.top5.length === 0 ? (
+        ) : currentCoins.length === 0 ? (
           <div className="scanner-empty-state">
-            <p>Chưa có dữ liệu scan. Bấm "Quét Ngay" để khởi chạy.</p>
+            <ShieldCheck size={32} className="text-amber-400/80 mb-1" />
+            <p className="font-bold text-slate-200">Không có coin nào đạt Quality Gate cho chiều {activeDirection === 'BUY' ? 'MUA (LONG)' : 'BÁN (SHORT)'} lúc này.</p>
+            <p className="text-xs text-slate-400 max-w-md text-center">
+              Bộ lọc giữ kỷ luật nghiêm ngặt: Thà không báo tín hiệu chứ không ép đưa coin kém chất lượng vào Top để bảo vệ tài khoản cho Trader.
+            </p>
           </div>
         ) : (
           <table className="scanner-table">
@@ -152,20 +206,21 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
               <tr>
                 <th style={{ width: '55px' }}>HẠNG</th>
                 <th style={{ width: '160px' }}>COIN / TRADINGVIEW</th>
-                <th style={{ width: '125px' }}>ĐIỂM CHẤM</th>
-                <th style={{ width: '125px' }}>FUTURES SPREAD</th>
+                <th style={{ width: '140px' }}>VỐN HÓA &amp; VOL 30D</th>
+                <th style={{ width: '135px' }}>SPREAD &amp; FUNDING</th>
                 <th style={{ width: '155px' }}>DÒNG TIỀN (CVD 24H)</th>
-                <th style={{ width: '155px' }}>VOLUME 24H / VOL 30D</th>
-                <th style={{ width: '155px' }}>KỸ THUẬT 4H (EMA / RSI)</th>
+                <th style={{ width: '165px' }}>KỸ THUẬT (4H &amp; DAILY)</th>
+                <th style={{ width: '120px' }}>ĐIỂM TÍN HIỆU</th>
                 <th>TÍN HIỆU NHÂN DUYÊN NỔI BẬT</th>
               </tr>
             </thead>
             <tbody>
-              {scanResult.top5.map((coin, index) => {
+              {currentCoins.map((coin, index) => {
                 const rank = index + 1;
-                const isUptrend = coin.ema21 && coin.ema55 && coin.ema21 > coin.ema55;
+                const is4hUptrend = coin.ema21 && coin.ema55 && coin.ema21 > coin.ema55;
                 const spreadText = coin.spreadPct != null ? `${coin.spreadPct.toFixed(3)}%` : '---';
                 const isTightSpread = coin.spreadPct != null && coin.spreadPct <= 0.05;
+                const fundingText = coin.fundingRate != null ? `${coin.fundingRate > 0 ? '+' : ''}${coin.fundingRate.toFixed(4)}%` : '---';
                 const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
 
                 return (
@@ -191,9 +246,86 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                         </div>
                       </a>
                       <div className="price-group">
-                        <span className="price-text">${coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                        <span className="price-text">
+                          ${coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </span>
                         <span className={`change-text ${coin.priceChange24h >= 0 ? 'text-emerald' : 'text-rose'}`}>
                           {coin.priceChange24h >= 0 ? '+' : ''}{coin.priceChange24h.toFixed(2)}%
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Vol 30d, MCap & VolCV */}
+                    <td className="td-vol">
+                      <div className="vol-val font-bold text-slate-200">
+                        <span className="label-sub">MCap: </span>{fmtUsd(coin.marketCap)}
+                      </div>
+                      <div className="surge-val mt-0.5">
+                        <span className="label-sub">Vol 30D: </span>
+                        <span className="text-slate-300 font-bold">{fmtUsd(coin.vol30d)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          coin.volCV <= 0.6 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60' : 'bg-slate-800 text-slate-300'
+                        }`}>
+                          VolCV: {coin.volCV} {coin.volCV <= 0.6 ? '✓' : ''}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Futures Spread & Funding Rate */}
+                    <td className="td-spread">
+                      <div className={`val-bold ${isTightSpread ? 'text-emerald' : coin.spreadPct > 0.15 ? 'text-rose' : 'text-slate'}`}>
+                        Spread: {spreadText}
+                      </div>
+                      <div className="mt-1">
+                        <span className={`text-[11px] font-bold ${
+                          activeDirection === 'BUY' && coin.fundingRate < -0.02 ? 'text-emerald font-extrabold' :
+                          activeDirection === 'BUY' && coin.fundingRate > 0.04 ? 'text-rose' :
+                          activeDirection === 'SELL' && coin.fundingRate > 0.04 ? 'text-rose font-extrabold' : 'text-slate-300'
+                        }`}>
+                          Funding: {fundingText}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Money Flow / CVD & Taker Ratio */}
+                    <td className="td-cvd">
+                      <div className="cvd-main">
+                        <span className="label-sub">CVD 24h: </span>
+                        <span className={`val-bold ${coin.cvd24h > 0 ? 'text-emerald' : coin.cvd24h < 0 ? 'text-rose' : 'text-slate'}`}>
+                          {fmtCvd(coin.cvd24h)}
+                        </span>
+                      </div>
+                      <div className="buy-ratio-bar-wrap mt-1">
+                        <div className="buy-ratio-text flex justify-between text-[10px]">
+                          <span>Mua: <strong>{coin.takerBuyRatio}%</strong></span>
+                          <span>Bán: <strong>{100 - coin.takerBuyRatio}%</strong></span>
+                        </div>
+                        <div className="buy-ratio-track mt-0.5">
+                          <div className="buy-ratio-fill" style={{ width: `${coin.takerBuyRatio}%` }} />
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Technicals (4h + Daily Multi-TF) */}
+                    <td className="td-ta">
+                      <div className="ta-item">
+                        <span className="label-sub">EMA 4h: </span>
+                        <span className={`val-ta font-bold ${is4hUptrend ? 'text-emerald' : 'text-rose'}`}>
+                          {is4hUptrend ? '▲ BULL (21>55)' : '▼ BEAR (21<55)'}
+                        </span>
+                      </div>
+                      <div className="ta-item mt-0.5">
+                        <span className="label-sub">Daily: </span>
+                        <span className={`val-ta font-bold ${coin.isDailyUptrend ? 'text-emerald' : 'text-rose'}`}>
+                          {coin.isDailyUptrend ? '▲ BULL 1D' : '▼ BEAR 1D'}
+                        </span>
+                      </div>
+                      <div className="ta-item mt-0.5">
+                        <span className="label-sub">RSI (14): </span>
+                        <span className={`val-ta ${coin.rsi14 >= 40 && coin.rsi14 <= 60 ? 'text-cyan font-bold' : coin.rsi14 > 70 ? 'text-rose' : 'text-slate'}`}>
+                          {coin.rsi14} {coin.rsi14 >= 40 && coin.rsi14 <= 60 ? '🎯' : ''}
                         </span>
                       </div>
                     </td>
@@ -201,83 +333,27 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                     {/* Score */}
                     <td className="td-score">
                       <div className="score-badge-wrap">
-                        <span className="score-val" style={{ color: coin.statusColor }}>
-                          {coin.score}<small>/20</small>
+                        <span className="score-val font-extrabold" style={{ color: coin.statusColor }}>
+                          {coin.score}<small>/25</small>
                         </span>
-                        <span className="status-pill" style={{ backgroundColor: `${coin.statusColor}20`, color: coin.statusColor, borderColor: coin.statusColor }}>
+                        <span className="status-pill font-bold" style={{ backgroundColor: `${coin.statusColor}20`, color: coin.statusColor, borderColor: coin.statusColor }}>
                           {coin.status}
                         </span>
                       </div>
-                      <div className="score-bar-bg">
+                      <div className="score-bar-bg mt-1">
                         <div
                           className="score-bar-fill"
                           style={{
-                            width: `${Math.min(100, (coin.score / 20) * 100)}%`,
+                            width: `${Math.min(100, (coin.score / 25) * 100)}%`,
                             backgroundColor: coin.statusColor,
                           }}
                         />
                       </div>
                     </td>
 
-                    {/* Futures Spread */}
-                    <td className="td-spread">
-                      <div className={`val-bold ${isTightSpread ? 'text-emerald' : coin.spreadPct > 0.15 ? 'text-rose' : 'text-slate'}`}>
-                        {spreadText}
-                      </div>
-                      <div className="label-sub">
-                        {isTightSpread ? '⚡ Mỏng (Thanh khoản)' : coin.spreadPct > 0.15 ? '⚠️ Rộng (Slippage)' : 'Bình thường'}
-                      </div>
-                    </td>
-
-                    {/* Money Flow / CVD */}
-                    <td className="td-cvd">
-                      <div className="cvd-main">
-                        <span className="label-sub">CVD 24h:</span>
-                        <span className={`val-bold ${coin.cvd24h > 0 ? 'text-emerald' : coin.cvd24h < 0 ? 'text-rose' : 'text-slate'}`}>
-                          {fmtCvd(coin.cvd24h)}
-                        </span>
-                      </div>
-                      <div className="buy-ratio-bar-wrap">
-                        <div className="buy-ratio-text">
-                          <span>Phe mua: <strong>{coin.takerBuyRatio}%</strong></span>
-                        </div>
-                        <div className="buy-ratio-track">
-                          <div className="buy-ratio-fill" style={{ width: `${coin.takerBuyRatio}%` }} />
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Volume 24h & Vol 30D */}
-                    <td className="td-vol">
-                      <div className="vol-val">24h: {fmtUsd(coin.volume24h)}</div>
-                      <div className="surge-val">
-                        <span className="label-sub">Vol 30D: </span>
-                        <span className="text-slate-300 font-bold">{fmtUsd(coin.vol30d)}</span>
-                        <span className={`badge-surge ml-1 ${coin.volSurgeRatio >= 1.5 ? 'surge-high' : 'surge-normal'}`}>
-                          {coin.volSurgeRatio}x 30d
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Technicals */}
-                    <td className="td-ta">
-                      <div className="ta-item">
-                        <span className="label-sub">EMA 4h:</span>
-                        <span className={`val-ta ${isUptrend ? 'text-emerald' : 'text-rose'}`}>
-                          {isUptrend ? '▲ BULL (21>55)' : '▼ BEAR (21<55)'}
-                        </span>
-                      </div>
-                      <div className="ta-item">
-                        <span className="label-sub">RSI (14):</span>
-                        <span className={`val-ta ${coin.rsi14 >= 40 && coin.rsi14 <= 60 ? 'text-cyan font-bold' : coin.rsi14 > 70 ? 'text-rose' : 'text-slate'}`}>
-                          {coin.rsi14} {coin.rsi14 >= 40 && coin.rsi14 <= 60 ? '🎯' : ''}
-                        </span>
-                      </div>
-                    </td>
-
                     {/* Tags & 1-Click TradingView Button */}
                     <td className="td-tags">
-                      <div className="tags-flex align-center">
+                      <div className="tags-flex align-center flex-wrap gap-1">
                         {coin.tags.map((tag, i) => (
                           <span key={i} className={`scan-tag tag-${tag.type}`}>
                             {tag.label}
@@ -287,7 +363,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                           href={tvChartUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="tv-btn-badge"
+                          className="tv-btn-badge ml-auto"
                         >
                           Chart ↗
                         </a>
@@ -303,11 +379,12 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
 
       {/* ── FOOTER GUIDANCE ──────────────────────────────────────────────── */}
       <div className="scanner-footer-note glass-panel">
-        <div className="note-title">💡 GHI CHÚ GIAO DỊCH SWING:</div>
+        <div className="note-title">💡 NGUYÊN TẮC SWING TRADING CHÍNH XÁC CAO:</div>
         <p>
-          • <strong>1-Click Mở Chart</strong>: Nhấp thẳng vào <strong>Tên Coin</strong> hoặc nút <strong>[Chart ↗]</strong> để soi nến chi tiết trên TradingView.<br />
-          • <strong>Volume 30D &amp; Spread Mỏng</strong>: Đã được lọc tự động để chống coin ảo/pump ngắn hạn và trượt giá.<br />
-          • Vùng vào lệnh Swing đẹp nhất: Khi <strong>Vol 30D lớn (&gt;$300M)</strong> + <strong>RSI 14 (4h) ở vùng 40-55 (Pullback)</strong> + <strong>CVD Mua ròng dương</strong> + <strong>Giá &gt; EMA 21 (4h)</strong>.
+          • <strong>Chất Lượng Over Số Lượng</strong>: Hệ thống có thể trả về ít hơn 5 coin nếu các coin khác không vượt qua <strong>Quality Gate (Score &ge; 10/25, VolCV &le; 1.3, Spread &le; 0.15%)</strong>.<br />
+          • <strong>Volume Consistency (VolCV &le; 0.6)</strong>: Đảm bảo volume giao dịch bền vững trong suốt 30 ngày, loại bỏ triệt để coin bị bơm thổi ảo 1-2 ngày rồi xả.<br />
+          • <strong>Funding Rate &amp; Crowded Trade</strong>: Tránh vào Long khi Funding quá dương (&gt;0.04%) hoặc Short khi Funding quá âm (&lt;-0.03%) để né cú Squeeze.<br />
+          • <strong>Multi-Timeframe Alignment</strong>: Tín hiệu mạnh nhất xuất hiện khi cả khung <strong>4H và Daily</strong> cùng đồng thuận theo 1 hướng trend.
         </p>
       </div>
     </div>

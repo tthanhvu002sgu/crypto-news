@@ -72,12 +72,70 @@ async function mapConcurrent(array, limit, fn) {
 }
 
 /** 
- * Fetch Top 50 coins sorted by TRUE 30-DAY VOLUME (not just 24h pump volume) 
- * Filters out low-liquidity coins with 1-day temporary volume spikes.
+ * Fetch Market Caps map (symbol -> marketCapUSD) via CoinGecko (fallback CoinCap)
  */
-export async function getTop30dVolumePairs(limit = 50) {
+export async function getMarketCapMap() {
+  const capMap = new Map();
   try {
-    // 1. Fetch 24h ticker for top 120 potential candidates
+    const res = await axios.get('https://api.coingecko.com/api/v3/coins/markets', {
+      params: { vs_currency: 'usd', order: 'market_cap_desc', per_page: 250, page: 1 },
+      timeout: 4000,
+    });
+    if (Array.isArray(res.data)) {
+      res.data.forEach(item => {
+        if (item.symbol && item.market_cap) {
+          capMap.set(item.symbol.toUpperCase(), item.market_cap);
+        }
+      });
+      return capMap;
+    }
+  } catch {
+    // Fallback to CoinCap
+    try {
+      const ccRes = await axios.get('https://api.coincap.io/v2/assets', {
+        params: { limit: 250 },
+        timeout: 4000,
+      });
+      if (ccRes.data && Array.isArray(ccRes.data.data)) {
+        ccRes.data.data.forEach(item => {
+          if (item.symbol && item.marketCapUsd) {
+            capMap.set(item.symbol.toUpperCase(), parseFloat(item.marketCapUsd));
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[Scanner] Could not fetch market caps:', err.message);
+    }
+  }
+  return capMap;
+}
+
+/**
+ * Fetch Binance Futures Funding Rates for all symbols (% per 8h)
+ */
+export async function getFundingRatesMap() {
+  const fundingMap = new Map();
+  try {
+    const res = await axios.get('https://fapi.binance.com/fapi/v1/premiumIndex', { timeout: 4000 });
+    if (Array.isArray(res.data)) {
+      res.data.forEach(item => {
+        if (item.symbol && item.lastFundingRate != null) {
+          // Funding rate percentage (e.g. 0.0001 -> 0.01%)
+          fundingMap.set(item.symbol, parseFloat(item.lastFundingRate) * 100);
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('[Scanner] Could not fetch funding rates:', e.message);
+  }
+  return fundingMap;
+}
+
+/** 
+ * Fetch Top 50 coins sorted by TRUE 30-DAY VOLUME with Volume Consistency Check (volCV)
+ */
+export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
+  try {
     const res = await axios.get('https://api.binance.com/api/v3/ticker/24hr');
     const candidates = res.data
       .filter(item => 
@@ -88,7 +146,6 @@ export async function getTop30dVolumePairs(limit = 50) {
       .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
       .slice(0, 100);
 
-    // 2. Fetch 30-day daily klines for each candidate to sum exact 30-day Quote Volume
     const fetch30dVol = async (item) => {
       try {
         const kRes = await axios.get('https://api.binance.com/api/v3/klines', {
@@ -98,30 +155,39 @@ export async function getTop30dVolumePairs(limit = 50) {
 
         if (!kRes.data || kRes.data.length === 0) return null;
 
-        const vol30d = kRes.data.reduce((sum, k) => sum + parseFloat(k[7]), 0); // quoteVolume sum
-        const avgDailyVol30d = vol30d / (kRes.data.length || 1);
+        const dailyVols = kRes.data.map(k => parseFloat(k[7]));
+        const vol30d = dailyVols.reduce((sum, v) => sum + v, 0);
+        const meanDailyVol = vol30d / (dailyVols.length || 1);
+        
+        // Coefficient of Variation (volCV = stdDev / mean)
+        const variance = dailyVols.reduce((sum, v) => sum + Math.pow(v - meanDailyVol, 2), 0) / (dailyVols.length || 1);
+        const stdDev = Math.sqrt(variance);
+        const volCV = meanDailyVol > 0 ? stdDev / meanDailyVol : 1.5;
+
+        const baseAsset = item.symbol.replace('USDT', '');
+        const marketCap = marketCapMap.get(baseAsset) || null;
 
         return {
           symbol: item.symbol,
-          baseAsset: item.symbol.replace('USDT', ''),
+          baseAsset,
           price: parseFloat(item.lastPrice),
           priceChange24h: parseFloat(item.priceChangePercent),
           volume24h: parseFloat(item.quoteVolume),
           high24h: parseFloat(item.highPrice),
           low24h: parseFloat(item.lowPrice),
           vol30d: Math.round(vol30d),
-          avgDailyVol30d: Math.round(avgDailyVol30d),
+          avgDailyVol30d: Math.round(meanDailyVol),
+          volCV: Math.round(volCV * 100) / 100, // Round 2 decimals e.g. 0.45
+          marketCap,
         };
       } catch {
         return null;
       }
     };
 
-    // Run concurrently with batch limit of 10
     const results = await mapConcurrent(candidates, 10, fetch30dVol);
     const validPairs = results.filter(Boolean);
 
-    // Sort by 30-DAY VOLUME descending & return top 50
     validPairs.sort((a, b) => b.vol30d - a.vol30d);
     return validPairs.slice(0, limit);
   } catch (e) {
@@ -143,7 +209,7 @@ export async function getFuturesBookTickers() {
         bookMap.set(item.symbol, {
           bidPrice: bid,
           askPrice: ask,
-          spreadPct: Math.round(spreadPct * 1000) / 1000, // round 3 decimals e.g. 0.025%
+          spreadPct: Math.round(spreadPct * 1000) / 1000,
         });
       }
     });
@@ -154,37 +220,56 @@ export async function getFuturesBookTickers() {
   }
 }
 
-/** Analyze single coin indicators (Spot 4h Klines + Futures 4h Klines + Spread) */
-async function analyzeCoin(pair, futuresBookMap) {
+/** Analyze single coin indicators (Spot 4h + Spot 1d Multi-TF + Futures 4h CVD + Funding) */
+async function analyzeCoin(pair, futuresBookMap, fundingMap) {
   try {
-    // 1. Fetch Spot 4h klines (limit 55 for EMA 55 + RSI 14)
-    const spotRes = await axios.get('https://api.binance.com/api/v3/klines', {
-      params: { symbol: pair.symbol, interval: '4h', limit: 55 },
+    // 1. Fetch Spot 4h klines (limit 150 for precise EMA 55 convergence)
+    const spot4hRes = await axios.get('https://api.binance.com/api/v3/klines', {
+      params: { symbol: pair.symbol, interval: '4h', limit: 150 },
       timeout: 5000,
     });
 
-    if (!spotRes.data || spotRes.data.length < 30) return null;
+    if (!spot4hRes.data || spot4hRes.data.length < 55) return null;
 
-    const closes = spotRes.data.map(k => parseFloat(k[4]));
-    const currentPrice = closes[closes.length - 1];
+    const closes4h = spot4hRes.data.map(k => parseFloat(k[4]));
+    const currentPrice = closes4h[closes4h.length - 1];
 
-    // TA Calculations
-    const ema21 = calculateEMA(closes, 21);
-    const ema55 = calculateEMA(closes, 55);
-    const rsi14 = calculateRSI(closes, 14);
+    const ema21 = calculateEMA(closes4h, 21);
+    const ema55 = calculateEMA(closes4h, 55);
+    const rsi14 = calculateRSI(closes4h, 14);
 
-    // Volume Surge vs 30-day Daily Average Volume
+    // 2. Fetch Spot Daily klines (limit 60) for Multi-Timeframe Daily Trend
+    let dailyEma21 = null;
+    let dailyEma55 = null;
+    let isDailyUptrend = false;
+    try {
+      const spot1dRes = await axios.get('https://api.binance.com/api/v3/klines', {
+        params: { symbol: pair.symbol, interval: '1d', limit: 60 },
+        timeout: 4000,
+      });
+      if (spot1dRes.data && spot1dRes.data.length >= 55) {
+        const closes1d = spot1dRes.data.map(k => parseFloat(k[4]));
+        dailyEma21 = calculateEMA(closes1d, 21);
+        dailyEma55 = calculateEMA(closes1d, 55);
+        if (dailyEma21 && dailyEma55) {
+          isDailyUptrend = dailyEma21 > dailyEma55;
+        }
+      }
+    } catch {
+      // ignore daily failure
+    }
+
     const avgDailyVol = pair.avgDailyVol30d || (pair.volume24h || 1);
     const volSurgeRatio = pair.volume24h > 0 ? (pair.volume24h / avgDailyVol) : 1;
 
-    // 2. Fetch Futures 4h klines for CVD & Taker Buy/Sell ratio
+    // 3. Fetch Futures 4h klines for CVD (18 nến: 6 nến = exact 24h)
     let cvd24h = 0;
-    let cvdTrend = 0; // positive if recent 12h CVD > previous 12h CVD
+    let cvdTrend = 0;
     let takerBuyRatio = 50;
     let hasFutures = false;
     let spreadPct = null;
+    let fundingRate = fundingMap.has(pair.symbol) ? fundingMap.get(pair.symbol) : null;
 
-    // Check futures book ticker for Bid-Ask Spread
     if (futuresBookMap && futuresBookMap.has(pair.symbol)) {
       hasFutures = true;
       spreadPct = futuresBookMap.get(pair.symbol).spreadPct;
@@ -192,7 +277,7 @@ async function analyzeCoin(pair, futuresBookMap) {
 
     try {
       const futRes = await axios.get('https://fapi.binance.com/fapi/v1/klines', {
-        params: { symbol: pair.symbol, interval: '4h', limit: 12 },
+        params: { symbol: pair.symbol, interval: '4h', limit: 18 },
         timeout: 4000,
       });
 
@@ -210,21 +295,24 @@ async function analyzeCoin(pair, futuresBookMap) {
 
           totalBuyQuote += buyQVol;
           totalQuote += qVol;
-          cvd24h += delta;
           deltas.push(delta);
         });
 
+        // CVD 24h = sum of last 6 candles (6 * 4h = 24h)
+        const recent24hDeltas = deltas.slice(-6);
+        cvd24h = recent24hDeltas.reduce((a, b) => a + b, 0);
+
         takerBuyRatio = totalQuote > 0 ? Math.round((totalBuyQuote / totalQuote) * 100) : 50;
 
-        // CVD trend: last 3 candles (12h) sum vs preceding 3 candles (12h) sum
-        if (deltas.length >= 6) {
-          const recent12h = deltas.slice(-3).reduce((a, b) => a + b, 0);
-          const prev12h = deltas.slice(-6, -3).reduce((a, b) => a + b, 0);
-          cvdTrend = recent12h - prev12h;
+        // CVD trend: recent 24h (last 6 candles) vs previous 24h (preceding 6 candles)
+        if (deltas.length >= 12) {
+          const prev24hDeltas = deltas.slice(-12, -6);
+          const prev24hSum = prev24hDeltas.reduce((a, b) => a + b, 0);
+          cvdTrend = cvd24h - prev24hSum;
         }
       }
     } catch {
-      // keep hasFutures as set by bookTicker if any
+      // keep default values
     }
 
     return {
@@ -232,6 +320,9 @@ async function analyzeCoin(pair, futuresBookMap) {
       currentPrice,
       ema21: ema21 ? Math.round(ema21 * 10000) / 10000 : null,
       ema55: ema55 ? Math.round(ema55 * 10000) / 10000 : null,
+      dailyEma21: dailyEma21 ? Math.round(dailyEma21 * 10000) / 10000 : null,
+      dailyEma55: dailyEma55 ? Math.round(dailyEma55 * 10000) / 10000 : null,
+      isDailyUptrend,
       rsi14,
       volSurgeRatio: Math.round(volSurgeRatio * 10) / 10,
       cvd24h: Math.round(cvd24h),
@@ -239,6 +330,7 @@ async function analyzeCoin(pair, futuresBookMap) {
       takerBuyRatio,
       hasFutures,
       spreadPct,
+      fundingRate: fundingRate !== null ? Math.round(fundingRate * 10000) / 10000 : null,
     };
   } catch (e) {
     console.warn(`[Scanner] Skipping ${pair.symbol}:`, e.message);
@@ -246,31 +338,50 @@ async function analyzeCoin(pair, futuresBookMap) {
   }
 }
 
-// ─── SCORING ALGORITHM (0 - 20 POINTS) ────────────────────────────────────────
+// ─── BUY / LONG SCORING ENGINE (MAX 25 POINTS) ─────────────────────────────────
 
-export function scoreCoin(coin, macroContext = {}) {
+export function scoreCoinBuy(coin, macroContext = {}) {
   let score = 0;
   const tags = [];
   const breakdown = [];
 
-  // 1. NHÂN — 30-Day Liquidity Base & Futures Spread (Max 6 pts)
-  // 30-Day Volume Quality Check
-  if (coin.vol30d >= 1000000000) { // 30d Vol > $1 Billion ($33M+/day)
+  // 1. NHÂN — 30D Volume, Market Cap, Vol Consistency & Spread (Max 8 pts)
+  if (coin.vol30d >= 1000000000) {
     score += 2;
     tags.push({ label: 'Vol 30D Khủng (>$1B)', type: 'emerald' });
-    breakdown.push({ category: 'NHÂN', item: 'Thanh khoản 30 ngày cực bền (>$1B)', pts: 2 });
-  } else if (coin.vol30d >= 300000000) { // 30d Vol > $300 Million ($10M+/day)
+    breakdown.push({ category: 'NHÂN', item: 'Thanh khoản 30 ngày cực cao (>$1B)', pts: 2 });
+  } else if (coin.vol30d >= 300000000) {
     score += 1;
     tags.push({ label: 'Vol 30D Bền', type: 'emerald' });
     breakdown.push({ category: 'NHÂN', item: 'Thanh khoản 30 ngày ổn định (>$300M)', pts: 1 });
   }
 
-  if (coin.hasFutures) {
+  // Market Cap
+  if (coin.marketCap >= 1000000000) {
+    score += 2;
+    tags.push({ label: 'Cap Large (>$1B)', type: 'emerald' });
+    breakdown.push({ category: 'NHÂN', item: 'Vốn hóa lớn (>$1B)', pts: 2 });
+  } else if (coin.marketCap >= 200000000) {
     score += 1;
-    breakdown.push({ category: 'NHÂN', item: 'Có Binance Futures', pts: 1 });
+    tags.push({ label: 'Cap Mid (>$200M)', type: 'emerald' });
+    breakdown.push({ category: 'NHÂN', item: 'Vốn hóa vừa (>$200M)', pts: 1 });
   }
 
-  // SPREAD FUTURES EVALUATION (Chênh lệch giá Mua / Bán)
+  // Volume Consistency (volCV)
+  if (coin.volCV <= 0.6) {
+    score += 2;
+    tags.push({ label: `Vol CV ${coin.volCV} (Đều)`, type: 'emerald' });
+    breakdown.push({ category: 'NHÂN', item: `Volume 30D phân bổ rất đều (CV ${coin.volCV})`, pts: 2 });
+  } else if (coin.volCV <= 0.9) {
+    score += 1;
+    breakdown.push({ category: 'NHÂN', item: `Volume 30D khá ổn định (CV ${coin.volCV})`, pts: 1 });
+  } else if (coin.volCV > 1.2) {
+    score -= 2;
+    tags.push({ label: `Vol CV ${coin.volCV} ⚠️ (Pump Ảo)`, type: 'rose' });
+    breakdown.push({ category: 'NHÂN', item: `Volume bất ổn định, rủi ro pump ảo (CV ${coin.volCV})`, pts: -2 });
+  }
+
+  // Spread Futures
   if (coin.spreadPct !== null) {
     if (coin.spreadPct <= 0.03) {
       score += 2;
@@ -279,114 +390,280 @@ export function scoreCoin(coin, macroContext = {}) {
     } else if (coin.spreadPct <= 0.08) {
       score += 1;
       tags.push({ label: `Spread ${coin.spreadPct.toFixed(2)}%`, type: 'emerald' });
-      breakdown.push({ category: 'NHÂN', item: `Spread mỏng tốt (${coin.spreadPct.toFixed(2)}%)`, pts: 1 });
+      breakdown.push({ category: 'NHÂN', item: `Spread mỏng (${coin.spreadPct.toFixed(2)}%)`, pts: 1 });
     } else if (coin.spreadPct > 0.15) {
-      score -= 1;
+      score -= 2;
       tags.push({ label: `Spread Rộng (${coin.spreadPct.toFixed(2)}%)`, type: 'rose' });
-      breakdown.push({ category: 'NHÂN', item: `Spread rộng >0.15% (Rủi ro Slippage)`, pts: -1 });
+      breakdown.push({ category: 'NHÂN', item: `Spread rộng >0.15% (Trượt giá)`, pts: -2 });
     }
   }
 
-  // 2. DUYÊN — Money Flow / CVD / Volume (Max 6 pts)
+  // 2. DUYÊN — Money Flow / CVD / Funding Rate (Max 8 pts)
   if (coin.cvd24h > 0) {
     score += 2;
-    tags.push({ label: 'CVD Inflow', type: 'emerald' });
+    tags.push({ label: 'CVD Mua Ròng', type: 'emerald' });
     breakdown.push({ category: 'DUYÊN', item: 'CVD 24h Mua Ròng', pts: 2 });
   } else if (coin.cvd24h < 0) {
-    score -= 1;
-    breakdown.push({ category: 'DUYÊN', item: 'CVD 24h Bán Ròng', pts: -1 });
+    score -= 2;
+    breakdown.push({ category: 'DUYÊN', item: 'CVD 24h Bán Ròng', pts: -2 });
   }
 
   if (coin.cvdTrend > 0) {
     score += 1;
-    tags.push({ label: 'CVD Trend ↑', type: 'emerald' });
-    breakdown.push({ category: 'DUYÊN', item: 'CVD Momentum Đang Tăng', pts: 1 });
-  }
-
-  if (coin.volSurgeRatio >= 1.5) {
-    score += 2;
-    tags.push({ label: `Vol Surge ${coin.volSurgeRatio}x 30d`, type: 'amber' });
-    breakdown.push({ category: 'DUYÊN', item: `Volume Đột Biến (${coin.volSurgeRatio}x TB 30d)`, pts: 2 });
-  } else if (coin.volSurgeRatio >= 1.2) {
-    score += 1;
-    tags.push({ label: 'Vol Tăng Cường', type: 'amber' });
-    breakdown.push({ category: 'DUYÊN', item: 'Volume Tăng So Với TB 30d', pts: 1 });
+    tags.push({ label: 'CVD Momentum ↑', type: 'emerald' });
+    breakdown.push({ category: 'DUYÊN', item: 'Lực CVD đang tăng tốc', pts: 1 });
   }
 
   if (coin.takerBuyRatio >= 60) {
+    score += 2;
+    tags.push({ label: `Phe Mua ${coin.takerBuyRatio}%`, type: 'emerald' });
+    breakdown.push({ category: 'DUYÊN', item: `Phe Mua áp đảo (${coin.takerBuyRatio}%)`, pts: 2 });
+  } else if (coin.takerBuyRatio >= 53) {
     score += 1;
-    tags.push({ label: `Buy Pressure ${coin.takerBuyRatio}%`, type: 'emerald' });
-    breakdown.push({ category: 'DUYÊN', item: `Phe Mua Áp Đảo (${coin.takerBuyRatio}%)`, pts: 1 });
+    breakdown.push({ category: 'DUYÊN', item: `Phe Mua chiếm ưu thế (${coin.takerBuyRatio}%)`, pts: 1 });
   }
 
-  // 3. DUYÊN — Technical Analysis 4H (Max 6 pts)
-  const isEmaUptrend = coin.ema21 && coin.ema55 && coin.ema21 > coin.ema55;
-  if (isEmaUptrend) {
+  // Funding Rate Check (Tránh Crowded Trade)
+  if (coin.fundingRate !== null) {
+    if (coin.fundingRate < -0.02) {
+      score += 2;
+      tags.push({ label: `Funding ${coin.fundingRate}% ⚡ (Short Squeeze)`, type: 'emerald' });
+      breakdown.push({ category: 'DUYÊN', item: `Funding âm (${coin.fundingRate}%), tiềm năng Short Squeeze`, pts: 2 });
+    } else if (Math.abs(coin.fundingRate) <= 0.01) {
+      score += 1;
+      tags.push({ label: `Funding Ổn (${coin.fundingRate}%)`, type: 'emerald' });
+      breakdown.push({ category: 'DUYÊN', item: `Funding Rate cân bằng, không bị crowded (${coin.fundingRate}%)`, pts: 1 });
+    } else if (coin.fundingRate > 0.04) {
+      score -= 2;
+      tags.push({ label: `Funding Cao (${coin.fundingRate}%) ⚠️`, type: 'rose' });
+      breakdown.push({ category: 'DUYÊN', item: `Funding quá cao (${coin.fundingRate}%), rủi ro Long Squeeze`, pts: -2 });
+    }
+  }
+
+  if (coin.volSurgeRatio >= 1.5) {
+    score += 1;
+    tags.push({ label: `Vol Surge ${coin.volSurgeRatio}x`, type: 'amber' });
+  }
+
+  // 3. KỸ THUẬT — Multi-Timeframe Trend & Indicators (Max 7 pts)
+  const is4hUptrend = coin.ema21 && coin.ema55 && coin.ema21 > coin.ema55;
+  if (is4hUptrend) {
     score += 2;
     tags.push({ label: 'EMA 4h Uptrend', type: 'emerald' });
-    breakdown.push({ category: 'KỸ THUẬT', item: 'EMA 21 > EMA 55 (Uptrend 4h)', pts: 2 });
+    breakdown.push({ category: 'KỸ THUẬT', item: 'EMA 21 > EMA 55 (4h Uptrend)', pts: 2 });
   } else {
-    score -= 1;
-    breakdown.push({ category: 'KỸ THUẬT', item: 'EMA 21 < EMA 55 (Downtrend 4h)', pts: -1 });
+    score -= 2;
+    breakdown.push({ category: 'KỸ THUẬT', item: 'EMA 21 < EMA 55 (4h Downtrend)', pts: -2 });
   }
 
-  const isPriceAboveEma21 = coin.ema21 && coin.currentPrice >= coin.ema21;
-  if (isPriceAboveEma21) {
-    score += 1;
-    breakdown.push({ category: 'KỸ THUẬT', item: 'Giá nằm trên EMA 21', pts: 1 });
-  } else {
-    score -= 1;
-    breakdown.push({ category: 'KỸ THUẬT', item: 'Giá nằm dưới EMA 21', pts: -1 });
-  }
-
-  // RSI 14 sweet spot (40-60 = Swing Pullback/Re-accumulation zone)
-  if (coin.rsi14 >= 40 && coin.rsi14 <= 60) {
+  // Multi-TF Confirmation (Daily)
+  if (is4hUptrend && coin.isDailyUptrend) {
     score += 2;
-    tags.push({ label: `RSI Sweet Spot (${coin.rsi14})`, type: 'cyan' });
-    breakdown.push({ category: 'KỸ THUẬT', item: `RSI 14 Vùng Tích Lũy Vừa Đẹp (${coin.rsi14})`, pts: 2 });
-  } else if (coin.rsi14 >= 30 && coin.rsi14 < 40) {
-    score += 1;
-    tags.push({ label: `RSI Bounce Zone (${coin.rsi14})`, type: 'cyan' });
-    breakdown.push({ category: 'KỸ THUẬT', item: `RSI Vùng Hồi Phục (${coin.rsi14})`, pts: 1 });
-  } else if (coin.rsi14 > 75) {
-    score -= 1;
-    tags.push({ label: `RSI Quá Mua (${coin.rsi14})`, type: 'rose' });
-    breakdown.push({ category: 'KỸ THUẬT', item: `RSI Quá Mua > 75 (Rủi ro Fomo)`, pts: -1 });
+    tags.push({ label: 'Multi-TF Uptrend ✓', type: 'emerald' });
+    breakdown.push({ category: 'KỸ THUẬT', item: 'Khung 4h + Daily đồng thuận Uptrend', pts: 2 });
   }
 
-  // Price Change 24h Sweet Spot (2% to 10% = active but not overextended)
-  if (coin.priceChange24h >= 2 && coin.priceChange24h <= 10) {
+  // Distance to EMA 21 (vùng pullback)
+  if (coin.ema21 && coin.currentPrice) {
+    const distPct = ((coin.currentPrice - coin.ema21) / coin.ema21) * 100;
+    if (distPct >= -1 && distPct <= 3) {
+      score += 2;
+      tags.push({ label: `Vùng Pullback EMA21`, type: 'cyan' });
+      breakdown.push({ category: 'KỸ THUẬT', item: `Giá sát EMA21 4h (${distPct.toFixed(1)}%), entry mượt`, pts: 2 });
+    } else if (distPct > 7) {
+      score -= 1;
+      tags.push({ label: `Cách Xa EMA21 (+${distPct.toFixed(1)}%)`, type: 'rose' });
+      breakdown.push({ category: 'KỸ THUẬT', item: `Giá quá xa EMA21 4h (Rủi ro đu đỉnh ngắn)`, pts: -1 });
+    }
+  }
+
+  // RSI 14 Sweet Spot
+  if (coin.rsi14 >= 40 && coin.rsi14 <= 60) {
     score += 1;
-    tags.push({ label: `24h +${coin.priceChange24h.toFixed(1)}%`, type: 'emerald' });
-    breakdown.push({ category: 'KỸ THUẬT', item: 'Biến động 24h mượt mà (2% - 10%)', pts: 1 });
-  } else if (coin.priceChange24h > 15) {
-    score -= 1;
-    tags.push({ label: `Pump Quá Đà (+${coin.priceChange24h.toFixed(1)}%)`, type: 'rose' });
-    breakdown.push({ category: 'KỸ THUẬT', item: 'Biến động 24h > 15% (Tránh Chase Pump)', pts: -1 });
+    tags.push({ label: `RSI Sweet Spot (${coin.rsi14})`, type: 'cyan' });
+  } else if (coin.rsi14 > 75) {
+    score -= 2;
+    tags.push({ label: `RSI Overbought (${coin.rsi14})`, type: 'rose' });
   }
 
   // 4. MACRO CONTEXT BONUS (Max 2 pts)
   if (macroContext.isBtcBullish) {
     score += 1;
-    breakdown.push({ category: 'MACRO', item: 'BTC Trend Thuận Lợi', pts: 1 });
+    breakdown.push({ category: 'MACRO', item: 'BTC 24h Tăng Trưởng', pts: 1 });
   }
   if (macroContext.isEtfInflow) {
     score += 1;
-    breakdown.push({ category: 'MACRO', item: 'Dòng tiền ETF Mua Ròng', pts: 1 });
+    breakdown.push({ category: 'MACRO', item: 'ETF Spot Mua Ròng', pts: 1 });
   }
 
-  // Final status classification (out of 20 points)
+  score = Math.max(0, score);
+
   let status = 'NEUTRAL';
   let statusColor = 'var(--text-slate-400)';
-  if (score >= 12) {
-    status = 'STRONG';
+  if (score >= 16) {
+    status = 'STRONG BUY';
     statusColor = '#10b981'; // Emerald
-  } else if (score >= 8) {
-    status = 'GOOD';
+  } else if (score >= 11) {
+    status = 'GOOD BUY';
     statusColor = '#f59e0b'; // Amber
-  } else if (score < 5) {
+  } else {
     status = 'WEAK';
+    statusColor = '#64748b'; // Slate
+  }
+
+  return {
+    ...coin,
+    score,
+    status,
+    statusColor,
+    tags,
+    breakdown,
+  };
+}
+
+// ─── SELL / SHORT SCORING ENGINE (MAX 25 POINTS) ────────────────────────────────
+
+export function scoreCoinSell(coin, macroContext = {}) {
+  let score = 0;
+  const tags = [];
+  const breakdown = [];
+
+  const takerSellRatio = 100 - coin.takerBuyRatio;
+
+  // 1. NHÂN — 30D Volume, Market Cap, Vol Consistency & Spread (Max 8 pts)
+  if (coin.vol30d >= 1000000000) {
+    score += 2;
+    tags.push({ label: 'Vol 30D Khủng (>$1B)', type: 'emerald' });
+    breakdown.push({ category: 'NHÂN', item: 'Thanh khoản 30 ngày lớn (Dễ khớp Short)', pts: 2 });
+  } else if (coin.vol30d >= 300000000) {
+    score += 1;
+    tags.push({ label: 'Vol 30D Bền', type: 'emerald' });
+  }
+
+  if (coin.marketCap >= 200000000) {
+    score += 1;
+    tags.push({ label: 'Cap Mid/Large', type: 'emerald' });
+  }
+
+  if (coin.volCV <= 0.6) {
+    score += 2;
+    tags.push({ label: `Vol CV ${coin.volCV} (Đều)`, type: 'emerald' });
+  } else if (coin.volCV > 1.2) {
+    score -= 2;
+    tags.push({ label: `Vol CV ${coin.volCV} ⚠️`, type: 'rose' });
+  }
+
+  if (coin.spreadPct !== null) {
+    if (coin.spreadPct <= 0.03) {
+      score += 2;
+      tags.push({ label: `Spread ${coin.spreadPct.toFixed(3)}% ⚡`, type: 'emerald' });
+    } else if (coin.spreadPct > 0.15) {
+      score -= 2;
+      tags.push({ label: `Spread Rộng (${coin.spreadPct.toFixed(2)}%)`, type: 'rose' });
+    }
+  }
+
+  // 2. DUYÊN — Money Outflow / CVD / Funding Rate (Max 8 pts)
+  if (coin.cvd24h < 0) {
+    score += 2;
+    tags.push({ label: 'CVD Bán Ròng', type: 'rose' });
+    breakdown.push({ category: 'DUYÊN', item: 'CVD 24h Bán Ròng (Xả hàng)', pts: 2 });
+  } else if (coin.cvd24h > 0) {
+    score -= 2;
+    breakdown.push({ category: 'DUYÊN', item: 'CVD 24h Mua Ròng', pts: -2 });
+  }
+
+  if (coin.cvdTrend < 0) {
+    score += 1;
+    tags.push({ label: 'CVD Momentum ↓', type: 'rose' });
+    breakdown.push({ category: 'DUYÊN', item: 'Lực bán CVD đang tăng tốc', pts: 1 });
+  }
+
+  if (takerSellRatio >= 60) {
+    score += 2;
+    tags.push({ label: `Phe Bán ${takerSellRatio}%`, type: 'rose' });
+    breakdown.push({ category: 'DUYÊN', item: `Phe Bán áp đảo (${takerSellRatio}%)`, pts: 2 });
+  } else if (takerSellRatio >= 53) {
+    score += 1;
+    breakdown.push({ category: 'DUYÊN', item: `Phe Bán chiếm ưu thế (${takerSellRatio}%)`, pts: 1 });
+  }
+
+  // Funding Rate Check for Short (Tránh Short Squeeze)
+  if (coin.fundingRate !== null) {
+    if (coin.fundingRate > 0.04) {
+      score += 2;
+      tags.push({ label: `Funding ${coin.fundingRate}% ⚡ (Long Squeeze)`, type: 'rose' });
+      breakdown.push({ category: 'DUYÊN', item: `Funding quá dương (${coin.fundingRate}%), tiềm năng Long Squeeze Dump`, pts: 2 });
+    } else if (Math.abs(coin.fundingRate) <= 0.01) {
+      score += 1;
+      tags.push({ label: `Funding Ổn (${coin.fundingRate}%)`, type: 'emerald' });
+    } else if (coin.fundingRate < -0.03) {
+      score -= 2;
+      tags.push({ label: `Funding Âm (${coin.fundingRate}%) ⚠️`, type: 'rose' });
+      breakdown.push({ category: 'DUYÊN', item: `Funding âm nặng (${coin.fundingRate}%), rủi ro Short Squeeze`, pts: -2 });
+    }
+  }
+
+  // 3. KỸ THUẬT — Downtrend & Overbought Rejection (Max 7 pts)
+  const is4hDowntrend = coin.ema21 && coin.ema55 && coin.ema21 < coin.ema55;
+  if (is4hDowntrend) {
+    score += 2;
+    tags.push({ label: 'EMA 4h Downtrend', type: 'rose' });
+    breakdown.push({ category: 'KỸ THUẬT', item: 'EMA 21 < EMA 55 (4h Downtrend)', pts: 2 });
+  } else {
+    score -= 2;
+    breakdown.push({ category: 'KỸ THUẬT', item: 'EMA 21 > EMA 55 (4h Uptrend)', pts: -2 });
+  }
+
+  // Multi-TF Bearish Confirmation (Daily)
+  if (is4hDowntrend && !coin.isDailyUptrend) {
+    score += 2;
+    tags.push({ label: 'Multi-TF Downtrend ✓', type: 'rose' });
+    breakdown.push({ category: 'KỸ THUẬT', item: 'Khung 4h + Daily đồng thuận Downtrend', pts: 2 });
+  }
+
+  // Distance to EMA 21 (kháng cự 4h)
+  if (coin.ema21 && coin.currentPrice) {
+    const distPct = ((coin.currentPrice - coin.ema21) / coin.ema21) * 100;
+    if (distPct >= -3 && distPct <= 1) {
+      score += 2;
+      tags.push({ label: `Kháng cự EMA21`, type: 'cyan' });
+      breakdown.push({ category: 'KỸ THUẬT', item: `Giá chạm kháng cự EMA21 4h (${distPct.toFixed(1)}%)`, pts: 2 });
+    }
+  }
+
+  // RSI Overbought rejection or Dead-cat bounce zone
+  if (coin.rsi14 >= 60 && coin.rsi14 <= 75) {
+    score += 2;
+    tags.push({ label: `RSI Test Kháng Cự (${coin.rsi14})`, type: 'cyan' });
+  } else if (coin.rsi14 < 30) {
+    score -= 2;
+    tags.push({ label: `RSI Oversold (${coin.rsi14})`, type: 'rose' });
+  }
+
+  // 4. MACRO CONTEXT BONUS (Max 2 pts)
+  if (!macroContext.isBtcBullish) {
+    score += 1;
+    breakdown.push({ category: 'MACRO', item: 'BTC 24h Giảm Giá (Giúp phe Short)', pts: 1 });
+  }
+  if (!macroContext.isEtfInflow) {
+    score += 1;
+    breakdown.push({ category: 'MACRO', item: 'ETF Rút Vốn', pts: 1 });
+  }
+
+  score = Math.max(0, score);
+
+  let status = 'NEUTRAL';
+  let statusColor = 'var(--text-slate-400)';
+  if (score >= 16) {
+    status = 'STRONG SHORT';
     statusColor = '#f43f5e'; // Rose
+  } else if (score >= 11) {
+    status = 'GOOD SHORT';
+    statusColor = '#fb923c'; // Orange
+  } else {
+    status = 'WEAK';
+    statusColor = '#64748b'; // Slate
   }
 
   return {
@@ -401,63 +678,97 @@ export function scoreCoin(coin, macroContext = {}) {
 
 // ─── MAIN ORCHESTRATOR ─────────────────────────────────────────────────────────
 
-const CACHE_KEY = 'crypto_scanner_top5_v3';
+const CACHE_KEY = 'crypto_scanner_v4_buy_sell';
 
 export async function runFullScan(macroContext = {}, forceRefresh = false) {
-  // Check local cache if not forced
   if (!forceRefresh) {
     try {
       const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        // Cache valid for 45 minutes
-        if (Date.now() - parsed.timestamp < 45 * 60 * 1000) {
-          console.log('[Scanner] Using cached scan results');
+        if (Date.now() - parsed.timestamp < 30 * 60 * 1000) {
+          console.log('[Scanner] Using cached dual-direction scan results');
           return parsed;
         }
       }
     } catch {
-      // Ignore cache error
+      // ignore cache error
     }
   }
 
-  console.log('[Scanner] Starting 30-Day Volume Top 50 scan...');
-  const [topPairs, futuresBookMap] = await Promise.all([
-    getTop30dVolumePairs(50),
+  console.log('[Scanner] Starting 30-Day Volume Top 50 scan with VolCV, Funding & Multi-TF...');
+
+  // Fetch Market Caps & Funding Rates concurrently
+  const [marketCapMap, fundingMap, futuresBookMap] = await Promise.all([
+    getMarketCapMap(),
+    getFundingRatesMap(),
     getFuturesBookTickers(),
   ]);
 
+  const topPairs = await getTop30dVolumePairs(marketCapMap, 50);
+
   if (topPairs.length === 0) {
     console.error('[Scanner] Could not fetch top 30d volume pairs.');
-    return { top5: [], scannedCount: 0, timestamp: Date.now() };
+    return { topBuy: [], topSell: [], scannedCount: 0, timestamp: Date.now() };
   }
 
-  // Analyze coins concurrently in batches of 5
-  const analyzedCoins = await mapConcurrent(topPairs, 5, pair => analyzeCoin(pair, futuresBookMap));
+  // Analyze coins in batches of 5
+  const analyzedCoins = await mapConcurrent(topPairs, 5, pair => 
+    analyzeCoin(pair, futuresBookMap, fundingMap)
+  );
   const validCoins = analyzedCoins.filter(Boolean);
 
-  // Score all valid coins
-  const scoredCoins = validCoins.map(coin => scoreCoin(coin, macroContext));
+  // ─── APPLY HARD QUALITY FILTERS (STRICT GATE) ──────────────────────────────
+  const qualifiedCoins = validCoins.filter(coin => {
+    // 1. Phải có Binance Futures
+    if (!coin.hasFutures) return false;
+    // 2. Vol 30D tối thiểu $100M USD
+    if (coin.vol30d < 100_000_000) return false;
+    // 3. Market Cap tối thiểu $100M (nếu có dữ liệu MCap)
+    if (coin.marketCap && coin.marketCap < 100_000_000) return false;
+    // 4. Futures Spread mỏng <= 0.15% (Chống trượt giá)
+    if (coin.spreadPct !== null && coin.spreadPct > 0.15) return false;
+    // 5. VolCV <= 1.3 (Loại bỏ coin bị pump ảo 1-2 ngày)
+    if (coin.volCV > 1.3) return false;
+    return true;
+  });
 
-  // Sort descending by score, then by 30d volume
-  scoredCoins.sort((a, b) => {
+  // ─── SCORE BUY (LONG) CANDIDATES ───────────────────────────────────────────
+  const scoredBuy = qualifiedCoins
+    .map(coin => scoreCoinBuy(coin, macroContext))
+    .filter(coin => coin.score >= 10); // Minimum score quality filter (>= 10/25)
+
+  scoredBuy.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return b.vol30d - a.vol30d;
   });
 
-  // Extract TOP 5
-  const top5 = scoredCoins.slice(0, 5);
+  const topBuy = scoredBuy.slice(0, 5); // Return up to top 5 (only those that passed filter)
+
+  // ─── SCORE SELL (SHORT) CANDIDATES ──────────────────────────────────────────
+  const scoredSell = qualifiedCoins
+    .map(coin => scoreCoinSell(coin, macroContext))
+    .filter(coin => coin.score >= 10); // Minimum score quality filter (>= 10/25)
+
+  scoredSell.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.vol30d - a.vol30d;
+  });
+
+  const topSell = scoredSell.slice(0, 5);
 
   const scanResult = {
-    top5,
-    scannedCount: scoredCoins.length,
+    topBuy,
+    topSell,
+    scannedCount: validCoins.length,
+    qualifiedCount: qualifiedCoins.length,
     timestamp: Date.now(),
   };
 
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(scanResult));
   } catch {
-    // Ignore storage error
+    // ignore storage error
   }
 
   return scanResult;
