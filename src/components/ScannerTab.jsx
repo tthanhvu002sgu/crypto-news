@@ -155,7 +155,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
             className={`btn-direction-tab ${activeDirection === 'BUY' ? 'active buy-active' : ''}`}
           >
             <TrendingUp size={16} />
-            <span>🟢 PHO LỰC MUA (LONG SWING)</span>
+            <span>🟢 TOP LONG (BUY)</span>
             <span className="chip-count buy">
               {scanResult.topBuy?.length || 0} COIN
             </span>
@@ -166,16 +166,11 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
             className={`btn-direction-tab ${activeDirection === 'SELL' ? 'active sell-active' : ''}`}
           >
             <TrendingDown size={16} />
-            <span>🔴 PHONG BA BÁN (SHORT SWING)</span>
+            <span>🔴 TOP SHORT (SELL)</span>
             <span className="chip-count sell">
               {scanResult.topSell?.length || 0} COIN
             </span>
           </button>
-        </div>
-
-        <div className="scanner-gate-info flex items-center gap-1.5 text-[11px] px-3.5 py-2 rounded-lg backdrop-blur-md">
-          <ShieldCheck size={14} className="text-amber-400" />
-          <span>Lọc Cứng: MCap &gt;$100M | Vol30D &gt;$100M | VolCV &le;1.3 | Spread &le;0.15% | Score &ge;10/25</span>
         </div>
       </div>
 

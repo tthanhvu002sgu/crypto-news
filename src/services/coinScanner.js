@@ -357,14 +357,14 @@ export function scoreCoinBuy(coin, macroContext = {}) {
   }
 
   // Market Cap
-  if (coin.marketCap >= 1000000000) {
+  if (coin.marketCap >= 2000000000) {
     score += 2;
-    tags.push({ label: 'Cap Large (>$1B)', type: 'emerald' });
-    breakdown.push({ category: 'NHÂN', item: 'Vốn hóa lớn (>$1B)', pts: 2 });
-  } else if (coin.marketCap >= 200000000) {
+    tags.push({ label: 'Cap Large (>$2B)', type: 'emerald' });
+    breakdown.push({ category: 'NHÂN', item: 'Vốn hóa lớn (>$2B)', pts: 2 });
+  } else if (coin.marketCap >= 500000000) {
     score += 1;
-    tags.push({ label: 'Cap Mid (>$200M)', type: 'emerald' });
-    breakdown.push({ category: 'NHÂN', item: 'Vốn hóa vừa (>$200M)', pts: 1 });
+    tags.push({ label: 'Cap Mid (>$500M)', type: 'emerald' });
+    breakdown.push({ category: 'NHÂN', item: 'Vốn hóa an toàn (>$500M)', pts: 1 });
   }
 
   // Volume Consistency (volCV)
@@ -540,9 +540,12 @@ export function scoreCoinSell(coin, macroContext = {}) {
     tags.push({ label: 'Vol 30D Bền', type: 'emerald' });
   }
 
-  if (coin.marketCap >= 200000000) {
+  if (coin.marketCap >= 2000000000) {
+    score += 2;
+    tags.push({ label: 'Cap Large (>$2B)', type: 'emerald' });
+  } else if (coin.marketCap >= 500000000) {
     score += 1;
-    tags.push({ label: 'Cap Mid/Large', type: 'emerald' });
+    tags.push({ label: 'Cap Mid (>$500M)', type: 'emerald' });
   }
 
   if (coin.volCV <= 0.6) {
@@ -724,8 +727,8 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
     if (!coin.hasFutures) return false;
     // 2. Vol 30D tối thiểu $100M USD
     if (coin.vol30d < 100_000_000) return false;
-    // 3. Market Cap tối thiểu $100M (nếu có dữ liệu MCap)
-    if (coin.marketCap && coin.marketCap < 100_000_000) return false;
+    // 3. Market Cap tối thiểu $500M (An toàn hơn, loại bỏ coin thao túng)
+    if (coin.marketCap && coin.marketCap < 500_000_000) return false;
     // 4. Futures Spread mỏng <= 0.15% (Chống trượt giá)
     if (coin.spreadPct !== null && coin.spreadPct > 0.15) return false;
     // 5. VolCV <= 1.3 (Loại bỏ coin bị pump ảo 1-2 ngày)
