@@ -341,10 +341,81 @@ function useDraggableScroll() {
   return ref;
 }
 
+const NAV_TABS_CONFIG = [
+  { id: 'dashboard', icon: <BarChart2 size={13} />, label: 'DASHBOARD' },
+  { id: 'scanner',   icon: <Zap size={13} />,       label: 'SCANNER' },
+  { id: 'hft',       icon: <Crosshair size={13} />, label: 'DATA' },
+  { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN', moduleId: 'tab_cascade' },
+  { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY', moduleId: 'tab_summary' },
+  { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ', moduleId: 'tab_glossary' },
+  { id: 'terminal',  icon: <Terminal size={13} />,  label: 'TERMINAL LOGS', moduleId: 'tab_terminal' },
+];
+const DEFAULT_TAB_ORDER = ['dashboard', 'scanner', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
+
 function AppContent() {
   const newsSliderRef = useDraggableScroll();
   const { tooltipsEnabled, setTooltipsEnabled, setLastSyncTime } = useTooltipSettings();
   const { hiddenModules, showModule, showAllModules, isModuleHidden } = useModuleVisibility();
+
+  // Custom Tab Ordering State
+  const [tabOrder, setTabOrder] = useState(() => {
+    try {
+      const saved = localStorage.getItem('app-tab-order');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const merged = [...parsed.filter(id => DEFAULT_TAB_ORDER.includes(id)), ...DEFAULT_TAB_ORDER.filter(id => !parsed.includes(id))];
+          return merged;
+        }
+      }
+    } catch {}
+    return DEFAULT_TAB_ORDER;
+  });
+
+  const [draggedTabId, setDraggedTabId] = useState(null);
+
+  const moveTab = useCallback((id, direction) => {
+    setTabOrder((prevOrder) => {
+      const idx = prevOrder.indexOf(id);
+      if (idx === -1) return prevOrder;
+      const newIdx = direction === 'left' ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= prevOrder.length) return prevOrder;
+
+      const updated = [...prevOrder];
+      const [removed] = updated.splice(idx, 1);
+      updated.splice(newIdx, 0, removed);
+      localStorage.setItem('app-tab-order', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const resetTabOrder = useCallback(() => {
+    setTabOrder(DEFAULT_TAB_ORDER);
+    localStorage.setItem('app-tab-order', JSON.stringify(DEFAULT_TAB_ORDER));
+  }, []);
+
+  const handleDragStart = (e, id) => {
+    setDraggedTabId(id);
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (!draggedTabId || draggedTabId === targetId) return;
+
+    setTabOrder((prevOrder) => {
+      const currentIdx = prevOrder.indexOf(draggedTabId);
+      const targetIdx = prevOrder.indexOf(targetId);
+      if (currentIdx === -1 || targetIdx === -1) return prevOrder;
+
+      const updated = [...prevOrder];
+      const [removed] = updated.splice(currentIdx, 1);
+      updated.splice(targetIdx, 0, removed);
+      localStorage.setItem('app-tab-order', JSON.stringify(updated));
+      return updated;
+    });
+    setDraggedTabId(null);
+  };
   const [data, setData] = useState(() => {
     // Preload CVD history from localStorage cache for immediate display
     const readCache = (key) => {
@@ -1400,23 +1471,28 @@ function AppContent() {
         {/* ── Main Content Area ─────────────────────────────────────────────── */}
         <main className="content-area">
           <nav className="tabs-nav font-mono">
-            {[
-              { id: 'dashboard', icon: <BarChart2 size={13} />, label: 'DASHBOARD' },
-              { id: 'scanner',   icon: <Zap size={13} />,       label: 'SCANNER' },
-              { id: 'hft',       icon: <Crosshair size={13} />, label: 'DATA' },
-              { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN', moduleId: 'tab_cascade' },
-              { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY', moduleId: 'tab_summary' },
-              { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ', moduleId: 'tab_glossary' },
-              { id: 'terminal',  icon: <Terminal size={13} />,  label: 'TERMINAL LOGS', moduleId: 'tab_terminal' },
-            ].filter(t => !t.moduleId || !isModuleHidden(t.moduleId)).map(t => (
-              <button
-                key={t.id}
-                className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(t.id)}
-              >
-                {t.icon} {t.label}
-              </button>
-            ))}
+            {tabOrder
+              .map(id => NAV_TABS_CONFIG.find(t => t.id === id))
+              .filter(t => t && (!t.moduleId || !isModuleHidden(t.moduleId)))
+              .map(t => (
+                <div
+                  key={t.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, t.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => handleDrop(e, t.id)}
+                  className={`tab-btn-wrapper ${draggedTabId === t.id ? 'is-dragging' : ''}`}
+                  title="Kéo thả để sắp xếp lại vị trí Menu Tab"
+                  style={{ display: 'inline-flex', alignItems: 'center' }}
+                >
+                  <button
+                    className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
+                    onClick={() => setActiveTab(t.id)}
+                  >
+                    {t.icon} {t.label}
+                  </button>
+                </div>
+              ))}
           </nav>
 
           <div className="tab-content">
@@ -1604,6 +1680,59 @@ function AppContent() {
               >
                 LƯU & ĐỒNG BỘ
               </button>
+            </div>
+
+            {/* Tab Reordering Controls */}
+            <div style={{ borderTop: '1px solid var(--border-panel)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 className="font-mono text-slate-300" style={{ margin: 0, fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Layers size={13} className="text-emerald" /> SẮP XẾP VỊ TRÍ THỨ TỰ TABS MENU
+                </h4>
+                <button
+                  type="button"
+                  onClick={resetTabOrder}
+                  className="font-mono text-slate-400"
+                  style={{ background: 'transparent', border: '1px solid var(--border-panel)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer' }}
+                >
+                  Reset Mặc Định
+                </button>
+              </div>
+              <p className="font-mono text-slate-400" style={{ fontSize: '0.55rem', margin: 0 }}>
+                Bấm ◄ / ► hoặc kéo thả trực tiếp trên thanh menu chính để thay đổi vị trí các tab.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                {tabOrder.map((id, index) => {
+                  const tabMeta = NAV_TABS_CONFIG.find(t => t.id === id);
+                  if (!tabMeta) return null;
+                  return (
+                    <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+                      <span className="font-mono text-contrast" style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {tabMeta.icon} {tabMeta.label}
+                      </span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => moveTab(id, 'left')}
+                          className="font-mono"
+                          style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', color: index === 0 ? 'var(--text-slate-600)' : 'var(--text-contrast)', padding: '2px 8px', borderRadius: '4px', cursor: index === 0 ? 'not-allowed' : 'pointer', fontSize: '0.65rem' }}
+                        >
+                          ◄
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === tabOrder.length - 1}
+                          onClick={() => moveTab(id, 'right')}
+                          className="font-mono"
+                          style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', color: index === tabOrder.length - 1 ? 'var(--text-slate-600)' : 'var(--text-contrast)', padding: '2px 8px', borderRadius: '4px', cursor: index === tabOrder.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.65rem' }}
+                        >
+                          ►
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div style={{ borderTop: '1px solid var(--border-panel)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>

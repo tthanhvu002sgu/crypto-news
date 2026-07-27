@@ -1410,7 +1410,12 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
             const analysis = analyzeSnapshot(sig.snapshot);
 
             return (
-              <div key={sig.id} className={`signal-card severity-${sig.severity}`}>
+              <div
+                key={sig.id}
+                className={`signal-card severity-${sig.severity} ${isExpanded ? 'is-expanded' : ''}`}
+                onClick={() => setExpandedId(isExpanded ? null : sig.id)}
+                style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+              >
                 <div className="signal-card-header">
                   <div className="signal-card-left">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -1424,9 +1429,12 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
                     </div>
                     {sig.description && <div className="signal-card-desc">{sig.description}</div>}
                   </div>
-                  <div className="signal-card-meta">
+                  <div className="signal-card-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`signal-severity-tag tag-${sig.severity}`}>{sig.severity}</span>
                     <span className="signal-time">{timeStr}</span>
+                    <span className="font-mono" style={{ color: 'var(--text-slate-400)', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                      {isExpanded ? '▲' : '▼'}
+                    </span>
                   </div>
                 </div>
 
@@ -1442,17 +1450,52 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
                   </div>
                 )}
 
-                {/* Snapshot toggle + grouped content */}
-                {sig.snapshot && (
+                {/* Move Report Specific Detail (for MOVE_REPORT signal type) */}
+                {isExpanded && sig.moveReport && (
+                  <div className="move-card-expanded font-mono" style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-slate-950)', borderRadius: '8px', border: '1px solid var(--border-panel)' }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                      <span style={{ fontWeight: 800, color: sig.moveReport.direction === 'PUMP' ? '#10b981' : '#f43f5e' }}>
+                        {sig.moveReport.direction === 'PUMP' ? '🚀 PUMP' : '💥 DUMP'} ${Math.round(sig.moveReport.endPrice - sig.moveReport.startPrice)} ({sig.moveReport.pctChange}%)
+                      </span>
+                      {sig.moveReport.verdictLabel && (
+                        <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800, backgroundColor: `${sig.moveReport.verdictColor}20`, color: sig.moveReport.verdictColor, border: `1px solid ${sig.moveReport.verdictColor}` }}>
+                          {sig.moveReport.verdictIcon} {sig.moveReport.verdictLabel}
+                        </span>
+                      )}
+                    </div>
+                    {sig.moveReport.verdictReason && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-slate-200)', marginBottom: '10px' }}>
+                        💡 {sig.moveReport.verdictReason}
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '0.72rem' }}>
+                      <div>Giá mở: <strong>${sig.moveReport.startPrice?.toLocaleString()}</strong></div>
+                      <div>Giá đóng: <strong>${sig.moveReport.endPrice?.toLocaleString()}</strong></div>
+                      <div>Thời gian: <strong>{sig.moveReport.durationSec}s</strong></div>
+                      <div>Tổng Volume: <strong>${(sig.moveReport.totalVolume / 1e6).toFixed(2)}M</strong></div>
+                      <div>Số lệnh khớp: <strong>{sig.moveReport.tradeCount}</strong></div>
+                      <div>Taker Buy: <strong>{sig.moveReport.takerBuyRatio}%</strong></div>
+                      <div>CVD Δ: <strong className={sig.moveReport.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{(sig.moveReport.cvdDelta >= 0 ? '+' : '')}${(sig.moveReport.cvdDelta / 1e6).toFixed(2)}M</strong></div>
+                      <div>Lệnh lớn &gt; $100K: <strong>{sig.moveReport.largeTradesCount} (${((sig.moveReport.largeTradesVol || 0)/1e6).toFixed(2)}M)</strong></div>
+                      <div>Recovery (60s): <strong>{sig.moveReport.recoveryPct}%</strong></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Standard Snapshot toggle + grouped content */}
+                {sig.snapshot && !sig.moveReport && (
                   <>
                     <button
                       className="signal-snapshot-toggle font-mono"
-                      onClick={() => setExpandedId(isExpanded ? null : sig.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedId(isExpanded ? null : sig.id);
+                      }}
                     >
-                      {isExpanded ? '▼ Ẩn bảng chỉ số chi tiết' : '▶ Xem toàn bộ bảng chỉ số chi tiết'}
+                      {isExpanded ? '▼ Ẩn bảng chỉ số chi tiết' : '▶ Xem toàn bộ bảng chỉ số chi tiết (Click thẻ để xem)'}
                     </button>
                     {isExpanded && (
-                      <div className="signal-snapshot-grouped">
+                      <div className="signal-snapshot-grouped" onClick={(e) => e.stopPropagation()}>
                         {/* Group 1: Flow & Order Book */}
                         <div className="snap-group">
                           <div className="snap-group-title font-mono">⚡ DÒNG TIỀN &amp; SỔ LỆNH</div>
