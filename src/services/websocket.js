@@ -124,29 +124,38 @@ function getTodayStr() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function useBinanceWebSocket() {
-  const [livePrice, setLivePrice] = useState(null);
-  const [liveChange, setLiveChange] = useState(null);
-  const [liveHigh, setLiveHigh] = useState(null);
-  const [liveLow, setLiveLow] = useState(null);
-  const [liveVolume, setLiveVolume] = useState(null);
-  const [liveFunding, setLiveFunding] = useState(null);
-  const [liveEthPrice, setLiveEthPrice] = useState(null);
-  const [liveSolPrice, setLiveSolPrice] = useState(null);
-  const [liveLinkPrice, setLiveLinkPrice] = useState(null);
+  const savedTicker = (() => {
+    try {
+      const raw = localStorage.getItem('hft_last_ticker');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const [livePrice, setLivePrice] = useState(savedTicker?.price ?? null);
+  const [liveChange, setLiveChange] = useState(savedTicker?.change ?? null);
+  const [liveHigh, setLiveHigh] = useState(savedTicker?.high ?? null);
+  const [liveLow, setLiveLow] = useState(savedTicker?.low ?? null);
+  const [liveVolume, setLiveVolume] = useState(savedTicker?.volume ?? null);
+  const [liveFunding, setLiveFunding] = useState(savedTicker?.funding ?? null);
+  const [liveEthPrice, setLiveEthPrice] = useState(savedTicker?.eth ?? null);
+  const [liveSolPrice, setLiveSolPrice] = useState(savedTicker?.sol ?? null);
+  const [liveLinkPrice, setLiveLinkPrice] = useState(savedTicker?.link ?? null);
   const [wsStatus, setWsStatus] = useState('connecting');
 
   const mountedRef = useRef(true);
   // Latest values live in refs; UI state is flushed on a timer
   const snapRef = useRef({
-    price: null,
-    change: null,
-    high: null,
-    low: null,
-    volume: null,
-    funding: null,
-    eth: null,
-    sol: null,
-    link: null,
+    price: savedTicker?.price ?? null,
+    change: savedTicker?.change ?? null,
+    high: savedTicker?.high ?? null,
+    low: savedTicker?.low ?? null,
+    volume: savedTicker?.volume ?? null,
+    funding: savedTicker?.funding ?? null,
+    eth: savedTicker?.eth ?? null,
+    sol: savedTicker?.sol ?? null,
+    link: savedTicker?.link ?? null,
   });
   const flushTimerRef = useRef(null);
   const dirtyRef = useRef(false);
@@ -168,6 +177,12 @@ export function useBinanceWebSocket() {
       if (s.eth != null) setLiveEthPrice(s.eth);
       if (s.sol != null) setLiveSolPrice(s.sol);
       if (s.link != null) setLiveLinkPrice(s.link);
+
+      try {
+        localStorage.setItem('hft_last_ticker', JSON.stringify(s));
+      } catch {
+        /* ignore */
+      }
     };
 
     const scheduleFlush = () => {
@@ -176,6 +191,14 @@ export function useBinanceWebSocket() {
         flushTimerRef.current = setTimeout(flushUi, TICKER_UI_MS);
       }
     };
+
+    // Immediate flush when tab becomes active after backgrounding
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        flushUi();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibility);
 
     const conn = createReconnectingWS(
       WS_TICKER_URL,
@@ -222,6 +245,7 @@ export function useBinanceWebSocket() {
 
     return () => {
       mountedRef.current = false;
+      window.removeEventListener('visibilitychange', handleVisibility);
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
       conn.close();
     };
@@ -287,17 +311,32 @@ export function useCVDStream() {
   useEffect(() => {
     mountedRef.current = true;
 
-    getDailyCVD('BTCUSDT').then((init) => {
-      if (!mountedRef.current) return;
-      cvdRef.current = init.initialCvd;
-      buyRef.current = init.initialBuyVol;
-      sellRef.current = init.initialSellVol;
-      isFetchingInitialRef.current = false;
+    // Safety fallback: unblock trade streaming after 1.5s even if REST API is slow
+    const initSafetyTimer = setTimeout(() => {
+      if (mountedRef.current && isFetchingInitialRef.current) {
+        isFetchingInitialRef.current = false;
+      }
+    }, 1500);
 
-      setCvd(cvdRef.current);
-      setBuyVolume(buyRef.current);
-      setSellVolume(sellRef.current);
-    });
+    getDailyCVD('BTCUSDT')
+      .then((init) => {
+        if (!mountedRef.current) return;
+        clearTimeout(initSafetyTimer);
+        cvdRef.current = init.initialCvd;
+        buyRef.current = init.initialBuyVol;
+        sellRef.current = init.initialSellVol;
+        isFetchingInitialRef.current = false;
+
+        setCvd(cvdRef.current);
+        setBuyVolume(buyRef.current);
+        setSellVolume(sellRef.current);
+      })
+      .catch((err) => {
+        if (!mountedRef.current) return;
+        clearTimeout(initSafetyTimer);
+        console.warn('[useCVDStream] Initial CVD fetch error, unblocking WS:', err);
+        isFetchingInitialRef.current = false;
+      });
 
     const conn = createReconnectingWS(
       WS_AGG_URL,
