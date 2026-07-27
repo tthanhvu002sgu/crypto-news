@@ -3,7 +3,7 @@ import { Line } from 'react-chartjs-2';
 
 import { getOrderBookDepth, getWhaleWalls } from '../services/api';
 import { runSignalDetection, takePeriodicSnapshot, SIGNAL_TYPE } from '../services/signalEngine';
-import { getSignals, exportSignals, clearAllSignals, clearOldSignals } from '../services/signalStore';
+import { getSignals, exportSignals, clearAllSignals, clearOldSignals, onSignalAdded } from '../services/signalStore';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
@@ -1870,6 +1870,10 @@ export default function HftRadarTab({
 
   useEffect(() => {
     loadSignals();
+    const unsubscribe = onSignalAdded(() => {
+      loadSignals();
+    });
+    return unsubscribe;
   }, [loadSignals]);
 
   useEffect(() => {

@@ -7,7 +7,18 @@ const DB_NAME = 'CryptoSignalLog';
 const DB_VERSION = 1;
 const STORE_NAME = 'signals';
 
-let dbInstance = null;
+const signalAddedListeners = new Set();
+
+export function onSignalAdded(callback) {
+  signalAddedListeners.add(callback);
+  return () => signalAddedListeners.delete(callback);
+}
+
+function notifySignalAdded(signal) {
+  signalAddedListeners.forEach((fn) => {
+    try { fn(signal); } catch { /* ignore */ }
+  });
+}
 
 function openDB() {
   if (dbInstance) return Promise.resolve(dbInstance);
@@ -27,11 +38,19 @@ function openDB() {
 
     request.onsuccess = (event) => {
       dbInstance = event.target.result;
+      dbInstance.onversionchange = () => {
+        dbInstance.close();
+        dbInstance = null;
+      };
+      dbInstance.onerror = () => {
+        dbInstance = null;
+      };
       resolve(dbInstance);
     };
 
     request.onerror = (event) => {
       console.error('[SignalStore] IndexedDB open error:', event.target.error);
+      dbInstance = null;
       reject(event.target.error);
     };
   });
@@ -48,15 +67,24 @@ export async function addSignal(signal) {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      const request = store.add({
+      const newSignal = {
         ...signal,
         timestamp: signal.timestamp || Date.now(),
-      });
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      };
+      const request = store.add(newSignal);
+
+      request.onsuccess = () => {
+        notifySignalAdded(newSignal);
+        resolve(request.result);
+      };
+      request.onerror = () => {
+        dbInstance = null;
+        reject(request.error);
+      };
     });
   } catch (e) {
     console.error('[SignalStore] addSignal error:', e);
+    dbInstance = null;
     return null;
   }
 }

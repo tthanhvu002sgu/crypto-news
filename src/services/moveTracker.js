@@ -5,7 +5,7 @@
 
 import { subscribeAggTrades } from './websocket';
 import { getATR } from './atrCalculator';
-import { addSignal } from './signalStore';
+import { addSignal, getMoveReports } from './signalStore';
 import { SIGNAL_TYPE, SEVERITY } from './signalEngine';
 
 // Configuration Defaults
@@ -33,8 +33,24 @@ let trackerStatus = 'IDLE'; // 'IDLE' | 'TRACKING' | 'POST_RECOVERY'
 let activeMove = null;
 let postRecoveryTimer = null;
 let moveListeners = new Set();
-let moveHistory = []; // In-memory history for quick UI renders
+let moveHistory = []; // Restored from IndexedDB + live moves
 let lastMoveEndTime = 0;
+
+// Hydrate moveHistory from IndexedDB on startup
+async function initMoveHistoryFromStore() {
+  try {
+    const stored = await getMoveReports(50);
+    if (Array.isArray(stored) && stored.length > 0) {
+      moveHistory = stored
+        .map((s) => s.moveReport)
+        .filter(Boolean);
+      notifyListeners();
+    }
+  } catch (err) {
+    console.warn('[MoveTracker] Error restoring move history:', err);
+  }
+}
+initMoveHistoryFromStore();
 
 // Price ring-buffer for detecting start of a move (stores last 3 minutes of price snapshots)
 const PRICE_RING_MAX = 180; // 180 seconds
