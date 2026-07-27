@@ -8,7 +8,7 @@ import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
-import { subscribeMoveTracker, updateMoveTrackerSettings, MOVE_CONFIG } from '../services/moveTracker';
+import { subscribeMoveTracker, updateMoveTrackerSettings, MOVE_CONFIG, simulateMoveReport } from '../services/moveTracker';
 import { getCurrentATR } from '../services/atrCalculator';
 
 
@@ -1385,6 +1385,14 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
           ))}
         </div>
         <div className="signal-log-actions">
+          <button
+            className="signal-log-btn"
+            style={{ background: 'rgba(16,185,129,0.15)', borderColor: 'rgba(16,185,129,0.4)', color: '#10b981', fontWeight: 700 }}
+            onClick={() => simulateMoveReport(Math.random() > 0.5 ? 'PUMP' : 'DUMP')}
+            title="Tạo giả lập 1 đợt Pump/Dump để kiểm tra giao diện Log Signal"
+          >
+            🧪 Test Pump/Dump
+          </button>
           <button className="signal-log-btn" onClick={handleCleanup} title="Xóa log cũ hơn 7 ngày">🧹 Clean 7d</button>
           <button className="signal-log-btn" onClick={handleExport} title="Export signal log ra JSON">📥 Export</button>
           <button className="signal-log-btn btn-danger" onClick={handleClear} title="Xóa toàn bộ">🗑️ Clear</button>
@@ -1638,6 +1646,15 @@ function MoveTrackerPanel() {
         </div>
 
         <div className="move-controls font-mono" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => simulateMoveReport(Math.random() > 0.5 ? 'PUMP' : 'DUMP')}
+            className="font-mono text-emerald"
+            style={{ background: 'var(--bg-slate-900)', border: '1px solid rgba(16,185,129,0.4)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+            title="Tạo giả lập 1 đợt biến động giá Pump/Dump để kiểm tra bảng theo dõi và Signal Log"
+          >
+            🧪 Test Signal (Tạo Mẫu)
+          </button>
           <span className="move-control-label" style={{ color: 'var(--text-slate-400)', fontSize: '0.8rem' }}>Bộ Lọc:</span>
           <select
             className="move-select"
@@ -2016,7 +2033,7 @@ export default function HftRadarTab({
         await takePeriodicSnapshot(freshCtx);
         loadSignals();
       }, 15 * 60 * 1000);
-    }, 60 * 1000);
+    }, 3000);
 
     return () => {
       clearTimeout(initialTimeout);

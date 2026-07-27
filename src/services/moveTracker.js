@@ -5,7 +5,7 @@
 
 import { subscribeAggTrades } from './websocket';
 import { getATR } from './atrCalculator';
-import { addSignal, getMoveReports } from './signalStore';
+import { addSignal, getMoveReports, onSignalAdded } from './signalStore';
 import { SIGNAL_TYPE, SEVERITY } from './signalEngine';
 
 // Configuration Defaults
@@ -51,6 +51,12 @@ async function initMoveHistoryFromStore() {
   }
 }
 initMoveHistoryFromStore();
+
+onSignalAdded((sig) => {
+  if (sig && sig.type === SIGNAL_TYPE.MOVE_REPORT) {
+    initMoveHistoryFromStore();
+  }
+});
 
 // Price ring-buffer for detecting start of a move (stores last 3 minutes of price snapshots)
 const PRICE_RING_MAX = 180; // 180 seconds
@@ -360,3 +366,72 @@ async function finalizeMoveReport(finalPriceAfter60s) {
 
 // Initialize subscriber on module import
 subscribeAggTrades(handleIncomingTrade);
+
+/**
+ * Simulate a Pump or Dump move report for UI testing and verification
+ */
+export async function simulateMoveReport(direction = 'PUMP') {
+  const isPump = direction === 'PUMP';
+  const startPrice = 96000 + Math.floor(Math.random() * 2000);
+  const moveUsd = 400 + Math.floor(Math.random() * 600);
+  const endPrice = isPump ? startPrice + moveUsd : startPrice - moveUsd;
+  const pctChange = parseFloat(((endPrice - startPrice) / startPrice * 100).toFixed(2));
+  const totalVolume = 15_000_000 + Math.floor(Math.random() * 20_000_000);
+  const takerBuyRatio = isPump ? 72.5 : 24.1;
+  const cvdDelta = isPump ? 6_500_000 : -7_200_000;
+
+  const enrichedMove = {
+    direction: isPump ? 'PUMP' : 'DUMP',
+    startPrice,
+    endPrice,
+    troughPrice: isPump ? startPrice : endPrice,
+    peakPrice: isPump ? endPrice : startPrice,
+    startTime: Date.now() - 120_000,
+    endTime: Date.now() - 60_000,
+    durationSec: 60,
+    pctChange,
+    priceMoveUsd: isPump ? moveUsd : -moveUsd,
+    totalRangeUsd: moveUsd,
+    totalVolume,
+    takerBuyVol: isPump ? totalVolume * 0.725 : totalVolume * 0.241,
+    takerSellVol: isPump ? totalVolume * 0.275 : totalVolume * 0.759,
+    takerBuyRatio,
+    tradeCount: 1420,
+    largeTradesCount: 18,
+    largeTradesVol: 8_500_000,
+    largeTradeRatio: 48.5,
+    avgTradeSize: 12500,
+    cvdDelta,
+    recoveryPct: 15.2,
+    finalPriceAfter60s: isPump ? endPrice - 60 : endPrice + 60,
+    verdict: isPump ? 'WHALE_PUSH' : 'LIQUIDITY_SWEEP',
+    verdictLabel: isPump ? 'Whale Push (Đẩy Giá Thật)' : 'Quét Thanh Khoản (Sweep)',
+    verdictIcon: isPump ? '🐋' : '🧹',
+    verdictColor: isPump ? '#10b981' : '#f59e0b',
+    verdictReason: isPump
+      ? 'Tỷ lệ chủ động mua áp đảo (72.5%), kèm dòng tiền lớn >100K dồn dập đùn giá.'
+      : 'Giá giật mạnh nhưng hồi nhanh (15.2%), dấu hiệu quét stop-loss trước khi đảo chiều.',
+  };
+
+  moveHistory = [enrichedMove, ...moveHistory].slice(0, 50);
+  notifyListeners();
+
+  const title = `${enrichedMove.direction === 'PUMP' ? '🚀 PUMP' : '💥 DUMP'} BTC ${enrichedMove.pctChange >= 0 ? '+' : ''}${enrichedMove.pctChange}% trong ${enrichedMove.durationSec}s`;
+  const description = `Volume: $${(enrichedMove.totalVolume / 1e6).toFixed(1)}M | CVD Δ: ${enrichedMove.cvdDelta >= 0 ? '+' : ''}${(enrichedMove.cvdDelta / 1e6).toFixed(1)}M | ${enrichedMove.tradeCount} trades | ${enrichedMove.verdictIcon} ${enrichedMove.verdictLabel}`;
+
+  await addSignal({
+    type: SIGNAL_TYPE.MOVE_REPORT,
+    severity: Math.abs(enrichedMove.pctChange) >= 2 ? SEVERITY.CRITICAL : SEVERITY.HIGH,
+    timestamp: Date.now(),
+    title,
+    description,
+    moveReport: enrichedMove,
+    snapshot: {
+      btcPrice: enrichedMove.endPrice,
+      cvd: enrichedMove.cvdDelta,
+      buyVolume: enrichedMove.takerBuyVol,
+      sellVolume: enrichedMove.takerSellVol,
+      buyRatio: enrichedMove.takerBuyRatio,
+    },
+  });
+}

@@ -56,26 +56,62 @@ function openDB() {
   });
 }
 
+const LS_SIGNALS_KEY = 'hft_signal_log_ls_v1';
+
+function saveSignalToLS(signal, id) {
+  try {
+    const raw = localStorage.getItem(LS_SIGNALS_KEY);
+    let list = [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed;
+    }
+    const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+    const item = { ...signal, id: id || signal.id || Date.now() };
+    list = [item, ...list].filter(s => s && s.timestamp > cutoff).slice(0, 200);
+    localStorage.setItem(LS_SIGNALS_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('[SignalStore] LS save error:', e);
+  }
+}
+
+function getSignalsFromLS(limit = 200) {
+  try {
+    const raw = localStorage.getItem(LS_SIGNALS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+        return parsed.filter(s => s && s.timestamp > cutoff).slice(0, limit);
+      }
+    }
+  } catch {}
+  return [];
+}
+
 /**
  * Add a signal to the store.
  * @param {Object} signal - { timestamp, type, severity, title, description, snapshot }
  * @returns {Promise<number>} - The auto-generated ID
  */
 export async function addSignal(signal) {
+  const newSignal = {
+    ...signal,
+    timestamp: signal.timestamp || Date.now(),
+  };
+  let generatedId = newSignal.timestamp;
+
   try {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      const newSignal = {
-        ...signal,
-        timestamp: signal.timestamp || Date.now(),
-      };
       const request = store.add(newSignal);
 
       request.onsuccess = () => {
-        notifySignalAdded(newSignal);
-        resolve(request.result);
+        generatedId = request.result;
+        newSignal.id = generatedId;
+        resolve(generatedId);
       };
       request.onerror = () => {
         dbInstance = null;
@@ -83,10 +119,14 @@ export async function addSignal(signal) {
       };
     });
   } catch (e) {
-    console.error('[SignalStore] addSignal error:', e);
+    console.warn('[SignalStore] addSignal IDB error, using LS fallback:', e);
     dbInstance = null;
-    return null;
+    newSignal.id = generatedId;
   }
+
+  saveSignalToLS(newSignal, generatedId);
+  notifySignalAdded(newSignal);
+  return generatedId;
 }
 
 /**
@@ -95,9 +135,10 @@ export async function addSignal(signal) {
  * @returns {Promise<Array>}
  */
 export async function getSignals(limit = 200) {
+  let idbResults = [];
   try {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    idbResults = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const index = store.index('timestamp');
@@ -116,9 +157,17 @@ export async function getSignals(limit = 200) {
       request.onerror = () => reject(request.error);
     });
   } catch (e) {
-    console.error('[SignalStore] getSignals error:', e);
-    return [];
+    console.warn('[SignalStore] getSignals IDB error, using LS fallback:', e);
+    idbResults = [];
   }
+
+  const lsResults = getSignalsFromLS(limit);
+  const map = new Map();
+  lsResults.forEach(s => map.set(`${s.id}_${s.timestamp}`, s));
+  idbResults.forEach(s => map.set(`${s.id}_${s.timestamp}`, s));
+
+  const merged = Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+  return merged;
 }
 
 /**
@@ -181,9 +230,20 @@ export async function getSignalCount() {
  * @returns {Promise<number>} - Number of deleted signals
  */
 export async function clearOldSignals(daysToKeep = 7) {
+  const cutoff = Date.now() - daysToKeep * 24 * 60 * 60 * 1000;
+  try {
+    const raw = localStorage.getItem(LS_SIGNALS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter(s => s && s.timestamp > cutoff);
+        localStorage.setItem(LS_SIGNALS_KEY, JSON.stringify(filtered));
+      }
+    }
+  } catch {}
+
   try {
     const db = await openDB();
-    const cutoff = Date.now() - daysToKeep * 24 * 60 * 60 * 1000;
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
@@ -215,6 +275,10 @@ export async function clearOldSignals(daysToKeep = 7) {
  * @returns {Promise<void>}
  */
 export async function clearAllSignals() {
+  try {
+    localStorage.removeItem(LS_SIGNALS_KEY);
+  } catch {}
+
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
