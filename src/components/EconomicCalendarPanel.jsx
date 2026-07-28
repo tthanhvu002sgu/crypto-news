@@ -130,10 +130,11 @@ export default function EconomicCalendarPanel({ theme }) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '12px',
+            gridTemplateColumns: 'repeat(7, minmax(125px, 1fr))',
+            gap: '8px',
             overflowX: 'auto',
-            paddingBottom: '4px',
+            paddingBottom: '6px',
+            width: '100%',
           }}
         >
           {filteredWeekDays.map((day) => {
@@ -144,36 +145,36 @@ export default function EconomicCalendarPanel({ theme }) {
                 style={{
                   background: isToday ? 'rgba(16,185,129,0.05)' : 'var(--bg-slate-950)',
                   border: isToday ? '1.5px solid var(--color-emerald-500)' : '1px solid var(--border-panel)',
-                  borderRadius: '10px',
-                  padding: '10px',
+                  borderRadius: '8px',
+                  padding: '6px 8px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px',
-                  minHeight: '230px',
-                  boxShadow: isToday ? '0 0 15px rgba(16,185,129,0.1)' : 'none',
+                  gap: '6px',
+                  minHeight: '160px',
+                  boxShadow: isToday ? '0 0 12px rgba(16,185,129,0.12)' : 'none',
                   position: 'relative',
                 }}
               >
                 {/* Day Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '6px' }}>
-                  <span className="font-mono" style={{ fontWeight: 700, fontSize: '0.82rem', color: isToday ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '4px' }}>
+                  <span className="font-mono" style={{ fontWeight: 700, fontSize: '0.75rem', color: isToday ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
                     {day.nameVN}
                   </span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)', background: 'rgba(255,255,255,0.05)', padding: '1px 4px', borderRadius: '3px' }}>
                     {day.dateStr}
                   </span>
                 </div>
 
                 {isToday && (
-                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#000', background: 'var(--color-emerald-400)', padding: '1px 6px', borderRadius: '4px', alignSelf: 'flex-start', marginBottom: '2px' }}>
+                  <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#000', background: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', alignSelf: 'flex-start' }}>
                     ● HÔM NAY
                   </div>
                 )}
 
                 {/* Events List */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto', paddingRight: '2px' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '210px', overflowY: 'auto', paddingRight: '1px' }}>
                   {day.events.length === 0 ? (
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-slate-400)', fontStyle: 'italic', textAlign: 'center', margin: 'auto 0' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-slate-400)', fontStyle: 'italic', textAlign: 'center', margin: 'auto 0' }}>
                       --- Trống ---
                     </div>
                   ) : (
@@ -188,18 +189,18 @@ export default function EconomicCalendarPanel({ theme }) {
                           style={{
                             background: 'rgba(255,255,255,0.025)',
                             border: '1px solid rgba(255,255,255,0.07)',
-                            borderRadius: '6px',
-                            padding: '8px',
+                            borderRadius: '5px',
+                            padding: '5px 6px',
                             cursor: 'pointer',
                             transition: 'all 0.15s ease-in-out',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '4px',
+                            gap: '3px',
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(16,185,129,0.08)';
                             e.currentTarget.style.borderColor = 'rgba(16,185,129,0.3)';
-                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.background = 'rgba(255,255,255,0.025)';
@@ -208,23 +209,23 @@ export default function EconomicCalendarPanel({ theme }) {
                           }}
                         >
                           {/* Top Row: Time + Flag + Impact */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-slate-400)', fontFamily: 'var(--font-mono)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.65rem', color: 'var(--text-slate-400)', fontFamily: 'var(--font-mono)' }}>
                             <span style={{ fontWeight: 600, color: 'var(--text-contrast)' }}>
                               ⏰ {event.timeStr}
                             </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <span>{flag} {event.country}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                              <span>{flag}</span>
                               <span title={impactStyle.label}>{impactStyle.dot}</span>
                             </span>
                           </div>
 
                           {/* Title */}
-                          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-contrast)', lineHeight: '1.25', wordBreak: 'break-word' }}>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-contrast)', lineHeight: '1.2', wordBreak: 'break-word' }}>
                             {event.titleVN || event.title}
                           </div>
 
                           {/* Data Row: Actual / Forecast */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-slate-400)', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '4px', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-slate-400)', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '3px', marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
                             <span>
                               Act: <strong style={{ color: event.actual ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>{event.actual || '--'}</strong>
                             </span>
