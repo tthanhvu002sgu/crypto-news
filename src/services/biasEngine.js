@@ -270,23 +270,23 @@ export function calculateMarketBias(data, etfHistory = []) {
   let bgGradient = 'rgba(148, 163, 184, 0.15)';
 
   if (clampedScore >= 60) {
-    label = 'STRONG BULL 🚀';
+    label = 'STRONG BULL';
     color = 'var(--color-emerald-400)';
     bgGradient = 'rgba(16, 185, 129, 0.15)';
   } else if (clampedScore >= 25) {
-    label = 'BULLISH 🟢';
+    label = 'BULLISH';
     color = '#34d399';
     bgGradient = 'rgba(52, 211, 153, 0.12)';
   } else if (clampedScore <= -60) {
-    label = 'STRONG BEAR 💥';
+    label = 'STRONG BEAR';
     color = 'var(--color-rose-400)';
     bgGradient = 'rgba(244, 63, 94, 0.15)';
   } else if (clampedScore <= -25) {
-    label = 'BEARISH 🔴';
+    label = 'BEARISH';
     color = '#f87171';
     bgGradient = 'rgba(248, 113, 113, 0.12)';
   } else {
-    label = 'NEUTRAL ⚪';
+    label = 'NEUTRAL';
     color = 'var(--text-contrast)';
     bgGradient = 'rgba(148, 163, 184, 0.12)';
   }
