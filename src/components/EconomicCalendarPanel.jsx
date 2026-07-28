@@ -2,14 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import ModuleMenu from './ModuleMenu';
 
-const IMPACT_COLORS = {
-  High: { dot: '🔴', bg: 'rgba(244,63,94,0.15)', border: 'rgba(244,63,94,0.4)', text: '#f43f5e', label: 'Quan trọng cao (High Impact)' },
-  Medium: { dot: '🟡', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.4)', text: '#f59e0b', label: 'Tác động vừa (Medium Impact)' },
-  Low: { dot: '🟢', bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.4)', text: '#10b981', label: 'Tác động thấp (Low Impact)' },
-};
-
-const COUNTRY_FLAGS = {
-  USD: '🇺🇸', EUR: '🇪🇺', JPY: '🇯🇵', GBP: '🇬🇧', CNY: '🇨🇳', CAD: '🇨🇦', AUD: '🇦🇺',
+const IMPACT_BADGES = {
+  High: { bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)', text: '#f43f5e', label: 'HIGH' },
+  Medium: { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)', text: '#f59e0b', label: 'MED' },
+  Low: { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', text: '#10b981', label: 'LOW' },
 };
 
 export default function EconomicCalendarPanel({ theme }) {
@@ -35,67 +31,66 @@ export default function EconomicCalendarPanel({ theme }) {
 
   useEffect(() => {
     loadData();
-    // Auto refresh every 30 minutes
     const interval = setInterval(() => loadData(true), 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Filter events per day
   const filteredWeekDays = useMemo(() => {
     if (!calendarData?.weekDays) return [];
     return calendarData.weekDays.map((day) => {
       const filteredEvents = day.events.filter((e) => {
         if (filter === 'HIGH') return e.impact === 'High';
         if (filter === 'USD') return e.country === 'USD';
-        if (filter === 'CRYPTO') return e.impact === 'High' || e.impactCrypto?.includes('Cực Mạnh') || e.category?.includes('LẠM PHÁT') || e.category?.includes('CHÍNH SÁCH');
+        if (filter === 'CRYPTO') return e.impact === 'High' || e.category?.includes('LẠM PHÁT') || e.category?.includes('CHÍNH SÁCH');
         return true;
       });
       return { ...day, events: filteredEvents };
     });
   }, [calendarData, filter]);
 
-  const getImpactStyle = (impact) => IMPACT_COLORS[impact] || IMPACT_COLORS.Medium;
+  const getImpact = (impact) => IMPACT_BADGES[impact] || IMPACT_BADGES.Medium;
 
   return (
-    <div className="glass-panel economic-calendar-panel" style={{ padding: '18px 20px', marginBottom: '20px', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '12px' }}>
-      {/* Panel Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px', borderBottom: '1px solid var(--border-panel)', paddingBottom: '12px' }}>
+    <div className="glass-panel economic-calendar-panel" style={{ padding: '16px', marginBottom: '20px', border: '1px solid var(--border-panel)', borderRadius: '8px' }}>
+      {/* Editorial Minimalist Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="dot dot-emerald" />
-            <h3 className="font-mono text-emerald" style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
-              📅 LỊCH KINH TẾ VĨ MÔ TUẦN NÀY (7 NGÀY TRONG TUẦN)
+            <h3 className="font-mono text-emerald" style={{ margin: 0, fontSize: '0.9rem', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
+              ECONOMIC CALENDAR (7 DAYS)
             </h3>
-            {refreshing && <span style={{ fontSize: '0.7rem', color: 'var(--color-amber-400)' }}>⏳ Đang cập nhật...</span>}
+            {refreshing && <span className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--color-amber-400)' }}>[UPDATING...]</span>}
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-slate-400)', marginTop: '4px' }}>
-            Bảng theo dõi tin tức kinh tế Mỹ &amp; Toàn cầu (CPI, FOMC, NFP...). Bấm vào ô sự kiện để xem phân tích tác động đến Bitcoin &amp; Crypto.
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-slate-400)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+            US &amp; Global Macroeconomic Release Schedule
           </div>
         </div>
 
-        {/* Toolbar & Filters */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {/* Filter Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           {[
-            { key: 'ALL', label: '🌟 Tất Cả' },
-            { key: 'HIGH', label: '🔴 Quan Trọng (High)' },
-            { key: 'USD', label: '🇺🇸 Chỉ USD (Mỹ)' },
-            { key: 'CRYPTO', label: '⚡ Tác Động Crypto' },
+            { key: 'ALL', label: 'ALL' },
+            { key: 'HIGH', label: 'HIGH IMPACT' },
+            { key: 'USD', label: 'USD ONLY' },
+            { key: 'CRYPTO', label: 'CRYPTO IMPACT' },
           ].map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={() => setFilter(item.key)}
               style={{
-                padding: '5px 10px',
-                borderRadius: '6px',
-                fontSize: '0.72rem',
-                fontWeight: 600,
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: 'var(--font-mono)',
-                background: filter === item.key ? 'var(--color-emerald-500)' : 'rgba(255,255,255,0.05)',
-                color: filter === item.key ? '#000' : 'var(--text-contrast)',
-                border: filter === item.key ? '1px solid var(--color-emerald-400)' : '1px solid var(--border-panel)',
-                transition: 'all 0.2s',
+                letterSpacing: '0.04em',
+                background: filter === item.key ? 'var(--color-emerald-500)' : 'transparent',
+                color: filter === item.key ? '#000' : 'var(--text-slate-400)',
+                border: filter === item.key ? '1px solid var(--color-emerald-400)' : '1px solid rgba(255,255,255,0.1)',
+                transition: 'all 0.15s ease',
               }}
             >
               {item.label}
@@ -104,36 +99,42 @@ export default function EconomicCalendarPanel({ theme }) {
           <button
             type="button"
             onClick={() => loadData(true)}
-            title="Tải lại lịch kinh tế"
+            title="Reload Calendar Data"
             style={{
-              padding: '5px 8px',
-              borderRadius: '6px',
-              fontSize: '0.8rem',
+              padding: '4px 6px',
+              borderRadius: '4px',
+              fontSize: '0.7rem',
               cursor: 'pointer',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid var(--border-panel)',
-              color: 'var(--text-contrast)',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: 'var(--text-slate-400)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            🔄
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6" />
+              <path d="M2 11.5a10 10 0 0 1 18.8-4.3L21.5 8M2.5 16l1.2 1.2A10 10 0 0 0 22 12.5" />
+            </svg>
           </button>
           <ModuleMenu moduleId="dash_calendar" />
         </div>
       </div>
 
-      {/* 7-Day Grids (Các ô vuông theo thứ trong tuần) */}
+      {/* 7 Columns on 1 Row on PC, Horizontal Scroll on Mobile */}
       {loading ? (
-        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-slate-400)', fontStyle: 'italic' }}>
-          ⏳ Đang tải dữ liệu lịch kinh tế 7 ngày trong tuần...
+        <div className="font-mono" style={{ padding: '30px 0', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>
+          LOADING ECONOMIC DATA...
         </div>
       ) : (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(7, minmax(125px, 1fr))',
+            gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))',
             gap: '8px',
             overflowX: 'auto',
-            paddingBottom: '6px',
+            paddingBottom: '4px',
             width: '100%',
           }}
         >
@@ -143,95 +144,91 @@ export default function EconomicCalendarPanel({ theme }) {
               <div
                 key={day.dayIndex}
                 style={{
-                  background: isToday ? 'rgba(16,185,129,0.05)' : 'var(--bg-slate-950)',
-                  border: isToday ? '1.5px solid var(--color-emerald-500)' : '1px solid var(--border-panel)',
-                  borderRadius: '8px',
-                  padding: '6px 8px',
+                  background: isToday ? 'rgba(16,185,129,0.04)' : 'var(--bg-slate-950)',
+                  border: isToday ? '1px solid var(--color-emerald-500)' : '1px solid var(--border-panel)',
+                  borderRadius: '6px',
+                  padding: '6px 7px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '6px',
-                  minHeight: '160px',
-                  boxShadow: isToday ? '0 0 12px rgba(16,185,129,0.12)' : 'none',
+                  minHeight: '155px',
                   position: 'relative',
                 }}
               >
                 {/* Day Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '4px' }}>
-                  <span className="font-mono" style={{ fontWeight: 700, fontSize: '0.75rem', color: isToday ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
-                    {day.nameVN}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '4px' }}>
+                  <span className="font-mono" style={{ fontWeight: 700, fontSize: '0.72rem', color: isToday ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
+                    {day.nameVN.toUpperCase()}
                   </span>
-                  <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)', background: 'rgba(255,255,255,0.05)', padding: '1px 4px', borderRadius: '3px' }}>
+                  <span className="font-mono" style={{ fontSize: '0.6rem', color: 'var(--text-slate-400)' }}>
                     {day.dateStr}
                   </span>
                 </div>
 
                 {isToday && (
-                  <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#000', background: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', alignSelf: 'flex-start' }}>
-                    ● HÔM NAY
+                  <div className="font-mono" style={{ fontSize: '0.58rem', fontWeight: 700, color: '#000', background: 'var(--color-emerald-400)', padding: '1px 4px', borderRadius: '2px', alignSelf: 'flex-start', letterSpacing: '0.04em' }}>
+                    TODAY
                   </div>
                 )}
 
                 {/* Events List */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '210px', overflowY: 'auto', paddingRight: '1px' }}>
                   {day.events.length === 0 ? (
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-slate-400)', fontStyle: 'italic', textAlign: 'center', margin: 'auto 0' }}>
-                      --- Trống ---
+                    <div className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--text-slate-500)', textAlign: 'center', margin: 'auto 0' }}>
+                      NO EVENTS
                     </div>
                   ) : (
                     day.events.map((event) => {
-                      const impactStyle = getImpactStyle(event.impact);
-                      const flag = COUNTRY_FLAGS[event.country] || '🌐';
+                      const impact = getImpact(event.impact);
 
                       return (
                         <div
                           key={event.id}
                           onClick={() => setSelectedEvent(event)}
                           style={{
-                            background: 'rgba(255,255,255,0.025)',
-                            border: '1px solid rgba(255,255,255,0.07)',
-                            borderRadius: '5px',
+                            background: 'rgba(255,255,255,0.02)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            borderRadius: '4px',
                             padding: '5px 6px',
                             cursor: 'pointer',
-                            transition: 'all 0.15s ease-in-out',
+                            transition: 'all 0.12s ease-in-out',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: '3px',
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(16,185,129,0.08)';
-                            e.currentTarget.style.borderColor = 'rgba(16,185,129,0.3)';
-                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.background = 'rgba(16,185,129,0.06)';
+                            e.currentTarget.style.borderColor = 'rgba(16,185,129,0.25)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(255,255,255,0.025)';
-                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
-                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
                           }}
                         >
-                          {/* Top Row: Time + Flag + Impact */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.65rem', color: 'var(--text-slate-400)', fontFamily: 'var(--font-mono)' }}>
+                          {/* Top Meta: Time + Country + Impact */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.62rem', color: 'var(--text-slate-400)', fontFamily: 'var(--font-mono)' }}>
                             <span style={{ fontWeight: 600, color: 'var(--text-contrast)' }}>
-                              ⏰ {event.timeStr}
+                              {event.timeStr}
                             </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                              <span>{flag}</span>
-                              <span title={impactStyle.label}>{impactStyle.dot}</span>
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '0.58rem', background: 'rgba(255,255,255,0.06)', padding: '0 3px', borderRadius: '2px', color: 'var(--text-contrast)', fontWeight: 600 }}>
+                                {event.country}
+                              </span>
+                              <span style={{ fontSize: '0.55rem', fontWeight: 700, color: impact.text, background: impact.bg, padding: '0 3px', borderRadius: '2px', border: `1px solid ${impact.border}` }}>
+                                {impact.label}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Title */}
-                          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-contrast)', lineHeight: '1.2', wordBreak: 'break-word' }}>
+                          <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-contrast)', lineHeight: '1.2' }}>
                             {event.titleVN || event.title}
                           </div>
 
-                          {/* Data Row: Actual / Forecast */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-slate-400)', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '3px', marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
-                            <span>
-                              Act: <strong style={{ color: event.actual ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>{event.actual || '--'}</strong>
-                            </span>
-                            <span>
-                              Fc: {event.forecast || '--'}
-                            </span>
+                          {/* Data Row */}
+                          <div className="font-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: 'var(--text-slate-400)', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '3px', marginTop: '1px' }}>
+                            <span>ACT: <strong style={{ color: event.actual ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>{event.actual || '--'}</strong></span>
+                            <span>FC: {event.forecast || '--'}</span>
                           </div>
                         </div>
                       );
@@ -244,7 +241,7 @@ export default function EconomicCalendarPanel({ theme }) {
         </div>
       )}
 
-      {/* EVENT DETAIL MODAL (Khi click vào sự kiện) */}
+      {/* MINIMALIST EDITORIAL MODAL */}
       {selectedEvent && (
         <div
           style={{
@@ -254,151 +251,149 @@ export default function EconomicCalendarPanel({ theme }) {
             width: '100vw',
             height: '100vh',
             zIndex: 99999,
-            background: 'rgba(0,0,0,0.8)',
-            backdropFilter: 'blur(8px)',
+            background: 'rgba(0,0,0,0.85)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '20px',
+            padding: '16px',
           }}
           onClick={() => setSelectedEvent(null)}
         >
           <div
             style={{
               background: 'var(--bg-slate-900)',
-              border: '1px solid var(--color-emerald-500)',
-              borderRadius: '14px',
-              maxWidth: '620px',
+              border: '1px solid var(--border-panel)',
+              borderRadius: '8px',
+              maxWidth: '560px',
               width: '100%',
               maxHeight: '90vh',
               overflowY: 'auto',
-              padding: '24px',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.7)',
-              position: 'relative',
+              padding: '20px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.8)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px',
+              gap: '14px',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-panel)', paddingBottom: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '1.4rem' }}>{COUNTRY_FLAGS[selectedEvent.country] || '🌐'}</span>
-                  <span style={{
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    background: getImpactStyle(selectedEvent.impact).bg,
-                    border: `1px solid ${getImpactStyle(selectedEvent.impact).border}`,
-                    color: getImpactStyle(selectedEvent.impact).text,
-                  }}>
-                    {getImpactStyle(selectedEvent.impact).label}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-contrast)' }}>
+                    {selectedEvent.country}
                   </span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-slate-400)', background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '6px' }}>
+                  <span className="font-mono" style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: '3px',
+                    background: getImpact(selectedEvent.impact).bg,
+                    border: `1px solid ${getImpact(selectedEvent.impact).border}`,
+                    color: getImpact(selectedEvent.impact).text,
+                  }}>
+                    {getImpact(selectedEvent.impact).label} IMPACT
+                  </span>
+                  <span className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }}>
                     {selectedEvent.category}
                   </span>
                 </div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-contrast)', margin: 0, lineHeight: 1.3 }}>
+                <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-contrast)', margin: 0, lineHeight: 1.35 }}>
                   {selectedEvent.titleVN || selectedEvent.title}
                 </h2>
                 {selectedEvent.titleVN && selectedEvent.title !== selectedEvent.titleVN && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-slate-400)', fontStyle: 'italic', marginTop: '2px' }}>
-                    ({selectedEvent.title})
+                  <div className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-slate-400)', marginTop: '2px' }}>
+                    {selectedEvent.title}
                   </div>
                 )}
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedEvent(null)}
+                className="font-mono"
                 style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid var(--border-panel)',
-                  color: 'var(--text-contrast)',
-                  borderRadius: '8px',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'var(--text-slate-400)',
+                  borderRadius: '4px',
+                  padding: '2px 8px',
                   cursor: 'pointer',
-                  fontSize: '1.1rem',
+                  fontSize: '0.75rem',
                 }}
               >
-                ✕
+                ESC
               </button>
             </div>
 
-            {/* Time & Location */}
-            <div style={{ background: 'var(--bg-slate-950)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-panel)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+            {/* Time Info */}
+            <div className="font-mono" style={{ background: 'var(--bg-slate-950)', padding: '10px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
               <div>
-                <span style={{ color: 'var(--text-slate-400)' }}>⏰ Thời gian: </span>
-                <strong style={{ color: 'var(--color-amber-400)' }}>{selectedEvent.timeStr}</strong> - {selectedEvent.fullDateStr || selectedEvent.dateStr} (Giờ VN)
+                <span style={{ color: 'var(--text-slate-400)' }}>TIME: </span>
+                <strong style={{ color: 'var(--color-emerald-400)' }}>{selectedEvent.timeStr}</strong> ({selectedEvent.fullDateStr || selectedEvent.dateStr})
               </div>
               <div>
-                <span style={{ color: 'var(--text-slate-400)' }}>🌍 Đồng tiền: </span>
+                <span style={{ color: 'var(--text-slate-400)' }}>CURRENCY: </span>
                 <strong style={{ color: 'var(--text-contrast)' }}>{selectedEvent.country}</strong>
               </div>
             </div>
 
-            {/* Data Comparison Table */}
-            <div style={{ background: 'var(--bg-slate-950)', borderRadius: '8px', border: '1px solid var(--border-panel)', overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-panel)', padding: '10px 14px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-slate-400)', textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
-                <div>THỰC TẾ (ACTUAL)</div>
-                <div>DỰ BÁO (FORECAST)</div>
-                <div>KỲ TRƯỚC (PREVIOUS)</div>
+            {/* Data Comparison */}
+            <div style={{ background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+              <div className="font-mono" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '8px 12px', fontSize: '0.68rem', color: 'var(--text-slate-400)', textAlign: 'center', letterSpacing: '0.04em' }}>
+                <div>ACTUAL</div>
+                <div>FORECAST</div>
+                <div>PREVIOUS</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', padding: '14px', fontSize: '1.1rem', fontWeight: 700, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
+              <div className="font-mono" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', padding: '12px', fontSize: '1rem', fontWeight: 700, textAlign: 'center' }}>
                 <div style={{ color: selectedEvent.actual ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>
-                  {selectedEvent.actual || 'Chưa công bố'}
+                  {selectedEvent.actual || 'PENDING'}
                 </div>
                 <div style={{ color: 'var(--text-contrast)' }}>
-                  {selectedEvent.forecast || '---'}
+                  {selectedEvent.forecast || '--'}
                 </div>
                 <div style={{ color: 'var(--text-slate-400)' }}>
-                  {selectedEvent.previous || '---'}
+                  {selectedEvent.previous || '--'}
                 </div>
               </div>
             </div>
 
-            {/* AI CRYPTO ANALYSIS */}
-            <div style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', padding: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-emerald-400)', fontFamily: 'var(--font-mono)' }}>
-                <span>🐋</span> PHÂN TÍCH TÁC ĐỘNG ĐẾN BITCOIN &amp; CRYPTO:
+            {/* Editorial Crypto Analysis */}
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '14px' }}>
+              <div className="font-mono" style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-emerald-400)', marginBottom: '4px', letterSpacing: '0.04em' }}>
+                BITCOIN &amp; CRYPTO MARKET IMPACT
               </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--color-emerald-300)', fontWeight: 600, marginBottom: '6px' }}>
+              <div className="font-mono" style={{ fontSize: '0.78rem', color: 'var(--text-contrast)', fontWeight: 600, marginBottom: '8px' }}>
                 {selectedEvent.impactCrypto}
               </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--text-contrast)', lineHeight: 1.5, marginBottom: '12px' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-slate-300)', lineHeight: 1.5, marginBottom: '10px' }}>
                 {selectedEvent.analysis}
               </div>
               {selectedEvent.tradingCue && (
-                <div style={{ background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid var(--color-amber-400)', padding: '8px 12px', borderRadius: '4px', fontSize: '0.78rem', color: 'var(--color-amber-300)', fontFamily: 'var(--font-mono)' }}>
+                <div className="font-mono" style={{ background: 'rgba(245,158,11,0.08)', borderLeft: '2px solid var(--color-amber-400)', padding: '6px 10px', fontSize: '0.72rem', color: 'var(--color-amber-300)' }}>
                   {selectedEvent.tradingCue}
                 </div>
               )}
             </div>
 
-            {/* Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+            {/* Footer Close */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={() => setSelectedEvent(null)}
+                className="font-mono"
                 style={{
                   background: 'var(--color-emerald-500)',
                   color: '#000',
                   fontWeight: 700,
-                  fontSize: '0.85rem',
-                  padding: '8px 20px',
-                  borderRadius: '8px',
+                  fontSize: '0.75rem',
+                  padding: '6px 16px',
+                  borderRadius: '4px',
                   border: 'none',
                   cursor: 'pointer',
-                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.04em',
                 }}
               >
-                Đóng / Close
+                CLOSE
               </button>
             </div>
           </div>
