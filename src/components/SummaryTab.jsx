@@ -1121,6 +1121,9 @@ ${promptData}
       {/* ── Separate Trade Plan Auditor Widget ── */}
       <TradePlanAuditor
         data={data}
+        cvd={cvd}
+        buyVolume={buyVolume}
+        sellVolume={sellVolume}
         apiKeys={apiKeys}
         aiProvider={aiProvider}
         selectedModel={selectedModel}

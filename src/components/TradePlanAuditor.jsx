@@ -6,10 +6,14 @@ import Tooltip from './Tooltip';
 import { cleanLatex } from './SummaryTab';
 import { getGenerationConfig } from '../services/aiPrompts';
 import { streamOpenRouterCompletion } from '../services/openrouter';
+import { getOrderBookDepth, getWhaleWalls } from '../services/api';
 import ModuleMenu from './ModuleMenu';
 
 export default function TradePlanAuditor({
   data,
+  cvd,
+  buyVolume,
+  sellVolume,
   apiKeys,
   aiProvider,
   selectedModel,
@@ -132,18 +136,50 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
 
 - **Emergency Invalidation:** [Specific signal or price breakdown that immediately invalidates setup]`;
 
+    // Fetch fresh microstructure depth and whale walls if not already attached
+    let orderBook = data?.orderBook || null;
+    let whaleWalls = data?.whaleWalls || null;
+
+    try {
+      const [obRes, wwRes] = await Promise.all([
+        getOrderBookDepth('BTCUSDT', 100).catch(() => null),
+        getWhaleWalls().catch(() => null),
+      ]);
+      if (obRes) orderBook = obRes;
+      if (wwRes) whaleWalls = wwRes;
+    } catch (err) {
+      console.warn('[TradeAuditor] Microstructure fetch fallback:', err);
+    }
+
+    const formattedCvd =
+      cvd !== undefined && cvd !== null && !Number.isNaN(Number(cvd))
+        ? (Number(cvd) > 0 ? '+' : '') + Number(cvd).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' USD'
+        : 'N/A';
+
+    const formattedBuyVol =
+      buyVolume !== undefined && buyVolume !== null && !Number.isNaN(Number(buyVolume))
+        ? Number(buyVolume).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' USD'
+        : 'N/A';
+
+    const formattedSellVol =
+      sellVolume !== undefined && sellVolume !== null && !Number.isNaN(Number(sellVolume))
+        ? Number(sellVolume).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' USD'
+        : 'N/A';
+
     const userPrompt = `
 # TRADE AUDIT INPUT DATA
 
 - Direction Requested: **${tradeDirection}**
 - Target Spot Price: **${formattedSpotPrice}**
 - BTC Live Spot Price: $${priceNow.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-- BTC 24h Change: ${data.btc?.change ? data.btc.change + '%' : 'N/A'}
+- BTC 24h Change: ${data.btc?.change !== undefined && data.btc?.change !== null ? (Number(data.btc.change) > 0 ? '+' : '') + Number(data.btc.change).toFixed(2) + '%' : 'N/A'}
 - Current Funding Rate: ${data.fundingRate !== undefined && data.fundingRate !== null ? (data.fundingRate * 100).toFixed(4) + '%' : 'N/A'}
-- Current Open Interest: ${data.openInterest ? data.openInterest.toLocaleString() + ' BTC' : 'N/A'}
-- Intraday CVD: ${data.cvd ? (data.cvd > 0 ? '+' : '') + data.cvd.toLocaleString() + ' USD' : 'N/A'}
-- Order Book Imbalance (OBI): ${data.orderBook?.obiPercent !== undefined ? data.orderBook.obiPercent.toFixed(2) + '%' : 'N/A'}
-- Whale Bid Ratio: ${data.whaleWalls?.bidRatio !== undefined ? (data.whaleWalls.bidRatio * 100).toFixed(1) + '%' : 'N/A'}
+- Current Open Interest: ${data.openInterest ? Number(data.openInterest).toLocaleString('en-US') + ' BTC' : 'N/A'}
+- Intraday Cumulative Volume Delta (CVD): ${formattedCvd}
+- Intraday Taker Buy Volume: ${formattedBuyVol}
+- Intraday Taker Sell Volume: ${formattedSellVol}
+- Order Book Imbalance (OBI): ${orderBook?.obiPercent !== undefined && orderBook?.obiPercent !== null ? (orderBook.obiPercent > 0 ? '+' : '') + orderBook.obiPercent.toFixed(2) + '%' : 'N/A'}
+- Whale Bid Ratio: ${whaleWalls?.bidRatio !== undefined && whaleWalls?.bidRatio !== null ? (whaleWalls.bidRatio * 100).toFixed(1) + '%' : 'N/A'}
 `;
 
     try {
