@@ -517,11 +517,11 @@ function AppContent() {
       const saved = localStorage.getItem('app-api-keys');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { fred: '', alphaVantage: '', gemini: '', ...parsed };
+        return { fred: '', alphaVantage: '', gemini: '', openrouter: '', ...parsed };
       }
-      return { fred: '', alphaVantage: '', gemini: '' };
+      return { fred: '', alphaVantage: '', gemini: '', openrouter: '' };
     } catch {
-      return { fred: '', alphaVantage: '', gemini: '' };
+      return { fred: '', alphaVantage: '', gemini: '', openrouter: '' };
     }
   });
   const [showSettings, setShowSettings] = useState(false);
@@ -1664,6 +1664,20 @@ function AppContent() {
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
                 Lấy miễn phí tại: <a href="https://www.alphavantage.co/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>alphavantage.co</a>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>OPENROUTER API KEY (TOP FREE MODELS)</label>
+              <input
+                type="password"
+                placeholder="sk-or-v1-..."
+                value={apiKeys.openrouter || ''}
+                onChange={(e) => setApiKeys(p => ({ ...p, openrouter: e.target.value }))}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
+              />
+              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
+                Lấy miễn phí tại: <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>openrouter.ai/keys</a>
               </span>
             </div>
 
