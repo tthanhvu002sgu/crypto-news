@@ -86,15 +86,20 @@ export const cleanLatex = (text) => {
     .replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi, 'Δ $1')
     .replace(/\$([~≈Δδ][0-9.,% \t\w]*)\$/g, '$1')
     .replace(/\$([0-9.,]+[KMBkmb%]?)\$/gi, (match, inner) => (inner.startsWith('$') ? inner : `$${inner}`))
-    // Fix merged bullet points on single line: insert newline before inline bullet hyphens
-    .replace(/([^\n])\s+-\s*(\*\*[^*]+?\*\*:?)/g, '$1\n- $2')
-    .replace(/([^\n])\s+-\s*([A-ZÀ-Ỹ][A-Za-zà-ỹ0-9\s/&()]+?:)/g, '$1\n- $2')
-    .replace(/^-([A-ZÀ-Ỹa-zà-ỹ0-9\*])/gm, '- $1')
-    // Clean spaces & duplicate asterisks (e.g. **** -> **)
+    // Fix merged bullet points on single line: insert newline before inline bullet hyphens (even without preceding space)
+    .replace(/([^\n])\s*-\s*(\*\*[^*]+?\*\*:?)/g, '$1\n- $2')
+    .replace(/([^\n])\s*-\s*([A-ZÀ-Ỹ][A-Za-zà-ỹ0-9\s/&()'-]+?:)/g, '$1\n- $2')
+    // Ensure space after opening hyphen at start of lines
+    .replace(/^-\s*([A-ZÀ-Ỹa-zà-ỹ0-9\*])/gm, '- $1')
+    // Fix missing space between words and dollar amounts (e.g. 'mốc$63,000' -> 'mốc $63,000')
+    .replace(/([a-zA-Zà-ỹÀ-Ỹ])(\$[0-9])/g, '$1 $2')
+    // Fix missing space between closing parenthesis/bracket and words (e.g. '(NO TRADE)hoặc' -> '(NO TRADE) hoặc')
+    .replace(/([\)])([a-zA-Zà-ỹÀ-Ỹ])/g, '$1 $2')
+    // Clean duplicate asterisks (e.g. **** -> **) and fix spaces inside bold markers
     .replace(/\*{3,}/g, '**')
-    .replace(/\*\*\s+([^*]+?)\s+\*\*/g, '**$1**')
-    .replace(/\*\*\s+([^*]+?)\*\*/g, '**$1**')
-    .replace(/\*\*([^*]+?)\s+\*\*/g, '**$1**')
+    .replace(/\*\*\s+([^*]+?)\s+\*\*/g, ' **$1** ')
+    .replace(/\*\*\s+([^*]+?)\*\*/g, ' **$1**')
+    .replace(/\*\*([^*]+?)\s+\*\*/g, '**$1** ')
     .replace(/\*\*\s*\*\*/g, '')
     // Prevent 4-space indent from creating code blocks
     .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ');
