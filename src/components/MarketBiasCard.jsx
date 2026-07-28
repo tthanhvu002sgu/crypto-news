@@ -8,62 +8,106 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
 
   const formatPillarScore = (val) => `${val >= 0 ? '+' : ''}${val}`;
 
-  const getPillarColor = (val) => {
-    if (val >= 15) return '#10b981'; // Emerald
-    if (val > 0) return '#34d399';
-    if (val === 0) return 'var(--text-slate-400)';
-    if (val > -15) return '#f87171';
-    return '#f43f5e'; // Rose
+  const getPillarStatus = (val) => {
+    if (val >= 15) return { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', label: 'MẠNH' };
+    if (val > 0) return { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)', label: 'TÍCH CỰC' };
+    if (val === 0) return { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.2)', label: 'TRUNG LẬP' };
+    if (val > -15) return { color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.25)', label: 'TIÊU CỰC' };
+    return { color: '#f43f5e', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)', label: 'YẾU' };
   };
 
-  const getPillarBg = (val) => {
-    if (val > 0) return 'rgba(16,185,129,0.08)';
-    if (val < 0) return 'rgba(244,63,94,0.08)';
-    return 'rgba(255,255,255,0.03)';
-  };
-
-  // Convert score (-100 to +100) to percentage (0% to 100%) for spectrum position
+  // Convert score (-100 to +100) to percentage (0% to 100%)
   const scorePercent = Math.min(100, Math.max(0, ((bias.score + 100) / 200) * 100));
+
+  const pillarsList = [
+    {
+      key: 'microstructure',
+      code: '01',
+      title: 'MICROSTRUCTURE',
+      weight: '35%',
+      subtext: 'CVD 24h, Funding Rate, Open Interest',
+      score: bias.pillars.microstructure,
+      maxPts: 35,
+    },
+    {
+      key: 'onChain',
+      code: '02',
+      title: 'ON-CHAIN DATA',
+      weight: '25%',
+      subtext: 'MVRV Ratio, Active Addrs, Mining Cost',
+      score: bias.pillars.onChain,
+      maxPts: 25,
+    },
+    {
+      key: 'institutional',
+      code: '03',
+      title: 'INSTITUTIONAL FLOW',
+      weight: '20%',
+      subtext: 'BTC Spot ETF Net Flow, Stablecoin Supply',
+      score: bias.pillars.institutional,
+      maxPts: 20,
+    },
+    {
+      key: 'newsRisk',
+      code: '04',
+      title: 'MACRO & RISK',
+      weight: '20%',
+      subtext: 'Macro Calendar, Fear & Greed, L/S Ratio',
+      score: bias.pillars.newsRisk,
+      maxPts: 20,
+    },
+  ];
 
   return (
     <div
-      className="glass-panel bias-card-container"
+      className="glass-panel"
       style={{
-        padding: '16px',
+        padding: '20px',
         marginBottom: '20px',
-        border: '1px solid var(--border-panel)',
-        borderRadius: '8px',
+        border: '1px solid rgba(16,185,129,0.2)',
+        borderRadius: '12px',
+        background: 'linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(2,6,23,0.98) 100%)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
       }}
     >
-      {/* Header Bar */}
+      {/* ── Top Header Toolbar ────────────────────────────────────────── */}
       <div
         style={{
           display: 'flex',
           justify: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: '10px',
-          marginBottom: '14px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          paddingBottom: '10px',
+          gap: '12px',
+          marginBottom: '18px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          paddingBottom: '14px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span className="dot dot-emerald" />
-          <h3 className="font-mono text-emerald" style={{ margin: 0, fontSize: '0.9rem', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
+          <h3
+            className="font-mono text-emerald"
+            style={{
+              margin: 0,
+              fontSize: '1rem',
+              letterSpacing: '0.05em',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+            }}
+          >
             MARKET BIAS ENGINE
           </h3>
           <span
             className="font-mono"
             style={{
-              fontSize: '0.65rem',
+              fontSize: '0.68rem',
               fontWeight: 700,
-              padding: '2px 6px',
-              borderRadius: '3px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'var(--text-slate-300)',
-              letterSpacing: '0.03em',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              background: 'rgba(16,185,129,0.1)',
+              border: '1px solid rgba(16,185,129,0.25)',
+              color: 'var(--color-emerald-400)',
+              letterSpacing: '0.04em',
             }}
           >
             CONFIDENCE: {bias.confidence}%
@@ -76,242 +120,375 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             className="font-mono"
             onClick={() => setExpanded(!expanded)}
             style={{
-              background: expanded ? 'rgba(255,255,255,0.1)' : 'transparent',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'var(--text-slate-300)',
-              borderRadius: '4px',
-              padding: '3px 8px',
-              fontSize: '0.68rem',
+              background: expanded ? 'var(--color-emerald-500)' : 'rgba(255,255,255,0.05)',
+              border: expanded ? '1px solid var(--color-emerald-400)' : '1px solid rgba(255,255,255,0.12)',
+              color: expanded ? '#000' : 'var(--text-contrast)',
+              borderRadius: '6px',
+              padding: '5px 12px',
+              fontSize: '0.72rem',
               cursor: 'pointer',
-              fontWeight: 600,
-              letterSpacing: '0.03em',
-              transition: 'all 0.15s ease',
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              transition: 'all 0.2s ease',
             }}
           >
-            {expanded ? '[ HIDE SIGNALS ]' : '[ BREAKDOWN ]'}
+            {expanded ? 'THU GỌN' : 'XEM CHI TIẾT TÍN HIỆU'}
           </button>
           <ModuleMenu moduleId={moduleId} />
         </div>
       </div>
 
-      {/* Main Score Hero Box & Spectrum Track */}
+      {/* ── Main Score Display & Gauge Meter ───────────────────────────── */}
       <div
         style={{
-          background: 'var(--bg-slate-950)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '6px',
-          padding: '14px 16px',
-          marginBottom: '12px',
+          background: 'rgba(0,0,0,0.4)',
+          border: `1px solid ${bias.color}35`,
+          borderRadius: '10px',
+          padding: '16px 20px',
+          marginBottom: '16px',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
-            <span style={{ fontSize: '1.25rem', fontWeight: 800, color: bias.color, letterSpacing: '-0.01em', fontFamily: 'var(--font-mono)' }}>
-              {bias.label}
-            </span>
-            <div className="font-mono" style={{ fontSize: '1.4rem', fontWeight: 800, color: bias.color }}>
-              {bias.score >= 0 ? `+${bias.score}` : bias.score}
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-slate-500)', fontWeight: 500, marginLeft: '4px' }}>/ 100</span>
+        <div
+          style={{
+            display: 'flex',
+            justify: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px',
+            marginBottom: '16px',
+          }}
+        >
+          {/* Left: Overall Status & Score */}
+          <div>
+            <div
+              className="font-mono"
+              style={{
+                fontSize: '0.7rem',
+                color: 'var(--text-slate-400)',
+                letterSpacing: '0.06em',
+                marginBottom: '4px',
+                fontWeight: 600,
+              }}
+            >
+              CHỈ SỐ XU HƯỚNG TỔNG HỢP (TOTAL BIAS SCORE)
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '14px' }}>
+              <span
+                className="font-mono"
+                style={{
+                  fontSize: '1.6rem',
+                  fontWeight: 900,
+                  color: bias.color,
+                  letterSpacing: '0.02em',
+                  lineHeight: 1,
+                }}
+              >
+                {bias.label}
+              </span>
+              <div
+                className="font-mono"
+                style={{
+                  fontSize: '1.8rem',
+                  fontWeight: 900,
+                  color: bias.color,
+                  lineHeight: 1,
+                }}
+              >
+                {bias.score >= 0 ? `+${bias.score}` : bias.score}
+                <span
+                  style={{
+                    fontSize: '0.85rem',
+                    color: 'var(--text-slate-500)',
+                    fontWeight: 500,
+                    marginLeft: '4px',
+                  }}
+                >
+                  / 100
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="font-mono" style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', maxWidth: '420px', textAlign: 'right' }}>
-            Weighted BTC trend index derived from 4 quantitative pillars (Microstructure, On-Chain, Flow &amp; News Risk)
+          {/* Right: Description */}
+          <div
+            className="font-mono"
+            style={{
+              fontSize: '0.75rem',
+              color: 'var(--text-slate-400)',
+              maxWidth: '380px',
+              lineHeight: 1.45,
+              textAlign: 'right',
+            }}
+          >
+            Định lượng tổng hợp từ 4 trụ cột chính: Vi cấu trúc phái sinh, Dữ liệu On-chain, Dòng tiền định chế ETF &amp; Rủi ro tin tức vĩ mô.
           </div>
         </div>
 
-        {/* Minimalist Spectrum Bar */}
-        <div style={{ position: 'relative', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', marginTop: '6px' }}>
-          {/* Fill Bar from Center (50%) */}
+        {/* ── Modern Spectrum Gauge Bar ──────────────────────────────── */}
+        <div style={{ marginTop: '10px' }}>
+          {/* Gauge Track */}
           <div
             style={{
-              position: 'absolute',
-              top: 0,
-              height: '100%',
-              left: scorePercent >= 50 ? '50%' : `${scorePercent}%`,
-              width: `${Math.abs(scorePercent - 50)}%`,
-              background: bias.color,
-              borderRadius: '3px',
+              position: 'relative',
+              height: '10px',
+              background: 'linear-gradient(90deg, #f43f5e 0%, #f59e0b 50%, #10b981 100%)',
+              borderRadius: '5px',
+              opacity: 0.85,
             }}
-          />
-          {/* Marker Dot */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '-3px',
-              left: `calc(${scorePercent}% - 6px)`,
-              width: '12px',
-              height: '12px',
-              borderRadius: '50%',
-              background: bias.color,
-              border: '2px solid var(--bg-slate-950)',
-              transition: 'left 0.3s ease',
-            }}
-          />
-        </div>
+          >
+            {/* Center Zero Marker Notch */}
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '-2px',
+                bottom: '-2px',
+                width: '2px',
+                background: '#ffffff',
+                opacity: 0.6,
+                zIndex: 2,
+              }}
+            />
 
-        {/* Spectrum Ticks */}
-        <div className="font-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: 'var(--text-slate-500)', marginTop: '6px' }}>
-          <span>BEARISH (-100)</span>
-          <span>NEUTRAL (0)</span>
-          <span>BULLISH (+100)</span>
+            {/* Active Pointer Marker */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '-4px',
+                left: `calc(${scorePercent}% - 7px)`,
+                width: '14px',
+                height: '18px',
+                background: '#ffffff',
+                borderRadius: '3px',
+                boxShadow: `0 0 10px ${bias.color}`,
+                border: `2px solid ${bias.color}`,
+                transition: 'left 0.4s ease-out',
+                zIndex: 3,
+              }}
+            />
+          </div>
+
+          {/* Scale Labels */}
+          <div
+            className="font-mono"
+            style={{
+              display: 'flex',
+              justify: 'space-between',
+              fontSize: '0.62rem',
+              color: 'var(--text-slate-400)',
+              marginTop: '8px',
+              fontWeight: 600,
+            }}
+          >
+            <span style={{ color: '#f43f5e' }}>BEARISH (-100)</span>
+            <span>NEUTRAL (0)</span>
+            <span style={{ color: '#10b981' }}>BULLISH (+100)</span>
+          </div>
         </div>
       </div>
 
-      {/* 4 Pillars Cards Grid (Minimalist Bento Boxes) */}
+      {/* ── 4 Pillars Bento Grid ──────────────────────────────────────── */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-          gap: '8px',
-          marginBottom: '10px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '10px',
+          marginBottom: '14px',
         }}
       >
-        <div
-          style={{
-            background: getPillarBg(bias.pillars.microstructure),
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: '6px',
-            padding: '8px 10px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-contrast)' }}>
-              MICROSTRUCTURE (35%)
-            </span>
-            <span className="font-mono" style={{ fontSize: '0.75rem', fontWeight: 800, color: getPillarColor(bias.pillars.microstructure) }}>
-              {formatPillarScore(bias.pillars.microstructure)}
-            </span>
-          </div>
-          <div className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
-            CVD 24h, Funding Rate, OI
-          </div>
-        </div>
+        {pillarsList.map((pillar) => {
+          const status = getPillarStatus(pillar.score);
+          const fillRatio = Math.min(100, Math.max(0, ((pillar.score + pillar.maxPts) / (pillar.maxPts * 2)) * 100));
 
-        <div
-          style={{
-            background: getPillarBg(bias.pillars.onChain),
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: '6px',
-            padding: '8px 10px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-contrast)' }}>
-              ON-CHAIN (25%)
-            </span>
-            <span className="font-mono" style={{ fontSize: '0.75rem', fontWeight: 800, color: getPillarColor(bias.pillars.onChain) }}>
-              {formatPillarScore(bias.pillars.onChain)}
-            </span>
-          </div>
-          <div className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
-            MVRV, Active Addrs, Cost
-          </div>
-        </div>
+          return (
+            <div
+              key={pillar.key}
+              style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: `1px solid ${status.border}`,
+                borderRadius: '8px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                justify: 'space-between',
+                gap: '8px',
+                transition: 'transform 0.15s ease, border-color 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = status.color;
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = status.border;
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <div>
+                {/* Header: Code + Name + Score */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: '0.6rem',
+                        fontWeight: 800,
+                        color: 'var(--text-slate-500)',
+                        background: 'rgba(255,255,255,0.05)',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                      }}
+                    >
+                      {pillar.code}
+                    </span>
+                    <span className="font-mono" style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-contrast)' }}>
+                      {pillar.title}
+                    </span>
+                  </div>
 
-        <div
-          style={{
-            background: getPillarBg(bias.pillars.institutional),
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: '6px',
-            padding: '8px 10px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-contrast)' }}>
-              INSTITUTIONAL (20%)
-            </span>
-            <span className="font-mono" style={{ fontSize: '0.75rem', fontWeight: 800, color: getPillarColor(bias.pillars.institutional) }}>
-              {formatPillarScore(bias.pillars.institutional)}
-            </span>
-          </div>
-          <div className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
-            ETF Flow, Stablecoins
-          </div>
-        </div>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontSize: '0.8rem',
+                      fontWeight: 800,
+                      color: status.color,
+                    }}
+                  >
+                    {formatPillarScore(pillar.score)}
+                  </span>
+                </div>
 
-        <div
-          style={{
-            background: getPillarBg(bias.pillars.newsRisk),
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: '6px',
-            padding: '8px 10px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-contrast)' }}>
-              NEWS &amp; RISK (20%)
-            </span>
-            <span className="font-mono" style={{ fontSize: '0.75rem', fontWeight: 800, color: getPillarColor(bias.pillars.newsRisk) }}>
-              {formatPillarScore(bias.pillars.newsRisk)}
-            </span>
-          </div>
-          <div className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
-            Calendar Risk, FnG, L/S Ratio
-          </div>
-        </div>
+                {/* Subtext */}
+                <div className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', lineHeight: 1.3 }}>
+                  {pillar.subtext}
+                </div>
+              </div>
+
+              {/* Progress Bar & Status Pill */}
+              <div>
+                <div style={{ height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${fillRatio}%`,
+                      background: status.color,
+                      borderRadius: '2px',
+                      transition: 'width 0.3s ease',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6rem' }}>
+                  <span className="font-mono" style={{ color: 'var(--text-slate-500)' }}>
+                    Trọng số: {pillar.weight}
+                  </span>
+                  <span
+                    className="font-mono"
+                    style={{
+                      fontWeight: 700,
+                      color: status.color,
+                      background: status.bg,
+                      padding: '1px 5px',
+                      borderRadius: '3px',
+                      border: `1px solid ${status.border}`,
+                    }}
+                  >
+                    {status.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Minimalist Event Alert Banner */}
+      {/* ── Upcoming Macro Risk Alert Banner ─────────────────────────────── */}
       {bias.upcomingEvents.length > 0 && (
         <div
           className="font-mono"
           style={{
             background: 'rgba(245,158,11,0.08)',
-            borderLeft: '3px solid var(--color-amber-400)',
-            padding: '6px 10px',
-            borderRadius: '0 4px 4px 0',
-            fontSize: '0.68rem',
+            border: '1px solid rgba(245,158,11,0.25)',
+            borderLeft: '4px solid var(--color-amber-400)',
+            padding: '10px 14px',
+            borderRadius: '6px',
+            fontSize: '0.75rem',
             color: 'var(--color-amber-300)',
-            marginTop: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '10px',
           }}
         >
-          <strong>EVENT RISK ALERT:</strong> High Impact event (<strong>{bias.upcomingEvents[0].title}</strong>) within 24h. Manage leverage risk accordingly.
+          <span style={{ fontWeight: 800, color: 'var(--color-amber-400)' }}>CẢNH BÁO LỊCH SỰ KIỆN:</span>
+          <span>
+            Sự kiện High Impact <strong>{bias.upcomingEvents[0].title}</strong> diễn ra trong 24h tới. Thận trọng đòn bẩy!
+          </span>
         </div>
       )}
 
-      {/* Expandable Signal Breakdown Drawer */}
+      {/* ── Expandable Breakdown Drawer ───────────────────────────────── */}
       {expanded && (
         <div
           style={{
-            marginTop: '12px',
-            paddingTop: '12px',
-            borderTop: '1px solid rgba(255,255,255,0.06)',
+            marginTop: '14px',
+            paddingTop: '14px',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
           }}
         >
-          <div className="font-mono" style={{ fontSize: '0.68rem', color: 'var(--text-slate-400)', marginBottom: '8px', fontWeight: 700, letterSpacing: '0.04em' }}>
-            10+ CONSTITUENT SIGNALS BREAKDOWN
+          <div
+            className="font-mono"
+            style={{
+              fontSize: '0.75rem',
+              color: 'var(--color-emerald-400)',
+              marginBottom: '10px',
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+            }}
+          >
+            BẢNG CHI TIẾT 10+ TÍN HIỆU ĐỊNH LƯỢNG THÀNH PHẦN
           </div>
+
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '6px',
+              gap: '8px',
             }}
           >
-            {bias.signals.map((sig, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  borderRadius: '4px',
-                  padding: '6px 8px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
-                    {sig.name}
-                  </span>
-                  <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, color: sig.score >= 0 ? '#10b981' : '#f43f5e' }}>
-                    {sig.score >= 0 ? `+${sig.score.toFixed(1)}` : sig.score.toFixed(1)} pt <span style={{ fontSize: '0.58rem', color: 'var(--text-slate-500)', fontWeight: 400 }}>({sig.weight})</span>
-                  </span>
+            {bias.signals.map((sig, idx) => {
+              const isPos = sig.score >= 0;
+              const color = isPos ? 'var(--color-emerald-400)' : 'var(--color-rose-400)';
+
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-contrast)' }}>
+                      {sig.name}
+                    </span>
+                    <span className="font-mono" style={{ fontSize: '0.75rem', fontWeight: 800, color }}>
+                      {isPos ? `+${sig.score.toFixed(1)}` : sig.score.toFixed(1)} pt{' '}
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-500)', fontWeight: 400 }}>({sig.weight})</span>
+                    </span>
+                  </div>
+
+                  <div className="font-mono" style={{ fontSize: '0.68rem', color: 'var(--text-slate-400)' }}>
+                    {sig.status}
+                  </div>
                 </div>
-                <div className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
-                  {sig.status}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
