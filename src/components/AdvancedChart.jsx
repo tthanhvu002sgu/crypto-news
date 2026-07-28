@@ -65,7 +65,21 @@ class HeatmapWallPrimitive {
             });
 
             // ── Render each wall cluster ────────────────────────────────
+            const currentPrice = this._options.currentPrice;
+            const currentPriceY = (currentPrice && currentPrice > 0) ? this._series.priceToCoordinate(currentPrice) : null;
+
             this._walls.forEach(w => {
+              const isBid = w.side === 'BID';
+              const avgP = w.avgPrice || w.price || 0;
+
+              // Strict Orderbook Logic Filter:
+              // BID (Limit Buy) MUST be < currentPrice
+              // ASK (Limit Sell) MUST be > currentPrice
+              if (currentPrice && currentPrice > 0) {
+                if (isBid && avgP >= currentPrice) return;
+                if (!isBid && avgP <= currentPrice) return;
+              }
+
               const yMax = this._series.priceToCoordinate(w.maxPrice || w.price || 0);
               const yMin = this._series.priceToCoordinate(w.minPrice || w.price || 0);
               if (yMax === null || yMin === null) return;
@@ -79,7 +93,19 @@ class HeatmapWallPrimitive {
                 bottomY = center + 12;
               }
 
-              const isBid = w.side === 'BID';
+              // Clip bounds relative to currentPriceY (In chart coords: higher price = smaller Y)
+              if (currentPriceY !== null) {
+                if (isBid) {
+                  // BID wall is below currentPrice (larger Y coord). Prevent topY from going above currentPriceY!
+                  topY = Math.max(topY, currentPriceY + 2);
+                } else {
+                  // ASK wall is above currentPrice (smaller Y coord). Prevent bottomY from going below currentPriceY!
+                  bottomY = Math.min(bottomY, currentPriceY - 2);
+                }
+              }
+
+              if (bottomY <= topY) return;
+
               const baseR = isBid ? 56 : 192;
               const baseG = isBid ? 189 : 132;
               const baseB = isBid ? 248 : 252;
@@ -721,11 +747,23 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       };
 
       const currentPrice = latestPriceRef.current || (klines && klines.length > 0 ? klines[klines.length - 1].close : 0);
+
+      // Top 3 Limit Buy (BID) Walls: MUST be strictly BELOW currentPrice
       const topBids = (whaleData.whaleBids || [])
-        .filter(w => !currentPrice || (w.avgPrice || w.price) <= currentPrice)
+        .filter(w => {
+          const avgP = w.avgPrice || w.price;
+          return currentPrice > 0 ? avgP < currentPrice : true;
+        })
+        .sort((a, b) => (b.avgPrice || b.price) - (a.avgPrice || a.price))
         .slice(0, 3);
+
+      // Top 3 Limit Sell (ASK) Walls: MUST be strictly ABOVE currentPrice
       const topAsks = (whaleData.whaleAsks || [])
-        .filter(w => !currentPrice || (w.avgPrice || w.price) >= currentPrice)
+        .filter(w => {
+          const avgP = w.avgPrice || w.price;
+          return currentPrice > 0 ? avgP > currentPrice : true;
+        })
+        .sort((a, b) => (a.avgPrice || a.price) - (b.avgPrice || b.price))
         .slice(0, 3);
 
       topBids.forEach(w => {
@@ -736,7 +774,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: false,
-          title: `${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
+          title: `BUY WALL ${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
         });
         wallLinesRef.current.push(line);
       });
@@ -749,12 +787,13 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: false,
-          title: `${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
+          title: `SELL WALL ${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
         });
         wallLinesRef.current.push(line);
       });
 
       if (wallPrimitiveRef.current) {
+        wallPrimitiveRef.current.setOptions({ currentPrice, wallWidthPct: wallWidth });
         wallPrimitiveRef.current.setData([...topBids, ...topAsks]);
       }
     }
