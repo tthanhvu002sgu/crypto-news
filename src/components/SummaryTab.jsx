@@ -64,10 +64,58 @@ const markdownComponents = {
   h3: ({ children }) => <h3>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h3>,
 };
 
+/**
+ * Remove orphaned ** markers while preserving valid **word** bold pairs.
+ *
+ * An "opening **" must be preceded by whitespace/start and followed by non-space.
+ * A "closing **" must be preceded by non-space and followed by whitespace/punctuation/end.
+ * Valid bold = opening ** matched with nearest subsequent closing **.
+ * Anything else is orphaned → removed.
+ */
+const stripOrphanedBold = (text) => {
+  const markers = [];
+  let idx = 0;
+  while (idx < text.length) {
+    const pos = text.indexOf('**', idx);
+    if (pos === -1) break;
+    const charBefore = pos > 0 ? text[pos - 1] : ' ';
+    const charAfter = pos + 2 < text.length ? text[pos + 2] : ' ';
+    const isOpening = /[\s([/]/.test(charBefore) && /\S/.test(charAfter);
+    const isClosing = /\S/.test(charBefore) && (/[\s.,;:!?\])}/\n]/.test(charAfter) || pos + 2 >= text.length);
+    markers.push({ pos, isOpening, isClosing });
+    idx = pos + 2;
+  }
+  if (markers.length === 0) return text;
+
+  const paired = new Set();
+  const stack = [];
+  for (let i = 0; i < markers.length; i++) {
+    const m = markers[i];
+    if (m.isOpening && !m.isClosing) {
+      stack.push(i);
+    } else if (m.isClosing && stack.length > 0) {
+      const openIdx = stack.pop();
+      paired.add(markers[openIdx].pos);
+      paired.add(m.pos);
+    }
+  }
+
+  let result = '';
+  let lastIdx = 0;
+  for (const m of markers) {
+    result += text.substring(lastIdx, m.pos);
+    if (paired.has(m.pos)) { result += '**'; }
+    lastIdx = m.pos + 2;
+  }
+  result += text.substring(lastIdx);
+  return result;
+};
+
 export const cleanLatex = (text) => {
   if (!text) return text;
+
+  // ── Phase 1: LaTeX symbol cleanup ──────────────────────────────────
   let cleaned = text
-    // Replace LaTeX command strings
     .replace(/\\sim\b/gi, '~')
     .replace(/\\approx\b/gi, '≈')
     .replace(/\\Delta\b/gi, 'Δ')
@@ -83,45 +131,81 @@ export const cleanLatex = (text) => {
     // Fix dollar math wrappers
     .replace(/\$\s*\\?sim\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '~$1')
     .replace(/\$\s*\\?approx\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '≈$1')
-    .replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi, 'Δ $1')
-    // Force headings (### 1., ### 2., etc.) onto a new line if merged into text
-    .replace(/([^\n#])\s*(#{1,4}\s+)/g, '$1\n\n$2')
-    // Fix merged bullet points on single line: insert newline before inline bullet hyphens
-    // Note: in character class [^\n#*-], '-' must be placed at the VERY END to avoid creating an ASCII character range that swallows spaces!
-    .replace(/([^\n])\s*-\s*(?:\*|\s)*([^\n#*-]{1,70}:)/gu, (match, prefix, label) => {
-      const cleanLabel = label.replace(/\*\*/g, '').trim();
-      return `${prefix}\n- **${cleanLabel}** `;
-    })
-    // Ensure space after opening hyphen at start of lines
-    .replace(/^-\s*([^\s])/gm, '- $1')
-    // Clean trailing stray asterisks after brackets or periods (e.g., [THẤP]** -> [THẤP])
-    .replace(/\]\s*\*\*/g, ']')
-    .replace(/\*\*\s*\]/g, ']')
-    .replace(/\.\s*\*\*/g, '.')
-    // Fix missing space between words and dollar amounts (e.g. 'mốc$63,000' -> 'mốc $63,000')
-    .replace(/([a-zA-Zà-ỹÀ-Ỹ])(\$[0-9])/g, '$1 $2')
-    // Fix missing space between closing parenthesis/bracket and words (e.g. '(NO TRADE)hoặc' -> '(NO TRADE) hoặc')
-    .replace(/([\)])([a-zA-Zà-ỹÀ-Ỹ])/g, '$1 $2')
-    // Clean duplicate asterisks (e.g. **** -> **) and fix spaces inside bold markers
-    .replace(/\*{3,}/g, '**')
-    .replace(/\*\*\s+([^*]+?)\s+\*\*/g, ' **$1** ')
-    .replace(/\*\*\s+([^*]+?)\*\*/g, ' **$1**')
-    .replace(/\*\*([^*]+?)\s+\*\*/g, '**$1** ')
-    .replace(/\*\*\s*\*\*/g, '')
-    // Prevent 4-space indent from creating code blocks
-    .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ');
+    .replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi, 'Δ $1');
 
-  // Auto-close unclosed bold asterisks line-by-line
+  // ── Phase 2: Pre-clean asterisks ───────────────────────────────────
+  cleaned = cleaned
+    .replace(/\*{3,}/g, '**')      // collapse ***+ → **
+    .replace(/\*\*\s*\*\*/g, '');  // remove empty ** **
+
+  // ── Phase 3: Structural line-break insertion ───────────────────────
+  // 3a. Force headings (### 1., ### 2., etc.) onto their own line
+  //     Apply twice to handle chained headings
+  cleaned = cleaned.replace(/([^\n#])\s*(#{1,4}\s+)/g, '$1\n\n$2');
+  cleaned = cleaned.replace(/([^\n#])\s*(#{1,4}\s+)/g, '$1\n\n$2');
+
+  // 3b. Split heading lines that contain an embedded bullet
+  //     e.g., "### 4. TITLE - **Label:** Content" → heading + bullet on separate lines
+  cleaned = cleaned
+    .split('\n')
+    .flatMap((line) => {
+      const trimmed = line.trim();
+      if (/^#{1,4}\s/.test(trimmed)) {
+        const idx = trimmed.search(/\s+-\s+(?:\*{0,2}\s*)?(?=\p{L})/u);
+        if (idx > 0) {
+          const heading = trimmed.substring(0, idx);
+          const rest = trimmed.substring(idx).replace(/^\s+-\s*\*{0,2}\s*/, '');
+          return [heading, '- ' + rest];
+        }
+      }
+      return [line];
+    })
+    .join('\n');
+
+  // 3c. Force bullet points onto separate lines
+  //     Match: non-newline char + spaces + hyphen + optional asterisks + Label with colon
+  cleaned = cleaned.replace(
+    /([^\n])\s+-\s*\*{0,2}\s*(?=\*{0,2}\s*\p{L}[\p{L}\s/&(),'0-9@$]{1,70}?:\s*)/gu,
+    '$1\n- '
+  );
+
+  // ── Phase 4: Per-line bullet formatting & bold cleanup ─────────────
   cleaned = cleaned
     .split('\n')
     .map((line) => {
-      const count = (line.match(/\*\*/g) || []).length;
-      if (count % 2 !== 0) {
-        return line.trimEnd() + '**';
+      const trimmed = line.trim();
+      // Skip empty lines and headings
+      if (!trimmed || /^#{1,4}\s/.test(trimmed)) return line;
+
+      // Process bullet lines (starting with - or •)
+      if (/^[-•]\s/.test(trimmed)) {
+        // Parse: "- [**]Label:[**] Content"
+        const m = trimmed.match(/^([-•]\s+)\*{0,2}\s*(.+?:)\s*\*{0,2}\s*(.*)/);
+        if (m) {
+          let [, prefix, rawLabel, content] = m;
+          // Clean label: strip any ** from label text and re-apply uniformly
+          const label = rawLabel.replace(/\*{1,2}/g, '').trim();
+          // Clean content: use context-aware orphan bold stripper
+          content = stripOrphanedBold(content);
+          return `${prefix}**${label}** ${content}`.trimEnd();
+        }
       }
-      return line;
+
+      // Non-bullet lines: strip orphaned bold
+      return stripOrphanedBold(line);
     })
     .join('\n');
+
+  // ── Phase 5: Final cleanup ─────────────────────────────────────────
+  cleaned = cleaned
+    // Fix missing space between words and dollar amounts
+    .replace(/([a-zA-Zà-ỹÀ-Ỹ])(\$[0-9])/g, '$1 $2')
+    // Fix missing space after ) before words
+    .replace(/([\)])([a-zA-Zà-ỹÀ-Ỹ])/g, '$1 $2')
+    // Ensure space after bullet hyphen
+    .replace(/^-\s*([^\s])/gm, '- $1')
+    // Prevent 4-space indent from creating code blocks
+    .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ');
 
   return cleaned;
 };
