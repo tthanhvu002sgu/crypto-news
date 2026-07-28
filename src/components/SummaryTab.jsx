@@ -80,21 +80,26 @@ export const cleanLatex = (text) => {
     .replace(/\\ref\{[^}]+\}/gi, '')
     .replace(/\\text\{([^}]+)\}/gi, '$1')
     .replace(/\\mathrm\{([^}]+)\}/gi, '$1')
-    // Fix dollar math wrappers like $\sim $83.06B$) or $\sim$ $83.06B$ or $~83.06B$
+    // Fix dollar math wrappers
     .replace(/\$\s*\\?sim\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '~$1')
     .replace(/\$\s*\\?approx\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '≈$1')
     .replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi, 'Δ $1')
-    // Only strip dollar wrappers around math symbols or single numbers, without matching across asterisks/newlines
     .replace(/\$([~≈Δδ][0-9.,% \t\w]*)\$/g, '$1')
     .replace(/\$([0-9.,]+[KMBkmb%]?)\$/gi, (match, inner) => (inner.startsWith('$') ? inner : `$${inner}`))
-    // Clean spaces inside bold markers (e.g. ** 63,000 ** -> **63,000**)
+    // Fix merged bullet points on single line: insert newline before inline bullet hyphens
+    .replace(/([^\n])\s+-\s*(\*\*[^*]+?\*\*:?)/g, '$1\n- $2')
+    .replace(/([^\n])\s+-\s*([A-ZÀ-Ỹ][A-Za-zà-ỹ0-9\s/&()]+?:)/g, '$1\n- $2')
+    .replace(/^-([A-ZÀ-Ỹa-zà-ỹ0-9\*])/gm, '- $1')
+    // Clean spaces & duplicate asterisks (e.g. **** -> **)
+    .replace(/\*{3,}/g, '**')
     .replace(/\*\*\s+([^*]+?)\s+\*\*/g, '**$1**')
     .replace(/\*\*\s+([^*]+?)\*\*/g, '**$1**')
     .replace(/\*\*([^*]+?)\s+\*\*/g, '**$1**')
+    .replace(/\*\*\s*\*\*/g, '')
     // Prevent 4-space indent from creating code blocks
     .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ');
 
-  // Auto-close unclosed bold asterisks line-by-line (e.g. "**63,000 - 63,059" at line end -> "**63,000 - 63,059**")
+  // Auto-close unclosed bold asterisks line-by-line
   cleaned = cleaned
     .split('\n')
     .map((line) => {

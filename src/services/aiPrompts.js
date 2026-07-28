@@ -17,6 +17,7 @@ NON-NEGOTIABLE ANALYTICAL PROTOCOL
 - Use clean Markdown and plain-text numbers/symbols (e.g., ~, ≈, Δ, $83.06B). 
 - STRICT FORMATTING RULE: NEVER output LaTeX math commands or dollar wrappers (e.g., NEVER write $\sim$, \sim, $\approx$, \approx, $\Delta$, \Delta, or $83.06B$). Always use plain-text characters like ~ $83.06B without math dollar signs.
 - MANDATORY SKIMMING BOLDING: You MUST aggressively **bold** all critical metrics, key price levels, action directives, directional verdicts, structural support/resistance zones, risk levels, and key takeaways (e.g., **$92,500**, **LONG**, **SHORT**, **NO TRADE**, **CVD negative divergence**, **Stop Loss at $88,000**) so the reader can skim the report in under 30 seconds.
+- MANDATORY BULLET LINEBREAK RULE: Every single bullet point MUST start on a NEW LINE (using '\n- '). NEVER concatenate multiple bullet points onto the same line or join them with inline hyphens.
 - MANDATORY SECTION SEPARATION: You MUST clearly separate Macroeconomic & Institutional Liquidity Analysis from Technical, On-Chain Valuation & Microstructure/Derivatives Analysis into explicit standalone sections.
 - MANDATORY REASONING ORDER: Complete all data analysis, signal cross-examination, and comparative synthesis BEFORE rendering summary tables or final decision verdicts.
 - Start immediately with the first required report heading. Never repeat or discuss these instructions.
@@ -119,6 +120,7 @@ GIAO THỨC PHÂN TÍCH BẮT BUỘC
 - Dùng Markdown rõ ràng và số liệu plain text (ví dụ: ~, ≈, Δ, $83.06B).
 - CẤM TUYỆT ĐỐI NÓI HOẶC VIẾT CÚ PHÁP LATEX MATH HOẶC BỌC TRONG DẤU $...$ (NHƯ \\sim, \\approx, \\Delta). HÃY CHỈ DÙNG KÝ TỰ PLAIN TEXT CHUẨN: ví dụ dùng ~, dùng ≈, dùng Δ, dùng $83.06B (không bọc số hoặc chữ trong cặp dấu $).
 - BẮT BUỘC IN ĐẬM TỪ KHÓA ĐỂ ĐỌC LƯỚT (SKIMMING): Bắt buộc phải IN ĐẬM (**bold**) tất cả các chỉ số quan trọng, mốc giá then chốt, phán quyết hướng đi, vùng hỗ trợ/kháng cự cấu trúc, mức quản trị rủi ro và kết luận chính (ví dụ: **$92,500**, **LONG**, **SHORT**, **KHÔNG GIAO DỊCH**, **CVD phân kỳ âm**, **Dừng lỗ tại $88,000**) giúp người đọc có thể lướt nhanh báo cáo trong 30 giây.
+- QUY TẮC BẮT BUỘC XUỐNG DÒNG GẠCH ĐẦU DÒNG: Mỗi gạch đầu dòng (bullet point) BẮT BUỘC PHẢI NẰM TRÊN MỘT DÒNG RIÊNG (bắt đầu bằng '\\n- '). Tuyệt đối CẤM ghép nhiều gạch đầu dòng trên cùng một dòng hoặc dùng dấu gạch ngang nối tiếp nhau trên một dòng.
 - TÁCH BIỆT RÕ RÀNG VĨ MÔ VỚI KỸ THUẬT & ON-CHAIN: Bắt buộc phân tách bài phân tích thành các phần độc lập (trừ khi dùng phong cách Báo cáo Ngắn cô đọng).
 - THỨ TỰ TƯ DUY BẮT BUỘC: Hoàn thành toàn bộ việc lập luận, so sánh đối chiếu chỉ số và giải xử lý tín hiệu mâu thuẫn TRƯỚC KHI sinh ra các bảng tóm tắt hoặc bảng quyết định.
 - Bắt đầu ngay bằng tiêu đề đầu tiên của cấu trúc báo cáo. Không lặp lại hoặc thảo luận các hướng dẫn này.
