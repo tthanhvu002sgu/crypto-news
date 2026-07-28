@@ -33,17 +33,57 @@ let trackerStatus = 'IDLE'; // 'IDLE' | 'TRACKING' | 'POST_RECOVERY'
 let activeMove = null;
 let postRecoveryTimer = null;
 let moveListeners = new Set();
-let moveHistory = []; // Restored from IndexedDB + live moves
-let lastMoveEndTime = 0;
+const MOVE_HISTORY_LS_KEY = 'hft_move_history_v1';
 
-// Hydrate moveHistory from IndexedDB on startup
+// Synchronously load from LocalStorage immediately on module import
+function loadMoveHistoryLS() {
+  try {
+    const raw = localStorage.getItem(MOVE_HISTORY_LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('[MoveTracker] LS load error:', e);
+  }
+  return [];
+}
+
+let moveHistory = loadMoveHistoryLS(); // Instant 0ms synchronous hydration!
+
+function saveMoveHistoryLS() {
+  try {
+    localStorage.setItem(MOVE_HISTORY_LS_KEY, JSON.stringify(moveHistory.slice(0, 50)));
+  } catch (e) {
+    console.warn('[MoveTracker] LS save error:', e);
+  }
+}
+
+// Hydrate and merge moveHistory from IndexedDB + SignalStore on startup
 async function initMoveHistoryFromStore() {
   try {
     const stored = await getMoveReports(50);
     if (Array.isArray(stored) && stored.length > 0) {
-      moveHistory = stored
-        .map((s) => s.moveReport)
-        .filter(Boolean);
+      const idbMoves = stored.map((s) => s.moveReport).filter(Boolean);
+
+      // Merge IDB moves with LS moves using startTime/endTime deduplication
+      const map = new Map();
+      moveHistory.forEach((m) => {
+        const key = m.startTime || m.endTime || m.startPrice;
+        if (key) map.set(key, m);
+      });
+      idbMoves.forEach((m) => {
+        const key = m.startTime || m.endTime || m.startPrice;
+        if (key) map.set(key, m);
+      });
+
+      moveHistory = Array.from(map.values())
+        .sort((a, b) => (b.startTime || b.endTime || 0) - (a.startTime || a.endTime || 0))
+        .slice(0, 50);
+
+      saveMoveHistoryLS();
       notifyListeners();
     }
   } catch (err) {
@@ -53,7 +93,7 @@ async function initMoveHistoryFromStore() {
 initMoveHistoryFromStore();
 
 onSignalAdded((sig) => {
-  if (sig && sig.type === SIGNAL_TYPE.MOVE_REPORT) {
+  if (sig && (sig.type === SIGNAL_TYPE.MOVE_REPORT || sig.moveReport != null)) {
     initMoveHistoryFromStore();
   }
 });
@@ -327,6 +367,7 @@ async function finalizeMoveReport(finalPriceAfter60s) {
 
   // Add to move history (keep latest 50 in memory)
   moveHistory = [enrichedMove, ...moveHistory].slice(0, 50);
+  saveMoveHistoryLS();
 
   // Reset state
   lastMoveEndTime = Date.now();
@@ -414,6 +455,7 @@ export async function simulateMoveReport(direction = 'PUMP') {
   };
 
   moveHistory = [enrichedMove, ...moveHistory].slice(0, 50);
+  saveMoveHistoryLS();
   notifyListeners();
 
   const title = `${enrichedMove.direction === 'PUMP' ? '🚀 PUMP' : '💥 DUMP'} BTC ${enrichedMove.pctChange >= 0 ? '+' : ''}${enrichedMove.pctChange}% trong ${enrichedMove.durationSec}s`;
