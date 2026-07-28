@@ -1,6 +1,7 @@
 import { Line, Bar } from 'react-chartjs-2';
 import MarketBiasCard from './MarketBiasCard';
 import PolymarketWhales from './PolymarketWhales';
+import EconomicCalendarPanel from './EconomicCalendarPanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 
@@ -199,6 +200,11 @@ export default function DashboardTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Lịch Kinh Tế Vĩ Mô 7 Ngày Trong Tuần */}
+      {!isModuleHidden('dash_calendar') && (
+        <EconomicCalendarPanel theme={theme} />
       )}
 
       {/* Polymarket Whales Tracker */}

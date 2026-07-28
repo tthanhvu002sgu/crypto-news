@@ -10,6 +10,7 @@ export const MODULES_CONFIG = {
   // Dashboard Tab
   dash_bias: { id: 'dash_bias', label: 'Market Bias Engine (Công Thức Bias Total)', category: 'Dashboard' },
   dash_news: { id: 'dash_news', label: 'Tin Tức Vĩ Mô & Thị Trường', category: 'Dashboard' },
+  dash_calendar: { id: 'dash_calendar', label: 'Lịch Kinh Tế Vĩ Mô (7 Ngày Trong Tuần)', category: 'Dashboard' },
   dash_polymarket: { id: 'dash_polymarket', label: 'Polymarket — Whale Tracker', category: 'Dashboard' },
   dash_btc_chart: { id: 'dash_btc_chart', label: 'BTC/USDT — Giá 48 Giờ Gần Nhất (1H)', category: 'Dashboard' },
   dash_ls_chart: { id: 'dash_ls_chart', label: 'Long/Short Ratio — 24H', category: 'Dashboard' },
