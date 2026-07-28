@@ -580,14 +580,10 @@ const STYLE_PROMPTS = {
   en: {
     compact: COMPACT_EN,
     professional: PROFESSIONAL_EN,
-    tactical: TACTICAL_EN,
-    educational: EDUCATIONAL_EN,
   },
   vi: {
     compact: COMPACT_VI,
     professional: PROFESSIONAL_VI,
-    tactical: TACTICAL_VI,
-    educational: EDUCATIONAL_VI,
   },
 };
 
@@ -607,26 +603,16 @@ const GENERATION_CONFIGS = {
     topP: 0.85,
     maxOutputTokens: 6000,
   },
-  tactical: {
-    temperature: 0.15,
-    topP: 0.8,
-    maxOutputTokens: 3600,
-  },
-  educational: {
-    temperature: 0.25,
-    topP: 0.9,
-    maxOutputTokens: 4800,
-  },
 };
 
 /**
- * @param {'professional'|'tactical'|'educational'|'compact'} style
+ * @param {'compact'|'professional'} style
  * @param {'en'|'vi'} lang
  * @param {'none'|'long'|'short'} userBias
  */
-export function getSystemPrompt(style = 'professional', lang = 'en', userBias = 'none') {
+export function getSystemPrompt(style = 'compact', lang = 'en', userBias = 'none') {
   const safeLang = CORE_PROMPTS[lang] ? lang : 'en';
-  const stylePrompt = STYLE_PROMPTS[safeLang][style] || STYLE_PROMPTS[safeLang].professional;
+  const stylePrompt = STYLE_PROMPTS[safeLang][style] || STYLE_PROMPTS[safeLang].compact;
   let result = `${CORE_PROMPTS[safeLang]}\n\n${stylePrompt}`;
 
   if (userBias === 'long' || userBias === 'short') {
@@ -640,10 +626,10 @@ export function getSystemPrompt(style = 'professional', lang = 'en', userBias = 
 }
 
 /**
- * @param {'professional'|'tactical'|'educational'|'compact'} style
+ * @param {'compact'|'professional'} style
  */
-export function getGenerationConfig(style = 'professional') {
-  return GENERATION_CONFIGS[style] || GENERATION_CONFIGS.professional;
+export function getGenerationConfig(style = 'compact') {
+  return GENERATION_CONFIGS[style] || GENERATION_CONFIGS.compact;
 }
 
 export const AI_LANG_OPTIONS = [
@@ -655,14 +641,10 @@ export const AI_STYLE_LABELS = {
   en: {
     compact: 'Executive Quick Brief (Short)',
     professional: 'Investment Committee (Full)',
-    tactical: 'Skeptical Execution Desk',
-    educational: 'Socratic Market Mentor',
   },
   vi: {
     compact: 'Báo cáo ngắn cô đọng (Quick Brief)',
     professional: 'Hội đồng đầu tư (Đầy đủ)',
-    tactical: 'Bàn execution hoài nghi',
-    educational: 'Cố vấn Socrates',
   },
 };
 

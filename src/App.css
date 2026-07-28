@@ -3559,7 +3559,7 @@
    MARKDOWN BODY SKIMMING BOLDING & ACCENT STYLES
    ═══════════════════════════════════════════════════════════════════════════════ */
 .markdown-body strong {
-  color: var(--color-emerald-400, #34d399);
+  color: #d4a373;
   font-weight: 800;
   background: transparent;
   padding: 0;

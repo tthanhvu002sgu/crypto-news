@@ -202,7 +202,8 @@ export default function SummaryTab({
   }, []);
 
   const [selectedStyle, setSelectedStyle] = useState(() => {
-    return localStorage.getItem('ai-analysis-style') || 'compact';
+    const saved = localStorage.getItem('ai-analysis-style');
+    return saved === 'professional' || saved === 'compact' ? saved : 'compact';
   });
 
   const handleStyleChange = (newStyle) => {
@@ -1048,8 +1049,6 @@ ${promptData}
             >
               <option value="compact">{styleLabels.compact}</option>
               <option value="professional">{styleLabels.professional}</option>
-              <option value="tactical">{styleLabels.tactical}</option>
-              <option value="educational">{styleLabels.educational}</option>
             </select>
           </div>
 
