@@ -56,7 +56,6 @@ export default function EconomicCalendarPanel({ theme }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="dot dot-emerald" />
             <h3 className="font-mono text-emerald" style={{ margin: 0, fontSize: '0.9rem', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
               ECONOMIC CALENDAR (7 DAYS)
             </h3>

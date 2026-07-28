@@ -83,7 +83,6 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span className="dot dot-emerald" />
           <h3
             className="font-mono text-emerald"
             style={{
