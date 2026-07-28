@@ -84,14 +84,20 @@ export const cleanLatex = (text) => {
     .replace(/\$\s*\\?sim\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '~$1')
     .replace(/\$\s*\\?approx\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '≈$1')
     .replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi, 'Δ $1')
-    .replace(/\$([~≈Δδ][0-9.,% \t\w]*)\$/g, '$1')
-    // Fix merged bullet points on single line: insert newline before inline bullet hyphens (using \p{L} for all Unicode/Vietnamese characters)
-    .replace(/([^\n])\s*-\s*(?:\*\*\s*|\s*\*\*\s*|\s*)?(\p{L}[^\n.\-]{1,70}:)/gu, (match, prefix, label) => {
+    // Force headings (### 1., ### 2., etc.) onto a new line if merged into text
+    .replace(/([^\n#])\s*(#{1,4}\s+)/g, '$1\n\n$2')
+    // Fix merged bullet points on single line: insert newline before inline bullet hyphens
+    // Note: in character class [^\n#*-], '-' must be placed at the VERY END to avoid creating an ASCII character range that swallows spaces!
+    .replace(/([^\n])\s*-\s*(?:\*|\s)*([^\n#*-]{1,70}:)/gu, (match, prefix, label) => {
       const cleanLabel = label.replace(/\*\*/g, '').trim();
       return `${prefix}\n- **${cleanLabel}** `;
     })
     // Ensure space after opening hyphen at start of lines
     .replace(/^-\s*([^\s])/gm, '- $1')
+    // Clean trailing stray asterisks after brackets or periods (e.g., [THẤP]** -> [THẤP])
+    .replace(/\]\s*\*\*/g, ']')
+    .replace(/\*\*\s*\]/g, ']')
+    .replace(/\.\s*\*\*/g, '.')
     // Fix missing space between words and dollar amounts (e.g. 'mốc$63,000' -> 'mốc $63,000')
     .replace(/([a-zA-Zà-ỹÀ-Ỹ])(\$[0-9])/g, '$1 $2')
     // Fix missing space between closing parenthesis/bracket and words (e.g. '(NO TRADE)hoặc' -> '(NO TRADE) hoặc')
