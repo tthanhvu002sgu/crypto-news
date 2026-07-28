@@ -9,11 +9,11 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
   const formatPillarScore = (val) => `${val >= 0 ? '+' : ''}${val}`;
 
   const getPillarStatus = (val) => {
-    if (val >= 15) return { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', label: 'MẠNH' };
+    if (val >= 15) return { color: 'var(--color-emerald-400)', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', label: 'MẠNH' };
     if (val > 0) return { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)', label: 'TÍCH CỰC' };
-    if (val === 0) return { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.2)', label: 'TRUNG LẬP' };
+    if (val === 0) return { color: 'var(--text-slate-400)', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.2)', label: 'TRUNG LẬP' };
     if (val > -15) return { color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.25)', label: 'TIÊU CỰC' };
-    return { color: '#f43f5e', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)', label: 'YẾU' };
+    return { color: 'var(--color-rose-400)', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)', label: 'YẾU' };
   };
 
   // Convert score (-100 to +100) to percentage (0% to 100%)
@@ -60,14 +60,13 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
 
   return (
     <div
-      className="glass-panel"
+      className="glass-panel bias-card-container"
       style={{
-        padding: '20px',
+        padding: '18px 20px',
         marginBottom: '20px',
-        border: '1px solid rgba(16,185,129,0.2)',
+        border: '1px solid var(--border-panel)',
         borderRadius: '12px',
-        background: 'linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(2,6,23,0.98) 100%)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+        background: 'var(--bg-panel)',
       }}
     >
       {/* ── Top Header Toolbar ────────────────────────────────────────── */}
@@ -78,9 +77,9 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
           alignItems: 'center',
           flexWrap: 'wrap',
           gap: '12px',
-          marginBottom: '18px',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          paddingBottom: '14px',
+          marginBottom: '16px',
+          borderBottom: '1px solid var(--border-panel)',
+          paddingBottom: '12px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -89,8 +88,8 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             className="font-mono text-emerald"
             style={{
               margin: 0,
-              fontSize: '1rem',
-              letterSpacing: '0.05em',
+              fontSize: '0.95rem',
+              letterSpacing: '0.04em',
               fontWeight: 800,
               textTransform: 'uppercase',
             }}
@@ -104,8 +103,8 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
               fontWeight: 700,
               padding: '2px 8px',
               borderRadius: '4px',
-              background: 'rgba(16,185,129,0.1)',
-              border: '1px solid rgba(16,185,129,0.25)',
+              background: 'var(--bg-slate-950)',
+              border: '1px solid var(--border-panel)',
               color: 'var(--color-emerald-400)',
               letterSpacing: '0.04em',
             }}
@@ -120,9 +119,9 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             className="font-mono"
             onClick={() => setExpanded(!expanded)}
             style={{
-              background: expanded ? 'var(--color-emerald-500)' : 'rgba(255,255,255,0.05)',
-              border: expanded ? '1px solid var(--color-emerald-400)' : '1px solid rgba(255,255,255,0.12)',
-              color: expanded ? '#000' : 'var(--text-contrast)',
+              background: expanded ? 'var(--color-emerald-500)' : 'var(--bg-slate-950)',
+              border: expanded ? '1px solid var(--color-emerald-400)' : '1px solid var(--border-panel)',
+              color: expanded ? '#ffffff' : 'var(--text-contrast)',
               borderRadius: '6px',
               padding: '5px 12px',
               fontSize: '0.72rem',
@@ -141,8 +140,8 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
       {/* ── Main Score Display & Gauge Meter ───────────────────────────── */}
       <div
         style={{
-          background: 'rgba(0,0,0,0.4)',
-          border: `1px solid ${bias.color}35`,
+          background: 'var(--bg-slate-950)',
+          border: '1px solid var(--border-panel)',
           borderRadius: '10px',
           padding: '16px 20px',
           marginBottom: '16px',
@@ -157,7 +156,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             alignItems: 'center',
             flexWrap: 'wrap',
             gap: '16px',
-            marginBottom: '16px',
+            marginBottom: '14px',
           }}
         >
           {/* Left: Overall Status & Score */}
@@ -165,9 +164,9 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             <div
               className="font-mono"
               style={{
-                fontSize: '0.7rem',
+                fontSize: '0.68rem',
                 color: 'var(--text-slate-400)',
-                letterSpacing: '0.06em',
+                letterSpacing: '0.05em',
                 marginBottom: '4px',
                 fontWeight: 600,
               }}
@@ -178,7 +177,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
               <span
                 className="font-mono"
                 style={{
-                  fontSize: '1.6rem',
+                  fontSize: '1.5rem',
                   fontWeight: 900,
                   color: bias.color,
                   letterSpacing: '0.02em',
@@ -190,7 +189,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
               <div
                 className="font-mono"
                 style={{
-                  fontSize: '1.8rem',
+                  fontSize: '1.7rem',
                   fontWeight: 900,
                   color: bias.color,
                   lineHeight: 1,
@@ -200,7 +199,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                 <span
                   style={{
                     fontSize: '0.85rem',
-                    color: 'var(--text-slate-500)',
+                    color: 'var(--text-slate-400)',
                     fontWeight: 500,
                     marginLeft: '4px',
                   }}
@@ -215,7 +214,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
           <div
             className="font-mono"
             style={{
-              fontSize: '0.75rem',
+              fontSize: '0.72rem',
               color: 'var(--text-slate-400)',
               maxWidth: '380px',
               lineHeight: 1.45,
@@ -227,7 +226,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         </div>
 
         {/* ── Modern Spectrum Gauge Bar ──────────────────────────────── */}
-        <div style={{ marginTop: '10px' }}>
+        <div style={{ marginTop: '8px' }}>
           {/* Gauge Track */}
           <div
             style={{
@@ -235,7 +234,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
               height: '10px',
               background: 'linear-gradient(90deg, #f43f5e 0%, #f59e0b 50%, #10b981 100%)',
               borderRadius: '5px',
-              opacity: 0.85,
+              opacity: 0.9,
             }}
           >
             {/* Center Zero Marker Notch */}
@@ -246,8 +245,8 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                 top: '-2px',
                 bottom: '-2px',
                 width: '2px',
-                background: '#ffffff',
-                opacity: 0.6,
+                background: 'var(--text-contrast)',
+                opacity: 0.7,
                 zIndex: 2,
               }}
             />
@@ -260,9 +259,9 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                 left: `calc(${scorePercent}% - 7px)`,
                 width: '14px',
                 height: '18px',
-                background: '#ffffff',
+                background: 'var(--bg-panel)',
                 borderRadius: '3px',
-                boxShadow: `0 0 10px ${bias.color}`,
+                boxShadow: `0 2px 8px ${bias.color}60`,
                 border: `2px solid ${bias.color}`,
                 transition: 'left 0.4s ease-out',
                 zIndex: 3,
@@ -282,9 +281,9 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
               fontWeight: 600,
             }}
           >
-            <span style={{ color: '#f43f5e' }}>BEARISH (-100)</span>
+            <span style={{ color: 'var(--color-rose-400)' }}>BEARISH (-100)</span>
             <span>NEUTRAL (0)</span>
-            <span style={{ color: '#10b981' }}>BULLISH (+100)</span>
+            <span style={{ color: 'var(--color-emerald-400)' }}>BULLISH (+100)</span>
           </div>
         </div>
       </div>
@@ -306,7 +305,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             <div
               key={pillar.key}
               style={{
-                background: 'rgba(255,255,255,0.02)',
+                background: 'var(--bg-slate-950)',
                 border: `1px solid ${status.border}`,
                 borderRadius: '8px',
                 padding: '12px 14px',
@@ -334,8 +333,8 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                       style={{
                         fontSize: '0.6rem',
                         fontWeight: 800,
-                        color: 'var(--text-slate-500)',
-                        background: 'rgba(255,255,255,0.05)',
+                        color: 'var(--text-slate-400)',
+                        background: 'var(--border-panel)',
                         padding: '1px 5px',
                         borderRadius: '3px',
                       }}
@@ -367,7 +366,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
 
               {/* Progress Bar & Status Pill */}
               <div>
-                <div style={{ height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
+                <div style={{ height: '4px', background: 'rgba(128,128,128,0.15)', borderRadius: '2px', overflow: 'hidden', marginBottom: '6px' }}>
                   <div
                     style={{
                       height: '100%',
@@ -379,7 +378,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                   />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6rem' }}>
-                  <span className="font-mono" style={{ color: 'var(--text-slate-500)' }}>
+                  <span className="font-mono" style={{ color: 'var(--text-slate-400)' }}>
                     Trọng số: {pillar.weight}
                   </span>
                   <span
@@ -413,14 +412,14 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
             padding: '10px 14px',
             borderRadius: '6px',
             fontSize: '0.75rem',
-            color: 'var(--color-amber-300)',
+            color: 'var(--color-amber-400)',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             marginBottom: '10px',
           }}
         >
-          <span style={{ fontWeight: 800, color: 'var(--color-amber-400)' }}>CẢNH BÁO LỊCH SỰ KIỆN:</span>
+          <span style={{ fontWeight: 800 }}>CẢNH BÁO LỊCH SỰ KIỆN:</span>
           <span>
             Sự kiện High Impact <strong>{bias.upcomingEvents[0].title}</strong> diễn ra trong 24h tới. Thận trọng đòn bẩy!
           </span>
@@ -433,7 +432,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
           style={{
             marginTop: '14px',
             paddingTop: '14px',
-            borderTop: '1px solid rgba(255,255,255,0.08)',
+            borderTop: '1px solid var(--border-panel)',
           }}
         >
           <div
@@ -464,8 +463,8 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                 <div
                   key={idx}
                   style={{
-                    background: 'rgba(255,255,255,0.02)',
-                    border: '1px solid rgba(255,255,255,0.06)',
+                    background: 'var(--bg-slate-950)',
+                    border: '1px solid var(--border-panel)',
                     borderRadius: '6px',
                     padding: '8px 10px',
                     display: 'flex',
@@ -479,7 +478,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                     </span>
                     <span className="font-mono" style={{ fontSize: '0.75rem', fontWeight: 800, color }}>
                       {isPos ? `+${sig.score.toFixed(1)}` : sig.score.toFixed(1)} pt{' '}
-                      <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-500)', fontWeight: 400 }}>({sig.weight})</span>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)', fontWeight: 400 }}>({sig.weight})</span>
                     </span>
                   </div>
 
