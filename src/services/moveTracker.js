@@ -33,6 +33,7 @@ let trackerStatus = 'IDLE'; // 'IDLE' | 'TRACKING' | 'POST_RECOVERY'
 let activeMove = null;
 let postRecoveryTimer = null;
 let moveListeners = new Set();
+let lastMoveEndTime = 0;
 const MOVE_HISTORY_LS_KEY = 'hft_move_history_v1';
 
 // Synchronously load from LocalStorage immediately on module import

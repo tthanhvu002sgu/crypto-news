@@ -6,6 +6,7 @@
 const DB_NAME = 'CryptoSignalLog';
 const DB_VERSION = 1;
 const STORE_NAME = 'signals';
+let dbInstance = null;
 
 const signalAddedListeners = new Set();
 
