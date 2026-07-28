@@ -64,9 +64,8 @@ const markdownComponents = {
 };
 
 const cleanLatex = (text) => {
-
   if (!text) return text;
-  return text
+  let cleaned = text
     // Replace LaTeX command strings
     .replace(/\\sim\b/gi, '~')
     .replace(/\\approx\b/gi, '≈')
@@ -84,18 +83,29 @@ const cleanLatex = (text) => {
     .replace(/\$\s*\\?sim\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '~$1')
     .replace(/\$\s*\\?approx\s*\$?\s*\$?\s*([0-9.,]+[KMBkmb]?)\$?\)?/gi, '≈$1')
     .replace(/\$\s*\\?Delta\s*\$?\s*([A-Z0-9.,_]+)\$?/gi, 'Δ $1')
-    // Strip dollar wrappers around simple text/numbers: $\sim$ -> ~, $83.06B$ -> $83.06B
-    .replace(/\$([~≈Δδ<=>+\-*0-9.,% \t\w]+)\$/g, (match, inner) => {
-      let cleaned = inner.replace(/\\sim/gi, '~').replace(/\\approx/gi, '≈').replace(/\\Delta/gi, 'Δ').trim();
-      if (cleaned.startsWith('~') || cleaned.startsWith('≈') || cleaned.startsWith('Δ')) {
-        return cleaned;
+    // Only strip dollar wrappers around math symbols or single numbers, without matching across asterisks/newlines
+    .replace(/\$([~≈Δδ][0-9.,% \t\w]*)\$/g, '$1')
+    .replace(/\$([0-9.,]+[KMBkmb%]?)\$/gi, (match, inner) => (inner.startsWith('$') ? inner : `$${inner}`))
+    // Clean spaces inside bold markers (e.g. ** 63,000 ** -> **63,000**)
+    .replace(/\*\*\s+([^*]+?)\s+\*\*/g, '**$1**')
+    .replace(/\*\*\s+([^*]+?)\*\*/g, '**$1**')
+    .replace(/\*\*([^*]+?)\s+\*\*/g, '**$1**')
+    // Prevent 4-space indent from creating code blocks
+    .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ');
+
+  // Auto-close unclosed bold asterisks line-by-line (e.g. "**63,000 - 63,059" at line end -> "**63,000 - 63,059**")
+  cleaned = cleaned
+    .split('\n')
+    .map((line) => {
+      const count = (line.match(/\*\*/g) || []).length;
+      if (count % 2 !== 0) {
+        return line.trimEnd() + '**';
       }
-      if (/^\$?[0-9.,]+[KMBkmb%]?$/i.test(cleaned)) {
-        return cleaned.startsWith('$') ? cleaned : `$${cleaned}`;
-      }
-      return cleaned;
+      return line;
     })
-    .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 '); // Prevent 4-space indent from creating code blocks
+    .join('\n');
+
+  return cleaned;
 };
 
 
