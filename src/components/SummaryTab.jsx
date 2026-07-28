@@ -8,6 +8,7 @@ import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../servic
 import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBACK_FREE_MODELS } from '../services/openrouter';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import TradePlanAuditor from './TradePlanAuditor';
 
 const renderTextWithTags = (text) => {
   if (typeof text !== 'string') return text;
@@ -63,7 +64,7 @@ const markdownComponents = {
   h3: ({ children }) => <h3>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h3>,
 };
 
-const cleanLatex = (text) => {
+export const cleanLatex = (text) => {
   if (!text) return text;
   let cleaned = text
     // Replace LaTeX command strings
@@ -1005,8 +1006,22 @@ ${promptData}
   if (isSummaryHidden) return null;
 
   return (
-    <div className="summary-tab glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+    <div className="summary-tab-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* ── Separate Trade Plan Auditor Widget ── */}
+      <TradePlanAuditor
+        data={data}
+        apiKeys={apiKeys}
+        aiProvider={aiProvider}
+        selectedModel={selectedModel}
+        selectedOpenRouterModel={selectedOpenRouterModel}
+        openrouterModels={openrouterModels}
+        isVi={isVi}
+        lastSync={lastSync}
+      />
+
+      {/* ── AI Market Decision Lab Main Panel ── */}
+      <div className="summary-tab glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <h3 className="panel-title font-mono text-emerald" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
           <Sparkles size={18} /> AI MARKET DECISION LAB
         </h3>
@@ -1314,5 +1329,6 @@ ${promptData}
         )}
       </div>
     </div>
-  );
+  </div>
+);
 }

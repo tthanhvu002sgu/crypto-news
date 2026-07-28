@@ -1,0 +1,401 @@
+import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { ShieldCheck, Loader2, ArrowUpRight, ArrowDownRight, Zap } from 'lucide-react';
+import Tooltip from './Tooltip';
+import { cleanLatex } from './SummaryTab';
+import { getGenerationConfig } from '../services/aiPrompts';
+import { streamOpenRouterCompletion } from '../services/openrouter';
+import ModuleMenu from './ModuleMenu';
+
+export default function TradePlanAuditor({
+  data,
+  apiKeys,
+  aiProvider,
+  selectedModel,
+  selectedOpenRouterModel,
+  openrouterModels,
+  isVi,
+  lastSync,
+  moduleId = 'dash_trade_auditor',
+}) {
+  const priceNow =
+    typeof data.btc?.price === 'number'
+      ? data.btc.price
+      : Number.parseFloat(data.btc?.price) || 0;
+
+  const [tradeDirection, setTradeDirection] = useState('LONG');
+  const [customPrice, setCustomPrice] = useState('');
+  const [auditResult, setAuditResult] = useState('');
+  const [isAuditing, setIsAuditing] = useState(false);
+
+  const effectivePrice = customPrice ? Number.parseFloat(customPrice) || priceNow : priceNow;
+
+  const runTradeAudit = async () => {
+    const geminiKey = apiKeys?.gemini?.trim();
+    const openrouterKey = apiKeys?.openrouter?.trim();
+
+    if (aiProvider === 'gemini' && !geminiKey) {
+      alert(
+        isVi
+          ? 'Vui lòng nhập Gemini API Key trong phần ⚙️ Cài đặt!'
+          : 'Please enter your Gemini API Key in ⚙️ Settings!'
+      );
+      return;
+    }
+
+    if (aiProvider === 'openrouter' && !openrouterKey) {
+      alert(
+        isVi
+          ? 'Vui lòng nhập OpenRouter API Key trong phần ⚙️ Cài đặt!'
+          : 'Please enter your OpenRouter API Key in ⚙️ Settings!'
+      );
+      return;
+    }
+
+    setIsAuditing(true);
+    setAuditResult('');
+
+    const formattedSpotPrice = effectivePrice
+      ? `$${effectivePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : 'N/A';
+
+    const systemPrompt = isVi
+      ? `Bạn là Trưởng phòng Execution & Risk Desk hoài nghi chuyên sâu về crypto.
+Nhiệm vụ của bạn: Kiểm định TRỰC TIẾP một setup lệnh [${tradeDirection}] tại mức giá hiện tại (${formattedSpotPrice}) dựa trên dữ liệu vi cấu trúc 0-24h thực tế.
+
+CẤU TRÚC KẾT QUẢ KIỂM ĐỊNH (CỰC KỲ SẮC BÉN, CÔ ĐỌNG, IN ĐẬM TỪ KHÓA KEY):
+
+### 1. 🎯 PHÁN QUYẾT & ĐỘ TIN CẨY (VERDICT)
+- **Phán quyết Lệnh [${tradeDirection} @ ${formattedSpotPrice}]:** [**🟢 NÊN THỰC HIỆN** | **⏸️ CẦN CHỜ XÁC NHẬN** | **🔴 KHÔNG NÊN - BẪY GIÁ** | **⚠️ RỦI RO BẮT DAO**]
+- **Mức độ Tin cậy:** [**CAO** | **TRUNG BÌNH** | **THẤP**]
+- **Tóm tắt Edge trong 1 câu:** ...
+
+### 2. 🔬 BẰNG CHỨNG VI CẤU TRÚC TẠI GIÁ HIỆN TẠI (MICROSTRUCTURE EVIDENCE)
+- **Lực mua/bán chủ động (CVD):** CVD đang **đồng pha ủng hộ** hay **phân kỳ bẫy giá**?
+- **Đòn bẩy phái sinh (OI & Funding):** OI tăng/giảm phản ánh **đòn bẩy mua/bán đuổi** hay **Short Cover**?
+- **Sổ lệnh & Whale Walls:** Khoảng cách tới tường **Bid Wall** (hỗ trợ) và **Ask Wall** (kháng cự) gần nhất.
+
+### 3. 🛡️ PLAYBOOK VÀO LỆNH & ĐIỀU KIỆN VÔ HIỆU
+- **Vùng Mua/Bán Đề xuất:** ...
+- **Dừng Lỗ Cấu Trúc (Stop Loss):** ... (Mức giá cụ thể)
+- **Mục tiêu Chốt Lãi (Take Profit):** ... (Tỷ lệ R:R ước tính)
+- **Điều kiện Vô Hiệu Lập Tức:** [Nêu 1 tín hiệu/mức giá khiến lệnh hỏng hoàn toàn]`
+      : `You are a Skeptical Execution & Risk Desk Lead in crypto trading.
+Your mission: Directly audit a [${tradeDirection}] trade setup at current price (${formattedSpotPrice}) using real-time 0-24h microstructure data.
+
+REQUIRED AUDIT FORMAT (LEAN, ACTIONABLE, AGGRESSIVELY BOLD KEY TERMS):
+
+### 1. 🎯 TRADE VERDICT & CONVICTION
+- **Verdict for [${tradeDirection} @ ${formattedSpotPrice}]:** [**🟢 CONFIRMED VALID** | **⏸️ WAIT FOR CONFIRMATION** | **🔴 INVALIDATED - TRAP** | **⚠️ HIGH RISK CATCHING KNIFE**]
+- **Conviction:** [**HIGH** | **MEDIUM** | **LOW**]
+- **One-line Edge:** ...
+
+### 2. 🔬 MICROSTRUCTURE EVIDENCE AT SPOT
+- **Aggressive Flow (CVD):** Is CVD **confirming** or **diverging (trap)**?
+- **Leverage (OI & Funding):** Is OI expanding from **FOMO leverage** or **hedging**?
+- **Book Liquidity & Whale Walls:** Nearest **Bid Wall** (support) and **Ask Wall** (resistance) distance.
+
+### 3. 🛡️ EXECUTION PLAYBOOK & INVALIDATION
+- **Recommended Zone:** ...
+- **Structural Stop Loss:** ... (Specific price level)
+- **Take Profit Targets:** ... (Estimated R:R)
+- **Emergency Invalidation:** [Specific signal or price breakdown]`;
+
+    const userPrompt = `
+# TRADE AUDIT INPUT DATA
+
+- Direction Requested: **${tradeDirection}**
+- Target Spot Price: **${formattedSpotPrice}**
+- BTC Live Spot Price: $${priceNow.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+- BTC 24h Change: ${data.btc?.change ? data.btc.change + '%' : 'N/A'}
+- Current Funding Rate: ${data.fundingRate !== undefined && data.fundingRate !== null ? (data.fundingRate * 100).toFixed(4) + '%' : 'N/A'}
+- Current Open Interest: ${data.openInterest ? data.openInterest.toLocaleString() + ' BTC' : 'N/A'}
+- Intraday CVD: ${data.cvd ? (data.cvd > 0 ? '+' : '') + data.cvd.toLocaleString() + ' USD' : 'N/A'}
+- Order Book Imbalance (OBI): ${data.orderBook?.obiPercent !== undefined ? data.orderBook.obiPercent.toFixed(2) + '%' : 'N/A'}
+- Whale Bid Ratio: ${data.whaleWalls?.bidRatio !== undefined ? (data.whaleWalls.bidRatio * 100).toFixed(1) + '%' : 'N/A'}
+`;
+
+    try {
+      if (aiProvider === 'openrouter') {
+        await streamOpenRouterCompletion({
+          apiKey: openrouterKey,
+          model: selectedOpenRouterModel,
+          systemPrompt,
+          userPrompt,
+          generationConfig: getGenerationConfig('compact'),
+          onChunk: (accumulatedText) => {
+            setAuditResult(cleanLatex(accumulatedText));
+          },
+        });
+      } else {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:streamGenerateContent?alt=sse&key=${geminiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: { text: systemPrompt } },
+            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+            generationConfig: getGenerationConfig('compact'),
+          }),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText || `HTTP status ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let currentText = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split(/\r?\n|\r/);
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const cleanedStr = line.trim();
+            if (cleanedStr.startsWith('data: ')) {
+              const dataStr = cleanedStr.slice(6).trim();
+              if (!dataStr) continue;
+              try {
+                const parsed = JSON.parse(dataStr);
+                const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                if (text) {
+                  currentText = cleanLatex(currentText + text);
+                  setAuditResult(currentText);
+                }
+              } catch {
+                continue;
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[TradeAuditor] Audit failed:', err);
+      setAuditResult((prev) => prev + `\n\n**Lỗi kiểm định:** ${err.message}`);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  return (
+    <div
+      className="glass-panel"
+      style={{
+        padding: '18px 20px',
+        marginBottom: '20px',
+        border: '1px solid var(--border-panel)',
+        borderRadius: '12px',
+        background: 'var(--bg-panel)',
+      }}
+    >
+      {/* ── Top Header Toolbar ────────────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginBottom: '16px',
+          borderBottom: '1px solid var(--border-panel)',
+          paddingBottom: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3
+            className="font-mono text-emerald"
+            style={{
+              margin: 0,
+              fontSize: '0.95rem',
+              letterSpacing: '0.04em',
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <ShieldCheck size={18} /> TRADE PLAN AUDITOR
+          </h3>
+          <span
+            className="font-mono"
+            style={{
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: '4px',
+              background: 'var(--bg-slate-950)',
+              border: '1px solid var(--border-panel)',
+              color: 'var(--color-emerald-400)',
+            }}
+          >
+            SPOT: ${priceNow ? priceNow.toLocaleString('en-US', { minimumFractionDigits: 2 }) : 'N/A'}
+          </span>
+        </div>
+
+        <ModuleMenu moduleId={moduleId} />
+      </div>
+
+      {/* ── Interactive Input Form ─────────────────────────────────────── */}
+      <div
+        style={{
+          background: 'var(--bg-slate-950)',
+          border: '1px solid var(--border-panel)',
+          borderRadius: '10px',
+          padding: '14px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '14px',
+          marginBottom: '16px',
+        }}
+      >
+        {/* Direction Switcher */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="font-mono" style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', fontWeight: 600 }}>
+            {isVi ? 'HƯỚNG LỆNH:' : 'DIRECTION:'}
+          </span>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={() => setTradeDirection('LONG')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '5px 14px',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                borderRadius: '6px',
+                background: tradeDirection === 'LONG' ? 'rgba(16, 185, 129, 0.2)' : 'var(--bg-slate-900)',
+                color: tradeDirection === 'LONG' ? 'var(--color-emerald-400)' : 'var(--text-slate-400)',
+                border: tradeDirection === 'LONG' ? '1px solid var(--color-emerald-500)' : '1px solid var(--border-panel)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <ArrowUpRight size={14} /> LONG
+            </button>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={() => setTradeDirection('SHORT')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '5px 14px',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                borderRadius: '6px',
+                background: tradeDirection === 'SHORT' ? 'rgba(244, 63, 94, 0.2)' : 'var(--bg-slate-900)',
+                color: tradeDirection === 'SHORT' ? 'var(--color-rose-400)' : 'var(--text-slate-400)',
+                border: tradeDirection === 'SHORT' ? '1px solid var(--color-rose-500)' : '1px solid var(--border-panel)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <ArrowDownRight size={14} /> SHORT
+            </button>
+          </div>
+        </div>
+
+        {/* Spot Price Input (Optional override) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="font-mono" style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', fontWeight: 600 }}>
+            {isVi ? 'MỨC GIÁ ENTRY:' : 'ENTRY PRICE:'}
+          </span>
+          <input
+            type="text"
+            placeholder={`Current ($${priceNow ? priceNow.toLocaleString('en-US') : ''})`}
+            value={customPrice}
+            onChange={(e) => setCustomPrice(e.target.value)}
+            className="font-mono"
+            style={{
+              background: 'var(--bg-slate-900)',
+              border: '1px solid var(--border-panel)',
+              color: 'var(--text-contrast)',
+              borderRadius: '6px',
+              padding: '5px 10px',
+              fontSize: '0.72rem',
+              width: '160px',
+              outline: 'none',
+            }}
+          />
+        </div>
+
+        {/* Action Button */}
+        <Tooltip
+          content={{
+            api: 'Microstructure Audit Engine',
+            def: isVi
+              ? 'Kiểm định lập tức phản ứng giá, CVD, OI và tường hỗ trợ/kháng cự gần nhất tại giá hiện tại.'
+              : 'Instantly audit CVD divergence, OI leverage, and nearby whale walls at current spot price.',
+          }}
+          lastUpdated={lastSync}
+        >
+          <button
+            type="button"
+            className="font-mono"
+            onClick={runTradeAudit}
+            disabled={isAuditing}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 16px',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              borderRadius: '6px',
+              background: isAuditing ? 'var(--bg-slate-800)' : 'var(--color-emerald-500)',
+              color: isAuditing ? 'var(--text-slate-500)' : '#ffffff',
+              border: '1px solid var(--color-emerald-400)',
+              cursor: isAuditing ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: isAuditing ? 'none' : '0 0 10px rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            {isAuditing ? <Loader2 size={14} className="spinning" /> : <Zap size={14} />}
+            {isAuditing
+              ? isVi
+                ? 'ĐANG AUDIT LỆNH...'
+                : 'AUDITING...'
+              : isVi
+                ? `KIỂM ĐỊNH LỆNH ${tradeDirection}`
+                : `AUDIT ${tradeDirection} SETUP`}
+          </button>
+        </Tooltip>
+      </div>
+
+      {/* ── Audit Output Box ───────────────────────────────────────────── */}
+      {auditResult && (
+        <div
+          className="summary-content"
+          style={{
+            background: 'var(--bg-slate-950)',
+            padding: '18px 20px',
+            borderRadius: '8px',
+            border: '1px solid var(--border-panel)',
+            color: 'var(--text-contrast)',
+            lineHeight: '1.6',
+            fontSize: '0.85rem',
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+        >
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditResult}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

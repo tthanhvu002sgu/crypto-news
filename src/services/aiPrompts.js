@@ -620,6 +620,11 @@ export function getSystemPrompt(style = 'compact', lang = 'en', userBias = 'none
       ? `\n\n[HƯỚNG DẪN BỔ SUNG THIÊN KIẾN NGƯỜI DÙNG]: Người dùng đang thiên về hướng **${userBias.toUpperCase()}**. Hãy tập trung kiểm định bài toán **${userBias.toUpperCase()}** trong phần USER BIAS AUDIT. Trả lời trực tiếp 3 mục: (1) Nhận định về Bias, (2) Lời khuyên & cảnh báo rủi ro, (3) Kết luận Bias [XÁC NHẬN / CHỜ XÁC NHẬN / VÔ HIỆU HÓA].`
       : `\n\n[USER BIAS SUPPLEMENTAL DIRECTIVE]: The user holds a **${userBias.toUpperCase()}** bias. Focus on auditing the **${userBias.toUpperCase()}** thesis in the USER BIAS AUDIT section. Address: (1) Assessment, (2) Risk advice & setup constraints, (3) Verdict [CONFIRMED / WAIT / INVALIDATED].`;
     result += biasNote;
+  } else {
+    const noBiasNote = safeLang === 'vi'
+      ? `\n\n[HƯỚNG DẪN BẮT BUỘC VỀ THIÊN KIẾN NGƯỜI DÙNG]: Người dùng chọn PHÂN TÍCH KHÁCH QUAN (KHÔNG BIAS). Bạn BẮT BUỘC BỎ QUA HOÀN TOÀN phần/tiêu đề USER BIAS AUDIT (Mục 2). Tuyệt đối KHÔNG in ra tiêu đề hoặc nội dung mục 2. Hãy chuyển trực tiếp từ Mục 1 sang Mục 3.`
+      : `\n\n[MANDATORY NO-BIAS DIRECTIVE]: The user selected OBJECTIVE evaluation (No Bias). You MUST COMPLETELY OMIT the USER BIAS AUDIT section and heading. Do NOT output Section 2 at all. Jump directly from Section 1 to Section 3.`;
+    result += noBiasNote;
   }
 
   return result;
