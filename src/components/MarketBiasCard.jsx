@@ -237,32 +237,17 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
               opacity: 0.9,
             }}
           >
-            {/* Center Zero Marker Notch */}
+            {/* Active Pointer Pin */}
             <div
               style={{
                 position: 'absolute',
-                left: '50%',
-                top: '-2px',
-                bottom: '-2px',
-                width: '2px',
-                background: 'var(--text-contrast)',
-                opacity: 0.7,
-                zIndex: 2,
-              }}
-            />
-
-            {/* Active Pointer Marker */}
-            <div
-              style={{
-                position: 'absolute',
-                top: '-4px',
-                left: `calc(${scorePercent}% - 7px)`,
-                width: '14px',
-                height: '18px',
-                background: 'var(--bg-panel)',
-                borderRadius: '3px',
-                boxShadow: `0 2px 8px ${bias.color}60`,
-                border: `2px solid ${bias.color}`,
+                top: '-3px',
+                bottom: '-3px',
+                left: `calc(${scorePercent}% - 2px)`,
+                width: '4px',
+                background: bias.color,
+                borderRadius: '2px',
+                boxShadow: `0 0 8px ${bias.color}`,
                 transition: 'left 0.4s ease-out',
                 zIndex: 3,
               }}
