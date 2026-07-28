@@ -202,12 +202,22 @@ export default function SummaryTab({
   }, []);
 
   const [selectedStyle, setSelectedStyle] = useState(() => {
-    return localStorage.getItem('ai-analysis-style') || 'professional';
+    return localStorage.getItem('ai-analysis-style') || 'compact';
   });
 
   const handleStyleChange = (newStyle) => {
     setSelectedStyle(newStyle);
     localStorage.setItem('ai-analysis-style', newStyle);
+  };
+
+  /** User bias: none | long | short — persists across reloads */
+  const [selectedUserBias, setSelectedUserBias] = useState(() => {
+    return localStorage.getItem('ai-user-bias') || 'none';
+  });
+
+  const handleUserBiasChange = (bias) => {
+    setSelectedUserBias(bias);
+    localStorage.setItem('ai-user-bias', bias);
   };
 
   /** Report language: vi | en — persists across reloads */
@@ -678,9 +688,17 @@ ${formatWalls(whaleWalls?.whaleAsks)}
 
 ## 8. LATEST HEADLINES & EVENT RISK
 ${formatNews(activeNews)}
+
+## 9. USER INTENDED BIAS & AUDIT REQUEST
+- User Selected Bias: **${selectedUserBias === 'none' ? 'NONE (Objective Evaluation)' : selectedUserBias.toUpperCase()}**
+${
+  selectedUserBias !== 'none'
+    ? `- SPECIAL DIRECTIVE: The user has selected a **${selectedUserBias.toUpperCase()}** bias. You MUST include the USER BIAS AUDIT section in your report. Provide (1) Assessment of whether current data supports or refutes ${selectedUserBias.toUpperCase()}, (2) Actionable risk management advice & entry conditions, and (3) Final verdict on the ${selectedUserBias.toUpperCase()} bias (**CONFIRMED VALID**, **WAIT FOR CONFIRMATION**, or **INVALIDATED**).`
+    : '- Note: User selected Objective Evaluation (No specific bias).'
+}
 `;
 
-    const systemPrompt = getSystemPrompt(selectedStyle, selectedLang);
+    const systemPrompt = getSystemPrompt(selectedStyle, selectedLang, selectedUserBias);
     return { promptData, systemPrompt };
   };
 
@@ -1028,9 +1046,53 @@ ${promptData}
                 cursor: 'pointer',
               }}
             >
+              <option value="compact">{styleLabels.compact}</option>
               <option value="professional">{styleLabels.professional}</option>
               <option value="tactical">{styleLabels.tactical}</option>
               <option value="educational">{styleLabels.educational}</option>
+            </select>
+          </div>
+
+          {/* User Bias Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
+            <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
+              {isVi ? 'BIAS CỦA BẠN:' : 'YOUR BIAS:'}
+            </span>
+            <select
+              value={selectedUserBias}
+              onChange={(e) => handleUserBiasChange(e.target.value)}
+              disabled={isAiLoading || isExporting}
+              className="font-mono"
+              style={{
+                background:
+                  selectedUserBias === 'long'
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : selectedUserBias === 'short'
+                    ? 'rgba(244, 63, 94, 0.15)'
+                    : 'var(--bg-slate-900)',
+                border:
+                  selectedUserBias === 'long'
+                    ? '1px solid var(--color-emerald-500)'
+                    : selectedUserBias === 'short'
+                    ? '1px solid var(--color-rose-500)'
+                    : '1px solid var(--border-panel)',
+                color:
+                  selectedUserBias === 'long'
+                    ? 'var(--color-emerald-400)'
+                    : selectedUserBias === 'short'
+                    ? 'var(--color-rose-400)'
+                    : 'var(--text-slate-300)',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                outline: 'none',
+                cursor: 'pointer',
+                fontWeight: selectedUserBias !== 'none' ? 700 : 400,
+              }}
+            >
+              <option value="none">{isVi ? 'Khách quan (Không bias)' : 'Objective (No bias)'}</option>
+              <option value="long">🟢 LONG (Kỳ vọng Tăng)</option>
+              <option value="short">🔴 SHORT (Kỳ vọng Giảm)</option>
             </select>
           </div>
 

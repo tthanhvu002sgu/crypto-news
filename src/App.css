@@ -3555,6 +3555,29 @@
   font-weight: 700;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MARKDOWN BODY SKIMMING BOLDING & ACCENT STYLES
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.markdown-body strong {
+  color: var(--color-emerald-400, #34d399);
+  font-weight: 800;
+  background: rgba(52, 211, 153, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border-bottom: 1px solid rgba(52, 211, 153, 0.25);
+  letter-spacing: 0.01em;
+}
+
+.markdown-body h3 {
+  color: var(--text-contrast);
+  margin-top: 1.4em;
+  margin-bottom: 0.6em;
+  font-size: 1.05rem;
+  border-bottom: 1px solid var(--border-panel);
+  padding-bottom: 6px;
+}
+
+
 
 
 
