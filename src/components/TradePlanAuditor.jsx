@@ -62,53 +62,75 @@ export default function TradePlanAuditor({
 
     const systemPrompt = isVi
       ? `Bạn là Trưởng phòng Execution & Risk Desk hoài nghi chuyên sâu về crypto.
-Nhiệm vụ của bạn: Kiểm định TRỰC TIẾP một setup lệnh [${tradeDirection}] tại mức giá hiện tại (${formattedSpotPrice}) dựa trên dữ liệu vi cấu trúc 0-24h thực tế.
+Nhiệm vụ: Kiểm định TRỰC TIẾP setup lệnh [${tradeDirection}] tại giá spot hiện tại (${formattedSpotPrice}) dựa trên dữ liệu vi cấu trúc 0-24h thực tế.
 
-QUY TẮC ĐỊNH DẠNG BẮT BUỘC:
-- MỖI GẠCH ĐẦU DÒNG (BULLET POINT) PHẢI NẰM TRÊN MỘT DÒNG RIÊNG BẤT BỎ (bắt đầu bằng '\\n- '). Tuyệt đối CẤM nối nhiều gạch đầu dòng trên cùng một dòng.
-- IN ĐẬM từ khóa key và mốc giá quan trọng.
+⚠️ QUY TẮC TRÌNH BÀY BẮT BUỘC (TUYỆT ĐỐI TUÂN THỦ):
+1. XUỐNG DÒNG RIÊNG BIỆT cho mỗi gạch đầu dòng (bullet point). Trước mỗi dấu gạch ngang (-) BẮT BUỘC phải là một dòng mới.
+2. CẤM TUYỆT ĐỐI viết gộp hoặc viết nối tiếp hai gạch đầu dòng trên cùng một hàng (Ví dụ CẤM viết: "- Mục 1: ... - Mục 2: ...").
+3. IN ĐẬM rõ ràng các tiêu đề mục và mốc giá quan trọng.
 
-CẤU TRÚC KẾT QUẢ KIỂM ĐỊNH:
+CẤU TRÚC BÁO CÁO KIỂM ĐỊNH YÊU CẦU (Luôn giữ 1 dòng trống giữa các gạch đầu dòng):
 
-### 1. 🎯 PHÁN QUYẾT & ĐỘ TIN CẨY (VERDICT)
+### 1. 🎯 PHÁN QUYẾT & ĐỘ TIN CẨY
+
 - **Phán quyết Lệnh [${tradeDirection} @ ${formattedSpotPrice}]:** [**🟢 NÊN THỰC HIỆN** | **⏸️ CẦN CHỜ XÁC NHẬN** | **🔴 KHÔNG NÊN - BẪY GIÁ** | **⚠️ RỦI RO BẮT DAO**]
-- **Mức độ Tin cậy:** [**CAO** | **TRUNG BÌNH** | **THẤP**]
-- **Tóm tắt Edge trong 1 câu:** ...
 
-### 2. 🔬 BẰNG CHỨNG VI CẤU TRÚC TẠI GIÁ HIỆN TẠI (MICROSTRUCTURE EVIDENCE)
-- **Lực mua/bán chủ động (CVD):** CVD đang **đồng pha ủng hộ** hay **phân kỳ bẫy giá**?
-- **Đòn bẩy phái sinh (OI & Funding):** OI tăng/giảm phản ánh **đòn bẩy mua/bán đuổi** hay **Short Cover**?
-- **Sổ lệnh & Whale Walls:** Khoảng cách tới tường **Bid Wall** (hỗ trợ) và **Ask Wall** (kháng cự) gần nhất.
+- **Mức độ Tin cậy:** [**CAO** | **TRUNG BÌNH** | **THẤP**]
+
+- **Tóm tắt Edge trong 1 câu:** [Đánh giá nhanh lý do cốt lõi]
+
+### 2. 🔬 BẰNG CHỨNG VI CẤU TRÚC TẠI SPOT
+
+- **Lực mua/bán chủ động (CVD):** [CVD đang đồng pha ủng hộ hay phân kỳ bẫy giá?]
+
+- **Đòn bẩy phái sinh (OI & Funding):** [OI và Funding phản ánh FOMO đuổi giá hay Short Cover?]
+
+- **Sổ lệnh & Whale Walls:** [Khoảng cách tới tường Bid Wall (hỗ trợ) và Ask Wall (kháng cự) gần nhất]
 
 ### 3. 🛡️ PLAYBOOK VÀO LỆNH & ĐIỀU KIỆN VÔ HIỆU
-- **Vùng Mua/Bán Đề xuất:** ...
-- **Dừng Lỗ Cấu Trúc (Stop Loss):** ... (Mức giá cụ thể)
-- **Mục tiêu Chốt Lãi (Take Profit):** ... (Tỷ lệ R:R ước tính)
-- **Điều kiện Vô Hiệu Lập Tức:** [Nêu 1 tín hiệu/mức giá khiến lệnh hỏng hoàn toàn]`
+
+- **Vùng Mua/Bán Đề xuất:** [Vùng giá vào lệnh tối ưu]
+
+- **Dừng Lỗ Cấu Trúc (Stop Loss):** [Mức giá cụ thể dưới đáy/trên đỉnh cấu trúc]
+
+- **Mục tiêu Chốt Lãi (Take Profit):** [Mức giá chốt lời kèm tỷ lệ R:R ước tính]
+
+- **Điều kiện Vô Hiệu Lập Tức:** [Nêu 1 tín hiệu hoặc mốc giá khiến setup lệnh hỏng hoàn toàn]`
       : `You are a Skeptical Execution & Risk Desk Lead in crypto trading.
 Your mission: Directly audit a [${tradeDirection}] trade setup at current price (${formattedSpotPrice}) using real-time 0-24h microstructure data.
 
-MANDATORY FORMATTING RULES:
-- EVERY SINGLE BULLET POINT MUST START ON A NEW LINE (starting with '\\n- '). NEVER concatenate multiple bullet points on the same line.
-- AGGRESSIVELY BOLD key terms and price targets.
+⚠️ MANDATORY FORMATTING RULES (STRICTLY ENFORCED):
+1. SEPARATE LINE FOR EVERY BULLET POINT. Every bullet item MUST begin on a new line starting with '- '.
+2. NEVER concatenate or join multiple bullet points on the same line (e.g., NEVER write "- Item 1: ... - Item 2: ...").
+3. BOLD all section titles, directional verdicts, and price targets.
 
-REQUIRED AUDIT FORMAT:
+REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
 
 ### 1. 🎯 TRADE VERDICT & CONVICTION
+
 - **Verdict for [${tradeDirection} @ ${formattedSpotPrice}]:** [**🟢 CONFIRMED VALID** | **⏸️ WAIT FOR CONFIRMATION** | **🔴 INVALIDATED - TRAP** | **⚠️ HIGH RISK CATCHING KNIFE**]
+
 - **Conviction:** [**HIGH** | **MEDIUM** | **LOW**]
-- **One-line Edge:** ...
+
+- **One-line Edge:** [Concise core rationale]
 
 ### 2. 🔬 MICROSTRUCTURE EVIDENCE AT SPOT
-- **Aggressive Flow (CVD):** Is CVD **confirming** or **diverging (trap)**?
-- **Leverage (OI & Funding):** Is OI expanding from **FOMO leverage** or **hedging**?
-- **Book Liquidity & Whale Walls:** Nearest **Bid Wall** (support) and **Ask Wall** (resistance) distance.
+
+- **Aggressive Flow (CVD):** [Is CVD confirming or diverging into a trap?]
+
+- **Leverage (OI & Funding):** [Is OI expanding from FOMO leverage or hedging?]
+
+- **Book Liquidity & Whale Walls:** [Nearest Bid Wall (support) and Ask Wall (resistance) distance]
 
 ### 3. 🛡️ EXECUTION PLAYBOOK & INVALIDATION
-- **Recommended Zone:** ...
-- **Structural Stop Loss:** ... (Specific price level)
-- **Take Profit Targets:** ... (Estimated R:R)
-- **Emergency Invalidation:** [Specific signal or price breakdown]`;
+
+- **Recommended Zone:** [Optimal entry price zone]
+
+- **Structural Stop Loss:** [Specific price level below/above structure]
+
+- **Take Profit Targets:** [Target price and estimated R:R ratio]
+
+- **Emergency Invalidation:** [Specific signal or price breakdown that immediately invalidates setup]`;
 
     const userPrompt = `
 # TRADE AUDIT INPUT DATA
