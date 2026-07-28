@@ -205,7 +205,17 @@ export const cleanLatex = (text) => {
     // Ensure space after bullet hyphen
     .replace(/^-\s*([^\s])/gm, '- $1')
     // Prevent 4-space indent from creating code blocks
-    .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ');
+    .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ')
+    // ── Tilde / strikethrough prevention ────────────────────────────
+    // remark-gfm treats ~~text~~ as strikethrough and ~text~ as subscript.
+    // Models use ~ as an approximation symbol (LaTeX \sim), which creates
+    // accidental ~value~ pairs that render with strikethrough.
+    // Remove any ~~...~~ markdown strikethrough by unwrapping its content.
+    .replace(/~~([^~]+)~~/g, '$1')
+    // Convert lone ~value~ (approx pattern) to ≈value
+    .replace(/~([^~\n]{1,60})~/g, '≈$1')
+    // Remove any remaining lone tildes that are not intentional
+    .replace(/(?<![~])~(?![~])/g, '');
 
   return cleaned;
 };
