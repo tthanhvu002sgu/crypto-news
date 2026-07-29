@@ -134,6 +134,8 @@ function CVDPanel({
 
   const displayTotalVol = displayVol.buy + displayVol.sell;
   const buyPct = displayTotalVol > 0 ? (displayVol.buy / displayTotalVol * 100) : 50;
+  const sellPct = 100 - buyPct;
+
   const [tfFootprintNodes, setTfFootprintNodes] = useState(null);
 
   useEffect(() => {
