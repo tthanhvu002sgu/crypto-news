@@ -161,14 +161,14 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
           <table className="scanner-table">
             <thead>
               <tr>
-                <th style={{ width: '55px' }}>HẠNG</th>
-                <th style={{ width: '160px' }}>COIN / TRADINGVIEW</th>
-                <th style={{ width: '140px' }}>VỐN HÓA &amp; VOL 30D</th>
-                <th style={{ width: '135px' }}>SPREAD &amp; FUNDING</th>
-                <th style={{ width: '155px' }}>DÒNG TIỀN (CVD 24H)</th>
-                <th style={{ width: '165px' }}>KỸ THUẬT (4H &amp; DAILY)</th>
-                <th style={{ width: '120px' }}>ĐIỂM TÍN HIỆU</th>
-                <th>TÍN HIỆU NHÂN DUYÊN NỔI BẬT</th>
+                <th style={{ width: '5%' }}>HẠNG</th>
+                <th style={{ width: '13%' }}>COIN / TRADINGVIEW</th>
+                <th style={{ width: '13%' }}>VỐN HÓA &amp; VOL 30D</th>
+                <th style={{ width: '12%' }}>SPREAD &amp; FUNDING</th>
+                <th style={{ width: '14%' }}>DÒNG TIỀN (CVD 24H)</th>
+                <th style={{ width: '15%' }}>KỸ THUẬT (4H &amp; DAILY)</th>
+                <th style={{ width: '11%' }}>ĐIỂM TÍN HIỆU</th>
+                <th style={{ width: '17%' }}>TÍN HIỆU NHÂN DUYÊN NỔI BẬT</th>
               </tr>
             </thead>
             <tbody>

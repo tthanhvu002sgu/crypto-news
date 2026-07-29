@@ -2493,7 +2493,9 @@
   border-radius: 12px;
   border: 1px solid var(--border-panel);
   box-shadow: var(--shadow-panel);
-  overflow-x: auto;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .scanner-skeleton-loader, .scanner-empty-state {
@@ -2517,6 +2519,8 @@
 
 .scanner-table {
   width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   text-align: left;
@@ -2524,21 +2528,24 @@
 }
 
 .scanner-table th {
-  padding: 14px 16px;
+  padding: 12px 9px;
   background: var(--bg-slate-900);
   color: var(--text-contrast);
   font-weight: 800;
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   border-bottom: 2px solid var(--border-panel);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 
 .scanner-table td {
-  padding: 16px;
+  padding: 12px 9px;
   border-bottom: 1px solid var(--border-panel);
   vertical-align: middle;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .scanner-row {
@@ -2644,7 +2651,7 @@
 
 .symbol-text {
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: clamp(0.74rem, 1vw, 0.95rem);
   color: var(--text-contrast);
   letter-spacing: 0.02em;
 }
@@ -3574,7 +3581,6 @@
   border-bottom: 1px solid var(--border-panel);
   padding-bottom: 6px;
 }
-
 
 
 
