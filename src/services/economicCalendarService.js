@@ -10,6 +10,72 @@ import axios from 'axios';
 let cachedEvents = null;
 let lastFetchTime = 0;
 const CACHE_DURATION_MS = 15 * 60 * 1000;
+const FOREX_FACTORY_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+function normalizeEventTitle(title = '') {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function getActualLookupKey(sourceDate, country, title) {
+  return `${sourceDate}|${country?.toUpperCase() || ''}|${normalizeEventTitle(title)}`;
+}
+
+function getForexFactoryDayUrl(sourceDate) {
+  const [year, month, day] = sourceDate.split('-').map(Number);
+  return `https://r.jina.ai/http://www.forexfactory.com/calendar?day=${FOREX_FACTORY_MONTHS[month - 1]}${day}.${year}`;
+}
+
+function parseForexFactoryActuals(markdown, sourceDate) {
+  const actuals = new Map();
+
+  markdown.split('\n').forEach((line) => {
+    if (!line.startsWith('|')) return;
+
+    const cells = line
+      .split('|')
+      .slice(1, -1)
+      .map((cell) => cell
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+        .replace(/\[[^\]]*\]\([^)]*\)/g, '')
+        .replace(/<[^>]*>/g, '')
+        .trim());
+
+    const countryIndex = cells.findIndex((cell) => /^[A-Z]{3}$/.test(cell));
+    if (countryIndex === -1) return;
+
+    const titleIndex = cells.findIndex((cell, index) => index > countryIndex && cell.length > 0);
+    const actual = cells[titleIndex + 3]?.trim();
+    if (titleIndex === -1 || !actual) return;
+
+    actuals.set(getActualLookupKey(sourceDate, cells[countryIndex], cells[titleIndex]), actual);
+  });
+
+  return actuals;
+}
+
+async function getReleasedEventActuals(rawEvents) {
+  const now = Date.now();
+  const sourceDates = [...new Set(
+    rawEvents
+      .filter((event) => event.date && event.title && !event.actual && new Date(event.date).getTime() <= now)
+      .map((event) => event.date.slice(0, 10))
+  )];
+
+  const results = await Promise.allSettled(sourceDates.map(async (sourceDate) => {
+    const response = await axios.get(getForexFactoryDayUrl(sourceDate), {
+      headers: { Accept: 'text/plain' },
+      timeout: 10000,
+    });
+    return parseForexFactoryActuals(response.data || '', sourceDate);
+  }));
+
+  return results.reduce((actuals, result) => {
+    if (result.status === 'fulfilled') {
+      result.value.forEach((value, key) => actuals.set(key, value));
+    }
+    return actuals;
+  }, new Map());
+}
 
 /**
  * Get 7 days of the current week (Monday to Sunday)
@@ -246,6 +312,15 @@ export async function getWeeklyEconomicCalendar(forceRefresh = false) {
   }
 
   let formattedEvents = [];
+  let releasedActuals = new Map();
+
+  if (rawEvents && Array.isArray(rawEvents) && rawEvents.length > 0) {
+    try {
+      releasedActuals = await getReleasedEventActuals(rawEvents);
+    } catch (err) {
+      console.warn('[EconomicCalendar] Actual result lookup failed:', err?.message);
+    }
+  }
 
   if (rawEvents && Array.isArray(rawEvents) && rawEvents.length > 0) {
     rawEvents.forEach((e, idx) => {
@@ -273,7 +348,7 @@ export async function getWeeklyEconomicCalendar(forceRefresh = false) {
           dateStr: matchedDay.dateStr,
           fullDateStr: matchedDay.fullDateStr,
           dayIndex: matchedDay.dayIndex,
-          actual: e.actual ?? '',
+          actual: e.actual ?? releasedActuals.get(getActualLookupKey(e.date.slice(0, 10), e.country, e.title)) ?? '',
           forecast: e.forecast ?? '',
           previous: e.previous ?? '',
           category: analysis.category,
