@@ -9,7 +9,7 @@
  * 4. News & Risk Shock (20%): High Impact Calendar Risk (8%), Fear & Greed (7%), Long/Short Ratio (5%)
  */
 
-const MAX_SCORING_WEIGHT = 0.68;
+const MAX_SCORING_WEIGHT = 0.90;
 
 function toFiniteNumber(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -164,7 +164,9 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (priceToCostRatio < 1.80) { miningSignal = 0.0; miningStatus = `Lợi nhuận thợ đào bình thường`; }
     else { miningSignal = -0.5; miningStatus = `Lợi nhuận thợ đào rất cao (Rủi ro xả)`; }
 
-    signals.push({ name: 'Mining Cost Floor', weight: 'Context', score: 0, status: miningStatus, pillar: 'onChain' });
+    onChainScoreSum += miningSignal * 0.06;
+    availableWeight += 0.06;
+    signals.push({ name: 'Mining Cost Floor', weight: '6%', score: miningSignal * 6, status: miningStatus, pillar: 'onChain' });
   }
 
   // ----------------------------------------------------
@@ -198,15 +200,22 @@ export function calculateMarketBias(data, etfHistory = []) {
     signals.push({ name: 'ETF 7D Net Flow', weight: '12%', score: etfSignal * 12, status: etfStatus, pillar: 'institutional' });
   }
 
-  // 3B. Stablecoin Dry Powder (8%)
-  let stbleSignal = 0;
-  let stbleStatus = 'No data';
-  if (data.stablecoins?.total > 0) {
-    const totalBillion = (data.stablecoins.total / 1e9).toFixed(1);
-    stbleSignal = 0;
-    stbleStatus = `Dry Powder: $${totalBillion}B USDT+USDC`;
+  // 3B. CME COT Institutional Flow (8%)
+  let cotSignal = 0;
+  let cotStatus = 'No data';
+  if (data.cotData?.assetManager) {
+    const netPos = toFiniteNumber(data.cotData.assetManager.net);
+    if (netPos != null) {
+      if (netPos > 3000) { cotSignal = 1.0; cotStatus = `CME Asset Mgr Net +${netPos} (Long áp đảo)`; }
+      else if (netPos > 1000) { cotSignal = 0.5; cotStatus = `CME Asset Mgr Net +${netPos} (Long ưu thế)`; }
+      else if (netPos > -1000) { cotSignal = 0.0; cotStatus = `CME Asset Mgr Net ${netPos} (Cân bằng)`; }
+      else if (netPos > -3000) { cotSignal = -0.5; cotStatus = `CME Asset Mgr Net ${netPos} (Short ưu thế)`; }
+      else { cotSignal = -1.0; cotStatus = `CME Asset Mgr Net ${netPos} (Short áp đảo)`; }
 
-    signals.push({ name: 'Stablecoin Liquidity', weight: 'Context', score: 0, status: stbleStatus, pillar: 'institutional' });
+      instScoreSum += cotSignal * 0.08;
+      availableWeight += 0.08;
+      signals.push({ name: 'CME COT Flow', weight: '8%', score: cotSignal * 8, status: cotStatus, pillar: 'institutional' });
+    }
   }
 
   // ----------------------------------------------------
@@ -215,9 +224,21 @@ export function calculateMarketBias(data, etfHistory = []) {
   let newsRiskScoreSum = 0;
   const upcomingEvents = [];
 
-  // 4A. Economic Calendar & High Impact News (8%)
-  let newsSignal = 0;
-  let newsStatus = 'Lịch sự kiện bình ổn';
+  // 4A. VIX Volatility Index (8%)
+  let vixSignal = 0;
+  let vixStatus = 'No data';
+  const vixVal = toFiniteNumber(data.vix);
+  if (vixVal != null && vixVal > 0) {
+    if (vixVal < 15) { vixSignal = 0.8; vixStatus = `VIX ${vixVal.toFixed(1)} (Risk-On ổn định)`; }
+    else if (vixVal < 20) { vixSignal = 0.3; vixStatus = `VIX ${vixVal.toFixed(1)} (Biến động bình thường)`; }
+    else if (vixVal < 25) { vixSignal = -0.3; vixStatus = `VIX ${vixVal.toFixed(1)} (Căng thẳng nhẹ)`; }
+    else if (vixVal < 32) { vixSignal = -0.8; vixStatus = `VIX ${vixVal.toFixed(1)} (Risk-Off hoảng loạn)`; }
+    else { vixSignal = -1.0; vixStatus = `VIX ${vixVal.toFixed(1)} (Khủng hoảng tâm lý)`; }
+
+    newsRiskScoreSum += vixSignal * 0.08;
+    availableWeight += 0.08;
+    signals.push({ name: 'VIX Volatility Index', weight: '8%', score: vixSignal * 8, status: vixStatus, pillar: 'newsRisk' });
+  }
 
   if (Array.isArray(data.news)) {
     const now = Date.now();
@@ -228,14 +249,7 @@ export function calculateMarketBias(data, etfHistory = []) {
     });
 
     if (highImpactCalendarEvents.length > 0) {
-      const firstEvent = highImpactCalendarEvents[0];
-      const eventTime = new Date(firstEvent.time);
-      const hoursLeft = Math.max(0, Math.round((eventTime.getTime() - now) / (1000 * 60 * 60)));
-      
       calendarRiskLevel = 'HIGH';
-      newsSignal = 0;
-      newsStatus = `⚠️ ${firstEvent.title.replace('[LỊCH SỰ KIỆN]', '').trim()} trong ~${hoursLeft}h nữa`;
-      
       highImpactCalendarEvents.forEach(e => {
         upcomingEvents.push({
           title: e.title.replace('[LỊCH SỰ KIỆN]', '').trim(),
@@ -246,14 +260,11 @@ export function calculateMarketBias(data, etfHistory = []) {
     }
   }
 
-  signals.push({ name: 'Calendar Risk Event', weight: 'Risk flag', score: 0, status: newsStatus, pillar: 'newsRisk' });
-
   // 4B. Fear & Greed Index (7%)
   let fngSignal = 0;
   let fngStatus = 'No data';
   const fng = toFiniteNumber(data.fngData?.value);
   if (fng != null) {
-    
     if (fng <= 20) { fngSignal = 1.0; fngStatus = `Fear & Greed ${fng} (Extreme Fear -> Mua tốt)`; }
     else if (fng <= 35) { fngSignal = 0.5; fngStatus = `Fear & Greed ${fng} (Fear)`; }
     else if (fng <= 65) { fngSignal = 0.0; fngStatus = `Fear & Greed ${fng} (Neutral)`; }
@@ -271,7 +282,6 @@ export function calculateMarketBias(data, etfHistory = []) {
   let lsStatus = 'No data';
   const latestLs = toFiniteNumber(data.lsHistory?.[data.lsHistory.length - 1]?.longShortRatio);
   if (latestLs != null && latestLs > 0) {
-    
     if (latestLs > 2.5) { lsSignal = -0.8; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Quá nhiều Longs)`; }
     else if (latestLs > 1.8) { lsSignal = -0.3; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng về Long)`; }
     else if (latestLs > 1.2) { lsSignal = 0.2; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Hợp lý)`; }
@@ -290,8 +300,7 @@ export function calculateMarketBias(data, etfHistory = []) {
   const totalWeightedRaw = microScoreSum + onChainScoreSum + instScoreSum + newsRiskScoreSum;
   
   const directionalScore = availableWeight > 0 ? (totalWeightedRaw / availableWeight) * 100 : 0;
-  const calendarRiskPenalty = calendarRiskLevel === 'HIGH' ? 0.20 : 0;
-  const confidencePct = Math.round(clamp(availableWeight / MAX_SCORING_WEIGHT, 0, 1) * (1 - calendarRiskPenalty) * 100);
+  const confidencePct = Math.round(clamp(availableWeight / MAX_SCORING_WEIGHT, 0, 1) * 100);
   const clampedScore = clamp(Math.round(directionalScore * (confidencePct / 100)), -100, 100);
 
   let label = 'NEUTRAL';
@@ -333,9 +342,9 @@ export function calculateMarketBias(data, etfHistory = []) {
     calendarRisk: calendarRiskLevel,
     pillars: {
       microstructure: Math.round((microScoreSum / 0.26) * 100),
-      onChain: Math.round((onChainScoreSum / 0.19) * 100),
-      institutional: Math.round((instScoreSum / 0.12) * 100),
-      newsRisk: Math.round((newsRiskScoreSum / 0.11) * 100),
+      onChain: Math.round((onChainScoreSum / 0.25) * 100),
+      institutional: Math.round((instScoreSum / 0.20) * 100),
+      newsRisk: Math.round((newsRiskScoreSum / 0.19) * 100),
     },
     signals,
     upcomingEvents,
