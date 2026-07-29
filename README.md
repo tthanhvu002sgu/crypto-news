@@ -53,6 +53,15 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-29] Đồng Bộ Cụm Footprint Nodes & TỔNG VOL Theo Nút Chọn Khung Thời Gian (1H, 24H, 7D, 30D) `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & FOOTPRINT TIMEFRAME SYNC
+- **Tóm tắt:** Nâng cấp bảng **CỤM FOOTPRINT NODES** và **TỔNG VOL** đồng bộ 100% theo nút chọn khung thời gian (`1H`, `24H`, `7D`, `30D`). Khi chọn `1H`, `24H`, `7D` hay `30D`, Footprint Nodes và Tổng Volume tự động truy vấn và tính toán đúng theo khoảng thời gian tương ứng.
+- **Thay đổi chính:**
+  - **Hàm Dynamic Footprint Timeframe (`api.js`):** Xây dựng `getFootprintNodesForTimeframe(symbol, market, timeframe)` điều chỉnh linh hoạt nến klines (`1m`, `1h`, `4h`) và giới hạn limit theo từng khung (`1H`, `24H`, `7D`, `30D`).
+  - **Auto Fetch & Render (`HftRadarTab.jsx`):** Thêm `useEffect` tự động tải lại Footprint Nodes khi thay đổi `cvdTf` hoặc `marketMode`. Cập nhật `TỔNG VOL (1H/24H/7D/30D)` và tiêu đề bảng đồng bộ 100%.
+- **Files / areas chạm:** `src/services/api.js`, `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (1.82s); `TỔNG VOL` và cụm Footprint Nodes thay đổi chính xác theo từng nút timeframe `1H`, `24H`, `7D`, `30D`.
+
 ### [2026-07-29] Tự Động Tái Tạo Footprint Nodes Lịch Sử (1000 Phút ~ 16.6 Giờ) Cho Cả Spot & Futures `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & FOOTPRINT HYDRATION
 - **Tóm tắt:** Giải quyết triệt để vấn đề mất dữ liệu Footprint Nodes khi đóng tab hoặc mới mở trang Web: Tự động tải và gộp 1000 nến 1 phút gần nhất (~16.6 giờ) từ Binance REST API cho cả 2 thị trường **Spot** và **Futures**, tái tạo ngay lập tức bảng Footprint Vùng giá đầy đủ 100% không phải chờ WebSocket tích lũy từ 0.

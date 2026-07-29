@@ -209,6 +209,65 @@ export const getHistoricalFootprintNodes = async (symbol = 'BTCUSDT', market = '
   }
 };
 
+/**
+ * Fetch and aggregate Footprint Nodes for specific timeframes: 1H, 24H, 7D, 30D.
+ * Dynamically computes price bin clusters matching the user's selected timeframe.
+ */
+export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market = 'futures', timeframe = '24H') => {
+  try {
+    const baseUrl = market === 'spot'
+      ? 'https://api.binance.com/api/v3/klines'
+      : 'https://fapi.binance.com/fapi/v1/klines';
+
+    let interval = '1m';
+    let limit = 60;
+
+    if (timeframe === '1H') {
+      interval = '1m';
+      limit = 60;
+    } else if (timeframe === '24H') {
+      interval = '1m';
+      limit = 1000;
+    } else if (timeframe === '7D') {
+      interval = '1h';
+      limit = 168; // 7 * 24 = 168 hours
+    } else if (timeframe === '30D') {
+      interval = '4h';
+      limit = 180; // 30 * 6 = 180 candles
+    }
+
+    const res = await axios.get(baseUrl, {
+      params: { symbol, interval, limit },
+    });
+
+    const nodeMap = new Map();
+    res.data.forEach(k => {
+      const high = parseFloat(k[2]);
+      const low = parseFloat(k[3]);
+      const close = parseFloat(k[4]);
+      const quoteVol = parseFloat(k[7]);
+      const takerBuyVol = parseFloat(k[10]);
+      const takerSellVol = Math.max(0, quoteVol - takerBuyVol);
+
+      const price = (high + low + close) / 3;
+      const binPrice = Math.floor(price / 10) * 10;
+
+      let node = nodeMap.get(binPrice);
+      if (!node) {
+        node = { buy: 0, sell: 0 };
+        nodeMap.set(binPrice, node);
+      }
+      node.buy += takerBuyVol;
+      node.sell += takerSellVol;
+    });
+
+    return Array.from(nodeMap.entries()).map(([p, v]) => ({ price: p, ...v }));
+  } catch (e) {
+    console.error(`[API] Footprint Nodes (${market}, ${timeframe}):`, e.message);
+    return [];
+  }
+};
+
 
 /**
  * Lọc nến 1 phút có khối lượng Quote Asset (USD) lớn hơn threshold.

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 
-import { getOrderBookDepth, getWhaleWalls } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
 import { runSignalDetection, takePeriodicSnapshot, SIGNAL_TYPE } from '../services/signalEngine';
 import { getSignals, exportSignals, clearAllSignals, clearOldSignals, onSignalAdded } from '../services/signalStore';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
@@ -134,9 +134,23 @@ function CVDPanel({
 
   const displayTotalVol = displayVol.buy + displayVol.sell;
   const buyPct = displayTotalVol > 0 ? (displayVol.buy / displayTotalVol * 100) : 50;
-  const sellPct = 100 - buyPct;
+  const [tfFootprintNodes, setTfFootprintNodes] = useState(null);
 
-  const activeVolNodes = activeStream?.volNodes ?? volNodes;
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchTfNodes = async () => {
+      const nodes = await getFootprintNodesForTimeframe('BTCUSDT', marketMode.toLowerCase(), cvdTf);
+      if (!isCancelled) {
+        setTfFootprintNodes(nodes);
+      }
+    };
+    fetchTfNodes();
+    return () => { isCancelled = true; };
+  }, [cvdTf, marketMode]);
+
+  const activeVolNodes = (tfFootprintNodes && tfFootprintNodes.length > 0)
+    ? tfFootprintNodes
+    : (activeStream?.volNodes ?? volNodes);
 
   const clusteredNodes = useMemo(() => {
     if (!activeVolNodes || activeVolNodes.length === 0) return [];
@@ -453,7 +467,7 @@ function CVDPanel({
       {/* Node Gap Config */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu Footprint Node được tích lũy theo thời gian thực từ sàn Binance ${marketMode} kể từ khi bạn mở phiên làm việc.`}>FOOTPRINT GAP (${marketMode} - REALTIME)</span>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu Footprint Node được đồng bộ theo khung thời gian ${cvdTf} từ sàn Binance ${marketMode}.`}>FOOTPRINT GAP (${marketMode} - ${cvdTf})</span>
           <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${nodeGap}</span>
         </div>
         <input
@@ -475,9 +489,9 @@ function CVDPanel({
       
       {/* Nodes Table Header Summary */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
-        <span>CỤM FOOTPRINT NODES ({marketMode})</span>
+        <span>CỤM FOOTPRINT NODES ({marketMode} - {cvdTf})</span>
         <span style={{ color: marketMode === 'FUTURES' ? '#a78bfa' : '#34d399', fontWeight: 600 }}>
-          TỔNG VOL: {fmtUsd(totalClusterVol)}
+          TỔNG VOL ({cvdTf}): {fmtUsd(totalClusterVol)}
         </span>
       </div>
 
