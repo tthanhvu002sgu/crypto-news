@@ -111,7 +111,9 @@ export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limi
         time: openTime,
         cvd: Math.round(cumulativeCvd),
         price: closePrice,
-        delta: Math.round(delta)
+        delta: Math.round(delta),
+        buyVol: Math.round(takerBuyVol),
+        sellVol: Math.round(takerSellVol),
       };
     });
   } catch (e) {
@@ -154,6 +156,8 @@ export const getIntradayCVD = async (symbol = 'BTCUSDT', market = 'futures') => 
         cvd: Math.round(cumulativeCvd),
         price: closePrice,
         delta: Math.round(delta),
+        buyVol: Math.round(takerBuyVol),
+        sellVol: Math.round(takerSellVol),
       };
     });
   } catch (e) {

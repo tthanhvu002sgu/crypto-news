@@ -53,6 +53,16 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-29] Đồng Bộ Volume Ratio Động Theo Nút Chọn Khung Thời Gian (1H, 24H, 7D, 30D) `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & TIMEFRAME SYNC
+- **Tóm tắt:** Nâng cấp **Volume Ratio** (Thanh tỷ lệ % Buy/Sell Volume) đồng bộ 100% theo nút chọn khung thời gian (`1H`, `24H`, `7D`, `30D`), đồng thời làm rõ ranh giới hiển thị giữa Volume Ratio tích lũy theo khung và Footprint Gap Nodes tích lũy theo phiên Realtime.
+- **Thay đổi chính:**
+  - **Bổ Sung Taker Volumes Cho REST API (`api.js`):** Trả về `buyVol` và `sellVol` trong `getHistoricalCVD` và `getIntradayCVD` từ Binance klines (`takerBuyQuoteVolume` vs `quoteVolume`).
+  - **Tính Toán Volume Ratio Động Theo Khung (`HftRadarTab.jsx`):** Khi chọn `24H`, `7D` hay `30D`, `Volume Ratio` tự động tính tổng Volume Mua/Bán ròng trong toàn bộ khoảng thời gian đó thay vì chỉ tính riêng cho phiên 1H.
+  - **Ghi Nhãn Rõ Ràng (`HftRadarTab.jsx`):** Đổi nhãn `Volume Ratio (FUTURES/SPOT - 1H/24H/7D/30D)` và `FOOTPRINT GAP (REALTIME)` kèm Tooltip giải thích trực quan.
+- **Files / areas chạm:** `src/services/api.js`, `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (2.37s); Volume Ratio tự động tính toán chính xác theo đúng khung thời gian đã chọn.
+
 ### [2026-07-29] Hiển Thị Thanh Tổng Volume Footprint & Trạng Thái Chờ Realtime Cho Tab SPOT/FUTURES `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & UI ENHANCEMENT
 - **Tóm tắt:** Bổ sung thanh Header hiển thị tổng khối lượng tích lũy `TỔNG VOL: $...` ngay trên bảng Footprint Nodes kèm nhãn phân biệt thị trường rõ ràng (`BIN-F PROXY` vs `BIN-S PROXY`), giúp người dùng thấy ngay sự khác biệt về quy mô giao dịch giữa Spot và Futures.

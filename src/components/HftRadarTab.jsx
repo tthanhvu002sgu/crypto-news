@@ -107,8 +107,33 @@ function CVDPanel({
   const activeCvdHistory7d = marketMode === 'SPOT' ? cvdHistory7dSpot : cvdHistory7d;
   const activeCvdHistory30d = marketMode === 'SPOT' ? cvdHistory30dSpot : cvdHistory30d;
 
-  const totalVol = activeBuyVolume + activeSellVolume;
-  const buyPct = totalVol > 0 ? (activeBuyVolume / totalVol * 100) : 50;
+  const displayVol = useMemo(() => {
+    if (cvdTf === '1H') {
+      return { buy: activeBuyVolume, sell: activeSellVolume };
+    }
+    const list = cvdTf === '24H' ? activeCvdHistory24h
+               : cvdTf === '7D' ? activeCvdHistory7d
+               : activeCvdHistory30d;
+    
+    if (!list || list.length === 0) {
+      return { buy: activeBuyVolume, sell: activeSellVolume };
+    }
+
+    let buySum = 0;
+    let sellSum = 0;
+    for (let i = 0; i < list.length; i++) {
+      buySum += (list[i].buyVol || 0);
+      sellSum += (list[i].sellVol || 0);
+    }
+    // Add current session realtime volume delta
+    buySum += activeBuyVolume;
+    sellSum += activeSellVolume;
+
+    return { buy: buySum, sell: sellSum };
+  }, [cvdTf, activeBuyVolume, activeSellVolume, activeCvdHistory24h, activeCvdHistory7d, activeCvdHistory30d]);
+
+  const displayTotalVol = displayVol.buy + displayVol.sell;
+  const buyPct = displayTotalVol > 0 ? (displayVol.buy / displayTotalVol * 100) : 50;
   const sellPct = 100 - buyPct;
 
   const activeVolNodes = activeStream?.volNodes ?? volNodes;
@@ -409,10 +434,10 @@ function CVDPanel({
       </div>
 
       {/* Volume Gauge */}
-      <div className="vol-gauge-container" title={`Tỷ lệ Buy/Sell Volume ròng tích lũy realtime từ Binance ${marketMode === 'FUTURES' ? 'Futures (Phái sinh)' : 'Spot (Cơ sở)'}`}>
+      <div className="vol-gauge-container" title={`Tỷ lệ Buy/Sell Volume ròng tích lũy trong khung ${cvdTf} từ Binance ${marketMode === 'FUTURES' ? 'Futures (Phái sinh)' : 'Spot (Cơ sở)'}`}>
         <div className="vol-gauge-labels font-mono">
           <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {buyPct.toFixed(1)}%</span>
-          <span className="text-slate-400" style={{ cursor: 'help' }} title={`Volume Ratio đo tỷ lệ Mua/Bán ròng realtime của thị trường Binance ${marketMode}`}>Volume Ratio ({marketMode})</span>
+          <span className="text-slate-400" style={{ cursor: 'help' }} title={`Volume Ratio đo tỷ lệ Mua/Bán ròng trong khung thời gian ${cvdTf} của thị trường Binance ${marketMode}`}>Volume Ratio ({marketMode} - {cvdTf})</span>
           <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {sellPct.toFixed(1)}%</span>
         </div>
         <div className="vol-gauge-bar">
@@ -420,15 +445,15 @@ function CVDPanel({
           <div className="vol-gauge-sell" style={{ width: `${sellPct}%` }} />
         </div>
         <div className="vol-gauge-values font-mono">
-          <span>{fmtUsd(activeBuyVolume)}</span>
-          <span>{fmtUsd(activeSellVolume)}</span>
+          <span>{fmtUsd(displayVol.buy)}</span>
+          <span>{fmtUsd(displayVol.sell)}</span>
         </div>
       </div>
 
       {/* Node Gap Config */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu thu thập từ sàn Binance ${marketMode}`}>FOOTPRINT GAP (${marketMode})</span>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu Footprint Node được tích lũy theo thời gian thực từ sàn Binance ${marketMode} kể từ khi bạn mở phiên làm việc.`}>FOOTPRINT GAP (${marketMode} - REALTIME)</span>
           <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${nodeGap}</span>
         </div>
         <input
