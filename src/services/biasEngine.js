@@ -9,6 +9,26 @@
  * 4. News & Risk Shock (20%): High Impact Calendar Risk (8%), Fear & Greed (7%), Long/Short Ratio (5%)
  */
 
+const MAX_SCORING_WEIGHT = 0.68;
+
+function toFiniteNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const parsed = Number.parseFloat(value.replace(/,/g, '').replace('%', ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clamp(value, min = -1, max = 1) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 export function calculateMarketBias(data, etfHistory = []) {
   if (!data) {
     return {
@@ -24,6 +44,7 @@ export function calculateMarketBias(data, etfHistory = []) {
 
   const signals = [];
   let availableWeight = 0;
+  let calendarRiskLevel = 'LOW';
 
   // ----------------------------------------------------
   // PILLAR 1: MARKET MICROSTRUCTURE (35%)
@@ -33,9 +54,10 @@ export function calculateMarketBias(data, etfHistory = []) {
   // 1A. 24h Futures CVD Ratio (15%)
   let cvdSignal = 0;
   let cvdStatus = 'No data';
-  if (Array.isArray(data.cvdHistory24h) && data.cvdHistory24h.length > 0 && data.btc?.volume > 0) {
-    const latestCvd = data.cvdHistory24h[data.cvdHistory24h.length - 1]?.cvd || 0;
-    const cvdRatio = latestCvd / data.btc.volume;
+  const latestCvd = toFiniteNumber(data.cvdHistory24h?.[data.cvdHistory24h.length - 1]?.cvd);
+  const btcVolume = toFiniteNumber(data.btc?.volume);
+  if (latestCvd != null && btcVolume != null && btcVolume > 0) {
+    const cvdRatio = latestCvd / btcVolume;
     
     if (cvdRatio > 0.08) { cvdSignal = 1.0; cvdStatus = 'Buy flow mạnh (+8% vol)'; }
     else if (cvdRatio > 0.03) { cvdSignal = 0.5; cvdStatus = 'Buy flow ưu thế (+3% vol)'; }
@@ -43,16 +65,17 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (cvdRatio > -0.08) { cvdSignal = -0.5; cvdStatus = 'Sell flow ưu thế (-3% vol)'; }
     else { cvdSignal = -1.0; cvdStatus = 'Sell flow áp đảo (-8% vol)'; }
 
-    microScoreSum += cvdSignal * 0.15;
-    availableWeight += 0.15;
-    signals.push({ name: '24h Futures CVD', weight: '15%', score: cvdSignal * 15, status: cvdStatus, pillar: 'microstructure' });
+    cvdSignal = clamp(Math.tanh(cvdRatio / 0.06));
+    microScoreSum += cvdSignal * 0.12;
+    availableWeight += 0.12;
+    signals.push({ name: '24h Futures CVD', weight: '12%', score: cvdSignal * 12, status: cvdStatus, pillar: 'microstructure' });
   }
 
   // 1B. Funding Rate & Leverage Heat (10%)
   let frSignal = 0;
   let frStatus = 'No data';
-  if (data.fundingRate != null) {
-    const fr = parseFloat(data.fundingRate);
+  const fr = toFiniteNumber(data.fundingRate);
+  if (fr != null) {
     const frPct = (fr * 100).toFixed(3) + '%';
     
     if (fr > 0.0005) { frSignal = -0.8; frStatus = `Overheated Longs (${frPct})`; }
@@ -62,17 +85,17 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (fr > -0.0002) { frSignal = -0.4; frStatus = `Bearish nhẹ (${frPct})`; }
     else { frSignal = 0.8; frStatus = `Extreme Shorts Squeeze potential (${frPct})`; }
 
-    microScoreSum += frSignal * 0.10;
-    availableWeight += 0.10;
-    signals.push({ name: 'Funding Rate', weight: '10%', score: frSignal * 10, status: frStatus, pillar: 'microstructure' });
+    microScoreSum += frSignal * 0.07;
+    availableWeight += 0.07;
+    signals.push({ name: 'Funding Rate', weight: '7%', score: frSignal * 7, status: frStatus, pillar: 'microstructure' });
   }
 
   // 1C. Open Interest Surge + Price Action (10%)
   let oiSignal = 0;
   let oiStatus = 'No data';
-  if (data.openInterest != null && Array.isArray(data.oiHistory) && data.oiHistory.length > 0) {
-    const currentOi = parseFloat(data.openInterest);
-    const prevOi = parseFloat(data.oiHistory[0]?.sumOpenInterest || currentOi);
+  const currentOi = toFiniteNumber(data.openInterest);
+  const prevOi = toFiniteNumber(data.oiHistory?.[0]?.sumOpenInterest);
+  if (currentOi != null && prevOi != null && prevOi > 0) {
     const oiChangePct = prevOi > 0 ? ((currentOi - prevOi) / prevOi) * 100 : 0;
     const priceChange = data.btc?.change || 0;
 
@@ -83,9 +106,9 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (oiChangePct < -5) { oiSignal = -0.2; oiStatus = `Deleveraging OI ${oiChangePct.toFixed(1)}%`; }
     else { oiSignal = 0.0; oiStatus = `OI ổn định (${oiChangePct >= 0 ? '+' : ''}${oiChangePct.toFixed(1)}%)`; }
 
-    microScoreSum += oiSignal * 0.10;
-    availableWeight += 0.10;
-    signals.push({ name: 'Open Interest & Price', weight: '10%', score: oiSignal * 10, status: oiStatus, pillar: 'microstructure' });
+    microScoreSum += oiSignal * 0.07;
+    availableWeight += 0.07;
+    signals.push({ name: 'Open Interest & Price', weight: '7%', score: oiSignal * 7, status: oiStatus, pillar: 'microstructure' });
   }
 
   // ----------------------------------------------------
@@ -96,8 +119,8 @@ export function calculateMarketBias(data, etfHistory = []) {
   // 2A. MVRV Ratio (12%)
   let mvrvSignal = 0;
   let mvrvStatus = 'No data';
-  if (data.onChainMetrics?.mvrv != null) {
-    const mvrv = parseFloat(data.onChainMetrics.mvrv);
+  const mvrv = toFiniteNumber(data.onChainMetrics?.mvrv);
+  if (mvrv != null) {
     
     if (mvrv < 1.0) { mvrvSignal = 1.0; mvrvStatus = `MVRV ${mvrv} (Rất rẻ / Vùng đáy)`; }
     else if (mvrv < 1.4) { mvrvSignal = 0.7; mvrvStatus = `MVRV ${mvrv} (Vùng tích lũy tốt)`; }
@@ -105,6 +128,7 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (mvrv < 2.8) { mvrvSignal = -0.3; mvrvStatus = `MVRV ${mvrv} (Giá hơi cao)`; }
     else { mvrvSignal = -1.0; mvrvStatus = `MVRV ${mvrv} (Vùng giá quá nóng / Quá định giá)`; }
 
+    mvrvSignal = clamp(-Math.tanh((mvrv - 2.1) / 0.7));
     onChainScoreSum += mvrvSignal * 0.12;
     availableWeight += 0.12;
     signals.push({ name: 'MVRV Ratio', weight: '12%', score: mvrvSignal * 12, status: mvrvStatus, pillar: 'onChain' });
@@ -114,9 +138,8 @@ export function calculateMarketBias(data, etfHistory = []) {
   let addrSignal = 0;
   let addrStatus = 'No data';
   if (data.onChainMetrics?.activeAddresses) {
-    const rawAddr = String(data.onChainMetrics.activeAddresses).replace(/,/g, '');
-    const addrs = parseInt(rawAddr, 10);
-    if (!isNaN(addrs)) {
+    const addrs = toFiniteNumber(data.onChainMetrics.activeAddresses);
+    if (addrs != null && addrs > 0) {
       if (addrs > 1000000) { addrSignal = 1.0; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng cực sôi động)`; }
       else if (addrs > 850000) { addrSignal = 0.5; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng hoạt động tốt)`; }
       else if (addrs > 700000) { addrSignal = 0.0; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng bình thường)`; }
@@ -141,9 +164,7 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (priceToCostRatio < 1.80) { miningSignal = 0.0; miningStatus = `Lợi nhuận thợ đào bình thường`; }
     else { miningSignal = -0.5; miningStatus = `Lợi nhuận thợ đào rất cao (Rủi ro xả)`; }
 
-    onChainScoreSum += miningSignal * 0.06;
-    availableWeight += 0.06;
-    signals.push({ name: 'Mining Cost Floor', weight: '6%', score: miningSignal * 6, status: miningStatus, pillar: 'onChain' });
+    signals.push({ name: 'Mining Cost Floor', weight: 'Context', score: 0, status: miningStatus, pillar: 'onChain' });
   }
 
   // ----------------------------------------------------
@@ -155,8 +176,9 @@ export function calculateMarketBias(data, etfHistory = []) {
   let etfSignal = 0;
   let etfStatus = 'No data';
   if (Array.isArray(etfHistory) && etfHistory.length > 0) {
-    const last7 = etfHistory.slice(-7);
-    const sum7d = last7.reduce((acc, curr) => acc + (parseFloat(curr.flow) || 0), 0);
+    const allFlows = etfHistory.map((item) => toFiniteNumber(item.flow)).filter((flow) => flow != null);
+    const last7 = allFlows.slice(-7);
+    const sum7d = last7.reduce((acc, flow) => acc + flow, 0);
     const flowStr = `${sum7d >= 0 ? '+' : ''}$${sum7d.toFixed(1)}M`;
 
     if (sum7d > 800) { etfSignal = 1.0; etfStatus = `ETF Flow 7D: ${flowStr} (Gom rất mạnh)`; }
@@ -164,6 +186,12 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (sum7d > -250) { etfSignal = 0.0; etfStatus = `ETF Flow 7D: ${flowStr} (Đi ngang)`; }
     else if (sum7d > -800) { etfSignal = -0.5; etfStatus = `ETF Flow 7D: ${flowStr} (Rút nhẹ)`; }
     else { etfSignal = -1.0; etfStatus = `ETF Flow 7D: ${flowStr} (Rút rất mạnh)`; }
+
+    const typicalDailyFlow = median(allFlows.map((flow) => Math.abs(flow)));
+    if (typicalDailyFlow != null && last7.length > 0) {
+      etfSignal = clamp(Math.tanh(sum7d / Math.max(250, typicalDailyFlow * 3)));
+      etfStatus = `ETF Flow 7D: ${flowStr}`;
+    }
 
     instScoreSum += etfSignal * 0.12;
     availableWeight += 0.12;
@@ -175,12 +203,10 @@ export function calculateMarketBias(data, etfHistory = []) {
   let stbleStatus = 'No data';
   if (data.stablecoins?.total > 0) {
     const totalBillion = (data.stablecoins.total / 1e9).toFixed(1);
-    stbleSignal = 0.3;
+    stbleSignal = 0;
     stbleStatus = `Dry Powder: $${totalBillion}B USDT+USDC`;
 
-    instScoreSum += stbleSignal * 0.08;
-    availableWeight += 0.08;
-    signals.push({ name: 'Stablecoin Liquidity', weight: '8%', score: stbleSignal * 8, status: stbleStatus, pillar: 'institutional' });
+    signals.push({ name: 'Stablecoin Liquidity', weight: 'Context', score: 0, status: stbleStatus, pillar: 'institutional' });
   }
 
   // ----------------------------------------------------
@@ -190,7 +216,7 @@ export function calculateMarketBias(data, etfHistory = []) {
   const upcomingEvents = [];
 
   // 4A. Economic Calendar & High Impact News (8%)
-  let newsSignal = 0.3;
+  let newsSignal = 0;
   let newsStatus = 'Lịch sự kiện bình ổn';
 
   if (Array.isArray(data.news)) {
@@ -206,7 +232,8 @@ export function calculateMarketBias(data, etfHistory = []) {
       const eventTime = new Date(firstEvent.time);
       const hoursLeft = Math.max(0, Math.round((eventTime.getTime() - now) / (1000 * 60 * 60)));
       
-      newsSignal = -0.4;
+      calendarRiskLevel = 'HIGH';
+      newsSignal = 0;
       newsStatus = `⚠️ ${firstEvent.title.replace('[LỊCH SỰ KIỆN]', '').trim()} trong ~${hoursLeft}h nữa`;
       
       highImpactCalendarEvents.forEach(e => {
@@ -219,15 +246,13 @@ export function calculateMarketBias(data, etfHistory = []) {
     }
   }
 
-  newsRiskScoreSum += newsSignal * 0.08;
-  availableWeight += 0.08;
-  signals.push({ name: 'Calendar Risk Event', weight: '8%', score: newsSignal * 8, status: newsStatus, pillar: 'newsRisk' });
+  signals.push({ name: 'Calendar Risk Event', weight: 'Risk flag', score: 0, status: newsStatus, pillar: 'newsRisk' });
 
   // 4B. Fear & Greed Index (7%)
   let fngSignal = 0;
   let fngStatus = 'No data';
-  if (data.fngData?.value != null) {
-    const fng = parseInt(data.fngData.value, 10);
+  const fng = toFiniteNumber(data.fngData?.value);
+  if (fng != null) {
     
     if (fng <= 20) { fngSignal = 1.0; fngStatus = `Fear & Greed ${fng} (Extreme Fear -> Mua tốt)`; }
     else if (fng <= 35) { fngSignal = 0.5; fngStatus = `Fear & Greed ${fng} (Fear)`; }
@@ -235,6 +260,7 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (fng <= 80) { fngSignal = -0.5; fngStatus = `Fear & Greed ${fng} (Greed)`; }
     else { fngSignal = -1.0; fngStatus = `Fear & Greed ${fng} (Extreme Greed -> Quá nóng)`; }
 
+    fngSignal = clamp((50 - fng) / 30);
     newsRiskScoreSum += fngSignal * 0.07;
     availableWeight += 0.07;
     signals.push({ name: 'Fear & Greed Index', weight: '7%', score: fngSignal * 7, status: fngStatus, pillar: 'newsRisk' });
@@ -243,8 +269,8 @@ export function calculateMarketBias(data, etfHistory = []) {
   // 4C. Binance Futures Long/Short Account Ratio (5%)
   let lsSignal = 0;
   let lsStatus = 'No data';
-  if (Array.isArray(data.lsHistory) && data.lsHistory.length > 0) {
-    const latestLs = parseFloat(data.lsHistory[data.lsHistory.length - 1]?.longShortRatio || 1);
+  const latestLs = toFiniteNumber(data.lsHistory?.[data.lsHistory.length - 1]?.longShortRatio);
+  if (latestLs != null && latestLs > 0) {
     
     if (latestLs > 2.5) { lsSignal = -0.8; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Quá nhiều Longs)`; }
     else if (latestLs > 1.8) { lsSignal = -0.3; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng về Long)`; }
@@ -252,9 +278,10 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (latestLs <= 0.8) { lsSignal = 0.6; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng Short -> Squeeze)`; }
     else { lsSignal = 0.0; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Cân bằng)`; }
 
-    newsRiskScoreSum += lsSignal * 0.05;
-    availableWeight += 0.05;
-    signals.push({ name: 'Long/Short Ratio', weight: '5%', score: lsSignal * 5, status: lsStatus, pillar: 'newsRisk' });
+    lsSignal = clamp((1 - latestLs) / 0.9);
+    newsRiskScoreSum += lsSignal * 0.04;
+    availableWeight += 0.04;
+    signals.push({ name: 'Long/Short Ratio', weight: '4%', score: lsSignal * 4, status: lsStatus, pillar: 'newsRisk' });
   }
 
   // ----------------------------------------------------
@@ -262,14 +289,20 @@ export function calculateMarketBias(data, etfHistory = []) {
   // ----------------------------------------------------
   const totalWeightedRaw = microScoreSum + onChainScoreSum + instScoreSum + newsRiskScoreSum;
   
-  const finalScore = availableWeight > 0 ? Math.round((totalWeightedRaw / availableWeight) * 100) : 0;
-  const clampedScore = Math.max(-100, Math.min(100, finalScore));
+  const directionalScore = availableWeight > 0 ? (totalWeightedRaw / availableWeight) * 100 : 0;
+  const calendarRiskPenalty = calendarRiskLevel === 'HIGH' ? 0.20 : 0;
+  const confidencePct = Math.round(clamp(availableWeight / MAX_SCORING_WEIGHT, 0, 1) * (1 - calendarRiskPenalty) * 100);
+  const clampedScore = clamp(Math.round(directionalScore * (confidencePct / 100)), -100, 100);
 
   let label = 'NEUTRAL';
   let color = 'var(--text-slate-400)';
   let bgGradient = 'rgba(148, 163, 184, 0.15)';
 
-  if (clampedScore >= 60) {
+  if (confidencePct < 60) {
+    label = 'LOW CONFIDENCE';
+    color = 'var(--text-slate-400)';
+    bgGradient = 'rgba(148, 163, 184, 0.15)';
+  } else if (clampedScore >= 60) {
     label = 'STRONG BULL';
     color = 'var(--color-emerald-400)';
     bgGradient = 'rgba(16, 185, 129, 0.15)';
@@ -291,19 +324,18 @@ export function calculateMarketBias(data, etfHistory = []) {
     bgGradient = 'rgba(148, 163, 184, 0.12)';
   }
 
-  const confidencePct = Math.round(availableWeight * 100);
-
   return {
     score: clampedScore,
     label,
     color,
     bgGradient,
     confidence: confidencePct,
+    calendarRisk: calendarRiskLevel,
     pillars: {
-      microstructure: Math.round((microScoreSum / 0.35) * 100),
-      onChain: Math.round((onChainScoreSum / 0.25) * 100),
-      institutional: Math.round((instScoreSum / 0.20) * 100),
-      newsRisk: Math.round((newsRiskScoreSum / 0.20) * 100),
+      microstructure: Math.round((microScoreSum / 0.26) * 100),
+      onChain: Math.round((onChainScoreSum / 0.19) * 100),
+      institutional: Math.round((instScoreSum / 0.12) * 100),
+      newsRisk: Math.round((newsRiskScoreSum / 0.11) * 100),
     },
     signals,
     upcomingEvents,
