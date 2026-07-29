@@ -346,11 +346,10 @@ function CVDPanel({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {/* Market Selector Tabs (FUTURES vs SPOT) */}
-          <div className="etf-timeframe-toggle font-mono" style={{ display: 'inline-flex', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '6px', padding: '2px', border: '1px solid var(--border-slate-700, rgba(255, 255, 255, 0.08))' }}>
+          <div className="etf-timeframe-toggle font-mono">
             <button
               onClick={() => { setMarketMode('FUTURES'); localStorage.setItem('hft_cvd_market', 'FUTURES'); }}
               className={`toggle-btn ${marketMode === 'FUTURES' ? 'active' : ''}`}
-              style={{ padding: '2px 10px', fontSize: '0.68rem', fontWeight: marketMode === 'FUTURES' ? '700' : '500', borderRadius: '4px' }}
               title="Xem chỉ số CVD Thị trường Phái sinh (Binance Futures)"
             >
               FUTURES
@@ -358,7 +357,6 @@ function CVDPanel({
             <button
               onClick={() => { setMarketMode('SPOT'); localStorage.setItem('hft_cvd_market', 'SPOT'); }}
               className={`toggle-btn ${marketMode === 'SPOT' ? 'active' : ''}`}
-              style={{ padding: '2px 10px', fontSize: '0.68rem', fontWeight: marketMode === 'SPOT' ? '700' : '500', borderRadius: '4px' }}
               title="Xem chỉ số CVD Thị trường Cơ sở (Binance Spot)"
             >
               SPOT
@@ -1888,7 +1886,10 @@ const MemoSignalLogPanel = React.memo(SignalLogPanel);
 const MemoMoveTrackerPanel = React.memo(MoveTrackerPanel);
 
 export default function HftRadarTab({
-  cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, whaleTrades, theme, volNodes,
+  cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, futuresStream, spotStream,
+  cvdHistory24h, cvdHistory7d, cvdHistory30d,
+  cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
+  cvdStatus, livePrice, whaleTrades, theme, volNodes,
   // Additional props for signal engine context
   data, fundingRate, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice,
 }) {
@@ -2093,9 +2094,14 @@ export default function HftRadarTab({
             buyVolume={buyVolume}
             sellVolume={sellVolume}
             cvdHistory={cvdHistory}
+            futuresStream={futuresStream}
+            spotStream={spotStream}
             cvdHistory24h={cvdHistory24h}
             cvdHistory7d={cvdHistory7d}
             cvdHistory30d={cvdHistory30d}
+            cvdHistory24hSpot={cvdHistory24hSpot}
+            cvdHistory7dSpot={cvdHistory7dSpot}
+            cvdHistory30dSpot={cvdHistory30dSpot}
             cvdStatus={cvdStatus}
             livePrice={livePrice}
             volNodes={volNodes}

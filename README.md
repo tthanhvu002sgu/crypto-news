@@ -53,6 +53,15 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-29] Sửa Lỗi Truyền Props Spot CVD & Đồng Bộ Style Tabs FUTURES/SPOT `(FIX)`
+- **Lane / Mode:** FIX & DESIGN MATCH
+- **Tóm tắt:** Sửa lỗi thiếu truyền props `spotStream` và các mảng lịch sử Spot (`cvd24hSpot`, `cvd7dSpot`, `cvd30dSpot`) xuống `MemoCVDPanel` làm cho tab Spot bị đứng dữ liệu, đồng thời đồng bộ 100% style tab FUTURES/SPOT với các nút Timeframe (`1H`, `24H`, `7D`, `30D`).
+- **Thay đổi chính:**
+  - **Sửa Lỗi Props Propagation (`HftRadarTab.jsx`):** Khai báo và truyền đầy đủ `futuresStream`, `spotStream`, `cvdHistory24hSpot`, `cvdHistory7dSpot`, `cvdHistory30dSpot` từ `HftRadarTab` xuống `<MemoCVDPanel>`.
+  - **Đồng Bộ Visual Style Tab (`HftRadarTab.jsx`):** Loại bỏ inline style đè lệch kích thước, áp dụng chuẩn CSS class `.etf-timeframe-toggle .toggle-btn` giúp tab FUTURES/SPOT match hoàn hảo 100% với khung Timeframe kế bên.
+- **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (1.59s); tab Spot hiển thị dữ liệu khác biệt chính xác so với Futures, style tab khớp 100%.
+
 ### [2026-07-29] Thiết kế Dual-Market CVD Selector (FUTURES vs SPOT) chuẩn Hallmark UI `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & DESIGN
 - **Tóm tắt:** Bổ sung tính năng phân tách và chuyển đổi tức thì giữa 2 thị trường CVD: **FUTURES (Phái sinh)** vs **SPOT (Cơ sở)**. Áp dụng chuẩn thiết kế Minimalist / Hallmark UI với bộ Segmented Control Tabs, Badge linh hoạt (`BIN-F PROXY` vs `BIN-S PROXY`) và lưu vết lựa chọn vào `localStorage`.
