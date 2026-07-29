@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getDailyCVD } from './api';
+import { getDailyCVD, getHistoricalFootprintNodes } from './api';
 import { updateBrowserChrome } from '../utils/browserChrome';
 
 // ─── Stream URLs ──────────────────────────────────────────────────────────────
@@ -342,12 +342,14 @@ export function useCVDStream() {
       }
     }, 1500);
 
-    // Initial baseline fetch for both Futures and Spot
+    // Initial baseline fetch for both Futures and Spot (CVD + 1000m Historical Footprint Nodes)
     Promise.all([
       getDailyCVD('BTCUSDT', 'futures'),
       getDailyCVD('BTCUSDT', 'spot'),
+      getHistoricalFootprintNodes('BTCUSDT', 'futures', 1000),
+      getHistoricalFootprintNodes('BTCUSDT', 'spot', 1000),
     ])
-      .then(([initFut, initSpot]) => {
+      .then(([initFut, initSpot, histNodesFut, histNodesSpot]) => {
         if (!mountedRef.current) return;
         clearTimeout(initSafetyTimer);
 
@@ -359,15 +361,44 @@ export function useCVDStream() {
         buyRefSpot.current = initSpot.initialBuyVol;
         sellRefSpot.current = initSpot.initialSellVol;
 
+        // Hydrate historical Footprint Nodes (1000 minutes ~ 16.6 hours)
+        histNodesFut.forEach((v, p) => {
+          let node = volNodeRefFutures.current.get(p);
+          if (!node) {
+            node = { buy: 0, sell: 0 };
+            volNodeRefFutures.current.set(p, node);
+          } else {
+            node.buy = Math.max(node.buy, v.buy);
+            node.sell = Math.max(node.sell, v.sell);
+          }
+        });
+
+        histNodesSpot.forEach((v, p) => {
+          let node = volNodeRefSpot.current.get(p);
+          if (!node) {
+            node = { buy: 0, sell: 0 };
+            volNodeRefSpot.current.set(p, node);
+          } else {
+            node.buy = Math.max(node.buy, v.buy);
+            node.sell = Math.max(node.sell, v.sell);
+          }
+        });
+
         isFetchingInitialRef.current = false;
 
         setCvdFutures(cvdRefFutures.current);
         setBuyVolFutures(buyRefFutures.current);
         setSellVolFutures(sellRefFutures.current);
+        setVolNodesFutures(
+          Array.from(volNodeRefFutures.current.entries()).map(([p, v]) => ({ price: p, ...v }))
+        );
 
         setCvdSpot(cvdRefSpot.current);
         setBuyVolSpot(buyRefSpot.current);
         setSellVolSpot(sellRefSpot.current);
+        setVolNodesSpot(
+          Array.from(volNodeRefSpot.current.entries()).map(([p, v]) => ({ price: p, ...v }))
+        );
       })
       .catch((err) => {
         if (!mountedRef.current) return;

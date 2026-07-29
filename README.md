@@ -53,6 +53,15 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-29] Tự Động Tái Tạo Footprint Nodes Lịch Sử (1000 Phút ~ 16.6 Giờ) Cho Cả Spot & Futures `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & FOOTPRINT HYDRATION
+- **Tóm tắt:** Giải quyết triệt để vấn đề mất dữ liệu Footprint Nodes khi đóng tab hoặc mới mở trang Web: Tự động tải và gộp 1000 nến 1 phút gần nhất (~16.6 giờ) từ Binance REST API cho cả 2 thị trường **Spot** và **Futures**, tái tạo ngay lập tức bảng Footprint Vùng giá đầy đủ 100% không phải chờ WebSocket tích lũy từ 0.
+- **Thay đổi chính:**
+  - **Hàm Reconstruct Footprint Nodes (`api.js`):** Xây dựng `getHistoricalFootprintNodes` truy vấn 1000 nến 1m (`/klines`), gộp Taker Buy / Taker Sell vào các nấc giá (Price Bins).
+  - **Tự Động Nạp Khi Khởi Động (`websocket.js`):** Trong `useCVDStream()`, nạp song song dữ liệu Footprint 1000m cho cả Spot và Futures ngay khi mount, sau đó nối tiếp luồng khớp lệnh WebSocket realtime.
+- **Files / areas chạm:** `src/services/api.js`, `src/services/websocket.js`, `README.md`
+- **Verify:** `npm run build` pass (1.66s); mở trang hoặc đóng tab F5 lại lập tức có đầy đủ bảng Footprint Nodes 16.6h cho cả Spot & Futures.
+
 ### [2026-07-29] Đồng Bộ Volume Ratio Động Theo Nút Chọn Khung Thời Gian (1H, 24H, 7D, 30D) `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & TIMEFRAME SYNC
 - **Tóm tắt:** Nâng cấp **Volume Ratio** (Thanh tỷ lệ % Buy/Sell Volume) đồng bộ 100% theo nút chọn khung thời gian (`1H`, `24H`, `7D`, `30D`), đồng thời làm rõ ranh giới hiển thị giữa Volume Ratio tích lũy theo khung và Footprint Gap Nodes tích lũy theo phiên Realtime.

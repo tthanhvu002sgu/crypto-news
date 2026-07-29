@@ -168,6 +168,49 @@ export const getIntradayCVD = async (symbol = 'BTCUSDT', market = 'futures') => 
 
 
 /**
+ * Reconstruct Footprint Nodes for the past ~16.6h (1000 minute candles) from Binance REST API.
+ * Solves the problem of tab closure or page refresh: immediately populates full price bin Footprints!
+ */
+export const getHistoricalFootprintNodes = async (symbol = 'BTCUSDT', market = 'futures', limit = 1000) => {
+  try {
+    const baseUrl = market === 'spot'
+      ? 'https://api.binance.com/api/v3/klines'
+      : 'https://fapi.binance.com/fapi/v1/klines';
+
+    const res = await axios.get(baseUrl, {
+      params: { symbol, interval: '1m', limit },
+    });
+
+    const nodeMap = new Map();
+    res.data.forEach(k => {
+      const high = parseFloat(k[2]);
+      const low = parseFloat(k[3]);
+      const close = parseFloat(k[4]);
+      const quoteVol = parseFloat(k[7]);
+      const takerBuyVol = parseFloat(k[10]);
+      const takerSellVol = Math.max(0, quoteVol - takerBuyVol);
+
+      const price = (high + low + close) / 3;
+      const binPrice = Math.floor(price / 10) * 10;
+
+      let node = nodeMap.get(binPrice);
+      if (!node) {
+        node = { buy: 0, sell: 0 };
+        nodeMap.set(binPrice, node);
+      }
+      node.buy += takerBuyVol;
+      node.sell += takerSellVol;
+    });
+
+    return nodeMap;
+  } catch (e) {
+    console.error(`[API] Historical Footprint Nodes (${market}):`, e.message);
+    return new Map();
+  }
+};
+
+
+/**
  * Lọc nến 1 phút có khối lượng Quote Asset (USD) lớn hơn threshold.
  * Tính toán Whale CVD dựa trên Taker Buy / Taker Sell của các nến đột biến này.
  */
