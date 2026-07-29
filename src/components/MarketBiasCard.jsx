@@ -2,10 +2,12 @@
 import React, { useState } from 'react';
 import { calculateMarketBias } from '../services/biasEngine';
 import ModuleMenu from './ModuleMenu';
-import { ChevronDown, ChevronUp, AlertTriangle, Activity, Gauge } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertTriangle, Activity, Gauge, Filter, X } from 'lucide-react';
 
 export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias' }) {
   const [expanded, setExpanded] = useState(false);
+  const [activePillarFilter, setActivePillarFilter] = useState(null); // null | 'microstructure' | 'onChain' | 'institutional' | 'newsRisk'
+
   const bias = calculateMarketBias(data, etfHistory);
 
   const formatPillarScore = (val) => `${val >= 0 ? '+' : ''}${val}`;
@@ -60,6 +62,17 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
     },
   ];
 
+  const handlePillarClick = (pillarKey) => {
+    if (activePillarFilter === pillarKey) {
+      setActivePillarFilter(null);
+    } else {
+      setActivePillarFilter(pillarKey);
+      setExpanded(true); // Auto expand drawer when selecting a pillar
+    }
+  };
+
+  const activePillarObj = pillarsList.find(p => p.key === activePillarFilter);
+
   return (
     <div className="glass-panel bias-card-container hallmark-bias-card">
       {/* ── Top Header Toolbar ────────────────────────────────────────── */}
@@ -75,6 +88,18 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         </div>
 
         <div className="bias-header-right">
+          {activePillarFilter && (
+            <button
+              type="button"
+              className="bias-clear-filter-btn font-mono"
+              onClick={() => setActivePillarFilter(null)}
+              title="Bỏ lọc trụ cột"
+            >
+              <X size={12} />
+              <span>BỎ LỌC TRỤ CỘT</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="bias-toggle-btn font-mono"
@@ -109,7 +134,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
 
           {/* Right: Technical Summary Description */}
           <div className="bias-description font-mono">
-            Định lượng tổng hợp từ 4 trụ cột chính: Vi cấu trúc phái sinh, Dữ liệu On-chain, Dòng tiền định chế ETF &amp; Rủi ro tin tức vĩ mô.
+            Định lượng tổng hợp từ 4 trụ cột chính: Vi cấu trúc phái sinh, Dữ liệu On-chain, Dòng tiền định chế ETF &amp; Rủi ro tin tức vĩ mô. Click vào trụ cột để lọc tín hiệu.
           </div>
         </div>
 
@@ -146,19 +171,25 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         </div>
       </div>
 
-      {/* ── 4 Pillars Bento Grid ──────────────────────────────────────── */}
+      {/* ── 4 Pillars Bento Grid (Interactive Filter Buttons) ────────────── */}
       <div className="bias-pillars-grid">
         {pillarsList.map((pillar) => {
           const status = getPillarStatus(pillar.score);
           const fillRatio = Math.min(100, Math.max(0, ((pillar.score + pillar.maxPts) / (pillar.maxPts * 2)) * 100));
+          const isSelected = activePillarFilter === pillar.key;
 
           return (
             <div
               key={pillar.key}
-              className="bias-pillar-card"
+              className={`bias-pillar-card ${isSelected ? 'is-active-pillar' : ''}`}
+              onClick={() => handlePillarClick(pillar.key)}
               style={{
-                borderColor: status.border,
+                borderColor: isSelected ? status.color : status.border,
+                boxShadow: isSelected ? `0 0 14px ${status.color}35` : 'none',
+                transform: isSelected ? 'translateY(-2px)' : 'none',
+                cursor: 'pointer',
               }}
+              title="Click để lọc 10+ tín hiệu định lượng bên dưới"
             >
               <div>
                 {/* Header: Code + Name + Score */}
@@ -200,7 +231,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
                       borderColor: status.border,
                     }}
                   >
-                    {status.label}
+                    {isSelected ? 'ĐANG LỌC 🎯' : status.label}
                   </span>
                 </div>
               </div>
@@ -225,17 +256,41 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
       {/* ── Expandable Breakdown Drawer ───────────────────────────────── */}
       {expanded && (
         <div className="bias-breakdown-drawer">
-          <div className="drawer-title font-mono">
-            BẢNG CHI TIẾT 10+ TÍN HIỆU ĐỊNH LƯỢNG THÀNH PHẦN
+          <div className="drawer-header-row font-mono">
+            <div className="drawer-title">
+              BẢNG CHI TIẾT 10+ TÍN HIỆU ĐỊNH LƯỢNG THÀNH PHẦN
+            </div>
+            {activePillarObj ? (
+              <div className="drawer-filter-status">
+                <Filter size={12} className="text-emerald-400" />
+                <span>Đang lọc theo trụ cột: <strong>{activePillarObj.code} - {activePillarObj.title}</strong></span>
+                <button
+                  type="button"
+                  className="btn-reset-filter"
+                  onClick={() => setActivePillarFilter(null)}
+                >
+                  (Hiện tất cả)
+                </button>
+              </div>
+            ) : (
+              <div className="drawer-filter-hint">
+                💡 Click vào 1 trong 4 trụ cột trên để làm nổi bật nhóm tín hiệu tương ứng
+              </div>
+            )}
           </div>
 
           <div className="signals-grid">
             {bias.signals.map((sig, idx) => {
               const isPos = sig.score >= 0;
               const color = isPos ? '#34d399' : '#f87171';
+              const isDimmed = activePillarFilter !== null && sig.pillar !== activePillarFilter;
+              const isHighlighted = activePillarFilter !== null && sig.pillar === activePillarFilter;
 
               return (
-                <div key={idx} className="signal-card font-mono">
+                <div
+                  key={idx}
+                  className={`signal-card font-mono ${isDimmed ? 'is-dimmed' : ''} ${isHighlighted ? 'is-highlighted' : ''}`}
+                >
                   <div className="signal-card-top">
                     <span className="signal-name">{sig.name}</span>
                     <span className="signal-score-badge" style={{ color }}>
