@@ -139,12 +139,28 @@ export default function EconomicCalendarPanel({ theme }) {
         >
           {filteredWeekDays.map((day) => {
             const isToday = day.isToday;
+            const isPast = day.isPast;
+            const dayBackground = isToday
+              ? 'rgba(16,185,129,0.04)'
+              : isPast
+                ? 'rgba(100,116,139,0.08)'
+                : 'var(--bg-slate-950)';
+            const dayBorder = isToday
+              ? '1px solid var(--color-emerald-500)'
+              : isPast
+                ? '1px solid rgba(148,163,184,0.18)'
+                : '1px solid var(--border-panel)';
+            const primaryTextColor = isToday
+              ? 'var(--color-emerald-400)'
+              : isPast
+                ? 'var(--text-slate-500)'
+                : 'var(--text-contrast)';
             return (
               <div
                 key={day.dayIndex}
                 style={{
-                  background: isToday ? 'rgba(16,185,129,0.04)' : 'var(--bg-slate-950)',
-                  border: isToday ? '1px solid var(--color-emerald-500)' : '1px solid var(--border-panel)',
+                  background: dayBackground,
+                  border: dayBorder,
                   borderRadius: '6px',
                   padding: '6px 7px',
                   display: 'flex',
@@ -156,10 +172,10 @@ export default function EconomicCalendarPanel({ theme }) {
               >
                 {/* Day Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '4px' }}>
-                  <span className="font-mono" style={{ fontWeight: 700, fontSize: '0.72rem', color: isToday ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
+                  <span className="font-mono" style={{ fontWeight: 700, fontSize: '0.72rem', color: primaryTextColor }}>
                     {day.nameVN.toUpperCase()}
                   </span>
-                  <span className="font-mono" style={{ fontSize: '0.6rem', color: 'var(--text-slate-400)' }}>
+                  <span className="font-mono" style={{ fontSize: '0.6rem', color: isPast ? 'var(--text-slate-600)' : 'var(--text-slate-400)' }}>
                     {day.dateStr}
                   </span>
                 </div>
@@ -179,14 +195,15 @@ export default function EconomicCalendarPanel({ theme }) {
                   ) : (
                     day.events.map((event) => {
                       const impact = getImpact(event.impact);
+                      const hasActual = event.actual !== '' && event.actual != null;
 
                       return (
                         <div
                           key={event.id}
                           onClick={() => setSelectedEvent(event)}
                           style={{
-                            background: 'rgba(255,255,255,0.02)',
-                            border: '1px solid rgba(255,255,255,0.06)',
+                            background: isPast ? 'rgba(148,163,184,0.035)' : 'rgba(255,255,255,0.02)',
+                            border: isPast ? '1px solid rgba(148,163,184,0.08)' : '1px solid rgba(255,255,255,0.06)',
                             borderRadius: '4px',
                             padding: '5px 6px',
                             cursor: 'pointer',
@@ -196,17 +213,18 @@ export default function EconomicCalendarPanel({ theme }) {
                             gap: '3px',
                           }}
                           onMouseEnter={(e) => {
+                            if (isPast) return;
                             e.currentTarget.style.background = 'rgba(16,185,129,0.06)';
                             e.currentTarget.style.borderColor = 'rgba(16,185,129,0.25)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                            e.currentTarget.style.background = isPast ? 'rgba(148,163,184,0.035)' : 'rgba(255,255,255,0.02)';
+                            e.currentTarget.style.borderColor = isPast ? 'rgba(148,163,184,0.08)' : 'rgba(255,255,255,0.06)';
                           }}
                         >
                           {/* Top Meta: Time + Country + Impact */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.62rem', color: 'var(--text-slate-400)', fontFamily: 'var(--font-mono)' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text-contrast)' }}>
+                            <span style={{ fontWeight: 600, color: isPast ? 'var(--text-slate-500)' : 'var(--text-contrast)' }}>
                               {event.timeStr}
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -220,14 +238,14 @@ export default function EconomicCalendarPanel({ theme }) {
                           </div>
 
                           {/* Title */}
-                          <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-contrast)', lineHeight: '1.2' }}>
+                          <div style={{ fontSize: '0.68rem', fontWeight: 600, color: isPast ? 'var(--text-slate-500)' : 'var(--text-contrast)', lineHeight: '1.2' }}>
                             {event.titleVN || event.title}
                           </div>
 
                           {/* Data Row */}
                           <div className="font-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: 'var(--text-slate-400)', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '3px', marginTop: '1px' }}>
-                            <span>ACT: <strong style={{ color: event.actual ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>{event.actual || '--'}</strong></span>
-                            <span>FC: {event.forecast || '--'}</span>
+                            <span>ACT: <strong style={{ color: hasActual ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>{hasActual ? event.actual : '--'}</strong></span>
+                            <span>FC: {event.forecast ?? '--'}</span>
                           </div>
                         </div>
                       );
@@ -344,8 +362,8 @@ export default function EconomicCalendarPanel({ theme }) {
                 <div>PREVIOUS</div>
               </div>
               <div className="font-mono" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', padding: '12px', fontSize: '1rem', fontWeight: 700, textAlign: 'center' }}>
-                <div style={{ color: selectedEvent.actual ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>
-                  {selectedEvent.actual || 'PENDING'}
+                <div style={{ color: selectedEvent.actual !== '' && selectedEvent.actual != null ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>
+                  {selectedEvent.actual !== '' && selectedEvent.actual != null ? selectedEvent.actual : 'PENDING'}
                 </div>
                 <div style={{ color: 'var(--text-contrast)' }}>
                   {selectedEvent.forecast || '--'}

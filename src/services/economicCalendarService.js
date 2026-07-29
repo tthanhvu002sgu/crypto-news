@@ -16,6 +16,8 @@ const CACHE_DURATION_MS = 15 * 60 * 1000;
  */
 export function getCurrentWeekDays() {
   const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
   const currentDayOfWeek = now.getDay(); // 0 is Sun, 1 is Mon
   const diffToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
   const monday = new Date(now);
@@ -33,6 +35,7 @@ export function getCurrentWeekDays() {
       d.getDate() === now.getDate() &&
       d.getMonth() === now.getMonth() &&
       d.getFullYear() === now.getFullYear();
+    const isPast = d.getTime() < todayStart.getTime();
 
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
     const fullDateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
@@ -44,6 +47,7 @@ export function getCurrentWeekDays() {
       fullDateStr,
       dateObj: new Date(d),
       isToday,
+      isPast,
       events: [],
     });
   }
@@ -202,9 +206,9 @@ function getCuratedWeeklyEvents(weekDays) {
       dateStr: targetDay.dateStr,
       fullDateStr: targetDay.fullDateStr,
       dayIndex: tmpl.dayIdx,
-      actual: tmpl.actual || '',
-      forecast: tmpl.forecast || '',
-      previous: tmpl.previous || '',
+      actual: tmpl.actual ?? '',
+      forecast: tmpl.forecast ?? '',
+      previous: tmpl.previous ?? '',
       category: analysis.category,
       impactCrypto: analysis.impactCrypto,
       analysis: analysis.analysis,
@@ -269,9 +273,9 @@ export async function getWeeklyEconomicCalendar(forceRefresh = false) {
           dateStr: matchedDay.dateStr,
           fullDateStr: matchedDay.fullDateStr,
           dayIndex: matchedDay.dayIndex,
-          actual: e.actual || '',
-          forecast: e.forecast || '',
-          previous: e.previous || '',
+          actual: e.actual ?? '',
+          forecast: e.forecast ?? '',
+          previous: e.previous ?? '',
           category: analysis.category,
           impactCrypto: analysis.impactCrypto,
           analysis: analysis.analysis,
@@ -285,15 +289,14 @@ export async function getWeeklyEconomicCalendar(forceRefresh = false) {
   // If live events are too sparse or failed, merge with curated weekly events
   const curated = getCuratedWeeklyEvents(weekDays);
 
-  if (formattedEvents.length < 5) {
-    // Use curated directly if live is almost empty
+  // Preserve every live event (including released Actual values), then use curated
+  // items only for days where the source returned no events at all.
+  if (formattedEvents.length === 0) {
     formattedEvents = curated;
   } else {
-    // Merge: add curated events for Saturday & Sunday if they don't exist in live
-    const weekendCurated = curated.filter((c) => c.dayIndex === 5 || c.dayIndex === 6);
-    weekendCurated.forEach((wc) => {
-      const exists = formattedEvents.some((fe) => fe.dayIndex === wc.dayIndex && fe.title.includes(wc.title.slice(0, 10)));
-      if (!exists) formattedEvents.push(wc);
+    curated.forEach((curatedEvent) => {
+      const hasLiveEventThatDay = formattedEvents.some((liveEvent) => liveEvent.dayIndex === curatedEvent.dayIndex);
+      if (!hasLiveEventThatDay) formattedEvents.push(curatedEvent);
     });
   }
 
