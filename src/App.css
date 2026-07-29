@@ -3929,28 +3929,202 @@
   gap: 8px;
 }
 
-.signal-card {
-  background: var(--bg-slate-950);
-  border: 1px solid var(--border-panel);
-  border-radius: 6px;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+/* ── Redesigned Bias Signal Cards ── */
+.signals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
 }
 
-.signal-card.is-dimmed {
-  opacity: 0.22;
-  filter: grayscale(70%);
+.bias-signal-card {
+  background: var(--bg-slate-950, #0f172a);
+  border: 1px solid var(--border-panel, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.bias-signal-card:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.bias-signal-card.is-dimmed {
+  opacity: 0.2;
+  filter: grayscale(80%);
   transform: scale(0.97);
 }
 
-.signal-card.is-highlighted {
+.bias-signal-card.is-highlighted {
   opacity: 1;
-  border-color: rgba(52, 211, 153, 0.5);
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
-  transform: translateY(-1px);
+  border-color: rgba(52, 211, 153, 0.6);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
+  transform: translateY(-2px);
+}
+
+/* Pillar Badges */
+.bias-pillar-chip {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.bias-pillar-chip.pillar-microstructure {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.bias-pillar-chip.pillar-onChain {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.bias-pillar-chip.pillar-institutional {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.bias-pillar-chip.pillar-newsRisk {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.bias-weight-badge {
+  font-size: 0.62rem;
+  color: var(--text-slate-400, #94a3b8);
+  font-weight: 600;
+}
+
+/* Signal Main */
+.bias-signal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bias-signal-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.bias-signal-name {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-contrast, #f8fafc);
+  letter-spacing: 0.02em;
+}
+
+.bias-signal-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 0.88rem;
+  font-weight: 900;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid currentColor;
+}
+
+.bias-signal-score .score-unit {
+  font-size: 0.65rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* Signal Footer */
+.bias-signal-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-panel, rgba(255, 255, 255, 0.08));
+}
+
+.bias-signal-footer .status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bias-signal-footer .status-desc {
+  font-size: 0.68rem;
+  color: var(--text-slate-400, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Light Theme Overrides */
+[data-theme='light'] .bias-signal-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='light'] .bias-signal-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='light'] .bias-signal-name {
+  color: #0f172a;
+}
+
+[data-theme='light'] .bias-signal-score {
+  background: #f8fafc;
+}
+
+[data-theme='light'] .bias-signal-footer {
+  border-top-color: #f1f5f9;
+}
+
+[data-theme='light'] .bias-signal-footer .status-desc {
+  color: #64748b;
+}
+
+[data-theme='light'] .bias-pillar-chip.pillar-microstructure {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+
+[data-theme='light'] .bias-pillar-chip.pillar-onChain {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+[data-theme='light'] .bias-pillar-chip.pillar-institutional {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border-color: #ddd6fe;
+}
+
+[data-theme='light'] .bias-pillar-chip.pillar-newsRisk {
+  background: #fffbeb;
+  color: #d97706;
+  border-color: #fde68a;
 }
 
 .bias-clear-filter-btn {

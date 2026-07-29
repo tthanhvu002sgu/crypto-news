@@ -62,6 +62,13 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
     },
   ];
 
+  const pillarMetaMap = {
+    microstructure: { code: '01', label: 'MICRO' },
+    onChain: { code: '02', label: 'ON-CHAIN' },
+    institutional: { code: '03', label: 'ETF FLOW' },
+    newsRisk: { code: '04', label: 'MACRO' },
+  };
+
   const handlePillarClick = (pillarKey) => {
     if (activePillarFilter === pillarKey) {
       setActivePillarFilter(null);
@@ -282,24 +289,39 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
           <div className="signals-grid">
             {bias.signals.map((sig, idx) => {
               const isPos = sig.score >= 0;
-              const color = isPos ? '#34d399' : '#f87171';
+              const scoreColor = isPos ? '#34d399' : '#f87171';
               const isDimmed = activePillarFilter !== null && sig.pillar !== activePillarFilter;
               const isHighlighted = activePillarFilter !== null && sig.pillar === activePillarFilter;
+              const pillarMeta = pillarMetaMap[sig.pillar] || { code: '00', label: 'OTHER' };
 
               return (
                 <div
                   key={idx}
-                  className={`signal-card font-mono ${isDimmed ? 'is-dimmed' : ''} ${isHighlighted ? 'is-highlighted' : ''}`}
+                  className={`bias-signal-card font-mono ${isDimmed ? 'is-dimmed' : ''} ${isHighlighted ? 'is-highlighted' : ''}`}
                 >
-                  <div className="signal-card-top">
-                    <span className="signal-name">{sig.name}</span>
-                    <span className="signal-score-badge" style={{ color }}>
-                      {isPos ? `+${sig.score.toFixed(1)}` : sig.score.toFixed(1)} pt{' '}
-                      <small className="signal-weight">({sig.weight})</small>
+                  {/* Top Row: Pillar Chip & Weight */}
+                  <div className="bias-signal-header">
+                    <span className={`bias-pillar-chip pillar-${sig.pillar}`}>
+                      {pillarMeta.code} {pillarMeta.label}
+                    </span>
+                    <span className="bias-weight-badge">
+                      Trọng số: {sig.weight}
                     </span>
                   </div>
-                  <div className="signal-status-text">
-                    {sig.status}
+
+                  {/* Main Row: Signal Title & Score */}
+                  <div className="bias-signal-main">
+                    <h4 className="bias-signal-name">{sig.name}</h4>
+                    <div className="bias-signal-score" style={{ color: scoreColor, borderColor: scoreColor }}>
+                      <span className="score-number">{isPos ? `+${sig.score.toFixed(1)}` : sig.score.toFixed(1)}</span>
+                      <span className="score-unit">pt</span>
+                    </div>
+                  </div>
+
+                  {/* Footer Row: Status Details */}
+                  <div className="bias-signal-footer">
+                    <span className="status-dot" style={{ backgroundColor: scoreColor }} />
+                    <span className="status-desc" title={sig.status}>{sig.status}</span>
                   </div>
                 </div>
               );
