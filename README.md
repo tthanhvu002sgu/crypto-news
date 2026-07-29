@@ -53,6 +53,16 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-29] Phân Tách Footprint Nodes Theo Thị Trường & Bổ Sung Tooltip Giải Thích `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & TOOLTIPS
+- **Tóm tắt:** Nâng cấp Volume Ratio và bảng Footprint Volume Nodes phân tách độc lập theo từng thị trường (`FUTURES` vs `SPOT`), đồng thời bổ sung bộ Tooltips giải thích chi tiết ý nghĩa tài chính và công thức của từng chỉ số.
+- **Thay đổi chính:**
+  - **Tách Luồng Footprint Nodes (`websocket.js`):** Quản lý 2 bộ đếm nấc giá `volNodesFutures` và `volNodesSpot` riêng biệt từ WebSocket stream.
+  - **Đồng Bộ Volume Ratio & Nodes (`HftRadarTab.jsx`):** Cập nhật `activeBuyVolume`, `activeSellVolume` và `activeVolNodes` tự động chuyển đổi theo tab `FUTURES`/`SPOT`.
+  - **Bổ Sung Tooltips Giải Thích (`HftRadarTab.jsx`):** Thêm chú thích chi tiết cho `Volume Ratio (Realtime)`, `FOOTPRINT GAP (NODE)`, `BUY VOL`, `SELL VOL` và `DELTA` theo ngữ cảnh thị trường.
+- **Files / areas chạm:** `src/services/websocket.js`, `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (5.19s); Footprint Nodes & Volume Ratio tự động đổi theo tab SPOT/FUTURES kèm Tooltip rõ ràng.
+
 ### [2026-07-29] Sửa Lỗi Truyền Props Spot CVD & Đồng Bộ Style Tabs FUTURES/SPOT `(FIX)`
 - **Lane / Mode:** FIX & DESIGN MATCH
 - **Tóm tắt:** Sửa lỗi thiếu truyền props `spotStream` và các mảng lịch sử Spot (`cvd24hSpot`, `cvd7dSpot`, `cvd30dSpot`) xuống `MemoCVDPanel` làm cho tab Spot bị đứng dữ liệu, đồng thời đồng bộ 100% style tab FUTURES/SPOT với các nút Timeframe (`1H`, `24H`, `7D`, `30D`).

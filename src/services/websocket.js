@@ -310,14 +310,19 @@ export function useCVDStream() {
     return Array.isArray(loaded) ? loaded.filter((h) => h.timestamp == null || h.timestamp >= keepFrom) : [];
   })());
 
-  const volNodeRef = useRef(loadTodayMap('hft_vol_nodes', 'hft_vol_nodes_date'));
+  const volNodeRefFutures = useRef(loadTodayMap('hft_vol_nodes', 'hft_vol_nodes_date'));
+  const volNodeRefSpot = useRef(loadTodayMap('hft_vol_nodes_spot', 'hft_vol_nodes_spot_date'));
+
   const whaleRef = useRef(loadTodayJson('hft_whale_trades', 'hft_whale_trades_date', []));
 
   const [cvdHistoryFutures, setCvdHistoryFutures] = useState(historyRefFutures.current);
   const [cvdHistorySpot, setCvdHistorySpot] = useState(historyRefSpot.current);
 
-  const [volNodes, setVolNodes] = useState(
-    Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v }))
+  const [volNodesFutures, setVolNodesFutures] = useState(
+    Array.from(volNodeRefFutures.current.entries()).map(([p, v]) => ({ price: p, ...v }))
+  );
+  const [volNodesSpot, setVolNodesSpot] = useState(
+    Array.from(volNodeRefSpot.current.entries()).map(([p, v]) => ({ price: p, ...v }))
   );
   const [whaleTrades, setWhaleTrades] = useState(whaleRef.current);
 
@@ -389,10 +394,12 @@ export function useCVDStream() {
         historyRefSpot.current = [];
 
         whaleRef.current = [];
-        volNodeRef.current.clear();
+        volNodeRefFutures.current.clear();
+        volNodeRefSpot.current.clear();
         localStorage.removeItem('hft_cvd_history');
         localStorage.removeItem('hft_cvd_history_spot');
         localStorage.removeItem('hft_vol_nodes');
+        localStorage.removeItem('hft_vol_nodes_spot');
         localStorage.removeItem('hft_whale_trades');
       }
     };
@@ -420,10 +427,10 @@ export function useCVDStream() {
         if (isFetchingInitialRef.current) return;
 
         const binPrice = Math.floor(price / 10) * 10;
-        let node = volNodeRef.current.get(binPrice);
+        let node = volNodeRefFutures.current.get(binPrice);
         if (!node) {
           node = { buy: 0, sell: 0 };
-          volNodeRef.current.set(binPrice, node);
+          volNodeRefFutures.current.set(binPrice, node);
         }
 
         if (data.m) {
@@ -488,14 +495,23 @@ export function useCVDStream() {
         checkMidnightReset(data.T);
         if (isFetchingInitialRef.current) return;
 
+        const binPrice = Math.floor(price / 10) * 10;
+        let node = volNodeRefSpot.current.get(binPrice);
+        if (!node) {
+          node = { buy: 0, sell: 0 };
+          volNodeRefSpot.current.set(binPrice, node);
+        }
+
         if (data.m) {
           cvdRefSpot.current -= usdtVol;
           sessionRefSpot.current -= usdtVol;
           sellRefSpot.current += usdtVol;
+          node.sell += usdtVol;
         } else {
           cvdRefSpot.current += usdtVol;
           sessionRefSpot.current += usdtVol;
           buyRefSpot.current += usdtVol;
+          node.buy += usdtVol;
         }
 
         const currentMinute = Math.floor(data.T / 60000);
@@ -529,17 +545,20 @@ export function useCVDStream() {
             setBuyVolFutures(buyRefFutures.current);
             setSellVolFutures(sellRefFutures.current);
             setCvdHistoryFutures([...historyRefFutures.current]);
+            setVolNodesFutures(
+              Array.from(volNodeRefFutures.current.entries()).map(([p, v]) => ({ price: p, ...v }))
+            );
 
             setCvdSpot(cvdRefSpot.current);
             setSessionSpot(sessionRefSpot.current);
             setBuyVolSpot(buyRefSpot.current);
             setSellVolSpot(sellRefSpot.current);
             setCvdHistorySpot([...historyRefSpot.current]);
+            setVolNodesSpot(
+              Array.from(volNodeRefSpot.current.entries()).map(([p, v]) => ({ price: p, ...v }))
+            );
 
             setWhaleTrades([...whaleRef.current]);
-            setVolNodes(
-              Array.from(volNodeRef.current.entries()).map(([p, v]) => ({ price: p, ...v }))
-            );
 
             try {
               localStorage.setItem('hft_cvd_history_date', todayRef.current);
@@ -547,7 +566,9 @@ export function useCVDStream() {
               localStorage.setItem('hft_cvd_history_spot_date', todayRef.current);
               localStorage.setItem('hft_cvd_history_spot', JSON.stringify(historyRefSpot.current));
               localStorage.setItem('hft_vol_nodes_date', todayRef.current);
-              localStorage.setItem('hft_vol_nodes', JSON.stringify(Array.from(volNodeRef.current.entries())));
+              localStorage.setItem('hft_vol_nodes', JSON.stringify(Array.from(volNodeRefFutures.current.entries())));
+              localStorage.setItem('hft_vol_nodes_spot_date', todayRef.current);
+              localStorage.setItem('hft_vol_nodes_spot', JSON.stringify(Array.from(volNodeRefSpot.current.entries())));
               localStorage.setItem('hft_whale_trades_date', todayRef.current);
               localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
             } catch (e) {
@@ -586,6 +607,7 @@ export function useCVDStream() {
       buyVolume: buyVolFutures,
       sellVolume: sellVolFutures,
       cvdHistory: cvdHistoryFutures,
+      volNodes: volNodesFutures,
     },
 
     // Specific Spot payload
@@ -595,10 +617,11 @@ export function useCVDStream() {
       buyVolume: buyVolSpot,
       sellVolume: sellVolSpot,
       cvdHistory: cvdHistorySpot,
+      volNodes: volNodesSpot,
     },
 
     whaleTrades,
     cvdStatus,
-    volNodes,
+    volNodes: volNodesFutures,
   };
 }

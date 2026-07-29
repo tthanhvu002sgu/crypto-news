@@ -111,13 +111,15 @@ function CVDPanel({
   const buyPct = totalVol > 0 ? (activeBuyVolume / totalVol * 100) : 50;
   const sellPct = 100 - buyPct;
 
+  const activeVolNodes = activeStream?.volNodes ?? volNodes;
+
   const clusteredNodes = useMemo(() => {
-    if (!volNodes || volNodes.length === 0) return [];
-    if (!nodeGap || nodeGap <= 1) return volNodes;
+    if (!activeVolNodes || activeVolNodes.length === 0) return [];
+    if (!nodeGap || nodeGap <= 1) return activeVolNodes;
 
     const map = new Map();
-    for (let i = 0; i < volNodes.length; i++) {
-      const n = volNodes[i];
+    for (let i = 0; i < activeVolNodes.length; i++) {
+      const n = activeVolNodes[i];
       const binPrice = Math.floor(n.price / nodeGap) * nodeGap;
       let entry = map.get(binPrice);
       if (!entry) {
@@ -131,7 +133,7 @@ function CVDPanel({
     // Convert to array and sort descending by price
     const arr = Array.from(map.values()).sort((a, b) => b.price - a.price);
     return arr;
-  }, [volNodes, nodeGap]);
+  }, [activeVolNodes, nodeGap]);
 
   const baseSession24hRef = useRef(activeSessionCvd || 0);
   const prevList24hRef = useRef(activeCvdHistory24h);
@@ -403,26 +405,26 @@ function CVDPanel({
       </div>
 
       {/* Volume Gauge */}
-      <div className="vol-gauge-container">
+      <div className="vol-gauge-container" title={`Tỷ lệ Buy/Sell Volume ròng tích lũy realtime từ Binance ${marketMode === 'FUTURES' ? 'Futures (Phái sinh)' : 'Spot (Cơ sở)'}`}>
         <div className="vol-gauge-labels font-mono">
-          <span className="text-emerald">BUY {buyPct.toFixed(1)}%</span>
-          <span className="text-slate-400">Volume Ratio (Realtime)</span>
-          <span className="text-rose">SELL {sellPct.toFixed(1)}%</span>
+          <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {buyPct.toFixed(1)}%</span>
+          <span className="text-slate-400" style={{ cursor: 'help' }} title={`Volume Ratio đo tỷ lệ Mua/Bán ròng realtime của thị trường Binance ${marketMode}`}>Volume Ratio ({marketMode})</span>
+          <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {sellPct.toFixed(1)}%</span>
         </div>
         <div className="vol-gauge-bar">
           <div className="vol-gauge-buy" style={{ width: `${buyPct}%` }} />
           <div className="vol-gauge-sell" style={{ width: `${sellPct}%` }} />
         </div>
         <div className="vol-gauge-values font-mono">
-          <span>{fmtUsd(buyVolume)}</span>
-          <span>{fmtUsd(sellVolume)}</span>
+          <span>{fmtUsd(activeBuyVolume)}</span>
+          <span>{fmtUsd(activeSellVolume)}</span>
         </div>
       </div>
 
       {/* Node Gap Config */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>FOOTPRINT GAP (NODE)</span>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu thu thập từ sàn Binance ${marketMode}`}>FOOTPRINT GAP (${marketMode})</span>
           <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${nodeGap}</span>
         </div>
         <input
@@ -448,10 +450,10 @@ function CVDPanel({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.65rem' }}>
             <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-950)', zIndex: 10 }}>
               <tr>
-                <th title="Vùng giá (Node) gộp các mức giá dựa trên cấu hình GAP. Dữ liệu được tích lũy theo thời gian thực từ WebSocket kể từ lúc bạn mở trang Web." style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ (NODE)</th>
-                <th title="Volume Mua Chủ Động (Lệnh Market Buy khớp vào Limit Sell) tích lũy realtime kể từ lúc mở trang." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
-                <th title="Volume Bán Chủ Động (Lệnh Market Sell khớp vào Limit Buy) tích lũy realtime kể từ lúc mở trang." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
-                <th title="Độ chênh lệch (Buy Vol - Sell Vol) tích lũy realtime kể từ lúc mở trang. Dương (Xanh) = Phe Mua áp đảo. Âm (Đỏ) = Phe Bán áp đảo." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
+                <th title={`Vùng giá (Node) gộp các mức giá dựa trên cấu hình GAP $${nodeGap}. Dữ liệu tích lũy realtime từ Binance ${marketMode === 'FUTURES' ? 'Futures' : 'Spot'}.`} style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ ({marketMode})</th>
+                <th title={`Volume Mua Chủ Động (Market Buy) trên Binance ${marketMode} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
+                <th title={`Volume Bán Chủ Động (Market Sell) trên Binance ${marketMode} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
+                <th title="Độ chênh lệch (Buy Vol - Sell Vol) tích lũy realtime. Dương (Xanh) = Hấp thụ mua mạnh (Support Node). Âm (Đỏ) = Áp lực bán mạnh (Resistance Node)." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
               </tr>
             </thead>
             <tbody>
