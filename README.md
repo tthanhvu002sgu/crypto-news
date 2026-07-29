@@ -53,6 +53,26 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-29] Thiết kế Dual-Market CVD Selector (FUTURES vs SPOT) chuẩn Hallmark UI `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & DESIGN
+- **Tóm tắt:** Bổ sung tính năng phân tách và chuyển đổi tức thì giữa 2 thị trường CVD: **FUTURES (Phái sinh)** vs **SPOT (Cơ sở)**. Áp dụng chuẩn thiết kế Minimalist / Hallmark UI với bộ Segmented Control Tabs, Badge linh hoạt (`BIN-F PROXY` vs `BIN-S PROXY`) và lưu vết lựa chọn vào `localStorage`.
+- **Thay đổi chính:**
+  - **Hỗ trợ Dual WebSocket Stream (`websocket.js`):** `useCVDStream` khởi tạo song song 2 luồng kết nối WebSocket (Futures `fstream.binance.com` & Spot `stream.binance.com`) và quản lý bộ đếm volume rồng độc lập.
+  - **Thêm tham số Market cho REST API (`api.js`):** Mở rộng `getDailyCVD`, `getHistoricalCVD`, `getIntradayCVD` hỗ trợ tham số `market` ('futures' | 'spot').
+  - **Quản lý State Dual-Market (`App.jsx`):** Nạp dữ liệu lịch sử cho cả Spot (`cvd24hSpot`, `cvd7dSpot`, `cvd30dSpot`) và Futures, truyền trực tiếp vào `HftRadarTab`.
+  - **Redesign UI Tab Dual-Market (`HftRadarTab.jsx`):** Thêm bộ nút chuyển đổi `FUTURES` vs `SPOT` chuẩn thiết kế Hallmark UI, tự động chuyển màu badge và dữ liệu biểu đồ realtime 0ms delay.
+- **Files / areas chạm:** `src/services/api.js`, `src/services/websocket.js`, `src/App.jsx`, `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (1.31s); hiển thị chính xác CVD Futures vs Spot riêng biệt.
+
+### [2026-07-29] Đồng bộ nguồn API Binance Futures cho CVD REST Endpoints `(FIX)`
+- **Lane / Mode:** FEATURE FAST
+- **Tóm tắt:** Sửa triệt để lỗi lệch quy mô volume CVD giữa WebSocket 1H (Futures `fstream.binance.com`) và REST API 24h/7d/30d (dùng nhầm Spot `api.binance.com`). Chuyển toàn bộ REST endpoints CVD sang Binance Futures API (`fapi.binance.com`) và cập nhật cache keys.
+- **Thay đổi chính:**
+  - **Sửa Nguồn REST Endpoint (`api.js`):** Chuyển `getDailyCVD`, `getHistoricalCVD`, `getIntradayCVD`, `getWhaleKlinesFlow` từ `api.binance.com/api/v3/klines` (Spot) sang `fapi.binance.com/fapi/v1/klines` (Binance Futures).
+  - **Làm mới Cache Keys (`App.jsx`):** Nâng cấp cache keys (`cvdHistory24h_v3`, `cvdHistory7d_v2`, `cvdHistory30d_v2`) để xóa bỏ cache Spot cũ và nạp lại dữ liệu Binance Futures chính xác.
+- **Files / areas chạm:** `src/services/api.js`, `src/App.jsx`, `README.md`
+- **Verify:** `npm run build` pass (6.06s); dữ liệu CVD 1h và 24h đồng nhất 100% trên cùng Binance Futures proxy market.
+
 ### [2026-07-28] Sửa Lỗi Logic Orderbook Chart, Persistence Move Tracker & ReferenceErrors `(FIX & FULL)`
 - **Lane / Mode:** FIX & PERSISTENCE
 - **Tóm tắt:** Sửa lỗi ranh giới tường Buy/Sell Limit đè sai vị trí trên biểu đồ, khôi phục log Pump & Dump Move Tracker 100% không mất khi F5, và khắc phục các lỗi ReferenceError biến chưa khai báo.

@@ -48,14 +48,18 @@ export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 
 };
 
 /** Get CVD from the start of the local day using 5m klines */
-export const getDailyCVD = async (symbol = 'BTCUSDT') => {
+export const getDailyCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
   try {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0); // Local midnight
     const startTime = startOfDay.getTime();
     
+    const baseUrl = market === 'spot'
+      ? 'https://api.binance.com/api/v3/klines'
+      : 'https://fapi.binance.com/fapi/v1/klines';
+
     // 24 hours * 12 (5m intervals) = 288 candles, well under 1000 limit
-    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+    const res = await axios.get(baseUrl, {
       params: { symbol, interval: '5m', startTime, limit: 300 },
     });
     
@@ -76,15 +80,19 @@ export const getDailyCVD = async (symbol = 'BTCUSDT') => {
     
     return { initialCvd, initialBuyVol, initialSellVol, lastKlineTime: res.data.length > 0 ? res.data[res.data.length - 1][6] : startTime };
   } catch (e) {
-    console.error('[API] Daily CVD:', e.message);
+    console.error(`[API] Daily CVD (${market}):`, e.message);
     return { initialCvd: 0, initialBuyVol: 0, initialSellVol: 0, lastKlineTime: 0 };
   }
 };
 
 /** Get CVD historical data (7d/30d) based on klines */
-export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limit = 42) => {
+export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limit = 42, market = 'futures') => {
   try {
-    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+    const baseUrl = market === 'spot'
+      ? 'https://api.binance.com/api/v3/klines'
+      : 'https://fapi.binance.com/fapi/v1/klines';
+
+    const res = await axios.get(baseUrl, {
       params: { symbol, interval, limit },
     });
     
@@ -107,7 +115,7 @@ export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limi
       };
     });
   } catch (e) {
-    console.error(`[API] Historical CVD (${interval}, ${limit}):`, e.message);
+    console.error(`[API] Historical CVD (${interval}, ${limit}, ${market}):`, e.message);
     return [];
   }
 };
@@ -117,13 +125,17 @@ export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limi
  * Fetches 1H klines from LOCAL MIDNIGHT → now, accumulates CVD from 0.
  * Each point = one hourly candle, so the 24H chart matches the live WebSocket view.
  */
-export const getIntradayCVD = async (symbol = 'BTCUSDT') => {
+export const getIntradayCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
   try {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0); // Local midnight (same as getDailyCVD)
     const startTime = startOfDay.getTime();
 
-    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+    const baseUrl = market === 'spot'
+      ? 'https://api.binance.com/api/v3/klines'
+      : 'https://fapi.binance.com/fapi/v1/klines';
+
+    const res = await axios.get(baseUrl, {
       params: { symbol, interval: '1h', startTime, limit: 25 }, // max 25 = covers full day
     });
 
@@ -145,7 +157,7 @@ export const getIntradayCVD = async (symbol = 'BTCUSDT') => {
       };
     });
   } catch (e) {
-    console.error('[API] Intraday CVD:', e.message);
+    console.error(`[API] Intraday CVD (${market}):`, e.message);
     return [];
   }
 };
@@ -157,7 +169,7 @@ export const getIntradayCVD = async (symbol = 'BTCUSDT') => {
  */
 export const getWhaleKlinesFlow = async (symbol = 'BTCUSDT', limit = 1000, volumeThreshold = 10000000) => {
   try {
-    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+    const res = await axios.get('https://fapi.binance.com/fapi/v1/klines', {
       params: { symbol, interval: '1m', limit },
     });
     

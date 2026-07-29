@@ -77,15 +77,38 @@ const getChartOptsBase = (theme) => {
 
 // ─── PANEL 1: CVD & Order Flow ────────────────────────────────────────────────
 
-function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHistory24h, cvdHistory7d, cvdHistory30d, cvdStatus, livePrice, theme, volNodes = [] }) {
+function CVDPanel({
+  cvd, sessionCvd, buyVolume, sellVolume, cvdHistory,
+  futuresStream, spotStream,
+  cvdHistory24h, cvdHistory7d, cvdHistory30d,
+  cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
+  cvdStatus, livePrice, theme, volNodes = []
+}) {
+  const [marketMode, setMarketMode] = useState(() => {
+    const saved = localStorage.getItem('hft_cvd_market');
+    return saved === 'SPOT' ? 'SPOT' : 'FUTURES';
+  });
+
   const [cvdTf, setCvdTf] = useState('1H');
   const [nodeGap, setNodeGap] = useState(() => {
     const saved = localStorage.getItem('hft_cvd_gap');
     return saved ? Number(saved) : 100;
   });
 
-  const totalVol = buyVolume + sellVolume;
-  const buyPct = totalVol > 0 ? (buyVolume / totalVol * 100) : 50;
+  // Select active market dataset dynamically
+  const activeStream = marketMode === 'SPOT' ? spotStream : futuresStream;
+  const activeCvd = activeStream?.cvd ?? cvd;
+  const activeSessionCvd = activeStream?.sessionCvd ?? sessionCvd;
+  const activeBuyVolume = activeStream?.buyVolume ?? buyVolume;
+  const activeSellVolume = activeStream?.sellVolume ?? sellVolume;
+  const activeCvdHistory = activeStream?.cvdHistory ?? cvdHistory;
+
+  const activeCvdHistory24h = marketMode === 'SPOT' ? cvdHistory24hSpot : cvdHistory24h;
+  const activeCvdHistory7d = marketMode === 'SPOT' ? cvdHistory7dSpot : cvdHistory7d;
+  const activeCvdHistory30d = marketMode === 'SPOT' ? cvdHistory30dSpot : cvdHistory30d;
+
+  const totalVol = activeBuyVolume + activeSellVolume;
+  const buyPct = totalVol > 0 ? (activeBuyVolume / totalVol * 100) : 50;
   const sellPct = 100 - buyPct;
 
   const clusteredNodes = useMemo(() => {
@@ -110,39 +133,39 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
     return arr;
   }, [volNodes, nodeGap]);
 
-  const baseSession24hRef = useRef(sessionCvd || 0);
-  const prevList24hRef = useRef(cvdHistory24h);
-  if (prevList24hRef.current !== cvdHistory24h) {
-    prevList24hRef.current = cvdHistory24h;
-    baseSession24hRef.current = sessionCvd || 0;
+  const baseSession24hRef = useRef(activeSessionCvd || 0);
+  const prevList24hRef = useRef(activeCvdHistory24h);
+  if (prevList24hRef.current !== activeCvdHistory24h) {
+    prevList24hRef.current = activeCvdHistory24h;
+    baseSession24hRef.current = activeSessionCvd || 0;
   }
-  const delta24h = (sessionCvd || 0) - baseSession24hRef.current;
+  const delta24h = (activeSessionCvd || 0) - baseSession24hRef.current;
 
-  const baseSession7dRef = useRef(sessionCvd || 0);
-  const prevList7dRef = useRef(cvdHistory7d);
-  if (prevList7dRef.current !== cvdHistory7d) {
-    prevList7dRef.current = cvdHistory7d;
-    baseSession7dRef.current = sessionCvd || 0;
+  const baseSession7dRef = useRef(activeSessionCvd || 0);
+  const prevList7dRef = useRef(activeCvdHistory7d);
+  if (prevList7dRef.current !== activeCvdHistory7d) {
+    prevList7dRef.current = activeCvdHistory7d;
+    baseSession7dRef.current = activeSessionCvd || 0;
   }
-  const delta7d = (sessionCvd || 0) - baseSession7dRef.current;
+  const delta7d = (activeSessionCvd || 0) - baseSession7dRef.current;
 
-  const baseSession30dRef = useRef(sessionCvd || 0);
-  const prevList30dRef = useRef(cvdHistory30d);
-  if (prevList30dRef.current !== cvdHistory30d) {
-    prevList30dRef.current = cvdHistory30d;
-    baseSession30dRef.current = sessionCvd || 0;
+  const baseSession30dRef = useRef(activeSessionCvd || 0);
+  const prevList30dRef = useRef(activeCvdHistory30d);
+  if (prevList30dRef.current !== activeCvdHistory30d) {
+    prevList30dRef.current = activeCvdHistory30d;
+    baseSession30dRef.current = activeSessionCvd || 0;
   }
-  const delta30d = (sessionCvd || 0) - baseSession30dRef.current;
+  const delta30d = (activeSessionCvd || 0) - baseSession30dRef.current;
 
   // True rolling 1H: only samples in the last 60 minutes, rebased so Net CVD = 0 at window start
   const list1h = useMemo(() => {
-    if (!cvdHistory || cvdHistory.length === 0) return [];
+    if (!activeCvdHistory || activeCvdHistory.length === 0) return [];
 
     const MS_1H = 60 * 60 * 1000;
     const now = Date.now();
     const cutoff = now - MS_1H;
 
-    const withTs = cvdHistory.filter((item) => item.timestamp != null);
+    const withTs = activeCvdHistory.filter((item) => item.timestamp != null);
     let window;
     let base1h;
 
@@ -161,7 +184,7 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
       base1h = baseSample != null ? baseSample.cvd : (window[0]?.cvd || 0);
     } else {
       // Legacy samples without timestamp: approximate last ~60 minute bars
-      window = cvdHistory.slice(-60);
+      window = activeCvdHistory.slice(-60);
       base1h = window[0]?.cvd || 0;
     }
 
@@ -169,7 +192,7 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
       const isLast = idx === window.length - 1;
       return {
         ...item,
-        cvd: (isLast ? (cvd ?? item.cvd) : item.cvd) - base1h,
+        cvd: (isLast ? (activeCvd ?? item.cvd) : item.cvd) - base1h,
         price: isLast ? (livePrice || item.price) : item.price,
       };
     });
@@ -190,33 +213,33 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
     }
 
     return points;
-  }, [cvdHistory, cvd, livePrice]);
+  }, [activeCvdHistory, activeCvd, livePrice]);
 
   const chartList = useMemo(() => {
     if (cvdTf === '1H') return list1h;
     if (cvdTf === '24H') {
-      if (!cvdHistory24h || cvdHistory24h.length === 0) return [];
-      const list = [...cvdHistory24h];
+      if (!activeCvdHistory24h || activeCvdHistory24h.length === 0) return [];
+      const list = [...activeCvdHistory24h];
       const last = list[list.length - 1];
       list[list.length - 1] = { ...last, cvd: last.cvd + delta24h, price: livePrice || last.price };
       return list;
     }
     if (cvdTf === '7D') {
-      if (!cvdHistory7d || cvdHistory7d.length === 0) return [];
-      const list = [...cvdHistory7d];
+      if (!activeCvdHistory7d || activeCvdHistory7d.length === 0) return [];
+      const list = [...activeCvdHistory7d];
       const last = list[list.length - 1];
       list[list.length - 1] = { ...last, cvd: last.cvd + delta7d, price: livePrice || last.price };
       return list;
     }
     if (cvdTf === '30D') {
-      if (!cvdHistory30d || cvdHistory30d.length === 0) return [];
-      const list = [...cvdHistory30d];
+      if (!activeCvdHistory30d || activeCvdHistory30d.length === 0) return [];
+      const list = [...activeCvdHistory30d];
       const last = list[list.length - 1];
       list[list.length - 1] = { ...last, cvd: last.cvd + delta30d, price: livePrice || last.price };
       return list;
     }
     return [];
-  }, [cvdTf, list1h, cvdHistory24h, cvdHistory7d, cvdHistory30d, delta24h, delta7d, delta30d, livePrice]);
+  }, [cvdTf, list1h, activeCvdHistory24h, activeCvdHistory7d, activeCvdHistory30d, delta24h, delta7d, delta30d, livePrice]);
 
   const latestCvd = chartList.length > 0 ? chartList[chartList.length - 1].cvd : 0;
 
@@ -296,26 +319,53 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <Tooltip content={METRIC_METADATA.cvd}>
             <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, margin: 0 }}>
               <span className="hft-icon">📊</span> CVD &amp; ORDER FLOW
             </h3>
           </Tooltip>
-          <div className="hft-panel-badges">
+          <div className="hft-panel-badges" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <span
               className="hft-badge badge-api font-mono"
-              style={{ cursor: 'help' }}
-              title="Binance Futures aggTrade được sử dụng làm chỉ số tham chiếu CVD chuẩn (Benchmark Proxy) vì chiếm hơn 50% thanh khoản phái sinh toàn cầu"
+              style={{
+                cursor: 'help',
+                backgroundColor: marketMode === 'FUTURES' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                color: marketMode === 'FUTURES' ? '#a78bfa' : '#34d399',
+                border: `1px solid ${marketMode === 'FUTURES' ? 'rgba(139, 92, 246, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                fontWeight: 600
+              }}
+              title={marketMode === 'FUTURES' ? 'Binance Futures aggTrade — Thị trường Phái sinh (Benchmark Proxy)' : 'Binance Spot aggTrade — Thị trường Cơ sở (Spot Direct)'}
             >
-              BIN-F PROXY
+              {marketMode === 'FUTURES' ? 'BIN-F PROXY' : 'BIN-S PROXY'}
             </span>
             <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
               {cvdStatus === 'connected' ? '⚡ LIVE' : 'WS OFF'}
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Market Selector Tabs (FUTURES vs SPOT) */}
+          <div className="etf-timeframe-toggle font-mono" style={{ display: 'inline-flex', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '6px', padding: '2px', border: '1px solid var(--border-slate-700, rgba(255, 255, 255, 0.08))' }}>
+            <button
+              onClick={() => { setMarketMode('FUTURES'); localStorage.setItem('hft_cvd_market', 'FUTURES'); }}
+              className={`toggle-btn ${marketMode === 'FUTURES' ? 'active' : ''}`}
+              style={{ padding: '2px 10px', fontSize: '0.68rem', fontWeight: marketMode === 'FUTURES' ? '700' : '500', borderRadius: '4px' }}
+              title="Xem chỉ số CVD Thị trường Phái sinh (Binance Futures)"
+            >
+              FUTURES
+            </button>
+            <button
+              onClick={() => { setMarketMode('SPOT'); localStorage.setItem('hft_cvd_market', 'SPOT'); }}
+              className={`toggle-btn ${marketMode === 'SPOT' ? 'active' : ''}`}
+              style={{ padding: '2px 10px', fontSize: '0.68rem', fontWeight: marketMode === 'SPOT' ? '700' : '500', borderRadius: '4px' }}
+              title="Xem chỉ số CVD Thị trường Cơ sở (Binance Spot)"
+            >
+              SPOT
+            </button>
+          </div>
+
+          {/* Timeframe Selector */}
           <div className="etf-timeframe-toggle font-mono">
             {['1H', '24H', '7D', '30D'].map(t => (
               <button
@@ -335,7 +385,7 @@ function CVDPanel({ cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, cvdHisto
       <div className="cvd-hero" style={{ paddingBottom: '8px' }}>
         <div className="cvd-value-wrap">
           <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian">
-            {`CVD RÒNG (${cvdTf === '1H' ? '1 GIỜ QUA' : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA'})`}
+            {`CVD RÒNG ${marketMode} (${cvdTf === '1H' ? '1 GIỜ QUA' : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA'})`}
           </span>
           <span className={`cvd-value font-mono ${latestCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
             {fmtCvdUsd(latestCvd)}

@@ -239,6 +239,9 @@ const INIT = {
   cvdHistory24h: [],
   cvdHistory7d: [],
   cvdHistory30d: [],
+  cvdHistory24hSpot: [],
+  cvdHistory7dSpot: [],
+  cvdHistory30dSpot: [],
   btcDailyKlinesAll: [],
 };
 
@@ -430,9 +433,12 @@ function AppContent() {
     };
     return {
       ...INIT,
-      cvdHistory24h: readCache('cvdHistory24h_v2'),
-      cvdHistory7d:  readCache('cvdHistory7d'),
-      cvdHistory30d: readCache('cvdHistory30d'),
+      cvdHistory24h: readCache('cvdHistory24h_v3'),
+      cvdHistory7d:  readCache('cvdHistory7d_v2'),
+      cvdHistory30d: readCache('cvdHistory30d_v2'),
+      cvdHistory24hSpot: readCache('cvdHistory24h_spot_v1'),
+      cvdHistory7dSpot:  readCache('cvdHistory7d_spot_v1'),
+      cvdHistory30dSpot: readCache('cvdHistory30d_spot_v1'),
     };
   });
   const [activeTab, setActiveTab] = useState(() => {
@@ -550,7 +556,7 @@ function AppContent() {
     useBinanceWebSocket();
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
-  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, whaleTrades, cvdStatus, volNodes } = useCVDStream();
+  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, futures, spot, whaleTrades, cvdStatus, volNodes } = useCVDStream();
 
 
   const addLog = useCallback((msg, type = 'info') => {
@@ -658,8 +664,10 @@ function AppContent() {
         push('sp500', fetchCached('sp500Quote', () => getFREDStockQuote('SP500', apiKeys.fred), CACHE_TTL.sp500, addLog, 'S&P 500 Index (Yahoo Finance)', force));
         push('vix', fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS', apiKeys.fred), CACHE_TTL.vix, addLog, 'VIX Volatility Index (Yahoo Finance)', force));
         push('qqq', fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100', apiKeys.fred), CACHE_TTL.qqq, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force));
-        push('cvd24h', fetchCached('cvdHistory24h_v2', () => getHistoricalCVD('BTCUSDT', '1h', 24), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h (Binance)', force));
-        push('cvd7d', fetchCached('cvdHistory7d', () => getHistoricalCVD('BTCUSDT', '4h', 42), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d (Binance)', force));
+        push('cvd24h', fetchCached('cvdHistory24h_v3', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'futures'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Futures', force));
+        push('cvd24hSpot', fetchCached('cvdHistory24h_spot_v1', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'spot'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Spot', force));
+        push('cvd7d', fetchCached('cvdHistory7d_v2', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'futures'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Futures', force));
+        push('cvd7dSpot', fetchCached('cvdHistory7d_spot_v1', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'spot'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Spot', force));
       }
 
       if (wantCold) {
@@ -670,7 +678,8 @@ function AppContent() {
         push('etfHistory', fetchCached('etfFlowHistory_v4', () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force));
         push('cot', fetchCached('cmeCot', () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force));
         push('fng', fetchCached('fearAndGreed', () => getFearAndGreed(), CACHE_TTL.fng, addLog, 'Chỉ số Fear & Greed (alternative.me)', force));
-        push('cvd30d', fetchCached('cvdHistory30d', () => getHistoricalCVD('BTCUSDT', '1d', 30), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d (Binance)', force));
+        push('cvd30d', fetchCached('cvdHistory30d_v2', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Futures', force));
+        push('cvd30dSpot', fetchCached('cvdHistory30d_spot_v1', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Spot', force));
         push('dailyKlines', fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), CACHE_TTL.dailyKlines, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force));
       }
 
@@ -693,7 +702,9 @@ function AppContent() {
       const vix = wantWarm ? settled(byKey.vix) : null;
       const qqq = wantWarm ? settled(byKey.qqq) : null;
       const cvdHistory24h = wantWarm ? settled(byKey.cvd24h) : null;
+      const cvdHistory24hSpot = wantWarm ? settled(byKey.cvd24hSpot) : null;
       const cvdHistory7d = wantWarm ? settled(byKey.cvd7d) : null;
+      const cvdHistory7dSpot = wantWarm ? settled(byKey.cvd7dSpot) : null;
 
       const onChain = wantCold ? settled(byKey.onChain) : null;
       const onChainMetrics = wantCold ? settled(byKey.onChainMetrics) : null;
@@ -703,6 +714,7 @@ function AppContent() {
       const cotData = wantCold ? settled(byKey.cot) : null;
       const fngData = wantCold ? settled(byKey.fng) : null;
       const cvdHistory30d = wantCold ? settled(byKey.cvd30d) : null;
+      const cvdHistory30dSpot = wantCold ? settled(byKey.cvd30dSpot) : null;
       const btcDailyKlinesAll = wantCold ? settled(byKey.dailyKlines) : null;
 
       const now = new Date().toLocaleString('vi-VN');
@@ -757,6 +769,9 @@ function AppContent() {
         cvdHistory24h: cvdHistory24h?.length > 0 ? cvdHistory24h : prev.cvdHistory24h,
         cvdHistory7d: cvdHistory7d?.length > 0 ? cvdHistory7d : prev.cvdHistory7d,
         cvdHistory30d: cvdHistory30d?.length > 0 ? cvdHistory30d : prev.cvdHistory30d,
+        cvdHistory24hSpot: cvdHistory24hSpot?.length > 0 ? cvdHistory24hSpot : prev.cvdHistory24hSpot,
+        cvdHistory7dSpot: cvdHistory7dSpot?.length > 0 ? cvdHistory7dSpot : prev.cvdHistory7dSpot,
+        cvdHistory30dSpot: cvdHistory30dSpot?.length > 0 ? cvdHistory30dSpot : prev.cvdHistory30dSpot,
         btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
       }));
 
@@ -1536,7 +1551,9 @@ function AppContent() {
             <div style={{ display: activeTab === 'hft' ? 'block' : 'none' }}>
               <HftRadarTab
                 cvd={cvd} sessionCvd={sessionCvd} buyVolume={buyVolume} sellVolume={sellVolume}
-                cvdHistory={cvdHistory} cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
+                cvdHistory={cvdHistory} futuresStream={futures} spotStream={spot}
+                cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
+                cvdHistory24hSpot={data.cvdHistory24hSpot} cvdHistory7dSpot={data.cvdHistory7dSpot} cvdHistory30dSpot={data.cvdHistory30dSpot}
                 cvdStatus={cvdStatus} livePrice={livePrice}
                 whaleTrades={whaleTrades} volNodes={volNodes} theme={theme}
                 data={data} fundingRate={fund}
