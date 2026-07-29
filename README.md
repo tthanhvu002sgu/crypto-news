@@ -53,6 +53,15 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-07-29] Hiển Thị Thanh Tổng Volume Footprint & Trạng Thái Chờ Realtime Cho Tab SPOT/FUTURES `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & UI ENHANCEMENT
+- **Tóm tắt:** Bổ sung thanh Header hiển thị tổng khối lượng tích lũy `TỔNG VOL: $...` ngay trên bảng Footprint Nodes kèm nhãn phân biệt thị trường rõ ràng (`BIN-F PROXY` vs `BIN-S PROXY`), giúp người dùng thấy ngay sự khác biệt về quy mô giao dịch giữa Spot và Futures.
+- **Thay đổi chính:**
+  - **Thanh Summary Header Footprint (`HftRadarTab.jsx`):** Tính toán và hiển thị `totalClusterVol` trực tiếp trên đầu bảng Footprint, đổi màu tím cho Futures và xanh lam cho Spot.
+  - **Trạng Thái Chờ Tích Lũy Lệnh Realtime (`HftRadarTab.jsx`):** Thêm khung thông báo fallback khi thị trường vừa khởi tạo chưa có lệnh khớp để tránh trải nghiệm giao diện trống.
+- **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (1.65s); hiển thị tổng Volume rõ ràng giữa Futures và Spot.
+
 ### [2026-07-29] Phân Tách Footprint Nodes Theo Thị Trường & Bổ Sung Tooltip Giải Thích `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & TOOLTIPS
 - **Tóm tắt:** Nâng cấp Volume Ratio và bảng Footprint Volume Nodes phân tách độc lập theo từng thị trường (`FUTURES` vs `SPOT`), đồng thời bổ sung bộ Tooltips giải thích chi tiết ý nghĩa tài chính và công thức của từng chỉ số.

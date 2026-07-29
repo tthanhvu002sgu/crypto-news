@@ -318,6 +318,10 @@ function CVDPanel({
 
 
 
+  const totalClusterVol = useMemo(() => {
+    return clusteredNodes.reduce((acc, n) => acc + n.buy + n.sell, 0);
+  }, [clusteredNodes]);
+
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
@@ -444,8 +448,16 @@ function CVDPanel({
         </div>
       </div>
       
+      {/* Nodes Table Header Summary */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
+        <span>CỤM FOOTPRINT NODES ({marketMode})</span>
+        <span style={{ color: marketMode === 'FUTURES' ? '#a78bfa' : '#34d399', fontWeight: 600 }}>
+          TỔNG VOL: {fmtUsd(totalClusterVol)}
+        </span>
+      </div>
+
       {/* Nodes Table */}
-      {clusteredNodes.length > 0 && (
+      {clusteredNodes.length > 0 ? (
         <div style={{ maxHeight: '250px', overflowY: 'auto', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', padding: '4px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.65rem' }}>
             <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-950)', zIndex: 10 }}>
@@ -487,10 +499,14 @@ function CVDPanel({
                       </div>
                     </td>
                   </tr>
-                )
+                );
               })}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="hft-empty font-mono" style={{ padding: '16px', textOverflow: 'ellipsis', overflow: 'hidden', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.65rem', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+          ⚡ Đang tích lũy dữ liệu Footprint Nodes realtime cho thị trường {marketMode}...
         </div>
       )}
 
