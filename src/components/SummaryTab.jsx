@@ -9,7 +9,14 @@ import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBAC
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import TradePlanAuditor from './TradePlanAuditor';
-import { EtfChart, CvdChart, OiChart } from './SummaryCharts';
+import { 
+  EtfChart, 
+  CvdChart, 
+  FundingOiChart, 
+  CotChart, 
+  OnChainValuationChart, 
+  MacroLiquidityChart 
+} from './SummaryCharts';
 
 const renderTextWithTags = (text) => {
   if (typeof text !== 'string') return text;
@@ -1434,12 +1441,31 @@ ${promptData}
               return chunks.map((chunk, index) => {
                 const firstLine = chunk.split('\n')[0].toLowerCase();
                 
-                let chartToRender = null;
-                if (firstLine.includes('dòng tiền tổ chức') || firstLine.includes('institutional flows') || firstLine.includes('etf')) {
-                  chartToRender = <EtfChart etfHistory={etfHistory} />;
-                } else if (firstLine.includes('phái sinh') || firstLine.includes('derivatives') || firstLine.includes('open interest') || firstLine.includes('funding')) {
-                  chartToRender = <OiChart oiHistory={Array.isArray(data.oiHistory) ? data.oiHistory : []} />;
-                } else if (
+                let chartsToRender = [];
+                
+                // 1. Group Vĩ mô & Macro Liquidity
+                if (firstLine.includes('vĩ mô') || firstLine.includes('macro') || firstLine.includes('real-rate')) {
+                  chartsToRender.push(<MacroLiquidityChart key="macro" data={data} />);
+                }
+                
+                // 2. Group Định giá On-chain & Production Cost
+                if (firstLine.includes('on-chain') || firstLine.includes('mậng lưới') || firstLine.includes('production cost') || firstLine.includes('mvrv')) {
+                  chartsToRender.push(<OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} btcPrice={data.btc?.price} productionCost={data.productionCost} />);
+                }
+
+                // 3. Group Dòng tiền Tổ chức (ETF & CME COT)
+                if (firstLine.includes('dòng tiền tổ chức') || firstLine.includes('institutional flows') || firstLine.includes('etf') || firstLine.includes('cme')) {
+                  chartsToRender.push(<EtfChart key="etf" etfHistory={etfHistory} />);
+                  chartsToRender.push(<CotChart key="cot" cotData={data.cotData} />);
+                }
+
+                // 4. Group Phái sinh (OI & Funding)
+                if (firstLine.includes('phái sinh') || firstLine.includes('derivatives') || firstLine.includes('open interest') || firstLine.includes('funding')) {
+                  chartsToRender.push(<FundingOiChart key="oi" oiHistory={Array.isArray(data.oiHistory) ? data.oiHistory : []} fundingRates={data.fundingRates} />);
+                }
+
+                // 5. Group Lịch sử Giá & CVD Phân kỳ
+                if (
                   firstLine.includes('lịch sử giá') || 
                   firstLine.includes('historical price') || 
                   firstLine.includes('cvd') || 
@@ -1450,13 +1476,13 @@ ${promptData}
                   firstLine.includes('microstructure')
                 ) {
                   const cvdSource = reportCvdData.length > 0 ? reportCvdData : (data.cvdHistory30d?.length > 0 ? data.cvdHistory30d : data.cvdHistory7d);
-                  chartToRender = <CvdChart cvdData={cvdSource} />;
+                  chartsToRender.push(<CvdChart key="cvd" cvdData={cvdSource} />);
                 }
 
                 return (
                   <div key={index} className="summary-chunk" style={{ position: 'relative' }}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{chunk}</ReactMarkdown>
-                    {chartToRender}
+                    {chartsToRender}
                   </div>
                 );
               });
