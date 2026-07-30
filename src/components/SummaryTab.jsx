@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
+import { fetchEconomicCalendar } from '../services/economicCalendarService';
 import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBACK_FREE_MODELS } from '../services/openrouter';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
@@ -388,6 +389,7 @@ export default function SummaryTab({
         cvd7d,
         cvd30d,
         latestNews,
+        calendarRes,
       ] = await Promise.all([
         getOrderBookDepth('BTCUSDT', 100),
         getWhaleWalls(),
@@ -398,6 +400,7 @@ export default function SummaryTab({
         getHistoricalCVD('BTCUSDT', '4h', 42),
         getHistoricalCVD('BTCUSDT', '1d', 30),
         fetchRealtimeFeed(),
+        fetchEconomicCalendar().catch(() => null),
       ]);
     } catch (error) {
       console.warn('Error fetching data for report:', error);
@@ -722,6 +725,20 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
 - Nasdaq proxy / QQQ: ${formatNumber(data.qqq?.price, 2)} | Change: ${formatSigned(data.qqq?.changePercent, 2, '%')}
 - M2 Supply: ${data.m2Supply !== null && data.m2Supply !== undefined ? '$' + formatNumber(data.m2Supply, 2) + 'B' : 'N/A'}
 - Crypto Fear & Greed: ${data.fngData?.value ?? 'N/A'} (${data.fngData?.sentiment || 'N/A'})
+
+### HIGH-IMPACT ECONOMIC CALENDAR EVENTS (ForexFactory / FairEconomy)
+${(() => {
+  const events = calendarRes?.allEvents || [];
+  const highImpact = events.filter((e) => e.country === 'USD' || e.impact === 'High' || e.impact === 'Medium').slice(0, 8);
+  if (highImpact.length === 0) return '- High-Impact Events: N/A';
+  return highImpact
+    .map(
+      (e) =>
+        `- ${e.dateStr || ''} ${e.timeStr || ''} | ${e.country} | ${e.title} (${e.titleVN || ''}) | ` +
+        `Actual: ${e.actual || 'TBD'} | Forecast: ${e.forecast || 'N/A'} | Prev: ${e.previous || 'N/A'} | Impact: ${e.impact}`
+    )
+    .join('\n');
+})()}`.trim()
 
 ## 2. BTC PRICE STRUCTURE & CRYPTO BREADTH
 - BTC spot: ${priceNow === null ? 'N/A' : '$' + formatNumber(priceNow, 2)}
@@ -1435,54 +1452,50 @@ ${promptData}
                 return <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{aiSummary}</ReactMarkdown>;
               }
 
-              // Split the markdown into chunks based on headings
+              // Split markdown by headers (##, ###, ####)
               const chunks = aiSummary.split(/(?=^#{2,4}\s)/m).filter(Boolean);
+              const renderedCharts = new Set();
               
               return chunks.map((chunk, index) => {
-                const firstLine = chunk.split('\n')[0].toLowerCase();
+                const lowerText = chunk.toLowerCase();
+                let chartToRender = null;
                 
-                let chartsToRender = [];
-                
-                // 1. Group Vĩ mô & Macro Liquidity
-                if (firstLine.includes('vĩ mô') || firstLine.includes('macro') || firstLine.includes('real-rate')) {
-                  chartsToRender.push(<MacroLiquidityChart key="macro" data={data} />);
+                // 1. Spot ETF Chart - place strictly under ETF section
+                if (!renderedCharts.has('etf') && (lowerText.includes('etf') || lowerText.includes('spot etf') || lowerText.includes('net flow'))) {
+                  chartToRender = <EtfChart key="etf" etfHistory={etfHistory} />;
+                  renderedCharts.add('etf');
                 }
-                
-                // 2. Group Định giá On-chain & Production Cost
-                if (firstLine.includes('on-chain') || firstLine.includes('mậng lưới') || firstLine.includes('production cost') || firstLine.includes('mvrv')) {
-                  chartsToRender.push(<OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} btcPrice={data.btc?.price} productionCost={data.productionCost} />);
+                // 2. CME COT Chart - place strictly under CME COT section
+                else if (!renderedCharts.has('cot') && (lowerText.includes('cme') || lowerText.includes('cot') || lowerText.includes('asset manager') || lowerText.includes('quỹ đầu cơ'))) {
+                  chartToRender = <CotChart key="cot" cotData={data.cotData} />;
+                  renderedCharts.add('cot');
                 }
-
-                // 3. Group Dòng tiền Tổ chức (ETF & CME COT)
-                if (firstLine.includes('dòng tiền tổ chức') || firstLine.includes('institutional flows') || firstLine.includes('etf') || firstLine.includes('cme')) {
-                  chartsToRender.push(<EtfChart key="etf" etfHistory={etfHistory} />);
-                  chartsToRender.push(<CotChart key="cot" cotData={data.cotData} />);
+                // 3. Phái sinh OI & Funding Chart - place strictly under Derivatives section
+                else if (!renderedCharts.has('oi') && (lowerText.includes('phái sinh') || lowerText.includes('open interest') || lowerText.includes('funding rate') || lowerText.includes('derivatives'))) {
+                  chartToRender = <FundingOiChart key="oi" oiHistory={Array.isArray(data.oiHistory) ? data.oiHistory : []} fundingRates={data.fundingRates} />;
+                  renderedCharts.add('oi');
                 }
-
-                // 4. Group Phái sinh (OI & Funding)
-                if (firstLine.includes('phái sinh') || firstLine.includes('derivatives') || firstLine.includes('open interest') || firstLine.includes('funding')) {
-                  chartsToRender.push(<FundingOiChart key="oi" oiHistory={Array.isArray(data.oiHistory) ? data.oiHistory : []} fundingRates={data.fundingRates} />);
-                }
-
-                // 5. Group Lịch sử Giá & CVD Phân kỳ
-                if (
-                  firstLine.includes('lịch sử giá') || 
-                  firstLine.includes('historical price') || 
-                  firstLine.includes('cvd') || 
-                  firstLine.includes('thị trường') || 
-                  firstLine.includes('market') || 
-                  firstLine.includes('giá tài sản') || 
-                  firstLine.includes('cấu trúc giá') || 
-                  firstLine.includes('microstructure')
-                ) {
+                // 4. Lịch sử Giá & CVD Chart - place strictly under CVD / Price section
+                else if (!renderedCharts.has('cvd') && (lowerText.includes('cvd') || lowerText.includes('taker flow') || lowerText.includes('lịch sử giá') || lowerText.includes('historical price'))) {
                   const cvdSource = reportCvdData.length > 0 ? reportCvdData : (data.cvdHistory30d?.length > 0 ? data.cvdHistory30d : data.cvdHistory7d);
-                  chartsToRender.push(<CvdChart key="cvd" cvdData={cvdSource} />);
+                  chartToRender = <CvdChart key="cvd" cvdData={cvdSource} />;
+                  renderedCharts.add('cvd');
+                }
+                // 5. On-Chain Valuation Chart - place strictly under On-Chain section
+                else if (!renderedCharts.has('onchain') && (lowerText.includes('on-chain') || lowerText.includes('mvrv') || lowerText.includes('production cost') || lowerText.includes('định giá'))) {
+                  chartToRender = <OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} btcPrice={data.btc?.price} productionCost={data.productionCost} />;
+                  renderedCharts.add('onchain');
+                }
+                // 6. Vĩ mô Macro Liquidity Chart - place strictly under Macro section
+                else if (!renderedCharts.has('macro') && (lowerText.includes('vĩ mô') || lowerText.includes('macro') || lowerText.includes('liquidity') || lowerText.includes('real-rate'))) {
+                  chartToRender = <MacroLiquidityChart key="macro" data={data} />;
+                  renderedCharts.add('macro');
                 }
 
                 return (
                   <div key={index} className="summary-chunk" style={{ position: 'relative' }}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{chunk}</ReactMarkdown>
-                    {chartsToRender}
+                    {chartToRender}
                   </div>
                 );
               });
