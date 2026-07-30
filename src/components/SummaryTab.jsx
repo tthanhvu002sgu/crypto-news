@@ -9,6 +9,7 @@ import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBAC
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import TradePlanAuditor from './TradePlanAuditor';
+import { EtfChart, CvdChart, OiChart } from './SummaryCharts';
 
 const renderTextWithTags = (text) => {
   if (typeof text !== 'string') return text;
@@ -1418,7 +1419,34 @@ ${promptData}
       >
         {aiSummary ? (
           <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{aiSummary}</ReactMarkdown>
+            {(() => {
+              if (selectedStyle !== 'professional') {
+                return <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{aiSummary}</ReactMarkdown>;
+              }
+
+              // Split the markdown into chunks based on headings
+              const chunks = aiSummary.split(/(?=^#{2,4}\s)/m).filter(Boolean);
+              
+              return chunks.map((chunk, index) => {
+                const firstLine = chunk.split('\n')[0].toLowerCase();
+                
+                let chartToRender = null;
+                if (firstLine.includes('dòng tiền tổ chức') || firstLine.includes('institutional flows') || firstLine.includes('etf')) {
+                  chartToRender = <EtfChart etfHistory={etfHistory} />;
+                } else if (firstLine.includes('phái sinh') || firstLine.includes('derivatives')) {
+                  chartToRender = <OiChart oiHistory={Array.isArray(data.oiHistory) ? data.oiHistory : []} />;
+                } else if (firstLine.includes('lịch sử giá') || firstLine.includes('historical price') || firstLine.includes('cvd')) {
+                  chartToRender = <CvdChart cvdData={data.cvdHistory30d || []} />;
+                }
+
+                return (
+                  <div key={index} className="summary-chunk" style={{ position: 'relative' }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{chunk}</ReactMarkdown>
+                    {chartToRender}
+                  </div>
+                );
+              });
+            })()}
           </div>
         ) : (
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>
