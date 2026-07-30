@@ -18,13 +18,22 @@ const fmtPriceCompact = (price) => {
   return price.toFixed(2);
 };
 
+// ─── Volume Bubble Primitive: Z-Score + EMA + Price Impact + Cooldown ────────
+// Pipeline: EMA(20) baseline → Rolling σ → Z-Score ≥ 2.5 → Body/Range ≥ 15%
+//           → Cooldown 3 nến → 3-Tier visual (Significant / Strong / Extreme)
 class VolumeBubblePrimitive {
   constructor() {
     this._data = [];
     this._series = null;
     this._chart = null;
     this._requestUpdate = null;
-    this._options = { show: false, thresholdMulti: 2.0 };
+    this._options = {
+      show: false,
+      emaPeriod: 20,        // EMA lookback for volume baseline
+      zScoreMin: 2.5,       // Minimum Z-Score to qualify as anomaly
+      bodyRatioMin: 0.15,   // Minimum |body|/range to filter out dojis/wicks
+      cooldownBars: 3,      // Min gap between bubbles to reduce cluster noise
+    };
   }
   setOptions(opts) {
     this._options = { ...this._options, ...opts };
@@ -45,6 +54,77 @@ class VolumeBubblePrimitive {
     if (this._requestUpdate) this._requestUpdate();
   }
   updateAllViews() {}
+
+  // ── Pre-compute EMA, rolling σ, Z-Scores, and filter passes ──────────────
+  _computeAnomalies() {
+    const data = this._data;
+    const n = data.length;
+    const { emaPeriod, zScoreMin, bodyRatioMin, cooldownBars } = this._options;
+    if (n < emaPeriod + 1) return [];
+
+    // 1) Build EMA(volume) array
+    const emaVol = new Float64Array(n);
+    const k = 2 / (emaPeriod + 1);
+    // Seed EMA with SMA of first `emaPeriod` bars
+    let seedSum = 0;
+    for (let i = 0; i < emaPeriod; i++) seedSum += data[i].volume;
+    emaVol[emaPeriod - 1] = seedSum / emaPeriod;
+    for (let i = emaPeriod; i < n; i++) {
+      emaVol[i] = data[i].volume * k + emaVol[i - 1] * (1 - k);
+    }
+
+    // 2) Rolling standard deviation over same window
+    const anomalies = [];
+    let lastBubbleIdx = -Infinity;
+
+    for (let i = emaPeriod; i < n; i++) {
+      const currentVol = data[i].volume;
+      const ema = emaVol[i];
+      if (ema <= 0) continue;
+
+      // Rolling σ: std dev of volumes in [i-emaPeriod .. i-1]
+      let sumSq = 0;
+      let sum = 0;
+      for (let j = i - emaPeriod; j < i; j++) {
+        sum += data[j].volume;
+        sumSq += data[j].volume * data[j].volume;
+      }
+      const mean = sum / emaPeriod;
+      const variance = sumSq / emaPeriod - mean * mean;
+      const sigma = Math.sqrt(Math.max(0, variance));
+
+      if (sigma <= 0) continue;
+
+      // 3) Z-Score
+      const zScore = (currentVol - ema) / sigma;
+      if (zScore < zScoreMin) continue;
+
+      // 4) Price Impact Filter: |body| / range ≥ bodyRatioMin
+      const candle = data[i];
+      const range = candle.high - candle.low;
+      if (range <= 0) continue;
+      const bodyRatio = Math.abs(candle.close - candle.open) / range;
+      if (bodyRatio < bodyRatioMin) continue;
+
+      // 5) Cooldown Debounce
+      if (i - lastBubbleIdx < cooldownBars) continue;
+
+      // ── Classify tier ─────────────────────────────────────────────
+      // Tier 1: Significant  (2.5σ ≤ z < 3.5σ)
+      // Tier 2: Strong       (3.5σ ≤ z < 5.0σ)
+      // Tier 3: Extreme      (z ≥ 5.0σ)
+      let tier;
+      if (zScore >= 5.0) tier = 3;
+      else if (zScore >= 3.5) tier = 2;
+      else tier = 1;
+
+      anomalies.push({ idx: i, zScore, tier, bodyRatio });
+      lastBubbleIdx = i;
+    }
+
+    return anomalies;
+  }
+
   paneViews() {
     return [{
       zOrder: () => 'normal',
@@ -53,47 +133,77 @@ class VolumeBubblePrimitive {
           if (!this._series || !this._chart || !this._data.length || !this._options.show) return;
           target.useMediaCoordinateSpace(({ context }) => {
             context.save();
-            const smaPeriod = 20;
             const timeScale = this._chart.timeScale();
-            
-            for (let i = 0; i < this._data.length; i++) {
-              if (i < smaPeriod) continue;
-              
-              let sumVol = 0;
-              for (let j = 1; j <= smaPeriod; j++) {
-                sumVol += this._data[i - j].volume;
-              }
-              const smaVol = sumVol / smaPeriod;
-              const currentVol = this._data[i].volume;
-              
-              if (smaVol > 0 && currentVol > smaVol * this._options.thresholdMulti) {
-                const k = this._data[i];
-                const timeSec = Math.floor(k.time.getTime() / 1000);
-                const x = timeScale.timeToCoordinate(timeSec);
-                if (x === null) continue;
-                
-                const y = this._series.priceToCoordinate(k.close);
-                if (y === null) continue;
-                
-                const isGreen = k.close >= k.open;
-                const r = isGreen ? 16 : 244;
-                const g = isGreen ? 185 : 63;
-                const b = isGreen ? 129 : 94;
-                
-                const ratio = currentVol / smaVol;
-                const radius = Math.min(24, Math.max(6, ratio * 2.5));
-                
+            const anomalies = this._computeAnomalies();
+
+            // ── Tier visual config ──────────────────────────────────────
+            // [radius, coreAlpha, strokeWidth, outerGlowRadius]
+            const tierConfig = {
+              1: { minR: 5, maxR: 10, coreAlpha: 0.50, strokeW: 1.0, glowR: 0 },
+              2: { minR: 8, maxR: 16, coreAlpha: 0.65, strokeW: 1.5, glowR: 4 },
+              3: { minR: 14, maxR: 24, coreAlpha: 0.80, strokeW: 2.0, glowR: 8 },
+            };
+
+            for (const a of anomalies) {
+              const candle = this._data[a.idx];
+              const timeSec = Math.floor(candle.time.getTime() / 1000);
+              const x = timeScale.timeToCoordinate(timeSec);
+              if (x === null) continue;
+
+              // Position bubble at the tip of the candle (high for green, low for red)
+              const isGreen = candle.close >= candle.open;
+              const priceY = isGreen ? candle.high : candle.low;
+              const y = this._series.priceToCoordinate(priceY);
+              if (y === null) continue;
+
+              const cfg = tierConfig[a.tier];
+
+              // Radius: interpolate within tier range based on Z-Score
+              const zNorm = Math.min(1, (a.zScore - 2.5) / 5); // 0..1 across z 2.5..7.5
+              const radius = cfg.minR + (cfg.maxR - cfg.minR) * zNorm;
+
+              const r = isGreen ? 16 : 239;
+              const g = isGreen ? 185 : 68;
+              const b = isGreen ? 129 : 68;
+
+              // Outer glow halo for Tier 2+
+              if (cfg.glowR > 0) {
+                const glowTotal = radius + cfg.glowR;
+                const glow = context.createRadialGradient(x, y, radius * 0.8, x, y, glowTotal);
+                glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha * 0.3})`);
+                glow.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.0)`);
                 context.beginPath();
-                context.arc(x, y, radius, 0, 2 * Math.PI);
-                const grad = context.createRadialGradient(x, y, 0, x, y, radius);
-                grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.7)`);
-                grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.0)`);
-                context.fillStyle = grad;
+                context.arc(x, y, glowTotal, 0, 2 * Math.PI);
+                context.fillStyle = glow;
                 context.fill();
-                
-                context.lineWidth = 1.5;
-                context.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
-                context.stroke();
+              }
+
+              // Core bubble with radial gradient
+              context.beginPath();
+              context.arc(x, y, radius, 0, 2 * Math.PI);
+              const grad = context.createRadialGradient(x, y, 0, x, y, radius);
+              grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha})`);
+              grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha * 0.5})`);
+              grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.05)`);
+              context.fillStyle = grad;
+              context.fill();
+
+              // Crisp stroke ring
+              context.lineWidth = cfg.strokeW;
+              context.strokeStyle = `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha + 0.1})`;
+              context.stroke();
+
+              // Tier 3 (Extreme): add inner diamond marker
+              if (a.tier === 3) {
+                const d = radius * 0.35;
+                context.beginPath();
+                context.moveTo(x, y - d);
+                context.lineTo(x + d, y);
+                context.lineTo(x, y + d);
+                context.lineTo(x - d, y);
+                context.closePath();
+                context.fillStyle = `rgba(255, 255, 255, 0.85)`;
+                context.fill();
               }
             }
             context.restore();
