@@ -11,7 +11,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
   - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta realtime và phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
-  - **Advanced Price Action:** Biểu đồ TradingView tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản) và Liquidity Zones (Vùng thanh lý đòn bẩy). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
+  - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
 - **AI Market Decision Lab:** Tích hợp Gemini để kiểm định giả thuyết vĩ mô/on-chain/flow/phái sinh/HFT, phân biệt quan sát với suy luận, phản biện narrative, chấm chất lượng bằng chứng và tạo playbook quyết định có trigger/invalidation. Hỗ trợ **Tiếng Việt / English** và 3 chế độ: Investment Committee / Skeptical Execution Desk / Socratic Market Mentor.
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%**.
@@ -20,7 +20,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 ## 2. Kiến trúc hệ thống (System Architecture)
 - **Frontend Framework:** React.js (Vite).
 - **Thiết kế UI/UX System:** **Minimalist-UI Protocol** (Editorial typography, High-contrast monospace, Bento Grid 1px borders, zero emojis, adaptive Light/Dark Theme).
-- **Biểu đồ (Charting):** `lightweight-charts` (nến / profile / wall primitive), `chart.js` & `react-chartjs-2` (ETF, CVD, macro, spectrum meter).
+- **Biểu đồ (Charting):** `lightweight-charts` (nến / profile / wall primitive / volume bubble primitive), `chart.js` & `react-chartjs-2` (ETF, CVD, macro, spectrum meter).
 - **Quản lý trạng thái:** React Hooks + Context (`ModuleVisibilityContext`, tooltip settings).
 - **Nguồn dữ liệu:**
   - **REST API:** Binance, FairEconomy/ForexFactory (weekly calendar), CoinGecko, FRED, CoinMetrics, ETF/COT scrapers, news RSS, Yahoo/FRED equities.
@@ -52,6 +52,16 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-07-30] Bổ Sung Tính Năng Tùy Chọn Timeframe M1 & Volume Bubble Dành Cho Advanced Chart `(FEATURE)`
+- **Lane / Mode:** FEATURE FULL & VOLUME ANOMALY TRACKING
+- **Tóm tắt:** Nâng cấp biểu đồ AdvancedChart hỗ trợ chuyển đổi linh hoạt các Timeframe (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`). Đồng thời xây dựng lớp `VolumeBubblePrimitive` vẽ trực tiếp bong bóng tại các nến có Volume đột biến (lớn hơn 2x so với trung bình 20 phiên), mã hóa màu xanh/đỏ mượt mà để dễ dàng tracking dòng tiền cá mập.
+- **Thay đổi chính:**
+  - **Custom Canvas Primitive:** Phát triển `VolumeBubblePrimitive` lồng ghép ngay trong `lightweight-charts` giúp đánh dấu Volume Anomaly.
+  - **Dynamic Timeframe & Realtime Data:** Điều chỉnh tự động API REST & WebSocket stream khớp với Khung thời gian do người dùng chọn trên UI (`1m` -> `4h`).
+- **Files / areas chạm:** `src/components/AdvancedChart.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §2, §4 (đã thêm log mới).
+- **Verify:** Chạy build thành công; tùy chọn Timeframe và nút "Vol Bubbles" hoạt động chính xác.
 
 ### [2026-07-29] Đồng Bộ Cụm Footprint Nodes & TỔNG VOL Theo Nút Chọn Khung Thời Gian (1H, 24H, 7D, 30D) `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & FOOTPRINT TIMEFRAME SYNC

@@ -18,6 +18,92 @@ const fmtPriceCompact = (price) => {
   return price.toFixed(2);
 };
 
+class VolumeBubblePrimitive {
+  constructor() {
+    this._data = [];
+    this._series = null;
+    this._chart = null;
+    this._requestUpdate = null;
+    this._options = { show: false, thresholdMulti: 2.0 };
+  }
+  setOptions(opts) {
+    this._options = { ...this._options, ...opts };
+    if (this._requestUpdate) this._requestUpdate();
+  }
+  setChart(chart) {
+    this._chart = chart;
+  }
+  attached({ series, requestUpdate }) {
+    this._series = series;
+    this._requestUpdate = requestUpdate;
+  }
+  detached() {
+    this._series = null;
+  }
+  setData(klines) {
+    this._data = klines || [];
+    if (this._requestUpdate) this._requestUpdate();
+  }
+  updateAllViews() {}
+  paneViews() {
+    return [{
+      zOrder: () => 'normal',
+      renderer: () => ({
+        draw: (target) => {
+          if (!this._series || !this._chart || !this._data.length || !this._options.show) return;
+          target.useMediaCoordinateSpace(({ context }) => {
+            context.save();
+            const smaPeriod = 20;
+            const timeScale = this._chart.timeScale();
+            
+            for (let i = 0; i < this._data.length; i++) {
+              if (i < smaPeriod) continue;
+              
+              let sumVol = 0;
+              for (let j = 1; j <= smaPeriod; j++) {
+                sumVol += this._data[i - j].volume;
+              }
+              const smaVol = sumVol / smaPeriod;
+              const currentVol = this._data[i].volume;
+              
+              if (smaVol > 0 && currentVol > smaVol * this._options.thresholdMulti) {
+                const k = this._data[i];
+                const timeSec = Math.floor(k.time.getTime() / 1000);
+                const x = timeScale.timeToCoordinate(timeSec);
+                if (x === null) continue;
+                
+                const y = this._series.priceToCoordinate(k.close);
+                if (y === null) continue;
+                
+                const isGreen = k.close >= k.open;
+                const r = isGreen ? 16 : 244;
+                const g = isGreen ? 185 : 63;
+                const b = isGreen ? 129 : 94;
+                
+                const ratio = currentVol / smaVol;
+                const radius = Math.min(24, Math.max(6, ratio * 2.5));
+                
+                context.beginPath();
+                context.arc(x, y, radius, 0, 2 * Math.PI);
+                const grad = context.createRadialGradient(x, y, 0, x, y, radius);
+                grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.7)`);
+                grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.0)`);
+                context.fillStyle = grad;
+                context.fill();
+                
+                context.lineWidth = 1.5;
+                context.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+                context.stroke();
+              }
+            }
+            context.restore();
+          });
+        }
+      })
+    }];
+  }
+}
+
 class HeatmapWallPrimitive {
   constructor() {
     this._walls = [];
@@ -484,6 +570,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const wallLinesRef = useRef([]);
   const wallPrimitiveRef = useRef(null);
   const tpoPrimitiveRef = useRef(null);
+  const bubblePrimitiveRef = useRef(null);
+  const klinesRef = useRef([]);
   const wsRef = useRef(null);
   const autoScrollRef = useRef(true);
   const latestPriceRef = useRef(null);
@@ -493,7 +581,9 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const [klines, setKlines] = useState(null);
   const [showWalls, setShowWalls] = useState(true);
   const [showLiq, setShowLiq] = useState(true);
-  const [tpoMode, setTpoMode] = useState('blocks'); // default ON: blocks
+  const [tpoMode, setTpoMode] = useState('blocks');
+  const [showBubbles, setShowBubbles] = useState(() => localStorage.getItem('hft_show_bubbles') === 'true');
+  const [timeframe, setTimeframe] = useState(() => localStorage.getItem('hft_timeframe') || '30m');
   const [autoScroll, setAutoScroll] = useState(true);
   const [wallTick, setWallTick] = useState(0);
 
@@ -520,6 +610,12 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       tpoPrimitiveRef.current.setOptions({ mode: tpoMode });
     }
   }, [tpoMode]);
+
+  useEffect(() => {
+    if (bubblePrimitiveRef.current) {
+      bubblePrimitiveRef.current.setOptions({ show: showBubbles });
+    }
+  }, [showBubbles]);
 
   // Wall reset cycle (500ms) to ensure limit walls update promptly
   useEffect(() => {
@@ -592,6 +688,12 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       mainSeries.attachPrimitive(tpoPrimitive);
       tpoPrimitive.setChart(chart);
       tpoPrimitiveRef.current = tpoPrimitive;
+
+      const bubblePrimitive = new VolumeBubblePrimitive();
+      bubblePrimitive.setOptions({ show: showBubbles });
+      mainSeries.attachPrimitive(bubblePrimitive);
+      bubblePrimitive.setChart(chart);
+      bubblePrimitiveRef.current = bubblePrimitive;
     } else if (chartRef.current) {
       chartRef.current.applyOptions({
         layout: { textColor: textColor },
@@ -604,15 +706,15 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
     async function loadData() {
       try {
         setLoading(true);
-        // Fetch 30m klines
-        const rawKlines = await getBTCKlines('BTCUSDT', '30m', 300);
+        // Fetch klines based on timeframe
+        const limit = timeframe === '1m' || timeframe === '5m' ? 500 : 300;
+        const rawKlines = await getBTCKlines('BTCUSDT', timeframe, limit);
         
         let formatted = rawKlines.map(k => ({
           time: Math.floor(k.time.getTime() / 1000),
           value: k.close,
         }));
 
-        // Lightweight-charts requires strictly ascending unique times
         formatted.sort((a, b) => a.time - b.time);
         formatted = formatted.filter((v, i, a) => i === 0 || v.time > a[i - 1].time);
 
@@ -623,10 +725,10 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
           }
         }
 
-        // Compute VP
         const vp = calculateVolumeProfile(rawKlines);
         setVpData(vp);
         setKlines(rawKlines);
+        klinesRef.current = [...rawKlines];
         if (rawKlines.length > 0) {
           latestPriceRef.current = rawKlines[rawKlines.length - 1].close;
         }
@@ -635,13 +737,16 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         if (tpoPrimitiveRef.current) {
           tpoPrimitiveRef.current.setData(rawKlines);
         }
+        if (bubblePrimitiveRef.current) {
+          bubblePrimitiveRef.current.setData(klinesRef.current);
+        }
       } catch (err) {
         console.error('[AdvancedChart] Error in loadData:', err);
       }
 
-      // Start realtime WebSocket updates
+      // Start realtime WebSocket updates for current timeframe
       if (wsRef.current) wsRef.current.close();
-      wsRef.current = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_30m');
+      wsRef.current = new WebSocket(`wss://stream.binance.com:9443/ws/btcusdt@kline_${timeframe}`);
       wsRef.current.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
@@ -652,12 +757,30 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
             
             latestPriceRef.current = close;
             seriesRef.current.update({ time, value: close });
+
+            // Update klines array ref for volume bubbles
+            if (klinesRef.current && klinesRef.current.length > 0) {
+              const lastK = klinesRef.current[klinesRef.current.length - 1];
+              if (Math.floor(lastK.time.getTime() / 1000) === time) {
+                lastK.close = close;
+                lastK.open = parseFloat(k.o);
+                lastK.high = parseFloat(k.h);
+                lastK.low = parseFloat(k.l);
+                lastK.volume = parseFloat(k.v);
+              } else {
+                klinesRef.current.push({ 
+                  time: new Date(k.t), 
+                  open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close, volume: parseFloat(k.v) 
+                });
+                if (klinesRef.current.length > 600) klinesRef.current.shift();
+              }
+              if (bubblePrimitiveRef.current) {
+                bubblePrimitiveRef.current.setData(klinesRef.current);
+              }
+            }
+
             if (autoScrollRef.current && chartRef.current) {
               chartRef.current.timeScale().scrollToRealTime();
-            }
-            if (tpoPrimitiveRef.current) {
-              // trigger a redraw if needed, or we might need to append data.
-              // For simplicity, lightweight-charts requests updates automatically when series updates.
             }
           }
         } catch (e) {
@@ -672,7 +795,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         wsRef.current.close();
       }
     };
-  }, []);
+  }, [timeframe]);
 
   useEffect(() => {
     if (!seriesRef.current || !klines) return;
@@ -912,6 +1035,44 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
             }}
           >
             🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }}>TF:</span>
+            <select 
+              value={timeframe} 
+              onChange={(e) => {
+                setTimeframe(e.target.value);
+                localStorage.setItem('hft_timeframe', e.target.value);
+              }}
+              style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '0.7rem', outline: 'none', cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}
+            >
+              <option value="1m">1M</option>
+              <option value="5m">5M</option>
+              <option value="15m">15M</option>
+              <option value="30m">30M</option>
+              <option value="1h">1H</option>
+              <option value="4h">4H</option>
+            </select>
+          </div>
+          <button
+            onClick={() => {
+              const val = !showBubbles;
+              setShowBubbles(val);
+              localStorage.setItem('hft_show_bubbles', val);
+            }}
+            className="font-mono"
+            style={{
+              padding: '2px 8px',
+              fontSize: '0.7rem',
+              borderRadius: '4px',
+              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: showBubbles ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+              color: showBubbles ? '#10b981' : 'var(--text-slate-400)',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            🫧 Vol Bubbles
           </button>
           <button
             onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}

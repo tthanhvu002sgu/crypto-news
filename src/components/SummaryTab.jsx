@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
-import { fetchEconomicCalendar } from '../services/economicCalendarService';
+import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBACK_FREE_MODELS } from '../services/openrouter';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
@@ -400,7 +400,7 @@ export default function SummaryTab({
         getHistoricalCVD('BTCUSDT', '4h', 42),
         getHistoricalCVD('BTCUSDT', '1d', 30),
         fetchRealtimeFeed(),
-        fetchEconomicCalendar().catch(() => null),
+        getWeeklyEconomicCalendar().catch(() => null),
       ]);
     } catch (error) {
       console.warn('Error fetching data for report:', error);
@@ -738,7 +738,7 @@ ${(() => {
         `Actual: ${e.actual || 'TBD'} | Forecast: ${e.forecast || 'N/A'} | Prev: ${e.previous || 'N/A'} | Impact: ${e.impact}`
     )
     .join('\n');
-})()}`.trim()
+})().trim()}
 
 ## 2. BTC PRICE STRUCTURE & CRYPTO BREADTH
 - BTC spot: ${priceNow === null ? 'N/A' : '$' + formatNumber(priceNow, 2)}
