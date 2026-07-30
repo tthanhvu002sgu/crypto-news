@@ -275,6 +275,7 @@ export default function SummaryTab({
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
   btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit
 }) {
+  const [reportCvdData, setReportCvdData] = useState([]);
   const { isModuleHidden } = useModuleVisibility();
   const isSummaryHidden = isModuleHidden('tab_summary');
   const [aiProvider, setAiProvider] = useState(() => {
@@ -397,6 +398,9 @@ export default function SummaryTab({
 
     const activeCvd7d = cvd7d.length > 0 ? cvd7d : (data.cvdHistory7d || []);
     const activeCvd30d = cvd30d.length > 0 ? cvd30d : (data.cvdHistory30d || []);
+    if (activeCvd30d.length > 0 || activeCvd7d.length > 0) {
+      setReportCvdData(activeCvd30d.length > 0 ? activeCvd30d : activeCvd7d);
+    }
     const activeNews = latestNews?.length > 0 ? latestNews : (data.news || []);
     const klines48h = Array.isArray(data.klines) ? data.klines : [];
     const priceNow =
@@ -1433,10 +1437,20 @@ ${promptData}
                 let chartToRender = null;
                 if (firstLine.includes('dòng tiền tổ chức') || firstLine.includes('institutional flows') || firstLine.includes('etf')) {
                   chartToRender = <EtfChart etfHistory={etfHistory} />;
-                } else if (firstLine.includes('phái sinh') || firstLine.includes('derivatives')) {
+                } else if (firstLine.includes('phái sinh') || firstLine.includes('derivatives') || firstLine.includes('open interest') || firstLine.includes('funding')) {
                   chartToRender = <OiChart oiHistory={Array.isArray(data.oiHistory) ? data.oiHistory : []} />;
-                } else if (firstLine.includes('lịch sử giá') || firstLine.includes('historical price') || firstLine.includes('cvd')) {
-                  chartToRender = <CvdChart cvdData={data.cvdHistory30d || []} />;
+                } else if (
+                  firstLine.includes('lịch sử giá') || 
+                  firstLine.includes('historical price') || 
+                  firstLine.includes('cvd') || 
+                  firstLine.includes('thị trường') || 
+                  firstLine.includes('market') || 
+                  firstLine.includes('giá tài sản') || 
+                  firstLine.includes('cấu trúc giá') || 
+                  firstLine.includes('microstructure')
+                ) {
+                  const cvdSource = reportCvdData.length > 0 ? reportCvdData : (data.cvdHistory30d?.length > 0 ? data.cvdHistory30d : data.cvdHistory7d);
+                  chartToRender = <CvdChart cvdData={cvdSource} />;
                 }
 
                 return (
