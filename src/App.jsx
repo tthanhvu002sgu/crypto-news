@@ -1408,24 +1408,33 @@ function AppContent() {
                           const m = data.stablecoins?.total;
                           if (p && m) {
                             const ssr = (p * 19740000) / m;
-                            // Implied Fair Price based on M/Q with historical median SSR (~8.5)
-                            const fairPrice = (m * 8.5) / 19740000;
-                            const fairStr = `$${(fairPrice / 1000).toFixed(1)}k`;
-                            if (ssr < 6) return `Est ${fairStr} • Buy ↑`;
-                            if (ssr > 15) return `Est ${fairStr} • High ↓`;
-                            return `Est ${fairStr} (M/Q)`;
+                            // Model 1: Static Legacy Median (~8.5)
+                            const fairPriceM1 = (m * 8.5) / 19740000;
+                            const fairStrM1 = `${(fairPriceM1 / 1000).toFixed(1)}k`;
+                            let statusM1 = 'Bình thường';
+                            if (ssr < 6) statusM1 = 'Buy ↑';
+                            if (ssr > 15) statusM1 = 'High ↓';
+
+                            // Model 2: Dynamic Cycle Adjusted Median (~4.2 for 2024-2026)
+                            const fairPriceM2 = (m * 4.2) / 19740000;
+                            const fairStrM2 = `${(fairPriceM2 / 1000).toFixed(1)}k`;
+                            let statusM2 = 'Bình thường';
+                            let clsM2 = 'text-slate-400';
+                            if (ssr < 3.2) { statusM2 = 'Buy ↑'; clsM2 = 'text-emerald-400'; }
+                            else if (ssr > 5.5) { statusM2 = 'High ↓'; clsM2 = 'text-rose-400'; }
+
+                            return (
+                              <div style={{ fontSize: '10px', marginTop: '4px', lineHeight: '1.45', textAlign: 'left' }}>
+                                <div style={{ opacity: 0.7, color: 'var(--text-slate-400)' }}>
+                                  M1 (Cố định 8.5): Est ${fairStrM1} • ${statusM1}
+                                </div>
+                                <div className={clsM2} style={{ fontWeight: 600 }}>
+                                  M2 (Chu kỳ 4.2): Est ${fairStrM2} • ${statusM2}
+                                </div>
+                              </div>
+                            );
                           }
-                          return 'M/Q Fair Value';
-                        })()}
-                        subCls={(() => {
-                          const p = btcDisplay?.price;
-                          const m = data.stablecoins?.total;
-                          if (p && m) {
-                            const ssr = (p * 19740000) / m;
-                            if (ssr < 6) return 'text-emerald';
-                            if (ssr > 15) return 'text-rose';
-                          }
-                          return 'text-slate-400';
+                          return 'M1 vs M2 Review';
                         })()}
                         tooltipId="ssr"
                         freshness="1h"

@@ -99,8 +99,8 @@ export const METRIC_METADATA = {
     formula: 'SupplyInProfit ≈ -10 + 52 × MVRV - 1.5 × MVRV²'
   },
   ssr: {
-    api: 'Mô hình giả lập (P = M/Q)',
-    def: 'Stablecoin Supply Ratio. Đo lường sức mua của Stablecoin so với Vốn hóa Bitcoin. SSR < 6: Sức mua dồi dào, báo hiệu đáy. SSR > 15: Sức mua cạn kiệt, cảnh báo đỉnh.',
+    api: 'So sánh Mô hình M1 vs M2',
+    def: 'Stablecoin Supply Ratio. Đo lường sức mua của Stablecoin so với Vốn hóa BTC.\n• M1 (Cố định 8.5): Mô hình cũ, bị phóng đại do phình vốn hóa Stablecoin.\n• M2 (Chu kỳ mới 4.2): Điều chỉnh theo nền SSR 2024-2026 (SSR < 3.2: Buy, > 5.5: High).',
     formula: 'SSR = (BTC Price × 19.74M) / Stablecoin Market Cap'
   },
   cvd: {
