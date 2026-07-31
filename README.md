@@ -15,6 +15,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
 - **AI Market Decision Lab:** Tích hợp Gemini để kiểm định giả thuyết vĩ mô/on-chain/flow/phái sinh/HFT, phân biệt quan sát với suy luận, phản biện narrative, chấm chất lượng bằng chứng và tạo playbook quyết định có trigger/invalidation. Hỗ trợ **Tiếng Việt / English** và 3 chế độ: Investment Committee / Skeptical Execution Desk / Socratic Market Mentor.
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%**.
+- **BTC SSR Oscillator (Glassnode Z-Score):** Đo lường sức mua Stablecoin so với Vốn hóa BTC chuẩn hóa bằng Z-Score (vị trí so với đường trung bình SMA 200 ngày và độ lệch chuẩn 2σ theo phương pháp Glassnode Oscillator). Tự động xác định vùng Mua/Bán cực đoan (Z < -2 / Z > +2) và đồng bộ nguồn vốn hóa DefiLlama.
 - **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
@@ -48,10 +49,21 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/economicCalendarService.js` — Fetch lịch kinh tế tuần từ FairEconomy JSON, phân tích tác động Crypto và fallback curated schedule.
 - `services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100) dựa trên 4 trụ cột định lượng.
 - `services/signalStore.js` — Lưu trữ Signal Log kết hợp IndexedDB + localStorage persistence chống mất dữ liệu khi F5.
-- `services/api.js` — REST multi-source (Binance, FRED, ETF, COT, …).
+- `services/api.js` — REST multi-source (Binance, DefiLlama, FRED, ETF, COT, …) hỗ trợ SSR Z-Score Oscillator 200-day.
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-07-31] Chuyển Đổi Chỉ Báo BTC SSR Sang Mô Hình Chuẩn Glassnode SSR Oscillator (Z-Score) `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & ON-CHAIN MODELING
+- **Tóm tắt:** Loại bỏ mô hình Fair Price tự chế không có cơ sở lý thuyết; chuyển đổi chỉ báo BTC SSR thành mô hình chuẩn Glassnode SSR Oscillator dựa trên Z-Score (SMA200 & ±2σ Bollinger Bands). Đồng thời đồng bộ dữ liệu vốn hóa stablecoin từ DefiLlama cho cả SSR realtime và SSR MA.
+- **Thay đổi chính:**
+  - **Tính Toán Z-Score Dynamic (`api.js`):** Mở rộng `getSsrMovingAverageData` truy vấn 200 ngày dữ liệu klines Binance & DefiLlama stablecoin aggregate, tính toán SMA200, StdDev và Z-Score.
+  - **Redesign UI MetricCard (`App.jsx`):** Bỏ hiển thị M1/M2 Fair Price (Est $xxxk). Thay thế bằng SSR realtime, SMA200 và Z-Score với phân vùng màu sắc trực quan (Mua mạnh / Vùng mua / Rủi ro / Bán mạnh).
+  - **Cập Nhật Tooltip & Backtest (`Tooltip.jsx` & Walkthrough):** Cập nhật mô tả giải thích thuật toán Z-Score Oscillator. Thực hiện backtest 1000 ngày quá khứ xác nhận tín hiệu đảo chiều chính xác tại các mốc đáy $53k và đỉnh $101k.
+- **Files / areas chạm:** `src/services/api.js`, `src/App.jsx`, `src/components/Tooltip.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §3, §4 (đã thêm log mới).
+- **Verify:** `npm run build` pass (1.42s); backtest lịch sử cho tín hiệu Z-Score khớp chính xác với biến động đỉnh/đáy của BTC.
 
 ### [2026-07-30] Bổ Sung Tính Năng Tùy Chọn Timeframe M1 & Volume Bubble Dành Cho Advanced Chart `(FEATURE)`
 - **Lane / Mode:** FEATURE FULL & VOLUME ANOMALY TRACKING
