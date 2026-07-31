@@ -1378,11 +1378,14 @@ function AppContent() {
                           const m = data.stablecoins?.total;
                           if (p && m) {
                             const ssr = (p * 19740000) / m;
-                            if (ssr < 6) return 'High Buy Power ↑';
-                            if (ssr > 15) return 'Low Buy Power ↓';
-                            return 'Neutral (M/Q)';
+                            // Implied Fair Price based on M/Q with historical median SSR (~8.5)
+                            const fairPrice = (m * 8.5) / 19740000;
+                            const fairStr = `$${(fairPrice / 1000).toFixed(1)}k`;
+                            if (ssr < 6) return `Est ${fairStr} • Buy ↑`;
+                            if (ssr > 15) return `Est ${fairStr} • High ↓`;
+                            return `Est ${fairStr} (M/Q)`;
                           }
-                          return 'M/Q Proxy';
+                          return 'M/Q Fair Value';
                         })()}
                         subCls={(() => {
                           const p = btcDisplay?.price;
