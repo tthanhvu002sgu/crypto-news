@@ -1399,7 +1399,8 @@ function AppContent() {
                         label="BTC SSR"
                         value={(() => {
                           const p = btcDisplay?.price;
-                          const m = data.stablecoins?.total;
+                          // Use DefiLlama total from our new endpoint if available, else fallback
+                          const m = data.ssrMa?.stablecoinTotal || data.stablecoins?.total;
                           if (p && m) {
                             const btcCap = p * 19740000;
                             const ssr = btcCap / m;
@@ -1409,39 +1410,35 @@ function AppContent() {
                         })()}
                         sub={(() => {
                           const p = btcDisplay?.price;
-                          const m = data.stablecoins?.total;
-                          if (p && m) {
+                          const m = data.ssrMa?.stablecoinTotal || data.stablecoins?.total;
+                          if (p && m && data.ssrMa?.ma200) {
                             const ssr = (p * 19740000) / m;
-                            // Model 1: Static Legacy Median (~8.5)
-                            const fairPriceM1 = (m * 8.5) / 19740000;
-                            const fairStrM1 = `${(fairPriceM1 / 1000).toFixed(1)}k`;
-                            let statusM1 = 'Bình thường';
-                            if (ssr < 6) statusM1 = 'Buy ↑';
-                            if (ssr > 15) statusM1 = 'High ↓';
-
-                            // Model 2: Real-time Dynamic MA180 of SSR
-                            const currentMa = data.ssrMa || 4.38;
-                            const fairPriceM2 = (m * currentMa) / 19740000;
-                            const fairStrM2 = `${(fairPriceM2 / 1000).toFixed(1)}k`;
-                            let statusM2 = 'Bình thường';
-                            let clsM2 = 'text-slate-400';
-                            const lowerBand = currentMa * 0.75;
-                            const upperBand = currentMa * 1.25;
-                            if (ssr < lowerBand) { statusM2 = 'Buy ↑'; clsM2 = 'text-emerald-400'; }
-                            else if (ssr > upperBand) { statusM2 = 'High ↓'; clsM2 = 'text-rose-400'; }
+                            const ma = data.ssrMa.ma200;
+                            const stdDev = data.ssrMa.stdDev200;
+                            
+                            // Realtime Z-Score
+                            const z = stdDev > 0 ? (ssr - ma) / stdDev : 0;
+                            
+                            let status = 'Bình thường';
+                            let cls = 'text-slate-400';
+                            
+                            if (z < -2) { status = 'Mua mạnh (Oversold) ↑'; cls = 'text-emerald-400'; }
+                            else if (z < -1) { status = 'Vùng mua (Buy Zone) ↗'; cls = 'text-emerald-400'; }
+                            else if (z > 2) { status = 'Bán mạnh (Overheated) ↓'; cls = 'text-rose-400'; }
+                            else if (z > 1) { status = 'Rủi ro cao (Sell Zone) ↘'; cls = 'text-rose-400'; }
 
                             return (
                               <div style={{ fontSize: '10px', marginTop: '4px', lineHeight: '1.45', textAlign: 'left' }}>
                                 <div style={{ opacity: 0.7, color: 'var(--text-slate-400)' }}>
-                                  M1 (Tĩnh 8.5): Est ${fairStrM1} • ${statusM1}
+                                  SMA200: {ma}
                                 </div>
-                                <div className={clsM2} style={{ fontWeight: 600 }}>
-                                  M2 (Động MA180 ${currentMa}): Est ${fairStrM2} • ${statusM2}
+                                <div className={cls} style={{ fontWeight: 600 }}>
+                                  Z-Score: {z > 0 ? '+' : ''}{z.toFixed(2)} • {status}
                                 </div>
                               </div>
                             );
                           }
-                          return 'M1 vs M2 Review';
+                          return 'Đang tải SSR Oscillator...';
                         })()}
                         tooltipId="ssr"
                         freshness="1h"

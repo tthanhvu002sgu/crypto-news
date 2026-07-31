@@ -99,9 +99,9 @@ export const METRIC_METADATA = {
     formula: 'SupplyInProfit ≈ -10 + 52 × MVRV - 1.5 × MVRV²'
   },
   ssr: {
-    api: 'So sánh Mô hình M1 vs M2',
-    def: 'Stablecoin Supply Ratio. Đo lường sức mua của Stablecoin so với Vốn hóa BTC.\n• M1 (Cố định 8.5): Mô hình cũ, bị phóng đại do phình vốn hóa Stablecoin.\n• M2 (Động MA180): Tính toán tự động theo Trung bình động 180 ngày của SSR từ dữ liệu Binance & DefiLlama realtime.',
-    formula: 'SSR = (BTC Price × 19.74M) / Stablecoin Market Cap'
+    api: 'Glassnode SSR Oscillator (Z-Score)',
+    def: 'Đo lường sức mua của Stablecoin so với Vốn hóa BTC.\nThay vì dùng SSR tĩnh, mô hình sử dụng Z-Score (độ lệch chuẩn) so với Đường trung bình 200 ngày (SMA200) để xác định vùng quá mua/quá bán.\n• Z < -2: Sức mua dồi dào (Oversold)\n• Z > +2: Sức mua cạn kiệt (Overheated)',
+    formula: 'Z-Score = (SSR - SMA200) / Standard_Deviation'
   },
   cvd: {
     api: 'Binance WebSocket (btcusdt@aggTrade)',

@@ -404,11 +404,11 @@ export const getGlobalCryptoData = async () => {
 
 /** Stablecoin market caps (USDT + USDC) as proxy for crypto "dry powder" */
 
-/** Fetches historical BTC 1d klines & DefiLlama stablecoin supply to calculate real-time SSR Moving Average (MA180) */
+/** Fetches historical BTC 1d klines & DefiLlama stablecoin supply to calculate real-time SSR Oscillator (Z-Score) */
 export const getSsrMovingAverageData = async () => {
   try {
     const [btcRes, stableRes] = await Promise.all([
-      axios.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=180'),
+      axios.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=200'),
       axios.get('https://stablecoins.llama.fi/stablecoincharts/all')
     ]);
 
@@ -424,16 +424,33 @@ export const getSsrMovingAverageData = async () => {
 
     const ssrHistory = [];
     btcPrices.forEach(b => {
+      // Find stablecoin data closest to this day
       const s = stableData.find(st => Math.abs(st.timestamp - b.timestamp) < 86400000);
       if (s && s.totalCap > 0) {
+        // Use 19.74M as a baseline for the 200-day window, Z-Score is relative so it's perfectly fine
         const ssr = (b.price * 19740000) / s.totalCap;
         ssrHistory.push(ssr);
       }
     });
 
     if (ssrHistory.length > 0) {
+      const currentSsr = ssrHistory[ssrHistory.length - 1];
       const sum = ssrHistory.reduce((a, b) => a + b, 0);
-      return parseFloat((sum / ssrHistory.length).toFixed(3));
+      const sma200 = sum / ssrHistory.length;
+      
+      const sumSq = ssrHistory.reduce((acc, val) => acc + Math.pow(val - sma200, 2), 0);
+      const variance = sumSq / ssrHistory.length;
+      const stdDev200 = Math.sqrt(variance);
+      
+      const zScore = stdDev200 > 0 ? (currentSsr - sma200) / stdDev200 : 0;
+
+      return {
+        currentSsr: parseFloat(currentSsr.toFixed(2)),
+        ma200: parseFloat(sma200.toFixed(2)),
+        stdDev200: parseFloat(stdDev200.toFixed(2)),
+        zScore: parseFloat(zScore.toFixed(2)),
+        stablecoinTotal: stableData[stableData.length - 1]?.totalCap || 0
+      };
     }
     return null;
   } catch (e) {
