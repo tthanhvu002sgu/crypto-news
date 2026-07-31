@@ -686,7 +686,7 @@ function AppContent() {
       if (wantWarm) {
         push('global', fetchCached('globalCryptoData', () => getGlobalCryptoData(), CACHE_TTL.globalCrypto, addLog, 'Global Market (CoinGecko)', force));
         push('stable', fetchCached('stablecoinData', () => getStablecoinData(), CACHE_TTL.stablecoin, addLog, 'Stablecoins (CoinGecko)', force));
-        push('ssrMa', fetchCached('ssrMovingAverage180', () => getSsrMovingAverageData(), CACHE_TTL.onChain, addLog, 'SSR MA180 (DefiLlama + Binance)', force));
+        push('ssrMa', fetchCached('ssrOscillator_v2', () => getSsrMovingAverageData(), CACHE_TTL.onChain, addLog, 'SSR Oscillator (DefiLlama + Binance)', force));
         push('news', fetchCached('realtimeFeed', () => fetchRealtimeFeed(), CACHE_TTL.news, addLog, 'News RSS (rss2json)', force));
         push('yield10y', fetchCached('yield10y', () => getFREDMetric('DGS10', apiKeys.fred), CACHE_TTL.yield10y, addLog, 'Yield 10Y (Yahoo Finance)', force));
         push('dxy', fetchCached('dxyQuote', () => getDXYQuote(), CACHE_TTL.dxy, addLog, 'Chỉ số DXY (Yahoo Finance)', force));
@@ -1400,7 +1400,7 @@ function AppContent() {
                         value={(() => {
                           const p = btcDisplay?.price;
                           // Use DefiLlama total from our new endpoint if available, else fallback
-                          const m = data.ssrMa?.stablecoinTotal || data.stablecoins?.total;
+                          const m = (typeof data.ssrMa === 'object' && data.ssrMa?.stablecoinTotal) || data.stablecoins?.total;
                           if (p && m) {
                             const btcCap = p * 19740000;
                             const ssr = btcCap / m;
@@ -1410,11 +1410,12 @@ function AppContent() {
                         })()}
                         sub={(() => {
                           const p = btcDisplay?.price;
-                          const m = data.ssrMa?.stablecoinTotal || data.stablecoins?.total;
-                          if (p && m && data.ssrMa?.ma200) {
+                          const ssrObj = typeof data.ssrMa === 'object' ? data.ssrMa : null;
+                          const m = ssrObj?.stablecoinTotal || data.stablecoins?.total;
+                          if (p && m && ssrObj?.ma200) {
                             const ssr = (p * 19740000) / m;
-                            const ma = data.ssrMa.ma200;
-                            const stdDev = data.ssrMa.stdDev200;
+                            const ma = ssrObj.ma200;
+                            const stdDev = ssrObj.stdDev200;
                             
                             // Realtime Z-Score
                             const z = stdDev > 0 ? (ssr - ma) / stdDev : 0;
