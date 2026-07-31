@@ -26,6 +26,7 @@ export const MODULES_CONFIG = {
   hft_advanced_chart: { id: 'hft_advanced_chart', label: 'Advanced Price Action: POC & Walls', category: 'Data (HFT)' },
   hft_whale_trades: { id: 'hft_whale_trades', label: 'Live Whale Trades', category: 'Data (HFT)' },
   hft_signal_log: { id: 'hft_signal_log', label: 'Signal Log (Kiểm tra Bias & Dòng tiền)', category: 'Data (HFT)' },
+  hft_move_tracker: { id: 'hft_move_tracker', label: 'Move Tracker (Futures + Spot)', category: 'Data (HFT)' },
 
   // Thác Thanh Khoản Tab
   tab_cascade: { id: 'tab_cascade', label: 'Thác Thanh Khoản — Sơ Đồ Lưu Chuyển', category: 'Thác Thanh Khoản' },

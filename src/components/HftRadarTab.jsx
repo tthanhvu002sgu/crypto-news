@@ -1458,7 +1458,7 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
         </h3>
         <div className="hft-panel-badges" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className="hft-badge badge-api font-mono">{signalCount} entries</span>
-          <ModuleMenu moduleId="hft_signals" />
+          <ModuleMenu moduleId="hft_signal_log" />
         </div>
       </div>
 
@@ -1550,7 +1550,7 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
                       </span>
                       {sig.moveReport.verdictLabel && (
                         <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800, backgroundColor: `${sig.moveReport.verdictColor}20`, color: sig.moveReport.verdictColor, border: `1px solid ${sig.moveReport.verdictColor}` }}>
-                          {sig.moveReport.verdictIcon} {sig.moveReport.verdictLabel}
+                          {sig.moveReport.verdictIcon} {sig.moveReport.verdictLabel}{sig.moveReport.confidenceScore != null ? ` · ${sig.moveReport.confidenceScore}%` : ''}
                         </span>
                       )}
                     </div>
@@ -1566,9 +1566,11 @@ function SignalLogPanel({ signals, onRefresh, signalCount }) {
                       <div>Tổng Volume: <strong>${(sig.moveReport.totalVolume / 1e6).toFixed(2)}M</strong></div>
                       <div>Số lệnh khớp: <strong>{sig.moveReport.tradeCount}</strong></div>
                       <div>Taker Buy: <strong>{sig.moveReport.takerBuyRatio}%</strong></div>
-                      <div>CVD Δ: <strong className={sig.moveReport.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{(sig.moveReport.cvdDelta >= 0 ? '+' : '')}${(sig.moveReport.cvdDelta / 1e6).toFixed(2)}M</strong></div>
+                      <div>Futures CVD Δ: <strong className={sig.moveReport.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{(sig.moveReport.cvdDelta >= 0 ? '+' : '')}${(sig.moveReport.cvdDelta / 1e6).toFixed(2)}M</strong></div>
+                      <div>Spot CVD Δ: {sig.moveReport.spotCvdDelta == null ? <strong>N/A</strong> : <strong className={sig.moveReport.spotCvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{sig.moveReport.spotCvdDelta >= 0 ? '+' : ''}${(sig.moveReport.spotCvdDelta / 1e6).toFixed(2)}M</strong>}</div>
+                      <div>Venue context: <strong>{sig.moveReport.flowContext || 'N/A'}</strong></div>
                       <div>Lệnh lớn &gt; $100K: <strong>{sig.moveReport.largeTradesCount} (${((sig.moveReport.largeTradesVol || 0)/1e6).toFixed(2)}M)</strong></div>
-                      <div>Recovery (60s): <strong>{sig.moveReport.recoveryPct}%</strong></div>
+                      <div>Recovery (60s): <strong>{sig.moveReport.recoveryPct == null ? 'N/A · data gap' : `${sig.moveReport.recoveryPct}%`}</strong></div>
                     </div>
                   </div>
                 )}
@@ -1690,7 +1692,10 @@ function MoveTrackerPanel() {
   const [trackerState, setTrackerState] = useState({
     status: 'IDLE',
     activeMove: null,
+    pendingRecoveries: [],
     moveHistory: [],
+    health: {},
+    thresholdUsd: null,
     settings: {
       mode: MOVE_CONFIG.MODE_ATR,
       atrMult: MOVE_CONFIG.DEFAULT_ATR_MULT,
@@ -1701,6 +1706,9 @@ function MoveTrackerPanel() {
 
   const [expandedMoveId, setExpandedMoveId] = useState(null);
   const [currentAtr, setCurrentAtr] = useState(getCurrentATR());
+  const [historyDirection, setHistoryDirection] = useState('ALL');
+  const [historyVerdict, setHistoryVerdict] = useState('ALL');
+  const [nowTick, setNowTick] = useState(0);
 
   useEffect(() => {
     const unsubscribe = subscribeMoveTracker((state) => {
@@ -1710,36 +1718,104 @@ function MoveTrackerPanel() {
     return unsubscribe;
   }, []);
 
-  const { status, activeMove, moveHistory, settings } = trackerState;
-  const displayMove = activeMove || (moveHistory.length > 0 ? moveHistory[0] : null);
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const {
+    status,
+    activeMove,
+    pendingRecoveries = [],
+    moveHistory,
+    settings,
+    health = {},
+    thresholdUsd,
+  } = trackerState;
+  const pendingMove = pendingRecoveries[0] || null;
+  const displayMove = activeMove || pendingMove || moveHistory[0] || null;
+  const displayPhase = activeMove ? 'TRACKING' : pendingMove ? 'RECOVERY' : displayMove ? 'CLASSIFIED' : 'LISTENING';
+  const displayNow = nowTick || pendingMove?.endTime || activeMove?.triggerTime || 0;
+  const recoveryRemaining = pendingMove
+    ? Math.max(0, Math.ceil((pendingMove.recoveryEndsAt - displayNow) / 1000))
+    : 0;
+  const futuresAge = health.futuresLastTradeAt && nowTick ? nowTick - health.futuresLastTradeAt : Infinity;
+  const spotAge = health.spotLastTradeAt && nowTick ? nowTick - health.spotLastTradeAt : Infinity;
+  const connectionState = futuresAge < 10_000 && spotAge < 10_000
+    ? 'LIVE'
+    : futuresAge === Infinity && spotAge === Infinity
+      ? 'WARMING'
+      : 'DATA GAP';
+  const filteredHistory = useMemo(() => moveHistory.filter((move) => {
+    const directionMatch = historyDirection === 'ALL' || move.direction === historyDirection;
+    const verdictMatch = historyVerdict === 'ALL' || move.verdict === historyVerdict;
+    return directionMatch && verdictMatch;
+  }), [moveHistory, historyDirection, historyVerdict]);
 
   const statusBadge = useMemo(() => {
-    if (status === 'TRACKING') return { label: '⚡ ĐANG TRACKING MOVE', cls: 'status-tag--tracking' };
-    if (status === 'POST_RECOVERY') return { label: '⏳ TÍNH RECOVERY 60S', cls: 'status-tag--recovery' };
-    return { label: '● ĐANG CHỜ TÍN HIỆU', cls: 'status-tag--idle' };
-  }, [status]);
+    if (!settings.enabled) return { label: 'ĐÃ TẠM DỪNG', cls: 'status-tag--idle' };
+    if (status === 'TRACKING') return { label: 'ĐANG TRACKING', cls: 'status-tag--tracking' };
+    if (pendingMove) return { label: `RECOVERY ${recoveryRemaining}s`, cls: 'status-tag--recovery' };
+    return { label: 'ĐANG CHỜ TÍN HIỆU', cls: 'status-tag--idle' };
+  }, [status, settings.enabled, pendingMove, recoveryRemaining]);
+
+  const futuresCvd = displayMove
+    ? displayMove.cvdDelta ?? ((displayMove.takerBuyVol || 0) - (displayMove.takerSellVol || 0))
+    : 0;
+  const spotCvd = displayMove?.spotCvdDelta ?? (
+    displayMove?.spotTradeCount > 0
+      ? (displayMove.spotTakerBuyVol || 0) - (displayMove.spotTakerSellVol || 0)
+      : null
+  );
+  const movePct = displayMove
+    ? displayMove.pctChange ?? (((displayMove.endPrice - displayMove.startPrice) / displayMove.startPrice) * 100)
+    : 0;
+  const durationSec = displayMove
+    ? displayMove.durationSec ?? Math.max(0, Math.round(((displayMove.endTime || displayNow) - displayMove.startTime) / 1000))
+    : 0;
 
   return (
-    <div className="hft-panel glass-panel move-tracker-panel">
-      {/* Panel Header & Controls */}
-      <div className="hft-panel-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
-        <div className="hft-panel-title font-mono" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="hft-icon">⚡</span> PUMP &amp; DUMP MOVE TRACKER (TRACKING TÍN HIỆU MẠNH)
-          <span className={`move-status-badge ${statusBadge.cls}`}>{statusBadge.label}</span>
+    <section className="hft-panel glass-panel move-tracker-panel" aria-label="BTC move tracker">
+      <header className="hft-panel-header move-tracker-header">
+        <div className="move-heading-block">
+          <div className="hft-panel-title font-mono">
+            <span className="hft-icon">↕</span> MOVE TRACKER
+          </div>
+          <div className="move-source-line font-mono">
+            <span>BINANCE BTCUSDT</span>
+            <span className={`move-health move-health--${connectionState.toLowerCase().replace(' ', '-')}`}>{connectionState}</span>
+            <span>FUTURES DETECTION · SPOT CONFIRMATION</span>
+          </div>
         </div>
+        <div className="move-header-actions">
+          <span className={`move-status-badge ${statusBadge.cls}`}>{statusBadge.label}</span>
+          <button
+            type="button"
+            className={`move-enable-btn ${settings.enabled ? 'is-on' : ''}`}
+            onClick={() => updateMoveTrackerSettings({ enabled: !settings.enabled })}
+            aria-pressed={settings.enabled}
+          >
+            {settings.enabled ? 'ON' : 'OFF'}
+          </button>
+          <ModuleMenu moduleId="hft_move_tracker" />
+        </div>
+      </header>
 
-        <div className="move-controls font-mono" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span className="move-control-label" style={{ color: 'var(--text-slate-400)', fontSize: '0.8rem' }}>Bộ Lọc:</span>
+      <div className="move-controls font-mono">
+        <label className="move-control-field">
+          <span>Detection</span>
           <select
             className="move-select"
             value={settings.mode}
             onChange={(e) => updateMoveTrackerSettings({ mode: e.target.value })}
           >
             <option value={MOVE_CONFIG.MODE_ATR}>ATR Dynamic (5m)</option>
-            <option value={MOVE_CONFIG.MODE_FIXED}>Cố Định (Fixed USD)</option>
+            <option value={MOVE_CONFIG.MODE_FIXED}>Fixed USD</option>
           </select>
-
+        </label>
           {settings.mode === MOVE_CONFIG.MODE_ATR ? (
+          <label className="move-control-field">
+            <span>Sensitivity</span>
             <select
               className="move-select"
               value={settings.atrMult}
@@ -1750,7 +1826,10 @@ function MoveTrackerPanel() {
               <option value={2.0}>2.0 × ATR (${(currentAtr * 2.0).toFixed(0)})</option>
               <option value={3.0}>3.0 × ATR (${(currentAtr * 3.0).toFixed(0)})</option>
             </select>
+          </label>
           ) : (
+          <label className="move-control-field">
+            <span>Threshold</span>
             <select
               className="move-select"
               value={settings.fixedUsd}
@@ -1761,157 +1840,169 @@ function MoveTrackerPanel() {
               <option value={1000}>≥ $1,000</option>
               <option value={1500}>≥ $1,500</option>
             </select>
+          </label>
           )}
-
-          <span className="move-atr-info" style={{ color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>ATR(14): ${currentAtr.toFixed(0)}</span>
-        </div>
+        <span className="move-atr-info">ATR(14) ${currentAtr.toFixed(0)} · active threshold ≈ ${Math.round(thresholdUsd || 0)}</span>
       </div>
 
-      {/* Main Content: Current / Latest Move Report */}
       {displayMove ? (
         <div className={`move-card move-card--${displayMove.direction ? displayMove.direction.toLowerCase() : 'pump'}`}>
+          <div className="move-timeline font-mono" aria-label={`Move phase: ${displayPhase}`}>
+            {['DETECTED', 'TRACKING', 'RECOVERY', 'CLASSIFIED'].map((phase, index) => {
+              const activeIndex = displayPhase === 'LISTENING' ? -1 : ['DETECTED', 'TRACKING', 'RECOVERY', 'CLASSIFIED'].indexOf(displayPhase);
+              return <span key={phase} className={index <= activeIndex ? 'is-complete' : ''}>{phase}</span>;
+            })}
+          </div>
           <div className="move-card-header">
             <div className="move-main-title">
               <span className={`move-dir-tag move-dir-tag--${displayMove.direction ? displayMove.direction.toLowerCase() : 'pump'}`}>
-                {displayMove.direction === 'PUMP' ? '🚀 PUMP MẠNH' : '💥 DUMP MẠNH'}
+                {displayMove.direction === 'PUMP' ? '▲ PUMP' : '▼ DUMP'}
               </span>
               <span className="move-price-delta font-mono">
-                {displayMove.direction === 'PUMP' ? '+' : ''}${Math.round(displayMove.endPrice - displayMove.startPrice).toLocaleString()} ({displayMove.direction === 'PUMP' ? '+' : ''}{displayMove.pctChange != null ? displayMove.pctChange : (((displayMove.endPrice - displayMove.startPrice)/displayMove.startPrice)*100).toFixed(2)}%)
+                {displayMove.direction === 'PUMP' ? '+' : ''}${Math.round(displayMove.endPrice - displayMove.startPrice).toLocaleString()} ({movePct > 0 ? '+' : ''}{Number(movePct).toFixed(2)}%)
               </span>
             </div>
 
             {displayMove.verdictLabel && (
               <div className="move-verdict-badge" style={{ backgroundColor: `${displayMove.verdictColor}20`, borderColor: displayMove.verdictColor, color: displayMove.verdictColor }}>
                 <span className="verdict-icon">{displayMove.verdictIcon}</span>
-                <span className="verdict-label font-mono">{displayMove.verdictLabel}</span>
+                <span className="verdict-label font-mono">{displayMove.verdictLabel}{displayMove.confidenceScore != null ? ` · ${displayMove.confidenceScore}%` : ''}</span>
               </div>
             )}
           </div>
 
-          {displayMove.verdictReason && (
-            <div className="move-verdict-reason font-mono">
-              💡 <strong>Đánh giá:</strong> {displayMove.verdictReason}
+          {pendingMove && (
+            <div className="move-recovery-progress" aria-label={`${recoveryRemaining} seconds remaining`}>
+              <span style={{ width: `${((60 - recoveryRemaining) / 60) * 100}%` }} />
             </div>
           )}
 
-          {/* Metric Grid */}
-          <div className="move-metrics-grid font-mono">
+          {displayMove.verdictReason && (
+            <div className="move-verdict-reason font-mono">
+              <strong>Evidence-based read:</strong> {displayMove.verdictReason}
+            </div>
+          )}
+
+          <div className="move-primary-metrics font-mono">
             <div className="move-metric-item">
-              <span className="move-metric-lbl">GIÁ MỞ / ĐÓNG</span>
+              <span className="move-metric-lbl">PRICE PATH</span>
               <span className="move-metric-val">${displayMove.startPrice?.toLocaleString()} → ${displayMove.endPrice?.toLocaleString()}</span>
             </div>
-
             <div className="move-metric-item">
-              <span className="move-metric-lbl">ĐỈNH / ĐÁY MOVE</span>
-              <span className="move-metric-val">${displayMove.peakPrice?.toLocaleString()} / ${displayMove.troughPrice?.toLocaleString()}</span>
+              <span className="move-metric-lbl">DURATION</span>
+              <span className="move-metric-val">{durationSec}s</span>
             </div>
-
             <div className="move-metric-item">
-              <span className="move-metric-lbl">THỜI GIAN MOVE</span>
-              <span className="move-metric-val">{displayMove.durationSec || Math.round(((displayMove.endTime || Date.now()) - displayMove.startTime)/1000)} giây</span>
+              <span className="move-metric-lbl">FUTURES CVD</span>
+              <span className={`move-metric-val ${futuresCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>{futuresCvd >= 0 ? '+' : ''}${(futuresCvd / 1e6).toFixed(2)}M</span>
             </div>
-
             <div className="move-metric-item">
-              <span className="move-metric-lbl">TỔNG VOLUME</span>
-              <span className="move-metric-val">${(displayMove.totalVolume / 1e6).toFixed(2)}M USDT</span>
+              <span className="move-metric-lbl">SPOT CVD</span>
+              <span className={`move-metric-val ${spotCvd == null ? '' : spotCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>{spotCvd == null ? 'N/A' : `${spotCvd >= 0 ? '+' : ''}$${(spotCvd / 1e6).toFixed(2)}M`}</span>
             </div>
-
             <div className="move-metric-item">
-              <span className="move-metric-lbl">SỐ LỆNH KHỚP</span>
-              <span className="move-metric-val">{displayMove.tradeCount?.toLocaleString()} lệnh (${Math.round((displayMove.totalVolume || 0)/(displayMove.tradeCount||1)).toLocaleString()}/lệnh)</span>
-            </div>
-
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">TAKER BUY / SELL</span>
-              <span className="move-metric-val">
-                <span className="text-emerald">{displayMove.takerBuyRatio != null ? displayMove.takerBuyRatio : Math.round((displayMove.takerBuyVol/displayMove.totalVolume)*100)}% Buy</span> vs <span className="text-rose">{100 - (displayMove.takerBuyRatio != null ? displayMove.takerBuyRatio : Math.round((displayMove.takerBuyVol/displayMove.totalVolume)*100))}% Sell</span>
-              </span>
-            </div>
-
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">CVD DELTA</span>
-              <span className={`move-metric-val ${(displayMove.cvdDelta != null ? displayMove.cvdDelta : (displayMove.takerBuyVol - displayMove.takerSellVol)) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                {(displayMove.cvdDelta != null ? displayMove.cvdDelta : (displayMove.takerBuyVol - displayMove.takerSellVol)) >= 0 ? '+' : ''}${(((displayMove.cvdDelta != null ? displayMove.cvdDelta : (displayMove.takerBuyVol - displayMove.takerSellVol))) / 1e6).toFixed(2)}M
-              </span>
-            </div>
-
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">LỆNH LỚN &gt; $100K</span>
-              <span className="move-metric-val">
-                {displayMove.largeTradesCount || 0} lệnh (${((displayMove.largeTradesVol || 0)/1e6).toFixed(2)}M = {displayMove.largeTradeRatio || 0}%)
-              </span>
-            </div>
-
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">LỆNH LỚN NHẤT</span>
-              <span className="move-metric-val">
-                ${((displayMove.maxSingleTradeUsd || 0)/1e6).toFixed(2)}M ({displayMove.maxSingleTradeSide})
-              </span>
-            </div>
-
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">% HỒI GIÁ (RECOVERY)</span>
-              <span className="move-metric-val highlight">
-                {displayMove.recoveryPct != null ? `${displayMove.recoveryPct}% (sau 60s)` : 'Đang theo dõi...'}
-              </span>
+              <span className="move-metric-lbl">RECOVERY 60S</span>
+              <span className="move-metric-val highlight">{displayMove.recoveryPct != null ? `${displayMove.recoveryPct}%` : pendingMove ? `${recoveryRemaining}s left` : displayMove.recoveryStatus === 'DATA_GAP' ? 'N/A · data gap' : 'Pending'}</span>
             </div>
           </div>
-        </div>
+
+          <details className="move-detail-disclosure">
+            <summary>Execution details and evidence</summary>
+            <div className="move-metrics-grid font-mono">
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">FUTURES VOLUME / TRADES</span>
+              <span className="move-metric-val">${((displayMove.totalVolume || 0) / 1e6).toFixed(2)}M · {(displayMove.tradeCount || 0).toLocaleString()}</span>
+            </div>
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">FUTURES TAKER BUY</span>
+              <span className="move-metric-val">{displayMove.takerBuyRatio ?? Math.round(((displayMove.takerBuyVol || 0) / Math.max(1, displayMove.totalVolume || 0)) * 100)}%</span>
+            </div>
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">SPOT VOLUME / TRADES</span>
+              <span className="move-metric-val">${((displayMove.spotTotalVolume || 0) / 1e6).toFixed(2)}M · {(displayMove.spotTradeCount || 0).toLocaleString()}</span>
+            </div>
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">LARGE TRADES ≥ $100K</span>
+              <span className="move-metric-val">{displayMove.largeTradesCount || 0} · ${((displayMove.largeTradesVol || 0) / 1e6).toFixed(2)}M ({displayMove.largeTradeRatio || 0}%)</span>
+            </div>
+            <div className="move-metric-item">
+              <span className="move-metric-lbl">EXTREMES / MAX TRADE</span>
+              <span className="move-metric-val">${displayMove.peakPrice?.toLocaleString()} / ${displayMove.troughPrice?.toLocaleString()} · ${((displayMove.maxSingleTradeUsd || 0) / 1e3).toFixed(0)}K {displayMove.maxSingleTradeSide || ''}</span>
+            </div>
+            </div>
+            {displayMove.evidence?.length > 0 && (
+              <ul className="move-evidence-list font-mono">
+                {displayMove.evidence.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            )}
+          </details>
+          </div>
       ) : (
         <div className="move-empty-state font-mono">
-          <span>⚡ Hệ thống đang lắng nghe dòng lệnh realtime... Khi có đợt di chuyển giá mạnh (Pump/Dump vượt {settings.mode === 'ATR' ? `${settings.atrMult}x ATR` : `$${settings.fixedUsd}`}), báo cáo phân tích chi tiết sẽ tự động xuất hiện tại đây.</span>
+          <strong>{connectionState === 'LIVE' ? 'Listening to executed trades' : 'Waiting for both market streams'}</strong>
+          <span>Futures detects the move; Spot confirms or challenges it. Current rule: {settings.mode === 'ATR' ? `${settings.atrMult}× ATR across 15s–120s windows` : `$${settings.fixedUsd} across 15s–120s windows`}.</span>
         </div>
       )}
 
-      {/* Move History Table */}
       {moveHistory.length > 0 && (
-        <div className="move-history-section" style={{ marginTop: '16px' }}>
-          <div className="move-history-title font-mono" style={{ fontSize: '0.8rem', color: 'var(--text-slate-400)', marginBottom: '8px' }}>📜 LỊCH SỬ CÁC ĐỢT DI CHUYỂN GIÁ (7 NGÀY GẦN NHẤT)</div>
+        <div className="move-history-section">
+          <div className="move-history-head">
+            <div className="move-history-title font-mono">7-DAY MOVE LOG · {filteredHistory.length}/{moveHistory.length}</div>
+            <div className="move-history-filters">
+              <label>
+                <span className="sr-only">Filter by direction</span>
+                <select className="move-select" value={historyDirection} onChange={(event) => setHistoryDirection(event.target.value)}>
+                  <option value="ALL">All directions</option>
+                  <option value="PUMP">Pump</option>
+                  <option value="DUMP">Dump</option>
+                </select>
+              </label>
+              <label>
+                <span className="sr-only">Filter by verdict</span>
+                <select className="move-select" value={historyVerdict} onChange={(event) => setHistoryVerdict(event.target.value)}>
+                  <option value="ALL">All verdicts</option>
+                  <option value="WHALE_PUSH">Large-flow push</option>
+                  <option value="LIQUIDITY_SWEEP">Liquidity sweep</option>
+                  <option value="STOP_HUNT">Stop sweep</option>
+                  <option value="MIXED">Insufficient evidence</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <div className="move-table-container">
             <table className="move-table font-mono">
               <thead>
                 <tr>
-                  <th>Thời gian</th>
-                  <th>Loại</th>
-                  <th>Biến động</th>
-                  <th>Volume</th>
-                  <th>Lệnh lớn</th>
-                  <th>CVD Δ</th>
-                  <th>Recovery</th>
-                  <th>Đánh giá (Verdict)</th>
+                  <th>Time</th><th>Move</th><th>Change</th><th>Futures / Spot CVD</th><th>Recovery</th><th>Classification</th><th><span className="sr-only">Details</span></th>
                 </tr>
               </thead>
               <tbody>
-                {moveHistory.map((m) => (
-                  <tr key={m.id} onClick={() => setExpandedMoveId(expandedMoveId === m.id ? null : m.id)} className="move-tr">
-                    <td>{new Date(m.startTime).toLocaleTimeString('vi-VN')}</td>
+                {filteredHistory.map((m) => (
+                  <React.Fragment key={m.id || m.startTime}>
+                  <tr className="move-tr">
+                    <td>{new Date(m.startTime).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                     <td>
-                      <span className={`move-badge move-badge--${m.direction ? m.direction.toLowerCase() : 'pump'}`}>
-                        {m.direction}
-                      </span>
+                      <span className={`move-badge move-badge--${m.direction?.toLowerCase() || 'pump'}`}>{m.direction}</span>
                     </td>
                     <td className={m.direction === 'PUMP' ? 'text-emerald' : 'text-rose'}>
                       {m.direction === 'PUMP' ? '+' : ''}${Math.round(m.endPrice - m.startPrice)} ({m.pctChange}%)
                     </td>
-                    <td>${(m.totalVolume / 1e6).toFixed(1)}M</td>
-                    <td>{m.largeTradesCount} (${(m.largeTradesVol / 1e6).toFixed(1)}M)</td>
-                    <td className={m.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>
-                      {m.cvdDelta >= 0 ? '+' : ''}${(m.cvdDelta / 1e6).toFixed(1)}M
-                    </td>
-                    <td>{m.recoveryPct}%</td>
-                    <td>
-                      <span className="verdict-inline" style={{ color: m.verdictColor }}>
-                        {m.verdictIcon} {m.verdictLabel}
-                      </span>
-                    </td>
+                    <td><span className={m.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{m.cvdDelta >= 0 ? '+' : ''}${(m.cvdDelta / 1e6).toFixed(1)}M</span> / {m.spotCvdDelta == null ? <span>N/A</span> : <span className={m.spotCvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{m.spotCvdDelta >= 0 ? '+' : ''}${(m.spotCvdDelta / 1e6).toFixed(1)}M</span>}</td>
+                    <td>{m.recoveryPct == null ? 'N/A' : `${m.recoveryPct}%`}</td>
+                    <td><span className="verdict-inline" style={{ color: m.verdictColor }}>{m.verdictIcon} {m.verdictLabel}{m.confidenceScore != null ? ` · ${m.confidenceScore}%` : ''}</span></td>
+                    <td><button type="button" className="move-row-toggle" onClick={() => setExpandedMoveId(expandedMoveId === m.id ? null : m.id)} aria-expanded={expandedMoveId === m.id} aria-label="Toggle move details">{expandedMoveId === m.id ? '−' : '+'}</button></td>
                   </tr>
+                  {expandedMoveId === m.id && (
+                    <tr className="move-detail-row"><td colSpan="7"><div><span>Futures volume ${(m.totalVolume / 1e6).toFixed(2)}M</span><span>Spot volume ${((m.spotTotalVolume || 0) / 1e6).toFixed(2)}M</span><span>Large trades {m.largeTradesCount} / ${((m.largeTradesVol || 0) / 1e6).toFixed(2)}M</span><span>Flow context {m.flowContext || 'N/A'}</span></div><p>{m.verdictReason}</p></td></tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -1954,6 +2045,7 @@ export default function HftRadarTab({
   const [signalCount, setSignalCount] = useState(0);
   const signalDetectionRef = useRef(null);
   const snapshotRef = useRef(null);
+  const signalContextRef = useRef(null);
 
   // Load signals from IndexedDB on mount
   const loadSignals = useCallback(async () => {
@@ -1963,11 +2055,18 @@ export default function HftRadarTab({
   }, []);
 
   useEffect(() => {
-    loadSignals();
-    const unsubscribe = onSignalAdded(() => {
-      loadSignals();
+    const initialLoadTimer = setTimeout(loadSignals, 0);
+    const unsubscribe = onSignalAdded((signal) => {
+      setSignals((previous) => {
+        const next = [signal, ...previous.filter((item) => item.id !== signal.id)].slice(0, 200);
+        return next;
+      });
+      setSignalCount((previous) => Math.min(200, previous + 1));
     });
-    return unsubscribe;
+    return () => {
+      clearTimeout(initialLoadTimer);
+      unsubscribe();
+    };
   }, [loadSignals]);
 
   useEffect(() => {
@@ -2032,83 +2131,47 @@ export default function HftRadarTab({
     };
   }, [depthLimit]);
 
+  useEffect(() => {
+    signalContextRef.current = {
+      livePrice,
+      liveChange,
+      liveHigh,
+      liveLow,
+      liveVolume,
+      liveEthPrice,
+      liveSolPrice,
+      cvd,
+      spotCvd: spotStream?.cvd,
+      sessionCvd,
+      buyVolume,
+      sellVolume,
+      fundingRate,
+      orderBook,
+      whaleData,
+      data,
+    };
+  }, [livePrice, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice,
+    cvd, spotStream?.cvd, sessionCvd, buyVolume, sellVolume, fundingRate, orderBook, whaleData, data]);
+
   // ── Signal Detection Engine (every 30s) ──────────────────────────────────
   useEffect(() => {
-    // Run signal detection every 30 seconds
     signalDetectionRef.current = setInterval(async () => {
-      const ctx = {
-        livePrice,
-        liveChange,
-        liveHigh,
-        liveLow,
-        liveVolume,
-        liveEthPrice,
-        liveSolPrice,
-        cvd,
-        sessionCvd,
-        buyVolume,
-        sellVolume,
-        fundingRate,
-        orderBook: orderBookRef.current,
-        whaleData: whaleDataRef.current,
-        data,
-      };
-      const newSignals = await runSignalDetection(ctx);
-      if (newSignals.length > 0) {
-        loadSignals(); // Refresh from DB
-      }
+      if (signalContextRef.current) await runSignalDetection(signalContextRef.current);
     }, 30 * 1000);
 
     return () => {
       if (signalDetectionRef.current) clearInterval(signalDetectionRef.current);
     };
-  }, [livePrice, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice, cvd, sessionCvd, buyVolume, sellVolume, fundingRate, data, loadSignals]);
+  }, []);
 
   // ── Periodic Snapshot (every 15 min) ─────────────────────────────────────
   useEffect(() => {
-    // Take first snapshot after 60s, then every 15 min
     const initialTimeout = setTimeout(async () => {
-      const ctx = {
-        livePrice,
-        liveChange,
-        liveHigh,
-        liveLow,
-        liveVolume,
-        liveEthPrice,
-        liveSolPrice,
-        cvd,
-        sessionCvd,
-        buyVolume,
-        sellVolume,
-        fundingRate,
-        orderBook: orderBookRef.current,
-        whaleData: whaleDataRef.current,
-        data,
-      };
-      await takePeriodicSnapshot(ctx);
-      loadSignals();
+      if (signalContextRef.current) await takePeriodicSnapshot(signalContextRef.current);
 
       // Then every 15 min
       snapshotRef.current = setInterval(async () => {
-        const freshCtx = {
-          livePrice,
-          liveChange,
-          liveHigh,
-          liveLow,
-          liveVolume,
-          liveEthPrice,
-          liveSolPrice,
-          cvd,
-          sessionCvd,
-          buyVolume,
-          sellVolume,
-          fundingRate,
-          orderBook: orderBookRef.current,
-          whaleData: whaleDataRef.current,
-          data,
-        };
-        await takePeriodicSnapshot(freshCtx);
-        loadSignals();
+        if (signalContextRef.current) await takePeriodicSnapshot(signalContextRef.current);
       }, 15 * 60 * 1000);
     }, 3000);
 
@@ -2116,7 +2179,7 @@ export default function HftRadarTab({
       clearTimeout(initialTimeout);
       if (snapshotRef.current) clearInterval(snapshotRef.current);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="hft-radar-layout">
@@ -2176,7 +2239,7 @@ export default function HftRadarTab({
           <MemoWhaleTradesPanel whaleTrades={whaleTrades} volume24h={liveVolume || data?.btc?.volume} />
         )}
 
-        {!isModuleHidden('hft_signals') && (
+        {!isModuleHidden('hft_signal_log') && (
           <MemoSignalLogPanel
             signals={signals}
             onRefresh={loadSignals}

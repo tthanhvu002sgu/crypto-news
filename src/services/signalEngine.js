@@ -61,6 +61,8 @@ function pushPriceHistory(ctx) {
   priceHistory.push({
     price: ctx.livePrice,
     cvd: ctx.cvd ?? null,
+    spotCvd: ctx.spotCvd ?? null,
+    openInterest: ctx.data?.openInterest ?? ctx.openInterest ?? null,
     buyVolume: ctx.buyVolume ?? null,
     sellVolume: ctx.sellVolume ?? null,
     ts: Date.now(),
@@ -80,14 +82,6 @@ function getBaselineEntry(windowMs) {
   return null;
 }
 
-// ─── Slower-changing detector state (OI surge, CVD divergence) ────────────────
-const prevValues = {
-  oiValue: null,
-  oiTimestamp: null,
-  cvd: null,
-  priceAtCvdCheck: null,
-};
-
 // ─── Helper: build full snapshot object ───────────────────────────────────────
 function buildSnapshot(ctx, extra = {}) {
   const snap = {};
@@ -103,6 +97,7 @@ function buildSnapshot(ctx, extra = {}) {
 
   // CVD & Order Flow
   if (ctx.cvd != null) snap.cvd = Math.round(ctx.cvd);
+  if (ctx.spotCvd != null) snap.spotCvd = Math.round(ctx.spotCvd);
   if (ctx.sessionCvd != null) snap.sessionCvd = Math.round(ctx.sessionCvd);
   if (ctx.buyVolume != null) snap.buyVolume = Math.round(ctx.buyVolume);
   if (ctx.sellVolume != null) snap.sellVolume = Math.round(ctx.sellVolume);
@@ -340,10 +335,15 @@ function detectFnGExtreme(ctx) {
 }
 
 function detectOISurge(ctx) {
-  if (ctx.data?.openInterest == null || prevValues.oiValue == null) return null;
+  if (ctx.data?.openInterest == null) return null;
   const oi = ctx.data.openInterest;
-  const oiDelta = ((oi - prevValues.oiValue) / prevValues.oiValue) * 100;
-  const timeDelta = Date.now() - (prevValues.oiTimestamp || 0);
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  const baseline = priceHistory.find(
+    (entry) => entry.ts >= cutoff && entry.openInterest != null && entry.openInterest !== oi
+  );
+  if (!baseline || baseline.openInterest <= 0) return null;
+  const oiDelta = ((oi - baseline.openInterest) / baseline.openInterest) * 100;
+  const timeDelta = Date.now() - baseline.ts;
 
   // >5% OI change in under 30 minutes
   if (Math.abs(oiDelta) >= 5 && timeDelta <= 30 * 60 * 1000) {
@@ -352,7 +352,7 @@ function detectOISurge(ctx) {
       type: SIGNAL_TYPE.OI_SURGE,
       severity: Math.abs(oiDelta) >= 10 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
       title: `OI ${direction} ${Math.abs(oiDelta).toFixed(1)}% trong ${Math.round(timeDelta / 60000)} phút`,
-      description: `Open Interest: ${prevValues.oiValue.toFixed(0)} → ${oi.toFixed(0)} BTC`,
+      description: `Open Interest: ${baseline.openInterest.toFixed(0)} → ${oi.toFixed(0)} BTC; so sánh hai quan sát REST khác nhau.`,
     };
   }
   return null;
@@ -360,26 +360,39 @@ function detectOISurge(ctx) {
 
 function detectCVDDivergence(ctx) {
   if (ctx.cvd == null || ctx.livePrice == null) return null;
-  if (prevValues.cvd == null || prevValues.priceAtCvdCheck == null) return null;
+  const baseline = getBaselineEntry(5 * 60 * 1000);
+  if (!baseline || baseline.cvd == null) return null;
 
-  const priceDelta = ((ctx.livePrice - prevValues.priceAtCvdCheck) / prevValues.priceAtCvdCheck) * 100;
-  const cvdDelta = ctx.cvd - prevValues.cvd;
+  const priceDelta = ((ctx.livePrice - baseline.price) / baseline.price) * 100;
+  const cvdDelta = ctx.cvd - baseline.cvd;
+  const intervalVolume = Math.max(
+    0,
+    ((ctx.buyVolume || 0) + (ctx.sellVolume || 0)) -
+      ((baseline.buyVolume || 0) + (baseline.sellVolume || 0))
+  );
+  const cvdThreshold = Math.min(50_000_000, Math.max(5_000_000, intervalVolume * 0.08));
+  const spotCvdDelta = ctx.spotCvd != null && baseline.spotCvd != null
+    ? ctx.spotCvd - baseline.spotCvd
+    : null;
+  const spotNote = spotCvdDelta == null
+    ? 'Spot CVD: chưa đủ dữ liệu cùng cửa sổ.'
+    : `Spot CVD Δ: ${spotCvdDelta >= 0 ? '+' : ''}$${(spotCvdDelta / 1e6).toFixed(1)}M.`;
 
-  // Price up >1% but CVD down significantly, or vice versa
-  if (priceDelta > 1 && cvdDelta < -50000000) { // Price ↑ CVD ↓ $50M+
+  // Fixed 5-minute window with a liquidity-adaptive CVD threshold.
+  if (priceDelta > 0.5 && cvdDelta < -cvdThreshold) {
     return {
       type: SIGNAL_TYPE.CVD_DIVERGENCE,
       severity: SEVERITY.HIGH,
-      title: `CVD Divergence ⚠ — Giá ↑${priceDelta.toFixed(1)}% nhưng CVD ↓`,
-      description: `Giá tăng nhưng dòng tiền bán ròng. CVD giảm $${Math.abs(cvdDelta / 1e6).toFixed(1)}M — cảnh báo fakeout.`,
+      title: `Futures CVD Divergence 5m — Giá ↑${priceDelta.toFixed(1)}% nhưng CVD ↓`,
+      description: `Binance Futures CVD giảm $${Math.abs(cvdDelta / 1e6).toFixed(1)}M. ${spotNote} Cảnh báo fakeout, không phải xác nhận độc lập.`,
     };
   }
-  if (priceDelta < -1 && cvdDelta > 50000000) { // Price ↓ CVD ↑ $50M+
+  if (priceDelta < -0.5 && cvdDelta > cvdThreshold) {
     return {
       type: SIGNAL_TYPE.CVD_DIVERGENCE,
       severity: SEVERITY.HIGH,
-      title: `CVD Divergence ⚠ — Giá ↓${Math.abs(priceDelta).toFixed(1)}% nhưng CVD ↑`,
-      description: `Giá giảm nhưng dòng tiền mua ròng. CVD tăng +$${(cvdDelta / 1e6).toFixed(1)}M — có thể đang tích lũy.`,
+      title: `Futures CVD Divergence 5m — Giá ↓${Math.abs(priceDelta).toFixed(1)}% nhưng CVD ↑`,
+      description: `Binance Futures CVD tăng +$${(cvdDelta / 1e6).toFixed(1)}M. ${spotNote} Có thể là hấp thụ, chưa đủ để kết luận tích lũy.`,
     };
   }
   return null;
@@ -438,16 +451,6 @@ export async function runSignalDetection(ctx) {
     } catch (e) {
       console.warn('[SignalEngine] Detection error:', e);
     }
-  }
-
-  // Update state for slower-changing detectors
-  if (ctx.data?.openInterest != null) {
-    prevValues.oiValue = ctx.data.openInterest;
-    prevValues.oiTimestamp = Date.now();
-  }
-  if (ctx.cvd != null) {
-    prevValues.cvd = ctx.cvd;
-    prevValues.priceAtCvdCheck = ctx.livePrice;
   }
 
   return newSignals;

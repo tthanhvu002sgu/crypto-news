@@ -1790,6 +1790,17 @@ export const getETFFlowHistory = async () => {
     return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   };
 
+  const isCompletedObservation = (ddmmyy, now = new Date()) => {
+    const sortable = toSortableDate(ddmmyy);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sortable)) return false;
+    const localToday = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-');
+    return sortable < localToday;
+  };
+
   // Start with bundled static data (Jan 2024 → Jun 2026)
   const baseHistory = [...staticFlowHistory];
   const lastStaticDate = baseHistory.length > 0 ? baseHistory[baseHistory.length - 1].date : null;
@@ -1818,7 +1829,9 @@ export const getETFFlowHistory = async () => {
             const formattedDate = `${day}/${month}/${year ? year.substring(2) : '26'}`;
             // Only add rows newer than last static date using sortable YYYY-MM-DD format
             if (!lastStaticSortable || toSortableDate(formattedDate) > lastStaticSortable) {
-              newRows.push({ date: formattedDate, flow: flowVal });
+              if (isCompletedObservation(formattedDate)) {
+                newRows.push({ date: formattedDate, flow: flowVal });
+              }
             }
           }
         }

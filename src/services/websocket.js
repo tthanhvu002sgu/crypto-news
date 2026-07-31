@@ -19,10 +19,16 @@ const RECONNECT_MS = 4000;
 
 // Trade subscribers for real-time move tracking
 const tradeSubscribers = new Set();
+const spotTradeSubscribers = new Set();
 
 export function subscribeAggTrades(callback) {
   tradeSubscribers.add(callback);
   return () => tradeSubscribers.delete(callback);
+}
+
+export function subscribeSpotAggTrades(callback) {
+  spotTradeSubscribers.add(callback);
+  return () => spotTradeSubscribers.delete(callback);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -522,6 +528,12 @@ export function useCVDStream() {
         const price = parseFloat(data.p);
         const qty = parseFloat(data.q);
         const usdtVol = price * qty;
+
+        spotTradeSubscribers.forEach((cb) => {
+          try {
+            cb({ price, qty, usdtVol, isTakerSell: data.m, timestamp: data.T });
+          } catch {}
+        });
 
         checkMidnightReset(data.T);
         if (isFetchingInitialRef.current) return;

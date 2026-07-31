@@ -86,7 +86,9 @@ function getSignalsFromLS(limit = 200) {
         return parsed.filter(s => s && s.timestamp > cutoff).slice(0, limit);
       }
     }
-  } catch {}
+  } catch {
+    // localStorage may be disabled; IndexedDB remains the primary store.
+  }
   return [];
 }
 
@@ -136,14 +138,15 @@ export async function addSignal(signal) {
  * @returns {Promise<Array>}
  */
 export async function getSignals(limit = 200) {
-  let idbResults = [];
+  let idbResults;
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   try {
     const db = await openDB();
     idbResults = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const index = store.index('timestamp');
-      const request = index.openCursor(null, 'prev'); // newest first
+      const request = index.openCursor(IDBKeyRange.lowerBound(cutoff, true), 'prev'); // newest first, 7-day retention
       const results = [];
 
       request.onsuccess = (event) => {
@@ -241,7 +244,9 @@ export async function clearOldSignals(daysToKeep = 7) {
         localStorage.setItem(LS_SIGNALS_KEY, JSON.stringify(filtered));
       }
     }
-  } catch {}
+  } catch {
+    // Continue with IndexedDB cleanup when localStorage is unavailable.
+  }
 
   try {
     const db = await openDB();
@@ -278,7 +283,9 @@ export async function clearOldSignals(daysToKeep = 7) {
 export async function clearAllSignals() {
   try {
     localStorage.removeItem(LS_SIGNALS_KEY);
-  } catch {}
+  } catch {
+    // Continue clearing IndexedDB when localStorage is unavailable.
+  }
 
   try {
     const db = await openDB();
@@ -313,3 +320,15 @@ export async function getMoveReports(limit = 100) {
   return allSignals.filter((s) => s.type === 'MOVE_REPORT').slice(0, limit);
 }
 
+const AUTO_CLEANUP_KEY = 'hft_signal_cleanup_last_run';
+try {
+  const lastCleanup = Number(localStorage.getItem(AUTO_CLEANUP_KEY) || 0);
+  if (Date.now() - lastCleanup > 24 * 60 * 60 * 1000) {
+    setTimeout(async () => {
+      await clearOldSignals(7);
+      localStorage.setItem(AUTO_CLEANUP_KEY, String(Date.now()));
+    }, 0);
+  }
+} catch (error) {
+  console.warn('[SignalStore] Automatic retention cleanup unavailable:', error);
+}

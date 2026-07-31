@@ -278,6 +278,16 @@ const ageInDays = (value, now = new Date()) => {
   return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 86400000));
 };
 
+// U.S. spot ETF flow providers publish after the U.S. session, which is normally
+// the following calendar day in Vietnam. A row carrying today's local date can
+// therefore be a provisional 0.0 placeholder, not an observed zero-flow day.
+const isCompletedEtfObservation = (value, now = new Date()) => {
+  const observationDate = parseMarketDate(value);
+  if (!observationDate) return false;
+  const localReportDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return observationDate.getTime() < localReportDay;
+};
+
 export default function SummaryTab({ 
   data, apiKeys, cvd, spotCvd, buyVolume, sellVolume, etfHoldings, etfHistory,
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
@@ -619,8 +629,18 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
         ).join('\n')
       : '  N/A';
 
-    const etfFlow7d = Array.isArray(etfHistory) ? etfHistory.slice(-7) : [];
-    const etfFlows = etfFlow7d
+    const reportNow = new Date();
+    const rawEtfFlows = Array.isArray(etfHistory)
+      ? etfHistory
+          .map((row) => ({ ...row, numericFlow: toFiniteNumber(row.flow) }))
+          .filter((row) => row.numericFlow !== null)
+      : [];
+    const pendingEtfRows = rawEtfFlows.filter(
+      (row) => !isCompletedEtfObservation(row.date, reportNow)
+    );
+    const etfFlows = rawEtfFlows
+      .filter((row) => isCompletedEtfObservation(row.date, reportNow))
+      .slice(-7)
       .map((row) => ({ ...row, numericFlow: toFiniteNumber(row.flow) }))
       .filter((row) => row.numericFlow !== null);
     const etfNetTotal = etfFlows.reduce((sum, row) => sum + row.numericFlow, 0);
@@ -633,6 +653,9 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
       : '  N/A';
     const latestEtfDate = etfFlows[etfFlows.length - 1]?.date || null;
     const etfObservationAgeDays = ageInDays(latestEtfDate);
+    const etfPublicationStatus = pendingEtfRows.length > 0
+      ? `PENDING/UNKNOWN — ignored ${pendingEtfRows.length} provisional current/future-date row(s); these are not observed zero flows.`
+      : 'PENDING/UNKNOWN for the report date — ETF flow is publication-lagged; use only the latest completed observation below.';
     const cotObservationAgeDays = ageInDays(data.cotData?.date);
 
     const fedRate = toFiniteNumber(data.fedFundsRate);
@@ -789,7 +812,8 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
 - CVD venue rule: Spot CVD and Futures CVD are separate taker-flow measurements. Never merge, average, or label one as the other; compare their direction explicitly.
 - OBI and whale-wall scope: multi-exchange aggregation returned by the dashboard; composition is shown where available.
 - Macro observations may have publication lag. The dashboard currently supplies values but not every source observation date.
-- ETF history contains the latest seven available dashboard observations, which may include non-trading-day gaps or fallback data. Compare the latest observation date with the report timestamp.
+- ETF history below contains only the latest seven completed observations strictly before the report's local calendar date. Same-day/future rows are provisional and excluded.
+- ETF CURRENT-DATE HARD RULE: missing, blank, or provisional 0.0 flow for the report date means PENDING/UNKNOWN, never an observed zero. Do not write that ETF flow "slowed/stalled/paused at 0.0M" unless a completed published observation explicitly reports zero.
 - ETF holdings snapshot date is not supplied; freshness is unknown.
 - News is headline/snippet input, not independently verified full-text reporting.
 - Historical CVD is cumulative taker delta rebased at the start of each requested window. Cross-window absolute levels are not comparable.
@@ -880,6 +904,7 @@ ${pricePath(klines7d, 12)}
 - Seven-observation ETF Net Flow: ${etfFlows.length > 0 ? formatSigned(etfNetTotal, 1, 'M USD') : 'N/A'}
 - Positive / negative observations: ${etfFlows.length > 0 ? etfPositiveDays + ' / ' + etfNegativeDays : 'N/A'}
 - Latest ETF observation date / age: ${latestEtfDate || 'N/A'} / ${etfObservationAgeDays === null ? 'N/A' : etfObservationAgeDays + ' days'}
+- ETF flow status for report date: ${etfPublicationStatus}
 ${etfFlowStr}
 
 ### CME COT Futures Only

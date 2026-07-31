@@ -64,6 +64,7 @@ ANALYTICAL PROTOCOL
 - Order-book walls are displayed liquidity, not guaranteed support or resistance. They may be cancelled, moved, spoofed, or consumed. Treat them as conditional liquidity zones and require price/flow confirmation.
 - OBI measures the displayed book inside the sampled depth. It can change quickly and should not override executed flow by itself.
 - ETF flows are evidence of creation/redemption-related institutional spot demand, but one day of flow is not a complete explanation for price.
+- ETF CURRENT-DATE HARD RULE: ETF flow publication is delayed. A missing current-date value, blank cell, or provisional 0.0 row is UNKNOWN/PENDING — never observed zero flow. Never claim flow "slowed", "stalled", "paused", or "held at 0.0M" for that date unless the input explicitly labels it as a completed published observation. Use the latest completed observation date and disclose the lag.
 - CME COT is released weekly on Friday using Tuesday positions and therefore lags by roughly 3-7 days. Use it for medium-term positioning, never as a 0-7 day timing trigger.
 - Stablecoin market capitalization is not immediately deployable BTC demand. Exchange reserves and transfer activity would be needed to estimate near-term purchasing power.
 - If NUPL or Supply in Profit is labelled estimated or model-derived from MVRV, do not count it as an independent confirmation of MVRV. Explicitly flag this dependency.
