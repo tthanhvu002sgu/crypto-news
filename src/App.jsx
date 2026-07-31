@@ -1612,6 +1612,7 @@ function AppContent() {
             <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
               <ScannerTab
                 data={data}
+                btcChange24h={btcDisplay?.change}
                 etfHistory={etfHistory}
               />
             </div>

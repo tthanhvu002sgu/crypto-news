@@ -1,5 +1,5 @@
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: modern-minimal · theme: Terminal */
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { runFullScan } from '../services/coinScanner';
 import { RefreshCw, Zap, ExternalLink, TrendingUp, TrendingDown, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
 
@@ -20,43 +20,62 @@ const fmtCvd = (n) => {
   return `${sign}$${n.toFixed(0)}`;
 };
 
-export default function ScannerTab({ data = {}, etfHistory = [] }) {
+const isFiniteValue = value => value !== null && value !== undefined && value !== ''
+  && Number.isFinite(Number(value));
+
+const isFreshEtfObservation = (row, now = new Date()) => {
+  if (!row?.date || !isFiniteValue(row.flow)) return false;
+  const [day, month, shortYear] = String(row.date).split('/').map(Number);
+  if (!day || !month || !shortYear) return false;
+  const year = shortYear < 100 ? 2000 + shortYear : shortYear;
+  const observedAt = new Date(year, month - 1, day, 12).getTime();
+  const ageMs = now.getTime() - observedAt;
+  // Four days covers weekends while preventing stale fallback data from
+  // masquerading as today's institutional flow regime.
+  return ageMs >= 0 && ageMs <= 4 * 24 * 60 * 60 * 1000;
+};
+
+export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory = [] }) {
   const [scanResult, setScanResult] = useState({ topBuy: [], topSell: [], scannedCount: 0, qualifiedCount: 0, timestamp: 0 });
   const [isScanning, setIsScanning] = useState(false);
-  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(3600); // 60 mins countdown
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(300);
   const [activeDirection, setActiveDirection] = useState('BUY'); // 'BUY' | 'SELL'
 
-  // Macro context evaluation
-  const macroContext = {
-    isBtcBullish: (data.btcChange24h ?? 0) > 0,
-    isEtfInflow: etfHistory.length > 0 ? (etfHistory[0]?.netFlow ?? 0) > 0 : false,
-  };
+  // Macro is tri-state: missing data must not silently become bearish.
+  const fallbackBtcChange = data.btc?.change;
 
   const executeScan = useCallback(async (force = false) => {
     setIsScanning(true);
     try {
-      const res = await runFullScan(macroContext, force);
+      const btcChange = isFiniteValue(btcChange24h)
+        ? Number(btcChange24h)
+        : isFiniteValue(fallbackBtcChange) ? Number(fallbackBtcChange) : null;
+      const latestEtf = [...etfHistory].reverse().find(row => isFreshEtfObservation(row));
+      const isBtcBullish = btcChange === null ? null : btcChange > 0;
+      const isEtfInflow = latestEtf ? Number(latestEtf.flow) > 0 : null;
+      const res = await runFullScan({ isBtcBullish, isEtfInflow }, force);
       setScanResult(res);
-      setSecondsUntilRefresh(3600);
+      setSecondsUntilRefresh(300);
     } catch (e) {
       console.error('[ScannerTab] Scan error:', e);
     } finally {
       setIsScanning(false);
     }
-  }, [macroContext.isBtcBullish, macroContext.isEtfInflow]);
+  }, [btcChange24h, fallbackBtcChange, etfHistory]);
 
   // Initial load
   useEffect(() => {
-    executeScan(false);
-  }, []);
+    const initialScan = setTimeout(() => executeScan(false), 0);
+    return () => clearTimeout(initialScan);
+  }, [executeScan]);
 
   // Countdown timer & auto-refresh
   useEffect(() => {
     const timer = setInterval(() => {
       setSecondsUntilRefresh(prev => {
         if (prev <= 1) {
-          executeScan(true);
-          return 3600;
+          executeScan(false);
+          return 300;
         }
         return prev - 1;
       });
@@ -87,7 +106,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
             <div>
               <h2 className="scanner-title">SCANNER — NHÂN DUYÊN 2 CHIỀU (BUY &amp; SELL)</h2>
               <p className="scanner-subtitle">
-                Lọc Top Coin theo <strong>Vol 30D + Vol Consistency (volCV) + Funding Rate + MCap + Multi-TF</strong>. Chỉ giữ coin vượt Quality Gate.
+                Xếp hạng theo <strong>Relative Strength vs BTC + Spot/Futures CVD + OI + Multi-TF</strong>. Chỉ giữ coin vượt Quality Gate và có directional edge rõ ràng.
               </p>
             </div>
           </div>
@@ -142,7 +161,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
         {isScanning && currentCoins.length === 0 ? (
           <div className="scanner-skeleton-loader">
             <RefreshCw size={24} className="spin text-amber-400" />
-            <p className="loading-text">Đang tính toán VolCV 30D, Funding Rate &amp; Multi-TF cho các cặp giao dịch...</p>
+            <p className="loading-text">Đang đo Relative Strength, dòng tiền Spot/Futures, OI và Multi-TF...</p>
           </div>
         ) : currentCoins.length === 0 ? (
           <div className="scanner-empty-state">
@@ -161,7 +180,7 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                   <th style={{ width: '14%' }}>COIN / CHART</th>
                   <th style={{ width: '15%' }}>VỐN HÓA &amp; VOL 30D</th>
                   <th style={{ width: '13%' }}>SPREAD &amp; FUNDING</th>
-                  <th style={{ width: '15%' }}>DÒNG TIỀN (CVD 24H)</th>
+                  <th style={{ width: '15%' }}>DÒNG TIỀN 24H</th>
                   <th style={{ width: '14%' }}>KỸ THUẬT (4H &amp; 1D)</th>
                   <th style={{ width: '11%' }}>ĐIỂM TÍN HIỆU</th>
                   <th style={{ width: '12%' }}>THAO TÁC</th>
@@ -231,9 +250,9 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                         </div>
                         <div className="funding-row">
                           <span className={`funding-val ${
-                            activeDirection === 'BUY' && coin.fundingRate < -0.02 ? 'text-emerald-400 font-extrabold' :
                             activeDirection === 'BUY' && coin.fundingRate > 0.04 ? 'text-rose-400' :
-                            activeDirection === 'SELL' && coin.fundingRate > 0.04 ? 'text-rose-400 font-extrabold' : 'text-neutral'
+                            activeDirection === 'SELL' && coin.fundingRate < -0.03 ? 'text-rose-400' :
+                            isFiniteValue(coin.fundingRate) && Math.abs(coin.fundingRate) <= 0.01 ? 'text-emerald-400' : 'text-neutral'
                           }`}>
                             Funding: {fundingText}
                           </span>
@@ -243,9 +262,15 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                       {/* Money Flow / CVD & Taker Ratio */}
                       <td className="td-cvd">
                         <div className="cvd-main">
-                          <span className="label-sub">CVD 24h: </span>
+                          <span className="label-sub">Futures CVD: </span>
                           <strong className={`cvd-val ${coin.cvd24h > 0 ? 'text-emerald-400' : coin.cvd24h < 0 ? 'text-rose-400' : 'text-neutral'}`}>
                             {fmtCvd(coin.cvd24h)}
+                          </strong>
+                        </div>
+                        <div className="cvd-main">
+                          <span className="label-sub">Spot CVD: </span>
+                          <strong className={`cvd-val ${coin.spotCvd24h > 0 ? 'text-emerald-400' : coin.spotCvd24h < 0 ? 'text-rose-400' : 'text-neutral'}`}>
+                            {fmtCvd(coin.spotCvd24h)}
                           </strong>
                         </div>
                         <div className="buy-ratio-bar-wrap">
@@ -269,8 +294,8 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                         </div>
                         <div className="ta-item">
                           <span className="label-sub">Daily 1D: </span>
-                          <span className={`val-ta ${coin.isDailyUptrend ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {coin.isDailyUptrend ? '▲ BULL 1D' : '▼ BEAR 1D'}
+                          <span className={`val-ta ${coin.isDailyUptrend === null ? 'text-neutral' : coin.isDailyUptrend ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {coin.isDailyUptrend === null ? 'N/A' : coin.isDailyUptrend ? '▲ BULL 1D' : '▼ BEAR 1D'}
                           </span>
                         </div>
                         <div className="ta-item">
@@ -299,6 +324,9 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
                               backgroundColor: coin.statusColor,
                             }}
                           />
+                        </div>
+                        <div className="label-sub" title="Quality / Strength / Entry">
+                          Q {coin.qualityScore} · S {coin.strengthScore} · E {coin.entryScore}
                         </div>
                       </td>
 
@@ -330,10 +358,11 @@ export default function ScannerTab({ data = {}, etfHistory = [] }) {
           <span className="note-title">NGUYÊN TẮC SWING TRADING CHÍNH XÁC CAO:</span>
         </div>
         <p className="note-body">
-          • <strong>Chất Lượng Over Số Lượng</strong>: Hệ thống có thể trả về ít hơn 5 coin nếu các coin khác không vượt qua <strong>Quality Gate (Score &ge; 10/25, VolCV &le; 1.3, Spread &le; 0.15%)</strong>.<br />
-          • <strong>Volume Consistency (VolCV &le; 0.6)</strong>: Đảm bảo volume giao dịch bền vững trong suốt 30 ngày, loại bỏ triệt me coin bị bơm thổi ảo 1-2 ngày rồi xả.<br />
-          • <strong>Funding Rate &amp; Crowded Trade</strong>: Tránh vào Long khi Funding quá dương (&gt;0.04%) hoặc Short khi Funding quá âm (&lt;-0.03%) để né cú Squeeze.<br />
-          • <strong>Multi-Timeframe Alignment</strong>: Tín hiệu mạnh nhất xuất hiện khi cả khung <strong>4H và Daily</strong> cùng đồng thuận theo 1 hướng trend.
+          • <strong>Chất Lượng Over Số Lượng</strong>: Hệ thống có thể trả về ít hơn 5 coin nếu không vượt <strong>Score &ge; 14/25, directional edge &ge; 3, MCap &ge; $500M, VolCV &le; 1.3, Spread &le; 0.15%</strong>.<br />
+          • <strong>Volume Consistency (VolCV &le; 0.6)</strong>: Đảm bảo volume giao dịch bền vững trong suốt 30 ngày, loại bỏ triệt để coin bị bơm thổi ảo 1-2 ngày rồi xả.<br />
+          • <strong>Spot + Futures Confirmation</strong>: CVD được chuẩn hóa theo quote volume; tín hiệu mạnh ưu tiên khi hai thị trường cùng xác nhận.<br />
+          • <strong>Funding, Basis &amp; OI</strong>: Setup squeeze chỉ được cộng điểm khi giá và flow đã xác nhận, tránh đoán đảo chiều chỉ vì funding cực đoan.<br />
+          • <strong>Relative Strength</strong>: Coin phải outperform BTC theo 1H/4H/24H và thắng rõ chiều đối diện mới được vào Top.
         </p>
       </div>
     </div>
