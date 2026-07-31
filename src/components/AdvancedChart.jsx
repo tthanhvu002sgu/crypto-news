@@ -1036,35 +1036,35 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
 
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2', position: 'relative', minHeight: '520px', height: 'auto', display: 'flex', flexDirection: 'column' }}>
-      <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+      <div className="hft-panel-header advanced-chart-header">
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
         </h3>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="advanced-chart-toolbar" aria-label="Chart controls">
           
           {/* Settings Inputs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
-            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }} title="Tỉ lệ % chiều rộng của vùng Limit Wall">WALL WIDTH:</span>
+          <div className="advanced-chart-field" title="Tỉ lệ % chiều rộng của vùng Limit Wall">
+            <span>W</span>
             <input 
               type="number" 
               value={wallWidth} 
               onChange={handleWallWidthChange} 
-              style={{ width: '35px', background: 'transparent', border: 'none', color: 'var(--text-slate-200)', fontSize: '0.7rem', outline: 'none', textAlign: 'right' }} 
+              aria-label="Wall width percentage"
               min="10" max="100" 
             />
-            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-500)' }}>%</span>
+            <span>%</span>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
-            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }} title="Khoảng cách từ nến hiện tại đến lề phải (đơn vị: số nến)">OFFSET:</span>
+          <div className="advanced-chart-field" title="Khoảng cách từ nến hiện tại đến lề phải (đơn vị: số nến)">
+            <span>OFF</span>
             <input 
               type="number" 
               value={rightOffset} 
               onChange={handleRightOffsetChange} 
-              style={{ width: '35px', background: 'transparent', border: 'none', color: 'var(--text-slate-200)', fontSize: '0.7rem', outline: 'none', textAlign: 'right' }} 
+              aria-label="Right offset in bars"
               min="0" max="300" 
             />
-            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-500)' }}>BARS</span>
+            <span>B</span>
           </div>
           <button
             onClick={() => {
@@ -1074,21 +1074,9 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
             }}
             className="font-mono"
             title="Cuộn ngay đến nến mới nhất"
-            style={{
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              borderRadius: '4px',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-              background: 'rgba(16, 185, 129, 0.15)',
-              color: '#10b981',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
+            className="advanced-chart-control is-live"
           >
-            ⏩ Nến mới nhất
+            ⏩ Latest
           </button>
           <button
             onClick={() => {
@@ -1101,60 +1089,35 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
             }}
             className="font-mono"
             title="Tự động bám sát theo nến realtime"
-            style={{
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              borderRadius: '4px',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-              background: autoScroll ? 'rgba(251, 191, 36, 0.2)' : 'transparent',
-              color: autoScroll ? '#fbbf24' : 'var(--text-slate-400)',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            className={`advanced-chart-control ${autoScroll ? 'is-active is-auto' : ''}`}
           >
-            ⚡ Auto Scroll {autoScroll ? 'ON' : 'OFF'}
+            ⚡ Auto
           </button>
           <button
             onClick={() => setShowWalls(!showWalls)}
             className="font-mono"
-            style={{
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              borderRadius: '4px',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-              background: showWalls ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-              color: showWalls ? '#38bdf8' : 'var(--text-slate-400)',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            title="Bật/tắt Limit Walls"
+            className={`advanced-chart-control ${showWalls ? 'is-active is-walls' : ''}`}
           >
-            🎯 Limit Walls {showWalls ? 'ON' : 'OFF'}
+            🎯 Walls
           </button>
           <button
             onClick={() => setShowLiq(!showLiq)}
             className="font-mono"
-            style={{
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              borderRadius: '4px',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-              background: showLiq ? 'rgba(244, 63, 94, 0.2)' : 'transparent',
-              color: showLiq ? '#f43f5e' : 'var(--text-slate-400)',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            title="Bật/tắt Liquidation Zones"
+            className={`advanced-chart-control ${showLiq ? 'is-active is-liq' : ''}`}
           >
-            🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
+            🔥 Liq
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
-            <span style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)' }}>TF:</span>
+          <div className="advanced-chart-field advanced-chart-timeframe">
+            <span>TF</span>
             <select 
               value={timeframe} 
               onChange={(e) => {
                 setTimeframe(e.target.value);
                 localStorage.setItem('hft_timeframe', e.target.value);
               }}
-              style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '0.7rem', outline: 'none', cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}
+              aria-label="Chart timeframe"
             >
               <option value="1m">1M</option>
               <option value="5m">5M</option>
@@ -1171,34 +1134,18 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
               localStorage.setItem('hft_show_bubbles', val);
             }}
             className="font-mono"
-            style={{
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              borderRadius: '4px',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-              background: showBubbles ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-              color: showBubbles ? '#10b981' : 'var(--text-slate-400)',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            title="Bật/tắt Volume Bubbles"
+            className={`advanced-chart-control ${showBubbles ? 'is-active is-live' : ''}`}
           >
-            🫧 Vol Bubbles
+            🫧 Vol
           </button>
           <button
             onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}
             className="font-mono"
-            style={{
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              borderRadius: '4px',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-              background: tpoMode !== 'off' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
-              color: tpoMode !== 'off' ? '#a855f7' : 'var(--text-slate-400)',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            title="Chuyển TPO: tắt, blocks, letters"
+            className={`advanced-chart-control ${tpoMode !== 'off' ? 'is-active is-tpo' : ''}`}
           >
-            🧩 TPO: {tpoMode.toUpperCase()}
+            🧩 TPO {tpoMode === 'off' ? 'OFF' : tpoMode === 'blocks' ? 'BLK' : 'LTR'}
           </button>
           {moduleId && <ModuleMenu moduleId={moduleId} />}
         </div>

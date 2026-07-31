@@ -221,10 +221,17 @@ export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market =
 
     let interval = '1m';
     let limit = 60;
+    let startTime;
+    let endTime;
 
     if (timeframe === '1H') {
       interval = '1m';
       limit = 60;
+      // Align 1H footprint with the CVD card's prior, completed clock hour.
+      const currentHour = new Date();
+      currentHour.setMinutes(0, 0, 0);
+      endTime = currentHour.getTime();
+      startTime = endTime - (60 * 60 * 1000);
     } else if (timeframe === '24H') {
       interval = '1m';
       limit = 1000;
@@ -237,7 +244,12 @@ export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market =
     }
 
     const res = await axios.get(baseUrl, {
-      params: { symbol, interval, limit },
+      params: {
+        symbol,
+        interval,
+        limit,
+        ...(startTime != null ? { startTime, endTime: endTime - 1 } : {}),
+      },
     });
 
     const nodeMap = new Map();
@@ -1246,6 +1258,60 @@ const parseFredCSVSeries = (csvText) => {
       value: Number.isFinite(value) ? value : null,
     };
   }).filter((observation) => observation.date);
+};
+
+/**
+ * Rebuild CVD for one completed clock hour from Binance 1-minute candles.
+ * The explicit start/end boundaries keep it fixed instead of becoming a
+ * rolling 60-minute value as new trades arrive.
+ */
+export const getCompletedHourCVD = async (symbol = 'BTCUSDT', market = 'futures', startTime) => {
+  const HOUR_MS = 60 * 60 * 1000;
+  const endTime = startTime + HOUR_MS;
+
+  try {
+    const baseUrl = market === 'spot'
+      ? 'https://api.binance.com/api/v3/klines'
+      : 'https://fapi.binance.com/fapi/v1/klines';
+    const res = await axios.get(baseUrl, {
+      // Binance endTime is inclusive. Stop at the last millisecond of the
+      // completed hour so the following live candle cannot enter the result.
+      params: { symbol, interval: '1m', startTime, endTime: endTime - 1, limit: 60 },
+    });
+
+    let cvd = 0;
+    let buyVol = 0;
+    let sellVol = 0;
+    const points = [{ time: startTime, timestamp: startTime, cvd: 0, price: null }];
+
+    res.data.forEach(k => {
+      const quoteVol = parseFloat(k[7]);
+      const takerBuyVol = parseFloat(k[10]);
+      const takerSellVol = quoteVol - takerBuyVol;
+      buyVol += takerBuyVol;
+      sellVol += takerSellVol;
+      cvd += takerBuyVol - takerSellVol;
+      points.push({
+        time: k[6] + 1,
+        timestamp: k[6] + 1,
+        cvd: Math.round(cvd),
+        price: parseFloat(k[4]),
+      });
+    });
+
+    return {
+      startTime,
+      endTime,
+      points,
+      cvd: Math.round(cvd),
+      buyVol: Math.round(buyVol),
+      sellVol: Math.round(sellVol),
+      isComplete: res.data.length === 60,
+    };
+  } catch (e) {
+    console.error(`[API] Completed hour CVD (${market}):`, e.message);
+    return null;
+  }
 };
 
 const fetchFredCSVSeries = async (seriesId, units = 'lin') => {

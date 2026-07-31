@@ -39,8 +39,10 @@ export const CACHE_TTL = {
   // COLD
   macroFred: 12 * MS.HOUR,
   onChain: 6 * MS.HOUR,
-  etf: 4 * MS.HOUR,
-  cot: 12 * MS.HOUR,
+  // Cache keys for ETF/CME rotate at their source publication windows; these
+  // TTLs simply retain that immutable daily / weekly snapshot afterwards.
+  etf: 36 * MS.HOUR,
+  cot: 8 * 24 * MS.HOUR,
   fng: 4 * MS.HOUR,
   cvd30d: 2 * MS.HOUR,
   dailyKlines: 2 * MS.HOUR,

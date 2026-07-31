@@ -649,6 +649,10 @@ export function getSystemPrompt(style = 'compact', lang = 'en', userBias = 'none
   const stylePrompt = STYLE_PROMPTS[safeLang][style] || STYLE_PROMPTS[safeLang].compact;
   let result = `${CORE_PROMPTS[safeLang]}\n\n${stylePrompt}`;
 
+  result += safeLang === 'vi'
+    ? `\n\n[QUY TẮC CVD BẮT BUỘC]: Luôn ghi rõ venue cho mọi nhận định CVD: **Binance Spot** hoặc **Binance Futures**. Không được cộng, trung bình, hoặc gọi chung hai CVD này. Bắt buộc có một đối chiếu riêng: hai venue đồng pha hay phân kỳ, ý nghĩa của sự phân kỳ và dữ liệu xác nhận cần theo dõi.`
+    : `\n\n[MANDATORY CVD VENUE RULE]: Always name the venue for every CVD conclusion: **Binance Spot** or **Binance Futures**. Never add, average, or treat them as one CVD. Include a dedicated comparison stating whether the venues are aligned or divergent, the implication, and the confirmation data to monitor.`;
+
   if (userBias === 'long' || userBias === 'short') {
     const biasNote = safeLang === 'vi'
       ? `\n\n[HƯỚNG DẪN BỔ SUNG THIÊN KIẾN NGƯỜI DÙNG]: Người dùng đang thiên về hướng **${userBias.toUpperCase()}**. Hãy tập trung kiểm định bài toán **${userBias.toUpperCase()}** trong phần USER BIAS AUDIT. Trả lời trực tiếp 3 mục: (1) Nhận định về Bias, (2) Lời khuyên & cảnh báo rủi ro, (3) Kết luận Bias [XÁC NHẬN / CHỜ XÁC NHẬN / VÔ HIỆU HÓA].`
@@ -686,4 +690,3 @@ export const AI_STYLE_LABELS = {
     professional: 'Hội đồng đầu tư (Đầy đủ)',
   },
 };
-

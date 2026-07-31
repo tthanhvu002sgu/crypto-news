@@ -279,7 +279,7 @@ const ageInDays = (value, now = new Date()) => {
 };
 
 export default function SummaryTab({ 
-  data, apiKeys, cvd, buyVolume, sellVolume, etfHoldings, etfHistory,
+  data, apiKeys, cvd, spotCvd, buyVolume, sellVolume, etfHoldings, etfHistory,
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
   btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit
 }) {
@@ -376,7 +376,10 @@ export default function SummaryTab({
     let klines1y = [];
     let cvd7d = [];
     let cvd30d = [];
+    let spotCvd7d = [];
+    let spotCvd30d = [];
     let latestNews = [];
+    let calendarRes = null;
 
     try {
       [
@@ -388,6 +391,8 @@ export default function SummaryTab({
         klines1y,
         cvd7d,
         cvd30d,
+        spotCvd7d,
+        spotCvd30d,
         latestNews,
         calendarRes,
       ] = await Promise.all([
@@ -397,8 +402,10 @@ export default function SummaryTab({
         getBTCKlines('BTCUSDT', '1d', 30),
         getBTCKlines('BTCUSDT', '1d', 90),
         getBTCKlines('BTCUSDT', '1w', 52),
-        getHistoricalCVD('BTCUSDT', '4h', 42),
-        getHistoricalCVD('BTCUSDT', '1d', 30),
+        getHistoricalCVD('BTCUSDT', '4h', 42, 'futures'),
+        getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'),
+        getHistoricalCVD('BTCUSDT', '4h', 42, 'spot'),
+        getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'),
         fetchRealtimeFeed(),
         getWeeklyEconomicCalendar().catch(() => null),
       ]);
@@ -408,6 +415,8 @@ export default function SummaryTab({
 
     const activeCvd7d = cvd7d.length > 0 ? cvd7d : (data.cvdHistory7d || []);
     const activeCvd30d = cvd30d.length > 0 ? cvd30d : (data.cvdHistory30d || []);
+    const activeSpotCvd7d = spotCvd7d.length > 0 ? spotCvd7d : (data.cvdHistory7dSpot || []);
+    const activeSpotCvd30d = spotCvd30d.length > 0 ? spotCvd30d : (data.cvdHistory30dSpot || []);
     if (activeCvd30d.length > 0 || activeCvd7d.length > 0) {
       setReportCvdData(activeCvd30d.length > 0 ? activeCvd30d : activeCvd7d);
     }
@@ -508,6 +517,25 @@ export default function SummaryTab({
 - Second-half net taker delta: ${formatSigned(secondHalfDelta, 0, ' USD')}
 - Sampled paired path:
 ${path}`;
+    };
+
+    const compareCvdVenues = (futuresSeries, spotSeries, label) => {
+      const finalCvd = (series) => {
+        const last = [...(series || [])].reverse().find((point) => toFiniteNumber(point.cvd) !== null);
+        return toFiniteNumber(last?.cvd);
+      };
+      const futuresValue = finalCvd(futuresSeries);
+      const spotValue = finalCvd(spotSeries);
+      const agreement = futuresValue === null || spotValue === null
+        ? 'N/A'
+        : futuresValue === 0 || spotValue === 0
+          ? 'Neutral / one venue is flat'
+          : Math.sign(futuresValue) === Math.sign(spotValue)
+            ? 'Aligned direction'
+            : 'Divergent direction';
+      return `- ${label} Futures CVD: ${formatSigned(futuresValue, 0, ' USD')}\n` +
+        `- ${label} Spot CVD: ${formatSigned(spotValue, 0, ' USD')}\n` +
+        `- Venue comparison: ${agreement}. Do not net, average, or treat the two venue values as interchangeable.`;
     };
 
     const wallQuality = (usdValue) => {
@@ -674,6 +702,63 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
       })
       .join(' | ');
 
+    // A report is only useful when every required evidence bucket is present.
+    // Keep this independent from prompt formatting so a literal "N/A" can
+    // never quietly reach the model as if it were evidence.
+    const missingData = [];
+    const hasValue = (value) => {
+      if (typeof value === 'number') return Number.isFinite(value);
+      if (typeof value === 'string') return value.trim() !== '' && value.trim().toUpperCase() !== 'N/A';
+      return value !== null && value !== undefined;
+    };
+    const requireValue = (label, value) => {
+      if (!hasValue(value)) missingData.push(label);
+    };
+    const requireSeries = (label, series, minimum = 1) => {
+      if (!Array.isArray(series) || series.length < minimum) missingData.push(label);
+    };
+
+    [
+      ['BTC spot price', priceNow],
+      ['US Net Liquidity', data.netLiquidity],
+      ['Fed Funds rate', fedRate],
+      ['CPI YoY', cpi],
+      ['US 10Y Yield', data.tenYearYield],
+      ['DXY', data.dxy],
+      ['VIX', data.vix?.price],
+      ['High-yield spread', data.highYield],
+      ['US unemployment', data.unrate],
+      ['S&P 500', data.sp500?.price],
+      ['Nasdaq / QQQ', data.qqq?.price],
+      ['BTC MVRV', data.onChainMetrics?.mvrv],
+      ['BTC hashrate', data.onChain?.hashRate],
+      ['BTC difficulty', data.onChain?.difficulty],
+      ['ETF holdings', etfHoldings?.total],
+      ['CME COT date', data.cotData?.date],
+      ['CME COT asset-manager positions', data.cotData?.assetManager?.net],
+      ['CME COT leveraged-fund positions', data.cotData?.leveragedFunds?.net],
+      ['Funding rate', data.fundingRate],
+      ['Open interest', data.openInterest],
+      ['Long/short ratio', lsLast],
+      ['Realtime Futures CVD', cvd],
+      ['Realtime Spot CVD', spotCvd],
+      ['Order-book imbalance', orderBook?.obiPercent],
+      ['Whale-wall bid ratio', whaleWalls?.bidRatio],
+    ].forEach(([label, value]) => requireValue(label, value));
+
+    requireSeries('48h BTC price candles', klines48h, 2);
+    requireSeries('7d BTC price candles', klines7d, 2);
+    requireSeries('30d BTC price candles', klines30d, 2);
+    requireSeries('90d BTC price candles', klines90d, 2);
+    requireSeries('1y BTC price candles', klines1y, 2);
+    requireSeries('ETF flow history', etfFlows, 1);
+    requireSeries('Futures CVD 7d', activeCvd7d, 2);
+    requireSeries('Futures CVD 30d', activeCvd30d, 2);
+    requireSeries('Spot CVD 7d', activeSpotCvd7d, 2);
+    requireSeries('Spot CVD 30d', activeSpotCvd30d, 2);
+    requireSeries('Recent news', activeNews, 1);
+    requireSeries('Economic-calendar events', calendarRes?.allEvents, 1);
+
     const formatNews = (items) => {
       if (!Array.isArray(items) || items.length === 0) return '- N/A';
       return items.slice(0, 15).map((item) => {
@@ -701,6 +786,7 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
 - Dashboard last successful sync/fetch: ${safeIsoTime(lastSync)}
 - Coverage summary: ${coverageStr}
 - BTC spot/klines, funding, OI, global L/S accounts, and historical CVD venue: Binance BTCUSDT.
+- CVD venue rule: Spot CVD and Futures CVD are separate taker-flow measurements. Never merge, average, or label one as the other; compare their direction explicitly.
 - OBI and whale-wall scope: multi-exchange aggregation returned by the dashboard; composition is shown where available.
 - Macro observations may have publication lag. The dashboard currently supplies values but not every source observation date.
 - ETF history contains the latest seven available dashboard observations, which may include non-trading-day gaps or fallback data. Compare the latest observation date with the report timestamp.
@@ -813,14 +899,24 @@ ${oiStr}
 - Change in L/S ratio across supplied history: ${formatSigned(lsChange, 3)}
 - L/S account history:
 ${lsStr}
-- Intraday CVD: ${formatSigned(cvd, 0, ' USD')}
-- Intraday taker buy volume: ${formatNumber(buyVolume, 0)} USD
-- Intraday taker sell volume: ${formatNumber(sellVolume, 0)} USD
+- Intraday CVD — Binance Futures: ${formatSigned(cvd, 0, ' USD')}
+- Intraday CVD — Binance Spot: ${formatSigned(spotCvd, 0, ' USD')}
+- Intraday taker buy volume — Binance Futures: ${formatNumber(buyVolume, 0)} USD
+- Intraday taker sell volume — Binance Futures: ${formatNumber(sellVolume, 0)} USD
+- Required interpretation: state whether Spot and Futures CVD agree or diverge. A futures-only move can reflect leverage; a spot-only move can reflect cash demand. Do not infer aggregate market CVD from either single venue.
 
 ## 6. HISTORICAL PRICE / CVD
-${cvdBlock(activeCvd7d, '7-Day CVD / Price (4h)')}
+${cvdBlock(activeCvd7d, '7-Day Binance Futures CVD / Price (4h)')}
 
-${cvdBlock(activeCvd30d, '30-Day CVD / Price (1d)')}
+${cvdBlock(activeCvd30d, '30-Day Binance Futures CVD / Price (1d)')}
+
+${cvdBlock(activeSpotCvd7d, '7-Day Binance Spot CVD / Price (4h)')}
+
+${cvdBlock(activeSpotCvd30d, '30-Day Binance Spot CVD / Price (1d)')}
+
+### CVD VENUE COMPARISON (MANDATORY)
+${compareCvdVenues(activeCvd7d, activeSpotCvd7d, '7-day / 4h')}
+${compareCvdVenues(activeCvd30d, activeSpotCvd30d, '30-day / 1d')}
 
 ## 7. DISPLAYED LIQUIDITY & ORDER BOOK
 - Aggregated OBI: ${orderBook?.obiPercent !== undefined ? formatSigned(orderBook.obiPercent, 2, '%') : 'N/A'}
@@ -851,7 +947,7 @@ ${
 `;
 
     const systemPrompt = getSystemPrompt(selectedStyle, selectedLang, selectedUserBias);
-    return { promptData, systemPrompt };
+    return { promptData, systemPrompt, missingData };
   };
 
   const [isExporting, setIsExporting] = useState(false);
@@ -928,6 +1024,19 @@ ${promptData}
     }
   };
 
+  const prepareVerifiedReportData = async () => {
+    const prepared = await preparePromptAndData();
+    if (prepared.missingData.length === 0) return prepared;
+
+    const title = isVi
+      ? 'Chưa thể tạo báo cáo AI vì dữ liệu bắt buộc còn thiếu:'
+      : 'The AI report cannot be created because required data is still missing:';
+    alert(`${title}\n\n• ${prepared.missingData.join('\n• ')}\n\n${isVi
+      ? 'Hãy đồng bộ lại và chờ các nguồn này có dữ liệu, rồi thử lại.'
+      : 'Sync again and wait for these sources to return data, then try again.'}`);
+    return null;
+  };
+
   const generateReport = async () => {
     if (aiProvider === 'openrouter') {
       const openrouterKey = apiKeys?.openrouter?.trim();
@@ -944,7 +1053,9 @@ ${promptData}
       setAiSummary('');
 
       try {
-        const { promptData, systemPrompt } = await preparePromptAndData();
+        const prepared = await prepareVerifiedReportData();
+        if (!prepared) return;
+        const { promptData, systemPrompt } = prepared;
         const genConfig = getGenerationConfig(selectedStyle);
 
         await streamOpenRouterCompletion({
@@ -1004,7 +1115,9 @@ ${promptData}
     let actualModelUsed = selectedModel;
 
     try {
-      const { promptData, systemPrompt } = await preparePromptAndData();
+      const prepared = await prepareVerifiedReportData();
+      if (!prepared) return;
+      const { promptData, systemPrompt } = prepared;
 
       for (let attempt = 0; attempt < modelAttempts.length; attempt++) {
         const model = modelAttempts[attempt];

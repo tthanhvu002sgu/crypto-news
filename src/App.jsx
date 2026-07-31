@@ -275,6 +275,33 @@ const BASELINE_CME_COT = {
   leveragedFunds: { long: 6269, longChange: 1603, short: 12827, shortChange: -473, net: -6558, netChange: 2076 }
 };
 
+const formatCacheDate = (date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0'),
+  String(date.getDate()).padStart(2, '0'),
+].join('-');
+
+// ETF flow/holding providers publish after the US session. Start a fresh cache
+// after 08:00 ICT and reuse Friday's snapshot during the weekend.
+const getEtfPublicationCacheKey = () => {
+  const effective = new Date();
+  if (effective.getHours() < 8) effective.setDate(effective.getDate() - 1);
+  if (effective.getDay() === 0) effective.setDate(effective.getDate() - 2);
+  if (effective.getDay() === 6) effective.setDate(effective.getDate() - 1);
+  return formatCacheDate(effective);
+};
+
+// CFTC positions are released Friday afternoon in New York (early Saturday in
+// ICT). Rotate this key only after the new weekly report should be available.
+const getCmeCotReleaseCacheKey = () => {
+  const release = new Date();
+  const daysSinceSaturday = (release.getDay() + 1) % 7;
+  release.setDate(release.getDate() - daysSinceSaturday);
+  release.setHours(4, 0, 0, 0);
+  if (Date.now() < release.getTime()) release.setDate(release.getDate() - 7);
+  return formatCacheDate(release);
+};
+
 function useDraggableScroll() {
   const [node, setNode] = useState(null);
   
@@ -674,9 +701,11 @@ function AppContent() {
         push('onChain', fetchCached('btcOnChain', () => getBTCOnChain(), CACHE_TTL.onChain, addLog, 'BTC Network (blockchain.info)', force));
         push('onChainMetrics', fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), CACHE_TTL.onChain, addLog, 'On-chain Metrics (CoinMetrics)', force));
         push('ethOnChainMetrics', fetchCached('ethOnChainMetrics', () => getETHOnChainMetrics(), CACHE_TTL.onChain, addLog, 'ETH On-chain Metrics (CoinMetrics)', force));
-        push('etfHoldings', fetchCached('etfHoldings', () => getETFHoldings(), CACHE_TTL.etf, addLog, 'Spot ETF Holdings (Bitbo)', force));
-        push('etfHistory', fetchCached('etfFlowHistory_v4', () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force));
-        push('cot', fetchCached('cmeCot', () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force));
+        const etfCacheKey = getEtfPublicationCacheKey();
+        const cmeCotCacheKey = getCmeCotReleaseCacheKey();
+        push('etfHoldings', fetchCached(`etfHoldings_${etfCacheKey}`, () => getETFHoldings(), CACHE_TTL.etf, addLog, 'Spot ETF Holdings (Bitbo)', force));
+        push('etfHistory', fetchCached(`etfFlowHistory_${etfCacheKey}`, () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force));
+        push('cot', fetchCached(`cmeCot_${cmeCotCacheKey}`, () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force));
         push('fng', fetchCached('fearAndGreed', () => getFearAndGreed(), CACHE_TTL.fng, addLog, 'Chỉ số Fear & Greed (alternative.me)', force));
         push('cvd30d', fetchCached('cvdHistory30d_v2', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Futures', force));
         push('cvd30dSpot', fetchCached('cvdHistory30d_spot_v1', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Spot', force));
@@ -788,7 +817,8 @@ function AppContent() {
     }
   }, [addLog, setLastSyncTime, apiKeys.fred]);
 
-  // Daily force-sync at 08:00 local
+  // Daily scheduled sync at 08:00 local. Publication-keyed ETF/CME caches
+  // refresh only when their daily/weekly source window advances.
   useEffect(() => {
     const checkAutoSync = () => {
       const now = new Date();
@@ -797,8 +827,8 @@ function AppContent() {
       const lastAutoSyncDate = localStorage.getItem('last-auto-sync-date');
 
       if (currentHour >= 8 && lastAutoSyncDate !== currentDateStr) {
-        addLog('[Auto-Sync] Đồng bộ hàng ngày 08:00 — full force...', 'system');
-        syncData(true, ['hot', 'warm', 'cold']);
+        addLog('[Auto-Sync] Đồng bộ hàng ngày 08:00...', 'system');
+        syncData(false, ['hot', 'warm', 'cold']);
         localStorage.setItem('last-auto-sync-date', currentDateStr);
       }
     };
@@ -1620,6 +1650,7 @@ function AppContent() {
                 data={data} 
                 apiKeys={apiKeys} 
                 cvd={cvd}
+                spotCvd={spot?.cvd}
                 buyVolume={buyVolume}
                 sellVolume={sellVolume}
                 etfHoldings={etfHoldings}

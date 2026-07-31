@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 
-import { getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
+import { getCompletedHourCVD, getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
 import { runSignalDetection, takePeriodicSnapshot, SIGNAL_TYPE } from '../services/signalEngine';
 import { getSignals, exportSignals, clearAllSignals, clearOldSignals, onSignalAdded } from '../services/signalStore';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
@@ -33,6 +33,19 @@ const fmtCvdUsd = (n) => {
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
   return `${sign}$${abs.toFixed(0)}`;
+};
+
+const getLastCompletedHourStart = () => {
+  const currentHour = new Date();
+  currentHour.setMinutes(0, 0, 0);
+  return currentHour.getTime() - (60 * 60 * 1000);
+};
+
+const formatHourRange = (startTime) => {
+  const start = new Date(startTime);
+  const end = new Date(startTime + (60 * 60 * 1000));
+  const hour = (date) => String(date.getHours()).padStart(2, '0');
+  return `${hour(start)}:00–${hour(end)}:00`;
 };
 
 const fmtPrice = (n) => n ? `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '---';
@@ -78,7 +91,7 @@ const getChartOptsBase = (theme) => {
 // ─── PANEL 1: CVD & Order Flow ────────────────────────────────────────────────
 
 function CVDPanel({
-  cvd, sessionCvd, buyVolume, sellVolume, cvdHistory,
+  sessionCvd, buyVolume, sellVolume,
   futuresStream, spotStream,
   cvdHistory24h, cvdHistory7d, cvdHistory30d,
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
@@ -90,6 +103,8 @@ function CVDPanel({
   });
 
   const [cvdTf, setCvdTf] = useState('1H');
+  const [completedHourStart, setCompletedHourStart] = useState(getLastCompletedHourStart);
+  const [completedHourCvd, setCompletedHourCvd] = useState(null);
   const [nodeGap, setNodeGap] = useState(() => {
     const saved = localStorage.getItem('hft_cvd_gap');
     return saved ? Number(saved) : 100;
@@ -97,19 +112,43 @@ function CVDPanel({
 
   // Select active market dataset dynamically
   const activeStream = marketMode === 'SPOT' ? spotStream : futuresStream;
-  const activeCvd = activeStream?.cvd ?? cvd;
   const activeSessionCvd = activeStream?.sessionCvd ?? sessionCvd;
   const activeBuyVolume = activeStream?.buyVolume ?? buyVolume;
   const activeSellVolume = activeStream?.sellVolume ?? sellVolume;
-  const activeCvdHistory = activeStream?.cvdHistory ?? cvdHistory;
 
   const activeCvdHistory24h = marketMode === 'SPOT' ? cvdHistory24hSpot : cvdHistory24h;
   const activeCvdHistory7d = marketMode === 'SPOT' ? cvdHistory7dSpot : cvdHistory7d;
   const activeCvdHistory30d = marketMode === 'SPOT' ? cvdHistory30dSpot : cvdHistory30d;
 
+  // 1H means the previous fully closed clock hour, never a rolling window.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCompletedHourStart((previous) => {
+        const next = getLastCompletedHourStart();
+        return previous === next ? previous : next;
+      });
+    }, 15 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+    getCompletedHourCVD('BTCUSDT', marketMode.toLowerCase(), completedHourStart)
+      .then((result) => {
+        if (!isCancelled) setCompletedHourCvd(result?.isComplete ? result : null);
+      });
+    return () => { isCancelled = true; };
+  }, [marketMode, completedHourStart]);
+
+  const activeCompletedHourCvd = completedHourCvd?.startTime === completedHourStart
+    ? completedHourCvd
+    : null;
+
   const displayVol = useMemo(() => {
     if (cvdTf === '1H') {
-      return { buy: activeBuyVolume, sell: activeSellVolume };
+      return activeCompletedHourCvd
+        ? { buy: activeCompletedHourCvd.buyVol, sell: activeCompletedHourCvd.sellVol }
+        : { buy: 0, sell: 0 };
     }
     const list = cvdTf === '24H' ? activeCvdHistory24h
                : cvdTf === '7D' ? activeCvdHistory7d
@@ -130,7 +169,7 @@ function CVDPanel({
     sellSum += activeSellVolume;
 
     return { buy: buySum, sell: sellSum };
-  }, [cvdTf, activeBuyVolume, activeSellVolume, activeCvdHistory24h, activeCvdHistory7d, activeCvdHistory30d]);
+  }, [cvdTf, activeCompletedHourCvd, activeBuyVolume, activeSellVolume, activeCvdHistory24h, activeCvdHistory7d, activeCvdHistory30d]);
 
   const displayTotalVol = displayVol.buy + displayVol.sell;
   const buyPct = displayTotalVol > 0 ? (displayVol.buy / displayTotalVol * 100) : 50;
@@ -200,63 +239,8 @@ function CVDPanel({
   }
   const delta30d = (activeSessionCvd || 0) - baseSession30dRef.current;
 
-  // True rolling 1H: only samples in the last 60 minutes, rebased so Net CVD = 0 at window start
-  const list1h = useMemo(() => {
-    if (!activeCvdHistory || activeCvdHistory.length === 0) return [];
-
-    const MS_1H = 60 * 60 * 1000;
-    const now = Date.now();
-    const cutoff = now - MS_1H;
-
-    const withTs = activeCvdHistory.filter((item) => item.timestamp != null);
-    let window;
-    let base1h;
-
-    if (withTs.length > 0) {
-      // Last sample at or before the 60-minute mark = true "CVD 1h ago" baseline
-      let baseSample = null;
-      for (let i = 0; i < withTs.length; i++) {
-        if (withTs[i].timestamp <= cutoff) baseSample = withTs[i];
-        else break;
-      }
-      window = withTs.filter((item) => item.timestamp >= cutoff);
-      if (window.length === 0) {
-        window = [withTs[withTs.length - 1]];
-      }
-      // Full hour available → baseline at cutoff; partial session → first point in window
-      base1h = baseSample != null ? baseSample.cvd : (window[0]?.cvd || 0);
-    } else {
-      // Legacy samples without timestamp: approximate last ~60 minute bars
-      window = activeCvdHistory.slice(-60);
-      base1h = window[0]?.cvd || 0;
-    }
-
-    const points = window.map((item, idx) => {
-      const isLast = idx === window.length - 1;
-      return {
-        ...item,
-        cvd: (isLast ? (activeCvd ?? item.cvd) : item.cvd) - base1h,
-        price: isLast ? (livePrice || item.price) : item.price,
-      };
-    });
-
-    // Start chart at 0 when baseline sits just before the window (cleaner 1h delta line)
-    if (
-      withTs.length > 0 &&
-      points.length > 0 &&
-      points[0].cvd !== 0 &&
-      points[0].timestamp > cutoff
-    ) {
-      const t = new Date(cutoff);
-      const timeStr = t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-      return [
-        { time: timeStr, cvd: 0, price: points[0].price, timestamp: cutoff },
-        ...points,
-      ];
-    }
-
-    return points;
-  }, [activeCvdHistory, activeCvd, livePrice]);
+  // Fixed 1H data comes from the prior completed hourly bucket.
+  const list1h = useMemo(() => activeCompletedHourCvd?.points ?? [], [activeCompletedHourCvd]);
 
   const chartList = useMemo(() => {
     if (cvdTf === '1H') return list1h;
@@ -284,7 +268,7 @@ function CVDPanel({
     return [];
   }, [cvdTf, list1h, activeCvdHistory24h, activeCvdHistory7d, activeCvdHistory30d, delta24h, delta7d, delta30d, livePrice]);
 
-  const latestCvd = chartList.length > 0 ? chartList[chartList.length - 1].cvd : 0;
+  const latestCvd = chartList.length > 0 ? chartList[chartList.length - 1].cvd : null;
 
   const chartOpts = useMemo(() => {
     const base = getChartOptsBase(theme);
@@ -331,7 +315,7 @@ function CVDPanel({
     });
 
     const cvdVals = chartList.map(item => item.cvd);
-    const lastVal = cvdVals.length > 0 ? cvdVals[cvdVals.length - 1] : cvd;
+    const lastVal = cvdVals.length > 0 ? cvdVals[cvdVals.length - 1] : 0;
     const isPos = lastVal >= 0;
     const lineColor = isPos ? '#10b981' : '#f43f5e';
     const isLight = theme === 'light';
@@ -355,7 +339,7 @@ function CVDPanel({
         }
       ]
     };
-  }, [chartList, cvdTf, cvd, theme]);
+  }, [chartList, cvdTf, theme]);
 
 
 
@@ -418,7 +402,7 @@ function CVDPanel({
                 onClick={() => setCvdTf(t)}
                 className={`toggle-btn ${cvdTf === t ? 'active' : ''}`}
               >
-                {t === '1H' ? '1H (LIVE)' : t}
+                {t === '1H' ? '1H (ĐÃ CHỐT)' : t}
               </button>
             ))}
           </div>
@@ -430,9 +414,9 @@ function CVDPanel({
       <div className="cvd-hero" style={{ paddingBottom: '8px' }}>
         <div className="cvd-value-wrap">
           <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian">
-            {`CVD RÒNG ${marketMode} (${cvdTf === '1H' ? '1 GIỜ QUA' : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA'})`}
+            {`CVD RÒNG ${marketMode} (${cvdTf === '1H' ? formatHourRange(completedHourStart) : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA'})`}
           </span>
-          <span className={`cvd-value font-mono ${latestCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>
+          <span className={`cvd-value font-mono ${(latestCvd ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
             {fmtCvdUsd(latestCvd)}
           </span>
         </div>
@@ -444,7 +428,7 @@ function CVDPanel({
           <Line data={chartData} options={chartOpts} />
         ) : (
           <div className="hft-empty font-mono" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>
-            {cvdTf === '1H' ? '⚡ Đang tích lũy dữ liệu CVD realtime theo phút...' : 'Đang tải dữ liệu biểu đồ CVD...'}
+            {cvdTf === '1H' ? 'Đang tải dữ liệu CVD của giờ đã chốt...' : 'Đang tải dữ liệu biểu đồ CVD...'}
           </div>
         )}
       </div>
