@@ -100,7 +100,7 @@ export const METRIC_METADATA = {
   },
   ssr: {
     api: 'So sánh Mô hình M1 vs M2',
-    def: 'Stablecoin Supply Ratio. Đo lường sức mua của Stablecoin so với Vốn hóa BTC.\n• M1 (Cố định 8.5): Mô hình cũ, bị phóng đại do phình vốn hóa Stablecoin.\n• M2 (Chu kỳ mới 4.2): Điều chỉnh theo nền SSR 2024-2026 (SSR < 3.2: Buy, > 5.5: High).',
+    def: 'Stablecoin Supply Ratio. Đo lường sức mua của Stablecoin so với Vốn hóa BTC.\n• M1 (Cố định 8.5): Mô hình cũ, bị phóng đại do phình vốn hóa Stablecoin.\n• M2 (Động MA180): Tính toán tự động theo Trung bình động 180 ngày của SSR từ dữ liệu Binance & DefiLlama realtime.',
     formula: 'SSR = (BTC Price × 19.74M) / Stablecoin Market Cap'
   },
   cvd: {

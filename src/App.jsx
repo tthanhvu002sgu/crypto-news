@@ -3,7 +3,7 @@ import './App.css';
 import {
   getBTCTicker24h, getBTCKlines, getLongShortRatio,
   getFundingRate, getOpenInterest, getOIHistory,
-  getGlobalCryptoData, getStablecoinData,
+  getGlobalCryptoData, getStablecoinData, getSsrMovingAverageData,
   fetchRealtimeFeed, getBTCOnChain, getBTCOnChainMetrics, getETHOnChainMetrics,
   getFREDMetric, getFREDStockQuote,
   getETFHoldings, getETFFlowHistory, getCMECot, getDXYQuote,
@@ -215,6 +215,7 @@ const INIT = {
 
   globalData: null,
   stablecoins: null,
+      ssrMa: null,
   news: [],
   logs: [],
   onChain: null,      // Blockchain.info network stats
@@ -685,6 +686,7 @@ function AppContent() {
       if (wantWarm) {
         push('global', fetchCached('globalCryptoData', () => getGlobalCryptoData(), CACHE_TTL.globalCrypto, addLog, 'Global Market (CoinGecko)', force));
         push('stable', fetchCached('stablecoinData', () => getStablecoinData(), CACHE_TTL.stablecoin, addLog, 'Stablecoins (CoinGecko)', force));
+        push('ssrMa', fetchCached('ssrMovingAverage180', () => getSsrMovingAverageData(), CACHE_TTL.onChain, addLog, 'SSR MA180 (DefiLlama + Binance)', force));
         push('news', fetchCached('realtimeFeed', () => fetchRealtimeFeed(), CACHE_TTL.news, addLog, 'News RSS (rss2json)', force));
         push('yield10y', fetchCached('yield10y', () => getFREDMetric('DGS10', apiKeys.fred), CACHE_TTL.yield10y, addLog, 'Yield 10Y (Yahoo Finance)', force));
         push('dxy', fetchCached('dxyQuote', () => getDXYQuote(), CACHE_TTL.dxy, addLog, 'Chỉ số DXY (Yahoo Finance)', force));
@@ -724,6 +726,7 @@ function AppContent() {
 
       const globalData = wantWarm ? settled(byKey.global) : null;
       const stablecoins = wantWarm ? settled(byKey.stable) : null;
+      const ssrMa = wantWarm ? settled(byKey.ssrMa) : null;
       const news = wantWarm ? (settled(byKey.news) || []) : [];
       const tenYearYield = wantWarm ? settled(byKey.yield10y) : null;
       const dxy = wantWarm ? settled(byKey.dxy) : null;
@@ -777,6 +780,7 @@ function AppContent() {
         oiHistory: oiHistory.length > 0 ? oiHistory : prev.oiHistory,
         globalData: globalData ?? prev.globalData,
         stablecoins: stablecoins ?? prev.stablecoins,
+        ssrMa: ssrMa ?? prev.ssrMa,
         news: news.length > 0 ? news : prev.news,
         logs: [...logsRef.current],
         onChain: onChain ?? prev.onChain,
@@ -1415,21 +1419,24 @@ function AppContent() {
                             if (ssr < 6) statusM1 = 'Buy ↑';
                             if (ssr > 15) statusM1 = 'High ↓';
 
-                            // Model 2: Dynamic Cycle Adjusted Median (~4.2 for 2024-2026)
-                            const fairPriceM2 = (m * 4.2) / 19740000;
+                            // Model 2: Real-time Dynamic MA180 of SSR
+                            const currentMa = data.ssrMa || 4.38;
+                            const fairPriceM2 = (m * currentMa) / 19740000;
                             const fairStrM2 = `${(fairPriceM2 / 1000).toFixed(1)}k`;
                             let statusM2 = 'Bình thường';
                             let clsM2 = 'text-slate-400';
-                            if (ssr < 3.2) { statusM2 = 'Buy ↑'; clsM2 = 'text-emerald-400'; }
-                            else if (ssr > 5.5) { statusM2 = 'High ↓'; clsM2 = 'text-rose-400'; }
+                            const lowerBand = currentMa * 0.75;
+                            const upperBand = currentMa * 1.25;
+                            if (ssr < lowerBand) { statusM2 = 'Buy ↑'; clsM2 = 'text-emerald-400'; }
+                            else if (ssr > upperBand) { statusM2 = 'High ↓'; clsM2 = 'text-rose-400'; }
 
                             return (
                               <div style={{ fontSize: '10px', marginTop: '4px', lineHeight: '1.45', textAlign: 'left' }}>
                                 <div style={{ opacity: 0.7, color: 'var(--text-slate-400)' }}>
-                                  M1 (Cố định 8.5): Est ${fairStrM1} • ${statusM1}
+                                  M1 (Tĩnh 8.5): Est ${fairStrM1} • ${statusM1}
                                 </div>
                                 <div className={clsM2} style={{ fontWeight: 600 }}>
-                                  M2 (Chu kỳ 4.2): Est ${fairStrM2} • ${statusM2}
+                                  M2 (Động MA180 ${currentMa}): Est ${fairStrM2} • ${statusM2}
                                 </div>
                               </div>
                             );

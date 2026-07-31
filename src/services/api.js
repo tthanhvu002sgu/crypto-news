@@ -403,6 +403,45 @@ export const getGlobalCryptoData = async () => {
 };
 
 /** Stablecoin market caps (USDT + USDC) as proxy for crypto "dry powder" */
+
+/** Fetches historical BTC 1d klines & DefiLlama stablecoin supply to calculate real-time SSR Moving Average (MA180) */
+export const getSsrMovingAverageData = async () => {
+  try {
+    const [btcRes, stableRes] = await Promise.all([
+      axios.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=180'),
+      axios.get('https://stablecoins.llama.fi/stablecoincharts/all')
+    ]);
+
+    const btcPrices = (btcRes.data || []).map(k => ({
+      timestamp: k[0],
+      price: parseFloat(k[4])
+    }));
+
+    const stableData = (stableRes.data || []).map(d => ({
+      timestamp: parseInt(d.date) * 1000,
+      totalCap: d.totalCirculating ? d.totalCirculating.peggedUSD : 0
+    }));
+
+    const ssrHistory = [];
+    btcPrices.forEach(b => {
+      const s = stableData.find(st => Math.abs(st.timestamp - b.timestamp) < 86400000);
+      if (s && s.totalCap > 0) {
+        const ssr = (b.price * 19740000) / s.totalCap;
+        ssrHistory.push(ssr);
+      }
+    });
+
+    if (ssrHistory.length > 0) {
+      const sum = ssrHistory.reduce((a, b) => a + b, 0);
+      return parseFloat((sum / ssrHistory.length).toFixed(3));
+    }
+    return null;
+  } catch (e) {
+    console.error('[API] SSR Moving Average:', e.message);
+    return null;
+  }
+};
+
 export const getStablecoinData = async () => {
   try {
     const res = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
