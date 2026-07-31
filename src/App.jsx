@@ -1362,6 +1362,42 @@ function AppContent() {
                     <div className="metrics-grid">
                       {/* Top Priority Valuation & Supply Metrics */}
                       <MetricCard
+                        label="BTC SSR"
+                        value={(() => {
+                          const p = btcDisplay?.price;
+                          const m = data.stablecoins?.total;
+                          if (p && m) {
+                            const btcCap = p * 19740000;
+                            const ssr = btcCap / m;
+                            return ssr.toFixed(2);
+                          }
+                          return '---';
+                        })()}
+                        sub={(() => {
+                          const p = btcDisplay?.price;
+                          const m = data.stablecoins?.total;
+                          if (p && m) {
+                            const ssr = (p * 19740000) / m;
+                            if (ssr < 6) return 'High Buy Power ↑';
+                            if (ssr > 15) return 'Low Buy Power ↓';
+                            return 'Neutral (M/Q)';
+                          }
+                          return 'M/Q Proxy';
+                        })()}
+                        subCls={(() => {
+                          const p = btcDisplay?.price;
+                          const m = data.stablecoins?.total;
+                          if (p && m) {
+                            const ssr = (p * 19740000) / m;
+                            if (ssr < 6) return 'text-emerald';
+                            if (ssr > 15) return 'text-rose';
+                          }
+                          return 'text-slate-400';
+                        })()}
+                        tooltipId="ssr"
+                        freshness="1h"
+                      />
+                      <MetricCard
                         label="PRODUCTION COST"
                         value={(() => {
                           const pc = data.onChain?.productionCost;

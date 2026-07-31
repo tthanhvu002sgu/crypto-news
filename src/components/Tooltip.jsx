@@ -98,6 +98,11 @@ export const METRIC_METADATA = {
     def: 'Ước tính Tỷ lệ % nguồn cung Ethereum đang có lời (Percent Supply in Profit) dựa trên mô hình hồi quy toán học từ MVRV.',
     formula: 'SupplyInProfit ≈ -10 + 52 × MVRV - 1.5 × MVRV²'
   },
+  ssr: {
+    api: 'Mô hình giả lập (P = M/Q)',
+    def: 'Stablecoin Supply Ratio. Đo lường sức mua của Stablecoin so với Vốn hóa Bitcoin. SSR < 6: Sức mua dồi dào, báo hiệu đáy. SSR > 15: Sức mua cạn kiệt, cảnh báo đỉnh.',
+    formula: 'SSR = (BTC Price × 19.74M) / Stablecoin Market Cap'
+  },
   cvd: {
     api: 'Binance WebSocket (btcusdt@aggTrade)',
     def: 'Chênh lệch tích lũy giữa volume lệnh Mua chủ động (Taker Buy) và lệnh Bán chủ động (Taker Sell) từ thời điểm mở trang.',
