@@ -231,6 +231,10 @@ function CVDPanel({
   }
   const delta7d = (activeSessionCvd || 0) - baseSession7dRef.current;
 
+
+
+
+
   const baseSession30dRef = useRef(activeSessionCvd || 0);
   const prevList30dRef = useRef(activeCvdHistory30d);
   if (prevList30dRef.current !== activeCvdHistory30d) {
@@ -302,9 +306,15 @@ function CVDPanel({
 
   const chartData = useMemo(() => {
     const labels = chartList.map(item => {
-      if (typeof item.time === 'string') return item.time;
       if (item.time == null) return '';
       const d = new Date(item.time);
+      if (isNaN(d.getTime())) return String(item.time);
+
+      if (cvdTf === '1H') {
+        const hrs = d.getHours();
+        const mins = d.getMinutes();
+        return `${hrs}h${mins > 0 ? String(mins).padStart(2, '0') : ''}`;
+      }
       if (cvdTf === '24H') {
         return `${String(d.getHours()).padStart(2, '0')}:00`;
       }
@@ -340,8 +350,6 @@ function CVDPanel({
       ]
     };
   }, [chartList, cvdTf, theme]);
-
-
 
   const totalClusterVol = useMemo(() => {
     return clusteredNodes.reduce((acc, n) => acc + n.buy + n.sell, 0);
@@ -402,15 +410,13 @@ function CVDPanel({
                 onClick={() => setCvdTf(t)}
                 className={`toggle-btn ${cvdTf === t ? 'active' : ''}`}
               >
-                {t === '1H' ? '1H (ĐÃ CHỐT)' : t}
+                {t}
               </button>
             ))}
           </div>
           <ModuleMenu moduleId="hft_cvd" />
         </div>
       </div>
-
-      {/* CVD Value */}
       <div className="cvd-hero" style={{ paddingBottom: '8px' }}>
         <div className="cvd-value-wrap">
           <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian">
