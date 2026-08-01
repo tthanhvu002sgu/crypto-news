@@ -3755,9 +3755,12 @@
 }
 
 .move-table-container {
-  overflow-x: auto;
+  max-height: 380px;
+  overflow: auto;
   border: 1px solid var(--border-panel);
   border-radius: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-slate-700) transparent;
 }
 
 .move-table {
@@ -3767,6 +3770,9 @@
 }
 
 .move-table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   background: var(--bg-slate-900);
   color: var(--text-slate-400);
   padding: 10px 12px;
