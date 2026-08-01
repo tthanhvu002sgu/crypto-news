@@ -5,8 +5,6 @@
 
 import { subscribeAggTrades, subscribeSpotAggTrades } from './websocket';
 import { getATR, getCurrentATR } from './atrCalculator';
-import { addSignal, getMoveReports } from './signalStore';
-import { SIGNAL_TYPE, SEVERITY } from './signalEngine';
 
 export const MOVE_CONFIG = {
   MODE_ATR: 'ATR',
@@ -572,29 +570,6 @@ async function finalizeMoveReport(moveId) {
     .slice(0, 50);
   saveMoveHistoryLS();
   notifyListeners();
-
-  try {
-    const directionIcon = enrichedMove.direction === 'PUMP' ? '▲' : '▼';
-    await addSignal({
-      type: SIGNAL_TYPE.MOVE_REPORT,
-      severity: getMoveSeverity(enrichedMove),
-      timestamp: enrichedMove.endTime,
-      title: `${directionIcon} ${enrichedMove.direction} BTC ${enrichedMove.pctChange >= 0 ? '+' : ''}${enrichedMove.pctChange}% trong ${durationSec}s`,
-      description: `Futures volume $${(enrichedMove.totalVolume / 1e6).toFixed(1)}M | Futures CVD ${enrichedMove.cvdDelta >= 0 ? '+' : ''}$${(enrichedMove.cvdDelta / 1e6).toFixed(1)}M | Spot CVD ${enrichedMove.spotCvdDelta == null ? 'N/A' : `${enrichedMove.spotCvdDelta >= 0 ? '+' : ''}$${(enrichedMove.spotCvdDelta / 1e6).toFixed(1)}M`} | ${verdict.label} ${verdict.confidenceScore}%`,
-      moveReport: enrichedMove,
-      snapshot: {
-        btcPrice: enrichedMove.endPrice,
-        cvd: enrichedMove.cvdDelta,
-        spotCvd: enrichedMove.spotCvdDelta,
-        buyVolume: enrichedMove.takerBuyVol,
-        sellVolume: enrichedMove.takerSellVol,
-        buyRatio: enrichedMove.takerBuyRatio,
-        moveFlowContext: enrichedMove.flowContext,
-      },
-    });
-  } catch (error) {
-    console.error('[MoveTracker] Failed to save move signal:', error);
-  }
 }
 
 function handleIncomingTrade(trade) {
@@ -708,13 +683,4 @@ export async function simulateMoveReport(direction = 'PUMP') {
   moveHistory = [simulated, ...moveHistory].filter(isRecentMove).slice(0, 50);
   saveMoveHistoryLS();
   notifyListeners();
-  await addSignal({
-    type: SIGNAL_TYPE.MOVE_REPORT,
-    severity: getMoveSeverity(simulated),
-    timestamp: now,
-    title: `${isPump ? '▲' : '▼'} ${direction} BTC ${simulated.pctChange}% trong 60s`,
-    description: `${verdict.label} ${verdict.confidenceScore}% | Futures CVD ${(simulated.cvdDelta / 1e6).toFixed(1)}M | Spot CVD ${(simulated.spotCvdDelta / 1e6).toFixed(1)}M`,
-    moveReport: simulated,
-    snapshot: { btcPrice: endPrice, cvd: simulated.cvdDelta, spotCvd: simulated.spotCvdDelta },
-  });
 }

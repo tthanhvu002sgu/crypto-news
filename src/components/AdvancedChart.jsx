@@ -18,9 +18,7 @@ const fmtPriceCompact = (price) => {
   return price.toFixed(2);
 };
 
-// ─── Volume Bubble Primitive: Z-Score + EMA + Price Impact + Cooldown ────────
-// Pipeline: EMA(20) baseline → Rolling σ → Z-Score ≥ 2.5 → Body/Range ≥ 15%
-//           → Cooldown 3 nến → 3-Tier visual (Significant / Strong / Extreme)
+// ─── Volume Bubble Primitive: Robust Z-Score + Price Impact + NMS ────────────
 class VolumeBubblePrimitive {
   constructor() {
     this._data = [];
@@ -29,10 +27,9 @@ class VolumeBubblePrimitive {
     this._requestUpdate = null;
     this._options = {
       show: false,
-      emaPeriod: 20,        // EMA lookback for volume baseline
-      zScoreMin: 2.5,       // Minimum Z-Score to qualify as anomaly
-      bodyRatioMin: 0.15,   // Minimum |body|/range to filter out dojis/wicks
-      cooldownBars: 3,      // Min gap between bubbles to reduce cluster noise
+      rollingPeriod: 60,    // N candles for median/MAD and ATR
+      robustZMin: 2.5,      // Minimum robust Z-Score
+      cooldownBars: 3,      // Non-maximum suppression window
     };
   }
   setOptions(opts) {
@@ -55,71 +52,90 @@ class VolumeBubblePrimitive {
   }
   updateAllViews() {}
 
-  // ── Pre-compute EMA, rolling σ, Z-Scores, and filter passes ──────────────
+  // ── Pre-compute rolling median, MAD, and filter passes ──────────────
   _computeAnomalies() {
     const data = this._data;
     const n = data.length;
-    const { emaPeriod, zScoreMin, bodyRatioMin, cooldownBars } = this._options;
-    if (n < emaPeriod + 1) return [];
+    const { rollingPeriod, robustZMin, cooldownBars } = this._options;
+    if (n < rollingPeriod + 1) return [];
 
-    // 1) Build EMA(volume) array
-    const emaVol = new Float64Array(n);
-    const k = 2 / (emaPeriod + 1);
-    // Seed EMA with SMA of first `emaPeriod` bars
-    let seedSum = 0;
-    for (let i = 0; i < emaPeriod; i++) seedSum += data[i].volume;
-    emaVol[emaPeriod - 1] = seedSum / emaPeriod;
-    for (let i = emaPeriod; i < n; i++) {
-      emaVol[i] = data[i].volume * k + emaVol[i - 1] * (1 - k);
+    const candidates = [];
+
+    for (let i = rollingPeriod; i < n; i++) {
+      const candle = data[i];
+      // Only process closed candles or fallback if isClosed is missing (for safety)
+      if (candle.isClosed === false) continue;
+      
+      const qVol = candle.quoteVolume || candle.volume; // Fallback to base volume if quote not available
+      if (!qVol || qVol <= 0) continue;
+
+      // 1. Calculate log1p quote volume for the window [i - rollingPeriod .. i - 1]
+      const windowLogs = [];
+      let trueRangeSum = 0;
+      for (let j = i - rollingPeriod; j < i; j++) {
+        const c = data[j];
+        const v = c.quoteVolume || c.volume;
+        windowLogs.push(Math.log1p(v));
+
+        // Calculate True Range for ATR
+        const prevC = data[j-1] ? data[j-1].close : c.open;
+        const tr = Math.max(c.high - c.low, Math.abs(c.high - prevC), Math.abs(c.low - prevC));
+        trueRangeSum += tr;
+      }
+
+      windowLogs.sort((a, b) => a - b);
+      const medianX = windowLogs[Math.floor(rollingPeriod / 2)];
+
+      const absDeviations = windowLogs.map(x => Math.abs(x - medianX)).sort((a, b) => a - b);
+      let mad = absDeviations[Math.floor(rollingPeriod / 2)];
+      if (mad < 1e-6) mad = 1e-6; // Epsilon
+
+      const currentLog = Math.log1p(qVol);
+      const robustZ = (currentLog - medianX) / (1.4826 * mad);
+
+      if (robustZ < robustZMin) continue;
+
+      // 2. Price Impact Filter (Displacement vs ATR)
+      const atr = trueRangeSum / rollingPeriod;
+      const displacement = atr > 0 ? Math.abs(candle.close - candle.open) / atr : 0;
+      
+      // Classify Type
+      // High volume + High displacement (> 0.5) -> Initiative
+      // High volume + Low displacement (<= 0.5) -> Absorption
+      const type = displacement > 0.5 ? 'initiative' : 'absorption';
+
+      // 3. Taker Volume Delta Ratio
+      let deltaRatio = 0;
+      if (candle.takerBuyQuoteVolume !== undefined && candle.quoteVolume !== undefined) {
+        const takerBuy = candle.takerBuyQuoteVolume;
+        const takerSell = candle.quoteVolume - takerBuy;
+        const delta = takerBuy - takerSell;
+        deltaRatio = delta / candle.quoteVolume; // range [-1, 1]
+      } else {
+        // Fallback for base volume if missing quote
+        deltaRatio = candle.close >= candle.open ? 0.5 : -0.5;
+      }
+
+      candidates.push({ idx: i, robustZ, type, deltaRatio, candle });
     }
 
-    // 2) Rolling standard deviation over same window
+    // 4. Non-Maximum Suppression (NMS) to remove clusters
     const anomalies = [];
-    let lastBubbleIdx = -Infinity;
-
-    for (let i = emaPeriod; i < n; i++) {
-      const currentVol = data[i].volume;
-      const ema = emaVol[i];
-      if (ema <= 0) continue;
-
-      // Rolling σ: std dev of volumes in [i-emaPeriod .. i-1]
-      let sumSq = 0;
-      let sum = 0;
-      for (let j = i - emaPeriod; j < i; j++) {
-        sum += data[j].volume;
-        sumSq += data[j].volume * data[j].volume;
+    for (const cand of candidates) {
+      if (anomalies.length === 0) {
+        anomalies.push(cand);
+        continue;
       }
-      const mean = sum / emaPeriod;
-      const variance = sumSq / emaPeriod - mean * mean;
-      const sigma = Math.sqrt(Math.max(0, variance));
-
-      if (sigma <= 0) continue;
-
-      // 3) Z-Score
-      const zScore = (currentVol - ema) / sigma;
-      if (zScore < zScoreMin) continue;
-
-      // 4) Price Impact Filter: |body| / range ≥ bodyRatioMin
-      const candle = data[i];
-      const range = candle.high - candle.low;
-      if (range <= 0) continue;
-      const bodyRatio = Math.abs(candle.close - candle.open) / range;
-      if (bodyRatio < bodyRatioMin) continue;
-
-      // 5) Cooldown Debounce
-      if (i - lastBubbleIdx < cooldownBars) continue;
-
-      // ── Classify tier ─────────────────────────────────────────────
-      // Tier 1: Significant  (2.5σ ≤ z < 3.5σ)
-      // Tier 2: Strong       (3.5σ ≤ z < 5.0σ)
-      // Tier 3: Extreme      (z ≥ 5.0σ)
-      let tier;
-      if (zScore >= 5.0) tier = 3;
-      else if (zScore >= 3.5) tier = 2;
-      else tier = 1;
-
-      anomalies.push({ idx: i, zScore, tier, bodyRatio });
-      lastBubbleIdx = i;
+      
+      const lastCand = anomalies[anomalies.length - 1];
+      if (cand.idx - lastCand.idx < cooldownBars) {
+        // In the same cluster, keep the stronger one
+        if (cand.robustZ > lastCand.robustZ) {
+          anomalies[anomalies.length - 1] = cand;
+        }
+      } else {
+        anomalies.push(cand);
+      }
     }
 
     return anomalies;
@@ -136,41 +152,38 @@ class VolumeBubblePrimitive {
             const timeScale = this._chart.timeScale();
             const anomalies = this._computeAnomalies();
 
-            // ── Tier visual config ──────────────────────────────────────
-            // [radius, coreAlpha, strokeWidth, outerGlowRadius]
-            const tierConfig = {
-              1: { minR: 5, maxR: 10, coreAlpha: 0.50, strokeW: 1.0, glowR: 0 },
-              2: { minR: 8, maxR: 16, coreAlpha: 0.65, strokeW: 1.5, glowR: 4 },
-              3: { minR: 14, maxR: 24, coreAlpha: 0.80, strokeW: 2.0, glowR: 8 },
-            };
-
             for (const a of anomalies) {
               const candle = this._data[a.idx];
               const timeSec = Math.floor(candle.time.getTime() / 1000);
               const x = timeScale.timeToCoordinate(timeSec);
               if (x === null) continue;
 
-              // Position bubble at the tip of the candle (high for green, low for red)
+              // Position bubble at the tip of the candle
               const isGreen = candle.close >= candle.open;
               const priceY = isGreen ? candle.high : candle.low;
               const y = this._series.priceToCoordinate(priceY);
               if (y === null) continue;
 
-              const cfg = tierConfig[a.tier];
+              // Continuous Radius Calculation
+              const radius = 5 + 7 * Math.sqrt(Math.max(0, a.robustZ - 2.5));
+              
+              // Color based on Delta Ratio
+              let r, g, b;
+              if (a.deltaRatio > 0.1) {
+                r = 14; g = 165; b = 233; // Sky blue (Buy Dominated)
+              } else if (a.deltaRatio < -0.1) {
+                r = 239; g = 68; b = 68; // Red (Sell Dominated)
+              } else {
+                r = 251; g = 191; b = 36; // Amber (Neutral)
+              }
+              
+              const coreAlpha = Math.min(0.85, 0.4 + a.robustZ * 0.05);
 
-              // Radius: interpolate within tier range based on Z-Score
-              const zNorm = Math.min(1, (a.zScore - 2.5) / 5); // 0..1 across z 2.5..7.5
-              const radius = cfg.minR + (cfg.maxR - cfg.minR) * zNorm;
-
-              const r = isGreen ? 16 : 239;
-              const g = isGreen ? 185 : 68;
-              const b = isGreen ? 129 : 68;
-
-              // Outer glow halo for Tier 2+
-              if (cfg.glowR > 0) {
-                const glowTotal = radius + cfg.glowR;
+              // Outer glow halo
+              if (a.robustZ >= 3.5) {
+                const glowTotal = radius + (a.robustZ - 3.5) * 3;
                 const glow = context.createRadialGradient(x, y, radius * 0.8, x, y, glowTotal);
-                glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha * 0.3})`);
+                glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${coreAlpha * 0.3})`);
                 glow.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.0)`);
                 context.beginPath();
                 context.arc(x, y, glowTotal, 0, 2 * Math.PI);
@@ -182,27 +195,33 @@ class VolumeBubblePrimitive {
               context.beginPath();
               context.arc(x, y, radius, 0, 2 * Math.PI);
               const grad = context.createRadialGradient(x, y, 0, x, y, radius);
-              grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha})`);
-              grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha * 0.5})`);
+              grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${coreAlpha})`);
+              grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, ${coreAlpha * 0.5})`);
               grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.05)`);
               context.fillStyle = grad;
               context.fill();
 
               // Crisp stroke ring
-              context.lineWidth = cfg.strokeW;
-              context.strokeStyle = `rgba(${r}, ${g}, ${b}, ${cfg.coreAlpha + 0.1})`;
+              context.lineWidth = a.robustZ >= 4 ? 2 : 1;
+              context.strokeStyle = `rgba(${r}, ${g}, ${b}, ${coreAlpha + 0.1})`;
               context.stroke();
 
-              // Tier 3 (Extreme): add inner diamond marker
-              if (a.tier === 3) {
-                const d = radius * 0.35;
+              // Marker based on type
+              if (a.type === 'initiative') {
+                const d = radius * 0.4;
                 context.beginPath();
                 context.moveTo(x, y - d);
                 context.lineTo(x + d, y);
                 context.lineTo(x, y + d);
                 context.lineTo(x - d, y);
                 context.closePath();
-                context.fillStyle = `rgba(255, 255, 255, 0.85)`;
+                context.fillStyle = `rgba(255, 255, 255, 0.9)`;
+                context.fill();
+              } else if (a.type === 'absorption') {
+                const d = radius * 0.3;
+                context.beginPath();
+                context.arc(x, y, d, 0, 2 * Math.PI);
+                context.fillStyle = `rgba(255, 255, 255, 0.9)`;
                 context.fill();
               }
             }
@@ -877,10 +896,14 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
                 lastK.high = parseFloat(k.h);
                 lastK.low = parseFloat(k.l);
                 lastK.volume = parseFloat(k.v);
+                lastK.quoteVolume = parseFloat(k.q);
+                lastK.takerBuyQuoteVolume = parseFloat(k.Q);
+                lastK.isClosed = k.x;
               } else {
                 klinesRef.current.push({ 
                   time: new Date(k.t), 
-                  open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close, volume: parseFloat(k.v) 
+                  open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close, 
+                  volume: parseFloat(k.v), quoteVolume: parseFloat(k.q), takerBuyQuoteVolume: parseFloat(k.Q), isClosed: k.x 
                 });
                 if (klinesRef.current.length > 600) klinesRef.current.shift();
               }

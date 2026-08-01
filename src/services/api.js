@@ -40,6 +40,9 @@ export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 
       low: parseFloat(k[3]),
       close: parseFloat(k[4]),
       volume: parseFloat(k[5]),
+      quoteVolume: parseFloat(k[7]),
+      takerBuyQuoteVolume: parseFloat(k[10]),
+      isClosed: true, // REST API historical klines are considered closed except maybe the last one, but we'll treat them as closed for baseline
     }));
   } catch (e) {
     console.error('[API] Klines:', e.message);

@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Line } from 'react-chartjs-2';
 
 import { getCompletedHourCVD, getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
-import { runSignalDetection, takePeriodicSnapshot, SIGNAL_TYPE } from '../services/signalEngine';
-import { getSignals, exportSignals, clearAllSignals, clearOldSignals, onSignalAdded } from '../services/signalStore';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
@@ -1057,8 +1055,6 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
   );
 }
 
-
-
 // ─── PANEL 4: Whale Trades ───────────────────────────────────────────────────
 
 function WhaleTradesPanel({ whaleTrades, volume24h }) {
@@ -1238,415 +1234,6 @@ function WhaleTradesPanel({ whaleTrades, volume24h }) {
     </div>
   );
 }
-
-
-
-// ─── PANEL 5: Signal Log ─────────────────────────────────────────────────────
-
-const SIGNAL_TYPE_LABELS = {
-  PRICE_SPIKE: '💥 Price Spike',
-  VOLUME_SPIKE: '📈 Volume Spike',
-  CVD_DIVERGENCE: '⚠️ CVD Divergence',
-  FUNDING_EXTREME: '💰 Funding',
-  OI_SURGE: '📊 OI Surge',
-  OBI_EXTREME: '📖 OBI Extreme',
-  WHALE_CLUSTER: '🐋 Whale Cluster',
-  WHALE_WALL_SHIFT: '🧱 Whale Wall',
-  MACRO_EVENT: '🌍 Macro Event',
-  FNG_EXTREME: '😱 Fear/Greed',
-  PERIODIC_SNAPSHOT: '📸 Snapshot',
-};
-
-const SNAPSHOT_LABELS = {
-  btcPrice: 'BTC Price',
-  btcChange24h: 'BTC 24h%',
-  ethPrice: 'ETH Price',
-  solPrice: 'SOL Price',
-  cvd: 'CVD',
-  sessionCvd: 'Session CVD',
-  buyVolume: 'Buy Vol',
-  sellVolume: 'Sell Vol',
-  buyRatio: 'Buy Ratio',
-  fundingRate: 'Funding Rate',
-  fundingRateRest: 'FR (REST)',
-  openInterest: 'Open Interest',
-  openInterestRest: 'OI (REST)',
-  obiPercent: 'OBI %',
-  obSignal: 'OB Signal',
-  bidVolBtc: 'Bid Vol BTC',
-  askVolBtc: 'Ask Vol BTC',
-  bidWallTotal: 'Bid Walls',
-  askWallTotal: 'Ask Walls',
-  bidRatio: 'Wall Bid Ratio',
-  whaleWallSignal: 'Wall Signal',
-  fngValue: 'Fear & Greed',
-  fngSentiment: 'F&G Label',
-  btcDominance: 'BTC Dom',
-  totalMarketCap: 'Mkt Cap',
-  stablecoinTotal: 'Stablecoin',
-  fedRate: 'Fed Rate',
-  cpi: 'CPI',
-  tenYearYield: '10Y Yield',
-  dxy: 'DXY',
-  vix: 'VIX',
-  sp500: 'S&P 500',
-  netLiquidity: 'Net Liq.',
-  mvrv: 'MVRV',
-  highYield: 'HY Spread',
-  m2Supply: 'M2 Supply',
-};
-
-function formatSnapshotValue(key, value) {
-  if (value == null || value === '') return '---';
-  if (typeof value === 'object') return JSON.stringify(value);
-
-  // USD values
-  if (['btcPrice', 'ethPrice', 'solPrice', 'sp500'].includes(key)) {
-    return `$${Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-  }
-  // Large USD volumes or numbers
-  if (['cvd', 'sessionCvd', 'buyVolume', 'sellVolume', 'bidWallTotal', 'askWallTotal', 'btcVolume24h'].includes(key)) {
-    const abs = Math.abs(value);
-    const sign = value < 0 ? '-' : value > 0 && ['cvd', 'sessionCvd'].includes(key) ? '+' : '';
-    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
-    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
-    return `${sign}$${abs.toFixed(0)}`;
-  }
-  // Market cap
-  if (['totalMarketCap', 'stablecoinTotal'].includes(key)) {
-    return `$${(value / 1e12).toFixed(2)}T`;
-  }
-  // Percentages
-  if (['btcChange24h', 'buyRatio', 'obiPercent', 'btcDominance'].includes(key)) {
-    return `${value >= 0 && key !== 'buyRatio' && key !== 'btcDominance' ? '+' : ''}${Number(value).toFixed(1)}%`;
-  }
-  // Funding rate
-  if (['fundingRate', 'fundingRateRest'].includes(key)) {
-    return `${(value * 100).toFixed(4)}%`;
-  }
-  // Ratios
-  if (['bidRatio'].includes(key)) {
-    return `${(value * 100).toFixed(0)}%`;
-  }
-  // Open interest
-  if (['openInterest', 'openInterestRest'].includes(key)) {
-    return `${Number(value).toLocaleString()} BTC`;
-  }
-
-  return String(value);
-}
-
-// Helper: Analyze snapshot to give concise BIAS and HIGHLIGHTS
-function analyzeSnapshot(snapshot) {
-  if (!snapshot) return null;
-
-  let bullPoints = 0;
-  let bearPoints = 0;
-  const highlights = [];
-
-  // 1. CVD Analysis
-  if (snapshot.cvd != null) {
-    if (snapshot.cvd > 10000000) {
-      bullPoints += 2;
-      highlights.push(`⚡ Dòng tiền Mua chủ động (+${formatSnapshotValue('cvd', snapshot.cvd)} CVD)`);
-    } else if (snapshot.cvd < -10000000) {
-      bearPoints += 2;
-      highlights.push(`⚡ Dòng tiền Bán chủ động (${formatSnapshotValue('cvd', snapshot.cvd)} CVD)`);
-    }
-  }
-
-  // 2. OBI Analysis
-  if (snapshot.obiPercent != null) {
-    if (snapshot.obiPercent > 15) {
-      bullPoints += 1;
-      highlights.push(`📖 Sổ lệnh nghiêng Mua (+${snapshot.obiPercent}% OBI)`);
-    } else if (snapshot.obiPercent < -15) {
-      bearPoints += 1;
-      highlights.push(`📖 Sổ lệnh nghiêng Bán (${snapshot.obiPercent}% OBI)`);
-    }
-  }
-
-  // 3. Whale Walls Analysis
-  if (snapshot.bidRatio != null) {
-    const ratioPct = Math.round(snapshot.bidRatio * 100);
-    if (ratioPct >= 60) {
-      bullPoints += 2;
-      highlights.push(`🧱 Tường cá voi đỡ giá dày (${ratioPct}% Bid ~ ${formatSnapshotValue('bidWallTotal', snapshot.bidWallTotal)})`);
-    } else if (ratioPct <= 40) {
-      bearPoints += 2;
-      highlights.push(`🧱 Tường cá voi chặn bán dày (${100 - ratioPct}% Ask ~ ${formatSnapshotValue('askWallTotal', snapshot.askWallTotal)})`);
-    }
-  }
-
-  // 4. Funding Rate Analysis
-  const fr = snapshot.fundingRate ?? snapshot.fundingRateRest;
-  if (fr != null) {
-    if (fr > 0.0003) {
-      bearPoints += 1;
-      highlights.push(`🔥 Funding Rate cao (${(fr * 100).toFixed(4)}%) — Áp lực thanh lý Long`);
-    } else if (fr < -0.0001) {
-      bullPoints += 1;
-      highlights.push(`🎯 Funding Rate âm (${(fr * 100).toFixed(4)}%) — Short trả phí, dễ Short Squeeze`);
-    }
-  }
-
-  // 5. Fear & Greed
-  if (snapshot.fngValue != null) {
-    if (snapshot.fngValue <= 25) {
-      highlights.push(`😱 Tâm lý Extreme Fear (${snapshot.fngValue}) — Thường là vùng mua hoảng loạn`);
-    } else if (snapshot.fngValue >= 75) {
-      highlights.push(`🤑 Tâm lý Extreme Greed (${snapshot.fngValue}) — Thường là vùng FOMO rủi ro`);
-    }
-  }
-
-  if (highlights.length === 0) {
-    highlights.push('⚖️ Thị trường cân bằng, dòng tiền và sổ lệnh không có chênh lệch lớn.');
-  }
-
-  let biasLabel = '⚪ NEUTRAL (Trung Tính)';
-  let biasClass = 'bias-neutral';
-  if (bullPoints > bearPoints + 1) {
-    biasLabel = '🟢 BULLISH BIAS (Thiên Về Mua)';
-    biasClass = 'bias-bullish';
-  } else if (bearPoints > bullPoints + 1) {
-    biasLabel = '🔴 BEARISH BIAS (Thiên Về Bán)';
-    biasClass = 'bias-bearish';
-  }
-
-  return { biasLabel, biasClass, highlights };
-}
-
-function SignalLogPanel({ signals, onRefresh, signalCount }) {
-  const [filter, setFilter] = useState('ALL');
-  const [expandedId, setExpandedId] = useState(null);
-
-  const filteredSignals = useMemo(() => {
-    if (filter === 'ALL') return signals;
-    if (filter === 'ALERTS') return signals.filter(s => s.type !== SIGNAL_TYPE.PERIODIC_SNAPSHOT);
-    return signals.filter(s => s.severity === filter);
-  }, [signals, filter]);
-
-  const handleExport = useCallback(async () => {
-    try {
-      const json = await exportSignals();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `signal-log-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('[SignalLog] Export error:', e);
-    }
-  }, []);
-
-  const handleClear = useCallback(async () => {
-    if (window.confirm('Xóa toàn bộ signal log?')) {
-      await clearAllSignals();
-      onRefresh();
-    }
-  }, [onRefresh]);
-
-  const handleCleanup = useCallback(async () => {
-    const deleted = await clearOldSignals(7);
-    if (deleted > 0) {
-      onRefresh();
-    }
-  }, [onRefresh]);
-
-  return (
-    <div className="hft-panel glass-panel signal-log-panel" style={{ gridColumn: 'span 2' }}>
-      <div className="hft-panel-header">
-        <h3 className="hft-panel-title font-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-          <span className="hft-icon">📋</span> SIGNAL LOG (KIỂM TRA BIAS &amp; DÒNG TIỀN)
-        </h3>
-        <div className="hft-panel-badges" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="hft-badge badge-api font-mono">{signalCount} entries</span>
-          <ModuleMenu moduleId="hft_signal_log" />
-        </div>
-      </div>
-
-      {/* Toolbar: Filters + Actions */}
-      <div className="signal-log-toolbar">
-        <div className="signal-log-filters">
-          {['ALL', 'ALERTS', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(f => (
-            <button
-              key={f}
-              className={`signal-filter-pill ${filter === f ? 'active' : ''}`}
-              onClick={() => setFilter(f)}
-            >
-              {f === 'ALERTS' ? '⚡ Alerts' : f}
-            </button>
-          ))}
-        </div>
-        <div className="signal-log-actions">
-          <button className="signal-log-btn" onClick={handleCleanup} title="Xóa log cũ hơn 7 ngày">🧹 Clean 7d</button>
-          <button className="signal-log-btn" onClick={handleExport} title="Export signal log ra JSON">📥 Export</button>
-          <button className="signal-log-btn btn-danger" onClick={handleClear} title="Xóa toàn bộ">🗑️ Clear</button>
-        </div>
-      </div>
-
-      {/* Signal List */}
-      {filteredSignals.length === 0 ? (
-        <div className="hft-empty font-mono">
-          {filter === 'ALL'
-            ? 'Chưa có signal nào. Engine sẽ tự động ghi nhận khi phát hiện sự kiện...'
-            : `Không có signal nào cho filter "${filter}"`}
-        </div>
-      ) : (
-        <div className="signal-log-list">
-          {filteredSignals.map((sig) => {
-            const isExpanded = expandedId === sig.id;
-            const timeStr = new Date(sig.timestamp).toLocaleString('vi-VN', {
-              day: '2-digit', month: '2-digit',
-              hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-            const typeLabel = SIGNAL_TYPE_LABELS[sig.type] || sig.type;
-            const analysis = analyzeSnapshot(sig.snapshot);
-
-            return (
-              <div
-                key={sig.id}
-                className={`signal-card severity-${sig.severity} ${isExpanded ? 'is-expanded' : ''}`}
-                onClick={() => setExpandedId(isExpanded ? null : sig.id)}
-                style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
-              >
-                <div className="signal-card-header">
-                  <div className="signal-card-left">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <span className="signal-card-title">{sig.title}</span>
-                      <span className="signal-type-badge">{typeLabel}</span>
-                      {analysis && (
-                        <span className={`signal-bias-pill font-mono ${analysis.biasClass}`}>
-                          {analysis.biasLabel}
-                        </span>
-                      )}
-                    </div>
-                    {sig.description && <div className="signal-card-desc">{sig.description}</div>}
-                  </div>
-                  <div className="signal-card-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`signal-severity-tag tag-${sig.severity}`}>{sig.severity}</span>
-                    <span className="signal-time">{timeStr}</span>
-                    <span className="font-mono" style={{ color: 'var(--text-slate-400)', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                      {isExpanded ? '▲' : '▼'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Quick Synthesis Highlights (Show right away if alert or expanded) */}
-                {analysis && analysis.highlights.length > 0 && (
-                  <div className="signal-highlights font-mono">
-                    <div className="signal-hl-title">NỔI TRỘI TẠI THỜI ĐIỂM NÀY:</div>
-                    <ul className="signal-hl-list">
-                      {analysis.highlights.map((hl, idx) => (
-                        <li key={idx}>{hl}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Move Report Specific Detail (for MOVE_REPORT signal type) */}
-                {isExpanded && sig.moveReport && (
-                  <div className="move-card-expanded font-mono" style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-slate-950)', borderRadius: '8px', border: '1px solid var(--border-panel)' }} onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                      <span style={{ fontWeight: 800, color: sig.moveReport.direction === 'PUMP' ? '#10b981' : '#f43f5e' }}>
-                        {sig.moveReport.direction === 'PUMP' ? '🚀 PUMP' : '💥 DUMP'} ${Math.round(sig.moveReport.endPrice - sig.moveReport.startPrice)} ({sig.moveReport.pctChange}%)
-                      </span>
-                      {sig.moveReport.verdictLabel && (
-                        <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800, backgroundColor: `${sig.moveReport.verdictColor}20`, color: sig.moveReport.verdictColor, border: `1px solid ${sig.moveReport.verdictColor}` }}>
-                          {sig.moveReport.verdictIcon} {sig.moveReport.verdictLabel}{sig.moveReport.confidenceScore != null ? ` · ${sig.moveReport.confidenceScore}%` : ''}
-                        </span>
-                      )}
-                    </div>
-                    {sig.moveReport.verdictReason && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-slate-200)', marginBottom: '10px' }}>
-                        💡 {sig.moveReport.verdictReason}
-                      </div>
-                    )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '0.72rem' }}>
-                      <div>Giá mở: <strong>${sig.moveReport.startPrice?.toLocaleString()}</strong></div>
-                      <div>Giá đóng: <strong>${sig.moveReport.endPrice?.toLocaleString()}</strong></div>
-                      <div>Thời gian: <strong>{sig.moveReport.durationSec}s</strong></div>
-                      <div>Tổng Volume: <strong>${(sig.moveReport.totalVolume / 1e6).toFixed(2)}M</strong></div>
-                      <div>Số lệnh khớp: <strong>{sig.moveReport.tradeCount}</strong></div>
-                      <div>Taker Buy: <strong>{sig.moveReport.takerBuyRatio}%</strong></div>
-                      <div>Futures CVD Δ: <strong className={sig.moveReport.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{(sig.moveReport.cvdDelta >= 0 ? '+' : '')}${(sig.moveReport.cvdDelta / 1e6).toFixed(2)}M</strong></div>
-                      <div>Spot CVD Δ: {sig.moveReport.spotCvdDelta == null ? <strong>N/A</strong> : <strong className={sig.moveReport.spotCvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{sig.moveReport.spotCvdDelta >= 0 ? '+' : ''}${(sig.moveReport.spotCvdDelta / 1e6).toFixed(2)}M</strong>}</div>
-                      <div>Venue context: <strong>{sig.moveReport.flowContext || 'N/A'}</strong></div>
-                      <div>Lệnh lớn &gt; $100K: <strong>{sig.moveReport.largeTradesCount} (${((sig.moveReport.largeTradesVol || 0)/1e6).toFixed(2)}M)</strong></div>
-                      <div>Recovery (60s): <strong>{sig.moveReport.recoveryPct == null ? 'N/A · data gap' : `${sig.moveReport.recoveryPct}%`}</strong></div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Standard Snapshot toggle + grouped content */}
-                {sig.snapshot && !sig.moveReport && (
-                  <>
-                    <button
-                      className="signal-snapshot-toggle font-mono"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedId(isExpanded ? null : sig.id);
-                      }}
-                    >
-                      {isExpanded ? '▼ Ẩn bảng chỉ số chi tiết' : '▶ Xem toàn bộ bảng chỉ số chi tiết (Click thẻ để xem)'}
-                    </button>
-                    {isExpanded && (
-                      <div className="signal-snapshot-grouped" onClick={(e) => e.stopPropagation()}>
-                        {/* Group 1: Flow & Order Book */}
-                        <div className="snap-group">
-                          <div className="snap-group-title font-mono">⚡ DÒNG TIỀN &amp; SỔ LỆNH</div>
-                          {['btcPrice', 'btcChange24h', 'btcVolume24h', 'cvd', 'sessionCvd', 'obiPercent', 'obSignal', 'bidWallTotal', 'askWallTotal', 'bidRatio', 'whaleWallSignal']
-                            .filter(k => sig.snapshot[k] != null)
-                            .map(key => (
-                              <div key={key} className="signal-snap-item">
-                                <span className="signal-snap-label">{SNAPSHOT_LABELS[key] || key}</span>
-                                <span className="signal-snap-value">{formatSnapshotValue(key, sig.snapshot[key])}</span>
-                              </div>
-                            ))}
-                        </div>
-
-                        {/* Group 2: Derivatives & Sentiment */}
-                        <div className="snap-group">
-                          <div className="snap-group-title font-mono">📊 PHÁI SINH &amp; TÂM LÝ</div>
-                          {['fundingRate', 'fundingRateRest', 'openInterest', 'openInterestRest', 'fngValue', 'fngSentiment', 'btcDominance']
-                            .filter(k => sig.snapshot[k] != null)
-                            .map(key => (
-                              <div key={key} className="signal-snap-item">
-                                <span className="signal-snap-label">{SNAPSHOT_LABELS[key] || key}</span>
-                                <span className="signal-snap-value">{formatSnapshotValue(key, sig.snapshot[key])}</span>
-                              </div>
-                            ))}
-                        </div>
-
-                        {/* Group 3: Macro & Global */}
-                        <div className="snap-group">
-                          <div className="snap-group-title font-mono">🌍 KINH TẾ VĨ MÔ (MACRO)</div>
-                          {['fedRate', 'cpi', 'tenYearYield', 'dxy', 'vix', 'sp500', 'netLiquidity', 'mvrv', 'highYield', 'm2Supply']
-                            .filter(k => sig.snapshot[k] != null)
-                            .map(key => (
-                              <div key={key} className="signal-snap-item">
-                                <span className="signal-snap-label">{SNAPSHOT_LABELS[key] || key}</span>
-                                <span className="signal-snap-value">{formatSnapshotValue(key, sig.snapshot[key])}</span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
 
 const MemoTargetLiquidityPanel = React.memo(TargetLiquidityPanel);
 
@@ -2014,7 +1601,6 @@ function MoveTrackerPanel() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main HFT Radar Tab Component
-
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const MemoCVDPanel = React.memo(CVDPanel);
@@ -2022,7 +1608,6 @@ const MemoTargetLiquidityPanelWrapper = React.memo(TargetLiquidityPanelWrapper);
 const MemoOrderBookPanel = React.memo(OrderBookPanel);
 const MemoAdvancedChartWrapper = React.memo(AdvancedChartWrapper);
 const MemoWhaleTradesPanel = React.memo(WhaleTradesPanel);
-const MemoSignalLogPanel = React.memo(SignalLogPanel);
 const MemoMoveTrackerPanel = React.memo(MoveTrackerPanel);
 
 export default function HftRadarTab({
@@ -2030,8 +1615,7 @@ export default function HftRadarTab({
   cvdHistory24h, cvdHistory7d, cvdHistory30d,
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
   cvdStatus, livePrice, whaleTrades, theme, volNodes,
-  // Additional props for signal engine context
-  data, fundingRate, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice,
+  data, liveVolume,
 }) {
   const { isModuleHidden } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
@@ -2046,48 +1630,15 @@ export default function HftRadarTab({
     return saved ? Number(saved) : 100;
   });
 
-  // ── Signal Log State ──────────────────────────────────────────────────────
-  const [signals, setSignals] = useState([]);
-  const [signalCount, setSignalCount] = useState(0);
-  const signalDetectionRef = useRef(null);
-  const snapshotRef = useRef(null);
-  const signalContextRef = useRef(null);
-
-  // Load signals from IndexedDB on mount
-  const loadSignals = useCallback(async () => {
-    const stored = await getSignals(200);
-    setSignals(stored);
-    setSignalCount(stored.length);
-  }, []);
-
-  useEffect(() => {
-    const initialLoadTimer = setTimeout(loadSignals, 0);
-    const unsubscribe = onSignalAdded((signal) => {
-      setSignals((previous) => {
-        const next = [signal, ...previous.filter((item) => item.id !== signal.id)].slice(0, 200);
-        return next;
-      });
-      setSignalCount((previous) => Math.min(200, previous + 1));
-    });
-    return () => {
-      clearTimeout(initialLoadTimer);
-      unsubscribe();
-    };
-  }, [loadSignals]);
-
   useEffect(() => {
     localStorage.setItem('hft-depth-limit', String(depthLimit));
-  }, [depthLimit]);
+    localStorage.setItem('hft_whale_gap', String(whaleGap));
+  }, [depthLimit, whaleGap]);
 
   const obIntervalRef = useRef(null);
   const whaleIntervalRef = useRef(null);
   const smoothedObiRef = useRef(null);
 
-  // Refs to hold latest values for signal engine (avoids stale closures)
-  const orderBookRef = useRef(null);
-  const whaleDataRef = useRef(null);
-
-  // Fetch Order Book every 3s + Whale Walls every 12s
   useEffect(() => {
     const fetchOB = async () => {
       const data = await getOrderBookDepth('BTCUSDT', depthLimit);
@@ -2095,7 +1646,6 @@ export default function HftRadarTab({
         if (smoothedObiRef.current === null) {
           smoothedObiRef.current = data.obiPercent;
         } else {
-          // EMA smoothing with alpha = 0.15 to filter noise
           smoothedObiRef.current = (smoothedObiRef.current * 0.85) + (data.obiPercent * 0.15);
         }
         const smoothed = {
@@ -2103,7 +1653,6 @@ export default function HftRadarTab({
           obiPercent: parseFloat(smoothedObiRef.current.toFixed(1))
         };
         setOrderBook(smoothed);
-        orderBookRef.current = smoothed;
       }
     };
 
@@ -2111,24 +1660,17 @@ export default function HftRadarTab({
       const d = await getWhaleWalls();
       if (d) {
         setWhaleData(d);
-        whaleDataRef.current = d;
       }
     };
 
-    // Initial fetch all
     const fetchAll = async () => {
       setIsLoading(true);
-      await Promise.allSettled([
-        fetchOB(),
-        fetchWhales()
-      ]);
+      await Promise.allSettled([fetchOB(), fetchWhales()]);
       setIsLoading(false);
     };
     fetchAll();
 
-    // Order book polling every 3s
     obIntervalRef.current = setInterval(fetchOB, 3000);
-    // Whale walls polling every 12s
     whaleIntervalRef.current = setInterval(fetchWhales, 12000);
 
     return () => {
@@ -2136,56 +1678,6 @@ export default function HftRadarTab({
       if (whaleIntervalRef.current) clearInterval(whaleIntervalRef.current);
     };
   }, [depthLimit]);
-
-  useEffect(() => {
-    signalContextRef.current = {
-      livePrice,
-      liveChange,
-      liveHigh,
-      liveLow,
-      liveVolume,
-      liveEthPrice,
-      liveSolPrice,
-      cvd,
-      spotCvd: spotStream?.cvd,
-      sessionCvd,
-      buyVolume,
-      sellVolume,
-      fundingRate,
-      orderBook,
-      whaleData,
-      data,
-    };
-  }, [livePrice, liveChange, liveHigh, liveLow, liveVolume, liveEthPrice, liveSolPrice,
-    cvd, spotStream?.cvd, sessionCvd, buyVolume, sellVolume, fundingRate, orderBook, whaleData, data]);
-
-  // ── Signal Detection Engine (every 30s) ──────────────────────────────────
-  useEffect(() => {
-    signalDetectionRef.current = setInterval(async () => {
-      if (signalContextRef.current) await runSignalDetection(signalContextRef.current);
-    }, 30 * 1000);
-
-    return () => {
-      if (signalDetectionRef.current) clearInterval(signalDetectionRef.current);
-    };
-  }, []);
-
-  // ── Periodic Snapshot (every 15 min) ─────────────────────────────────────
-  useEffect(() => {
-    const initialTimeout = setTimeout(async () => {
-      if (signalContextRef.current) await takePeriodicSnapshot(signalContextRef.current);
-
-      // Then every 15 min
-      snapshotRef.current = setInterval(async () => {
-        if (signalContextRef.current) await takePeriodicSnapshot(signalContextRef.current);
-      }, 15 * 60 * 1000);
-    }, 3000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      if (snapshotRef.current) clearInterval(snapshotRef.current);
-    };
-  }, []);
 
   return (
     <div className="hft-radar-layout">
@@ -2244,21 +1736,7 @@ export default function HftRadarTab({
         {!isModuleHidden('hft_liquidations') && (
           <MemoWhaleTradesPanel whaleTrades={whaleTrades} volume24h={liveVolume || data?.btc?.volume} />
         )}
-
-        {!isModuleHidden('hft_signal_log') && (
-          <MemoSignalLogPanel
-            signals={signals}
-            onRefresh={loadSignals}
-            signalCount={signalCount}
-          />
-        )}
-
       </div>
     </div>
   );
 }
-
-
-
-
-

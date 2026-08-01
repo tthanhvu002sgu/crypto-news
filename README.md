@@ -11,7 +11,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
   - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta realtime và phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
-  - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
+  - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến bằng Robust Z-Score & Taker Delta). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
 - **AI Market Decision Lab:** Tích hợp Gemini để kiểm định giả thuyết vĩ mô/on-chain/flow/phái sinh/HFT, phân biệt quan sát với suy luận, phản biện narrative, chấm chất lượng bằng chứng và tạo playbook quyết định có trigger/invalidation. Hỗ trợ **Tiếng Việt / English** và 3 chế độ: Investment Committee / Skeptical Execution Desk / Socratic Market Mentor.
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%**.
@@ -41,18 +41,38 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC với thanh Gauge Spectrum, 4 bento card trụ cột và drawer bẻ nhỏ 10+ tín hiệu định lượng.
-- `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel`, `WhaleTradesPanel`, `AdvancedChart`, `TargetLiquidityPanel`, `OrderBookPanel`.
+- `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel`, `WhaleTradesPanel`, `AdvancedChart` (tích hợp Bubble Anomaly Robust Z-Score), `TargetLiquidityPanel`, `OrderBookPanel`.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
 - `services/moveTracker.js` — Phân tích biến động giá mạnh Pump & Dump, tính toán tỷ lệ nến hồi (Recovery %), phân loại hành vi cá mập và lưu vết 0ms sync + IndexedDB.
 - `services/economicCalendarService.js` — Fetch lịch kinh tế tuần từ FairEconomy JSON, phân tích tác động Crypto và fallback curated schedule.
 - `services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100) dựa trên 4 trụ cột định lượng.
-- `services/signalStore.js` — Lưu trữ Signal Log kết hợp IndexedDB + localStorage persistence chống mất dữ liệu khi F5.
 - `services/api.js` — REST multi-source (Binance, DefiLlama, FRED, ETF, COT, …) hỗ trợ SSR Z-Score Oscillator 200-day.
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-01] Loại Bỏ Toàn Bộ Mã Nguồn Tín Hiệu Signal Log Theo Yêu Cầu `(CLEANUP)`
+- **Lane / Mode:** REFACTOR & CODE CLEANUP
+- **Tóm tắt:** Xóa sạch toàn bộ mã nguồn, dịch vụ, component UI và CSS liên quan đến module Signal Log (`SignalLogPanel`, `signalEngine.js`, `signalStore.js`, `hft_signal_log`) theo yêu cầu người dùng để tinh gọn hệ thống và giảm tải overhead.
+- **Thay đổi chính:**
+  - **Xóa file dịch vụ:** Xóa `src/services/signalEngine.js` và `src/services/signalStore.js`.
+  - **Dọn dẹp HftRadarTab & MoveTracker:** Gỡ bỏ component `SignalLogPanel`, các state/effect phát hiện tín hiệu định kỳ trong `HftRadarTab.jsx`, và bỏ gọi `addSignal` trong `moveTracker.js`.
+  - **Dọn dẹp Context & CSS:** Xóa key `hft_signal_log` khỏi `ModuleVisibilityContext.jsx` và toàn bộ block CSS `.signal-log-*` khỏi `App.css`.
+- **Files / areas chạm:** `src/context/ModuleVisibilityContext.jsx`, `src/services/moveTracker.js`, `src/components/HftRadarTab.jsx`, `src/App.css`, `src/services/signalEngine.js` (deleted), `src/services/signalStore.js` (deleted), `README.md`
+- **Verify:** `npm run build` thành công 100% (4.52s, 0 errors).
+
+### [2026-08-01] Xây Dựng Lại Thuật Toán Phân Tích Volume Bubble Nâng Cao (Robust Z-Score & Price Impact) `(FEATURE FULL)`
+- **Lane / Mode:** FEATURE FULL & VOLUME ANOMALY
+- **Tóm tắt:** Nâng cấp toàn diện bộ lọc Volume Bubble trên Advanced Chart. Thay thế thuật toán Standard Deviation cũ bằng Robust Z-Score (Rolling Median & MAD) để hạn chế nhiễu từ các đuôi dài của Volume. Đưa vào đánh giá Price Impact (Initiative vs Absorption) thông qua hệ số Displacement so với ATR. Đồng thời tính toán delta bằng Taker Volume để xác định chính xác phe Mua/Bán chủ động.
+- **Thay đổi chính:**
+  - **Data Layer (api.js & WS):** Cập nhật `getBTCKlines` và WebSocket stream để lấy thêm `quoteVolume`, `takerBuyQuoteVolume` và trạng thái đóng nến `isClosed`.
+  - **Thuật toán Volume (AdvancedChart.jsx):** Chuyển tính toán Z-Score sang dùng log của Quote Volume. Tính Median và Median Absolute Deviation (MAD) trên cửa sổ 60 nến gần nhất (chỉ dùng nến đã đóng). Phân tích NMS (Non-Maximum Suppression) loại bỏ bubble ảo liên tiếp.
+  - **Giao diện Bubble Mới:** Render bán kính bubble mượt mà hơn. Đổi màu linh hoạt theo Taker Volume Delta (Xanh = Buy, Đỏ = Sell, Vàng = Neutral). Ký hiệu Hình thoi cho Initiative (phá vỡ giá) và Hình tròn cho Absorption (hấp thụ).
+- **Files / areas chạm:** `src/services/api.js`, `src/components/AdvancedChart.jsx`, `README.md`
+- **Ảnh hưởng README:** §1, §3, §4 (đã thêm log mới).
+- **Verify:** Cập nhật thành công, logic tính toán không báo lỗi, bubble chỉ hiển thị tại những nến đã đóng.
 
 ### [2026-07-31] Chuyển Đổi Chỉ Báo BTC SSR Sang Mô Hình Chuẩn Glassnode SSR Oscillator (Z-Score) `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & ON-CHAIN MODELING
