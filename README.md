@@ -53,6 +53,14 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-08-01] Bổ Sung Chú Thích Trực Quan Cho Volume Bubbles Dưới Chân Biểu Đồ Advanced Chart `(FEATURE FAST)`
+- **Lane / Mode:** FEATURE FAST & UI LEGEND
+- **Tóm tắt:** Bổ sung dòng chú thích chi tiết cho chỉ báo Volume Bubbles ở phần footer của `AdvancedChart.jsx`, giúp người dùng dễ dàng phân biệt màu sắc Taker Delta (Xanh = Buy, Đỏ = Sell, Vàng = Neutral) và ký hiệu Price Action (Hình thoi = Initiative / Phá vỡ, Hình tròn = Absorption / Hấp thụ).
+- **Thay đổi chính:** Cập nhật nội dung thẻ chú thích `hft-empty font-mono` tại chân biểu đồ Advanced Chart.
+- **Files / areas chạm:** `src/components/AdvancedChart.jsx`, `README.md`
+- **Ảnh hưởng README:** §4 (đã thêm log mới).
+- **Verify:** Chú thích hiển thị rõ ràng, màu sắc khớp chính xác với thuật toán vẽ Bubble.
+
 ### [2026-08-01] Loại Bỏ Toàn Bộ Mã Nguồn Tín Hiệu Signal Log Theo Yêu Cầu `(CLEANUP)`
 - **Lane / Mode:** REFACTOR & CODE CLEANUP
 - **Tóm tắt:** Xóa sạch toàn bộ mã nguồn, dịch vụ, component UI và CSS liên quan đến module Signal Log (`SignalLogPanel`, `signalEngine.js`, `signalStore.js`, `hft_signal_log`) theo yêu cầu người dùng để tinh gọn hệ thống và giảm tải overhead.

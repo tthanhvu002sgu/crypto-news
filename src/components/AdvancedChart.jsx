@@ -1216,8 +1216,11 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       <div className="hft-empty font-mono" style={{ marginTop: '12px', fontSize: '0.7rem', lineHeight: 1.6 }}>
         <span style={{color: '#38bdf8'}}>Limit Walls</span>: Chiều dài các thanh ngang thể hiện khối lượng lệnh chờ khớp (Bid/Ask) tại mỗi mức giá.{' '}
         <span style={{background: 'rgba(168, 85, 247, 0.85)', color: '#fff', padding: '2px 6px', borderRadius: '4px', margin: '0 4px', display: 'inline-block'}}>63,000 | $1M</span>:{' '}
-        Nhãn hiển thị <span style={{color: '#fbbf24'}}>Mức giá</span> có thanh khoản lớn nhất | <span style={{color: '#fbbf24'}}>Tổng USD</span> chờ khớp tại cụm đó.
-        <span style={{color: '#a855f7', marginLeft: '8px'}}>TPO Profile</span>: Biểu đồ thời gian - giá theo ngày (Blocks/Letters). POC của ngày có màu vàng mờ.
+        Nhãn hiển thị <span style={{color: '#fbbf24'}}>Mức giá</span> có thanh khoản lớn nhất | <span style={{color: '#fbbf24'}}>Tổng USD</span> chờ khớp tại cụm đó.{' '}
+        <span style={{color: '#a855f7', marginLeft: '8px'}}>TPO Profile</span>: Biểu đồ thời gian - giá theo ngày (Blocks/Letters). POC của ngày có màu vàng mờ.{' '}
+        <span style={{color: '#38bdf8', marginLeft: '8px'}}>🫧 Vol Bubbles</span>: Anomaly Volume (Robust Z-Score ≥ 2.5).{' '}
+        <span style={{color: '#0ea5e9'}}>● Xanh</span>: Taker Buy | <span style={{color: '#ef4444'}}>● Đỏ</span>: Taker Sell | <span style={{color: '#f59e0b'}}>● Vàng</span>: Neutral.{' '}
+        <span style={{color: '#fff'}}>◆ Diamond</span>: Initiative (Phá vỡ) | <span style={{color: '#fff'}}>● Circle</span>: Absorption (Hấp thụ).
       </div>
       {children}
     </div>

@@ -358,7 +358,7 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
           <span className="note-title">NGUYÊN TẮC SWING TRADING CHÍNH XÁC CAO:</span>
         </div>
         <p className="note-body">
-          • <strong>Chất Lượng Over Số Lượng</strong>: Hệ thống có thể trả về ít hơn 5 coin nếu không vượt <strong>Score &ge; 14/25, directional edge &ge; 3, MCap &ge; $500M, VolCV &le; 1.3, Spread &le; 0.15%</strong>.<br />
+          • <strong>Chất Lượng Over Số Lượng</strong>: Hệ thống có thể trả về ít hơn 5 coin nếu không vượt <strong>Score &ge; 14/25, directional edge &ge; 3, MCap &ge; $1B, VolCV &le; 1.3, Spread &le; 0.15%</strong>.<br />
           • <strong>Volume Consistency (VolCV &le; 0.6)</strong>: Đảm bảo volume giao dịch bền vững trong suốt 30 ngày, loại bỏ triệt để coin bị bơm thổi ảo 1-2 ngày rồi xả.<br />
           • <strong>Spot + Futures Confirmation</strong>: CVD được chuẩn hóa theo quote volume; tín hiệu mạnh ưu tiên khi hai thị trường cùng xác nhận.<br />
           • <strong>Funding, Basis &amp; OI</strong>: Setup squeeze chỉ được cộng điểm khi giá và flow đã xác nhận, tránh đoán đảo chiều chỉ vì funding cực đoan.<br />

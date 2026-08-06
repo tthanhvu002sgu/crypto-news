@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateKlineFlowStats, scoreCoinBuy, scoreCoinSell } from './coinScanner.js';
+import { calculateKlineFlowStats, scoreCoinBuy, scoreCoinSell, passesQualityGate } from './coinScanner.js';
 
 function kline(quoteVolume, takerBuyQuote) {
   const row = new Array(11).fill(0);
@@ -12,6 +12,7 @@ function kline(quoteVolume, takerBuyQuote) {
 function strongCoin(overrides = {}) {
   return {
     symbol: 'SOLUSDT',
+    hasFutures: true,
     vol30d: 2_000_000_000,
     marketCap: 50_000_000_000,
     volCV: 0.5,
@@ -85,3 +86,16 @@ test('unknown macro data awards neither direction', () => {
   assert.equal(supportive.macroScore, 2);
   assert.equal(supportive.score, unknown.score + 2);
 });
+
+test('quality gate enforces market cap >= $1B', () => {
+  const sub1bCoin = strongCoin({ marketCap: 500_000_000 });
+  const sub1bEdgeCoin = strongCoin({ marketCap: 999_999_999 });
+  const exactly1bCoin = strongCoin({ marketCap: 1_000_000_000 });
+  const multiBillionCoin = strongCoin({ marketCap: 5_000_000_000 });
+
+  assert.equal(passesQualityGate(sub1bCoin), false);
+  assert.equal(passesQualityGate(sub1bEdgeCoin), false);
+  assert.equal(passesQualityGate(exactly1bCoin), true);
+  assert.equal(passesQualityGate(multiBillionCoin), true);
+});
+

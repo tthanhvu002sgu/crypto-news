@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const ALGORITHM_VERSION = 'v5';
+const ALGORITHM_VERSION = 'v6';
 const RESULT_CACHE_TTL = 5 * 60 * 1000;
 const UNIVERSE_CACHE_TTL = 4 * 60 * 60 * 1000;
 const RESULT_CACHE_KEY = `crypto_scanner_${ALGORITHM_VERSION}_results`;
@@ -440,7 +440,7 @@ function scoreQuality(coin, state) {
   if (coin.vol30d >= 1_000_000_000) addPoint(state, 'quality', 1, 'Vol 30D > $1B', 'emerald');
   else if (coin.vol30d >= 300_000_000) addPoint(state, 'quality', 0.5, 'Vol 30D > $300M', 'emerald');
   if (coin.marketCap >= 2_000_000_000) addPoint(state, 'quality', 1, 'Large cap', 'emerald');
-  else if (coin.marketCap >= 500_000_000) addPoint(state, 'quality', 0.5, 'Mid cap', 'emerald');
+  else if (coin.marketCap >= 1_000_000_000) addPoint(state, 'quality', 0.5, 'Mid cap', 'emerald');
   if (coin.volCV <= 0.6) addPoint(state, 'quality', 1, `VolCV ${coin.volCV}`, 'emerald');
   else if (coin.volCV <= 0.9) addPoint(state, 'quality', 0.5, `VolCV ${coin.volCV}`, 'cyan');
   if (coin.spreadPct <= 0.03) addPoint(state, 'quality', 1, `Spread ${coin.spreadPct}%`, 'emerald');
@@ -549,9 +549,9 @@ export function scoreCoinDirection(coin, direction, macroContext = {}) {
 export const scoreCoinBuy = (coin, macroContext = {}) => scoreCoinDirection(coin, 'BUY', macroContext);
 export const scoreCoinSell = (coin, macroContext = {}) => scoreCoinDirection(coin, 'SELL', macroContext);
 
-function passesQualityGate(coin) {
+export function passesQualityGate(coin) {
   return coin.hasFutures
-    && finite(coin.marketCap) && coin.marketCap >= 500_000_000
+    && finite(coin.marketCap) && coin.marketCap >= 1_000_000_000
     && finite(coin.spreadPct) && coin.spreadPct <= 0.15
     && finite(coin.volCV) && coin.volCV <= 1.3
     && coin.vol30d >= 100_000_000
