@@ -3,10 +3,10 @@
  * Calculates an overall BTC market bias score from -100 to +100
  * using 4 weighted pillars calibrated for swing trading:
  * 
- * 1. Market Microstructure (35%): CVD 24h (15%), Funding Rate (10%), OI Change (10%)
- * 2. On-Chain Fundamentals (25%): MVRV Ratio (12%), Active Addresses (7%), Mining Production Cost (6%)
- * 3. Institutional Flows (20%): Spot ETF 7-Day Net Flow (12%), Stablecoin Dry Powder (8%)
- * 4. News & Risk Shock (20%): High Impact Calendar Risk (8%), Fear & Greed (7%), Long/Short Ratio (5%)
+ * 1. Market Microstructure (40%): Spot CVD (10%), Futures CVD (10%), Funding Rate (5%), OI Change (5%), Fear & Greed (6%), L/S Ratio (4%)
+ * 2. On-Chain Fundamentals (25%): MVRV Ratio (8%), NUPL (4%), SSR (4%), Supply in Profit (3%), Active Addresses (3%), Mining Production Cost (3%)
+ * 3. Institutional Flows (15%): Spot ETF 7-Day Net Flow (10%), CME COT (5%)
+ * 4. Macro & Risk Shock (20%): VIX (6%), Macro Indicators (Fed, CPI, Unrate) (14%)
  */
 
 const MAX_SCORING_WEIGHT = 0.90;
@@ -29,6 +29,12 @@ function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function calculateSupplyInProfit(mvrv) {
+  if (!mvrv || isNaN(mvrv) || mvrv <= 0) return null;
+  let est = -8 + 47 * mvrv - 1.1 * mvrv * mvrv;
+  return Math.max(28, Math.min(98.5, est));
+}
+
 export function calculateMarketBias(data, etfHistory = []) {
   if (!data) {
     return {
@@ -47,37 +53,79 @@ export function calculateMarketBias(data, etfHistory = []) {
   let calendarRiskLevel = 'LOW';
 
   // ----------------------------------------------------
-  // PILLAR 1: MARKET MICROSTRUCTURE (35%)
+  // PILLAR 1: MARKET MICROSTRUCTURE (40%)
   // ----------------------------------------------------
   let microScoreSum = 0;
-
-  // 1A. 24h Futures CVD Ratio (15%)
-  let cvdSignal = 0;
-  let cvdStatus = 'No data';
-  const latestCvd = toFiniteNumber(data.cvdHistory24h?.[data.cvdHistory24h.length - 1]?.cvd);
   const btcVolume = toFiniteNumber(data.btc?.volume);
-  if (latestCvd != null && btcVolume != null && btcVolume > 0) {
-    const cvdRatio = latestCvd / btcVolume;
-    
-    if (cvdRatio > 0.08) { cvdSignal = 1.0; cvdStatus = 'Buy flow mạnh (+8% vol)'; }
-    else if (cvdRatio > 0.03) { cvdSignal = 0.5; cvdStatus = 'Buy flow ưu thế (+3% vol)'; }
-    else if (cvdRatio > -0.03) { cvdSignal = 0.0; cvdStatus = 'Cân bằng mua bán'; }
-    else if (cvdRatio > -0.08) { cvdSignal = -0.5; cvdStatus = 'Sell flow ưu thế (-3% vol)'; }
-    else { cvdSignal = -1.0; cvdStatus = 'Sell flow áp đảo (-8% vol)'; }
 
-    cvdSignal = clamp(Math.tanh(cvdRatio / 0.06));
-    microScoreSum += cvdSignal * 0.12;
-    availableWeight += 0.12;
-    signals.push({ name: '24h Futures CVD', weight: '12%', score: cvdSignal * 12, status: cvdStatus, pillar: 'microstructure' });
+  // 1A. Spot CVD (24h, 7d, 30d) (10%)
+  let spotCvdSignal = 0;
+  let spotCvdStatus = 'No data';
+  const spot24 = toFiniteNumber(data.cvdHistory24hSpot?.[data.cvdHistory24hSpot.length - 1]?.cvd);
+  const spot7d = toFiniteNumber(data.cvdHistory7dSpot?.[data.cvdHistory7dSpot.length - 1]?.cvd);
+  const spot30d = toFiniteNumber(data.cvdHistory30dSpot?.[data.cvdHistory30dSpot.length - 1]?.cvd);
+  
+  if (spot24 != null && btcVolume != null && btcVolume > 0) {
+    const cvdRatio = spot24 / btcVolume; 
+    let baseScore = clamp(Math.tanh(cvdRatio / 0.05));
+    if (spot7d != null) {
+      if (spot7d > 0 && spot24 > 0) baseScore += 0.1;
+      else if (spot7d < 0 && spot24 < 0) baseScore -= 0.1;
+    }
+    if (spot30d != null) {
+      if (spot30d > 0 && spot24 > 0) baseScore += 0.1;
+      else if (spot30d < 0 && spot24 < 0) baseScore -= 0.1;
+    }
+    spotCvdSignal = clamp(baseScore);
+    
+    if (spotCvdSignal > 0.6) spotCvdStatus = 'Spot Gom Hàng Mạnh (+)';
+    else if (spotCvdSignal > 0.2) spotCvdStatus = 'Spot Mua Ưu Thế';
+    else if (spotCvdSignal > -0.2) spotCvdStatus = 'Spot Đi Ngang';
+    else if (spotCvdSignal > -0.6) spotCvdStatus = 'Spot Bán Ưu Thế';
+    else spotCvdStatus = 'Spot Xả Mạnh (-)';
+
+    microScoreSum += spotCvdSignal * 0.10;
+    availableWeight += 0.10;
+    signals.push({ name: 'Spot CVD (24h/7d/30d)', weight: '10%', score: spotCvdSignal * 10, status: spotCvdStatus, pillar: 'microstructure' });
   }
 
-  // 1B. Funding Rate & Leverage Heat (10%)
+  // 1B. Futures CVD (24h, 7d, 30d) (10%)
+  let futCvdSignal = 0;
+  let futCvdStatus = 'No data';
+  const fut24 = toFiniteNumber(data.cvdHistory24h?.[data.cvdHistory24h.length - 1]?.cvd);
+  const fut7d = toFiniteNumber(data.cvdHistory7d?.[data.cvdHistory7d.length - 1]?.cvd);
+  const fut30d = toFiniteNumber(data.cvdHistory30d?.[data.cvdHistory30d.length - 1]?.cvd);
+  
+  if (fut24 != null && btcVolume != null && btcVolume > 0) {
+    const cvdRatio = fut24 / btcVolume;
+    let baseScore = clamp(Math.tanh(cvdRatio / 0.08));
+    if (fut7d != null) {
+      if (fut7d > 0 && fut24 > 0) baseScore += 0.1;
+      else if (fut7d < 0 && fut24 < 0) baseScore -= 0.1;
+    }
+    if (fut30d != null) {
+      if (fut30d > 0 && fut24 > 0) baseScore += 0.1;
+      else if (fut30d < 0 && fut24 < 0) baseScore -= 0.1;
+    }
+    futCvdSignal = clamp(baseScore);
+    
+    if (futCvdSignal > 0.6) futCvdStatus = 'Futures Long Chủ Đạo';
+    else if (futCvdSignal > 0.2) futCvdStatus = 'Futures Nghiêng Long';
+    else if (futCvdSignal > -0.2) futCvdStatus = 'Futures Cân Bằng';
+    else if (futCvdSignal > -0.6) futCvdStatus = 'Futures Nghiêng Short';
+    else futCvdStatus = 'Futures Short Chủ Đạo';
+
+    microScoreSum += futCvdSignal * 0.10;
+    availableWeight += 0.10;
+    signals.push({ name: 'Futures CVD (24h/7d/30d)', weight: '10%', score: futCvdSignal * 10, status: futCvdStatus, pillar: 'microstructure' });
+  }
+
+  // 1C. Funding Rate & Leverage Heat (5%)
   let frSignal = 0;
   let frStatus = 'No data';
   const fr = toFiniteNumber(data.fundingRate);
   if (fr != null) {
     const frPct = (fr * 100).toFixed(3) + '%';
-    
     if (fr > 0.0005) { frSignal = -0.8; frStatus = `Overheated Longs (${frPct})`; }
     else if (fr > 0.0002) { frSignal = 0.3; frStatus = `Bullish lành mạnh (${frPct})`; }
     else if (fr > 0.00005) { frSignal = 0.6; frStatus = `Bullish nhẹ (${frPct})`; }
@@ -85,12 +133,12 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (fr > -0.0002) { frSignal = -0.4; frStatus = `Bearish nhẹ (${frPct})`; }
     else { frSignal = 0.8; frStatus = `Extreme Shorts Squeeze potential (${frPct})`; }
 
-    microScoreSum += frSignal * 0.07;
-    availableWeight += 0.07;
-    signals.push({ name: 'Funding Rate', weight: '7%', score: frSignal * 7, status: frStatus, pillar: 'microstructure' });
+    microScoreSum += frSignal * 0.05;
+    availableWeight += 0.05;
+    signals.push({ name: 'Funding Rate', weight: '5%', score: frSignal * 5, status: frStatus, pillar: 'microstructure' });
   }
 
-  // 1C. Open Interest Surge + Price Action (10%)
+  // 1D. Open Interest Surge + Price Action (5%)
   let oiSignal = 0;
   let oiStatus = 'No data';
   const currentOi = toFiniteNumber(data.openInterest);
@@ -106,22 +154,55 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (oiChangePct < -5) { oiSignal = -0.2; oiStatus = `Deleveraging OI ${oiChangePct.toFixed(1)}%`; }
     else { oiSignal = 0.0; oiStatus = `OI ổn định (${oiChangePct >= 0 ? '+' : ''}${oiChangePct.toFixed(1)}%)`; }
 
-    microScoreSum += oiSignal * 0.07;
-    availableWeight += 0.07;
-    signals.push({ name: 'Open Interest & Price', weight: '7%', score: oiSignal * 7, status: oiStatus, pillar: 'microstructure' });
+    microScoreSum += oiSignal * 0.05;
+    availableWeight += 0.05;
+    signals.push({ name: 'Open Interest & Price', weight: '5%', score: oiSignal * 5, status: oiStatus, pillar: 'microstructure' });
+  }
+
+  // 1E. Fear & Greed Index (6%) (Moved to Micro)
+  let fngSignal = 0;
+  let fngStatus = 'No data';
+  const fng = toFiniteNumber(data.fngData?.value);
+  if (fng != null) {
+    if (fng <= 20) { fngSignal = 1.0; fngStatus = `Fear & Greed ${fng} (Extreme Fear -> Mua tốt)`; }
+    else if (fng <= 35) { fngSignal = 0.5; fngStatus = `Fear & Greed ${fng} (Fear)`; }
+    else if (fng <= 65) { fngSignal = 0.0; fngStatus = `Fear & Greed ${fng} (Neutral)`; }
+    else if (fng <= 80) { fngSignal = -0.5; fngStatus = `Fear & Greed ${fng} (Greed)`; }
+    else { fngSignal = -1.0; fngStatus = `Fear & Greed ${fng} (Extreme Greed -> Quá nóng)`; }
+
+    fngSignal = clamp((50 - fng) / 30);
+    microScoreSum += fngSignal * 0.06;
+    availableWeight += 0.06;
+    signals.push({ name: 'Fear & Greed Index', weight: '6%', score: fngSignal * 6, status: fngStatus, pillar: 'microstructure' });
+  }
+
+  // 1F. Long/Short Ratio (4%) (Moved to Micro)
+  let lsSignal = 0;
+  let lsStatus = 'No data';
+  const latestLs = toFiniteNumber(data.lsHistory?.[data.lsHistory.length - 1]?.longShortRatio);
+  if (latestLs != null && latestLs > 0) {
+    if (latestLs > 2.5) { lsSignal = -0.8; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Quá nhiều Longs)`; }
+    else if (latestLs > 1.8) { lsSignal = -0.3; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng về Long)`; }
+    else if (latestLs > 1.2) { lsSignal = 0.2; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Hợp lý)`; }
+    else if (latestLs <= 0.8) { lsSignal = 0.6; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng Short -> Squeeze)`; }
+    else { lsSignal = 0.0; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Cân bằng)`; }
+
+    lsSignal = clamp((1 - latestLs) / 0.9);
+    microScoreSum += lsSignal * 0.04;
+    availableWeight += 0.04;
+    signals.push({ name: 'Long/Short Ratio', weight: '4%', score: lsSignal * 4, status: lsStatus, pillar: 'microstructure' });
   }
 
   // ----------------------------------------------------
   // PILLAR 2: ON-CHAIN FUNDAMENTALS & VALUATION (25%)
   // ----------------------------------------------------
   let onChainScoreSum = 0;
+  const mvrv = toFiniteNumber(data.onChainMetrics?.mvrv);
 
-  // 2A. MVRV Ratio (12%)
+  // 2A. MVRV Ratio (8%)
   let mvrvSignal = 0;
   let mvrvStatus = 'No data';
-  const mvrv = toFiniteNumber(data.onChainMetrics?.mvrv);
   if (mvrv != null) {
-    
     if (mvrv < 1.0) { mvrvSignal = 1.0; mvrvStatus = `MVRV ${mvrv} (Rất rẻ / Vùng đáy)`; }
     else if (mvrv < 1.4) { mvrvSignal = 0.7; mvrvStatus = `MVRV ${mvrv} (Vùng tích lũy tốt)`; }
     else if (mvrv < 2.2) { mvrvSignal = 0.2; mvrvStatus = `MVRV ${mvrv} (Định giá hợp lý)`; }
@@ -129,12 +210,65 @@ export function calculateMarketBias(data, etfHistory = []) {
     else { mvrvSignal = -1.0; mvrvStatus = `MVRV ${mvrv} (Vùng giá quá nóng / Quá định giá)`; }
 
     mvrvSignal = clamp(-Math.tanh((mvrv - 2.1) / 0.7));
-    onChainScoreSum += mvrvSignal * 0.12;
-    availableWeight += 0.12;
-    signals.push({ name: 'MVRV Ratio', weight: '12%', score: mvrvSignal * 12, status: mvrvStatus, pillar: 'onChain' });
+    onChainScoreSum += mvrvSignal * 0.08;
+    availableWeight += 0.08;
+    signals.push({ name: 'MVRV Ratio', weight: '8%', score: mvrvSignal * 8, status: mvrvStatus, pillar: 'onChain' });
   }
 
-  // 2B. Active Addresses (7%)
+  // 2B. NUPL (4%)
+  let nuplSignal = 0;
+  let nuplStatus = 'No data';
+  if (mvrv != null) {
+    const nupl = 1 - (1 / mvrv);
+    if (nupl < 0) { nuplSignal = 1.0; nuplStatus = `NUPL ${(nupl*100).toFixed(1)}% (Đầu hàng)`; }
+    else if (nupl < 0.25) { nuplSignal = 0.5; nuplStatus = `NUPL ${(nupl*100).toFixed(1)}% (Hy vọng/Tích lũy)`; }
+    else if (nupl < 0.5) { nuplSignal = 0.0; nuplStatus = `NUPL ${(nupl*100).toFixed(1)}% (Lạc quan)`; }
+    else if (nupl < 0.75) { nuplSignal = -0.5; nuplStatus = `NUPL ${(nupl*100).toFixed(1)}% (Niềm tin/Lãi cao)`; }
+    else { nuplSignal = -1.0; nuplStatus = `NUPL ${(nupl*100).toFixed(1)}% (Hưng phấn tột độ)`; }
+    
+    onChainScoreSum += nuplSignal * 0.04;
+    availableWeight += 0.04;
+    signals.push({ name: 'NUPL', weight: '4%', score: nuplSignal * 4, status: nuplStatus, pillar: 'onChain' });
+  }
+
+  // 2C. Supply in Profit (3%)
+  let sipSignal = 0;
+  let sipStatus = 'No data';
+  if (mvrv != null) {
+    const sip = calculateSupplyInProfit(mvrv);
+    if (sip != null) {
+      if (sip > 95) { sipSignal = -0.8; sipStatus = `Supply in Profit ${sip.toFixed(1)}% (Rủi ro xả cao)`; }
+      else if (sip > 85) { sipSignal = -0.3; sipStatus = `Supply in Profit ${sip.toFixed(1)}% (Khá nóng)`; }
+      else if (sip > 60) { sipSignal = 0.0; sipStatus = `Supply in Profit ${sip.toFixed(1)}% (Trung bình)`; }
+      else if (sip > 40) { sipSignal = 0.5; sipStatus = `Supply in Profit ${sip.toFixed(1)}% (Lành mạnh)`; }
+      else { sipSignal = 1.0; sipStatus = `Supply in Profit ${sip.toFixed(1)}% (Quá bán/Vùng đáy)`; }
+
+      onChainScoreSum += sipSignal * 0.03;
+      availableWeight += 0.03;
+      signals.push({ name: 'Supply in Profit', weight: '3%', score: sipSignal * 3, status: sipStatus, pillar: 'onChain' });
+    }
+  }
+
+  // 2D. SSR (Stablecoin Supply Ratio) (4%)
+  let ssrSignal = 0;
+  let ssrStatus = 'No data';
+  const p = data.btc?.price;
+  const m = (typeof data.ssrMa === 'object' && data.ssrMa?.stablecoinTotal) || data.stablecoins?.total;
+  if (p && m && typeof data.ssrMa === 'object' && data.ssrMa?.ma200) {
+     const ssr = (p * 19740000) / m;
+     const z = data.ssrMa.stdDev200 > 0 ? (ssr - data.ssrMa.ma200) / data.ssrMa.stdDev200 : 0;
+     if (z < -2) { ssrSignal = 1.0; ssrStatus = `SSR Z-Score ${z.toFixed(2)} (Oversold - Tiền chờ mua nhiều)`; }
+     else if (z < -1) { ssrSignal = 0.6; ssrStatus = `SSR Z-Score ${z.toFixed(2)} (Sức mua mạnh)`; }
+     else if (z < 1) { ssrSignal = 0.0; ssrStatus = `SSR Z-Score ${z.toFixed(2)} (Bình thường)`; }
+     else if (z < 2) { ssrSignal = -0.6; ssrStatus = `SSR Z-Score ${z.toFixed(2)} (Cạn sức mua)`; }
+     else { ssrSignal = -1.0; ssrStatus = `SSR Z-Score ${z.toFixed(2)} (Overheated - Hết tiền mua)`; }
+     
+     onChainScoreSum += ssrSignal * 0.04;
+     availableWeight += 0.04;
+     signals.push({ name: 'Stablecoin Supply Ratio', weight: '4%', score: ssrSignal * 4, status: ssrStatus, pillar: 'onChain' });
+  }
+
+  // 2E. Active Addresses (3%)
   let addrSignal = 0;
   let addrStatus = 'No data';
   if (data.onChainMetrics?.activeAddresses) {
@@ -145,13 +279,13 @@ export function calculateMarketBias(data, etfHistory = []) {
       else if (addrs > 700000) { addrSignal = 0.0; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng bình thường)`; }
       else { addrSignal = -0.6; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng suy giảm hoạt động)`; }
 
-      onChainScoreSum += addrSignal * 0.07;
-      availableWeight += 0.07;
-      signals.push({ name: 'Active Addresses', weight: '7%', score: addrSignal * 7, status: addrStatus, pillar: 'onChain' });
+      onChainScoreSum += addrSignal * 0.03;
+      availableWeight += 0.03;
+      signals.push({ name: 'Active Addresses', weight: '3%', score: addrSignal * 3, status: addrStatus, pillar: 'onChain' });
     }
   }
 
-  // 2C. Mining Production Cost Floor (6%)
+  // 2F. Mining Production Cost Floor (3%)
   let miningSignal = 0;
   let miningStatus = 'No data';
   if (data.btc?.price > 0 && data.onChain?.difficulty > 0) {
@@ -164,17 +298,17 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (priceToCostRatio < 1.80) { miningSignal = 0.0; miningStatus = `Lợi nhuận thợ đào bình thường`; }
     else { miningSignal = -0.5; miningStatus = `Lợi nhuận thợ đào rất cao (Rủi ro xả)`; }
 
-    onChainScoreSum += miningSignal * 0.06;
-    availableWeight += 0.06;
-    signals.push({ name: 'Mining Cost Floor', weight: '6%', score: miningSignal * 6, status: miningStatus, pillar: 'onChain' });
+    onChainScoreSum += miningSignal * 0.03;
+    availableWeight += 0.03;
+    signals.push({ name: 'Mining Cost Floor', weight: '3%', score: miningSignal * 3, status: miningStatus, pillar: 'onChain' });
   }
 
   // ----------------------------------------------------
-  // PILLAR 3: INSTITUTIONAL FLOWS & CAPITAL (20%)
+  // PILLAR 3: INSTITUTIONAL FLOWS & CAPITAL (15%)
   // ----------------------------------------------------
   let instScoreSum = 0;
 
-  // 3A. Spot ETF 7-Day Net Flow (12%)
+  // 3A. Spot ETF 7-Day Net Flow (10%)
   let etfSignal = 0;
   let etfStatus = 'No data';
   if (Array.isArray(etfHistory) && etfHistory.length > 0) {
@@ -195,12 +329,12 @@ export function calculateMarketBias(data, etfHistory = []) {
       etfStatus = `ETF Flow 7D: ${flowStr}`;
     }
 
-    instScoreSum += etfSignal * 0.12;
-    availableWeight += 0.12;
-    signals.push({ name: 'ETF 7D Net Flow', weight: '12%', score: etfSignal * 12, status: etfStatus, pillar: 'institutional' });
+    instScoreSum += etfSignal * 0.10;
+    availableWeight += 0.10;
+    signals.push({ name: 'ETF 7D Net Flow', weight: '10%', score: etfSignal * 10, status: etfStatus, pillar: 'institutional' });
   }
 
-  // 3B. CME COT Institutional Flow (8%)
+  // 3B. CME COT Institutional Flow (5%)
   let cotSignal = 0;
   let cotStatus = 'No data';
   if (data.cotData?.assetManager) {
@@ -212,19 +346,19 @@ export function calculateMarketBias(data, etfHistory = []) {
       else if (netPos > -3000) { cotSignal = -0.5; cotStatus = `CME Asset Mgr Net ${netPos} (Short ưu thế)`; }
       else { cotSignal = -1.0; cotStatus = `CME Asset Mgr Net ${netPos} (Short áp đảo)`; }
 
-      instScoreSum += cotSignal * 0.08;
-      availableWeight += 0.08;
-      signals.push({ name: 'CME COT Flow', weight: '8%', score: cotSignal * 8, status: cotStatus, pillar: 'institutional' });
+      instScoreSum += cotSignal * 0.05;
+      availableWeight += 0.05;
+      signals.push({ name: 'CME COT Flow', weight: '5%', score: cotSignal * 5, status: cotStatus, pillar: 'institutional' });
     }
   }
 
   // ----------------------------------------------------
-  // PILLAR 4: NEWS & SENTIMENT RISK SHOCK (20%)
+  // PILLAR 4: MACRO & RISK SHOCK (20%)
   // ----------------------------------------------------
   let newsRiskScoreSum = 0;
   const upcomingEvents = [];
 
-  // 4A. VIX Volatility Index (8%)
+  // 4A. VIX Volatility Index (6%)
   let vixSignal = 0;
   let vixStatus = 'No data';
   const vixVal = toFiniteNumber(data.vix);
@@ -235,9 +369,48 @@ export function calculateMarketBias(data, etfHistory = []) {
     else if (vixVal < 32) { vixSignal = -0.8; vixStatus = `VIX ${vixVal.toFixed(1)} (Risk-Off hoảng loạn)`; }
     else { vixSignal = -1.0; vixStatus = `VIX ${vixVal.toFixed(1)} (Khủng hoảng tâm lý)`; }
 
-    newsRiskScoreSum += vixSignal * 0.08;
-    availableWeight += 0.08;
-    signals.push({ name: 'VIX Volatility Index', weight: '8%', score: vixSignal * 8, status: vixStatus, pillar: 'newsRisk' });
+    newsRiskScoreSum += vixSignal * 0.06;
+    availableWeight += 0.06;
+    signals.push({ name: 'VIX Volatility Index', weight: '6%', score: vixSignal * 6, status: vixStatus, pillar: 'newsRisk' });
+  }
+
+  // 4B. Macro Health Pulse (14%)
+  let macroSignal = 0;
+  let macroStatus = 'No data';
+  const fedVal = toFiniteNumber(data.fedFundsRate?.val ?? data.fedFundsRate);
+  const cpiVal = toFiniteNumber(data.cpi?.val ?? data.cpi);
+  const unrateVal = toFiniteNumber(data.unrate?.val ?? data.unrate);
+  
+  if (fedVal != null || cpiVal != null || unrateVal != null) {
+      let mScore = 0;
+      let count = 0;
+      let desc = [];
+      
+      if (fedVal != null) {
+          if (fedVal > 5.0) { mScore -= 0.5; desc.push(`Fed ${fedVal.toFixed(1)}% (Thắt chặt)`); }
+          else if (fedVal < 3.5) { mScore += 0.5; desc.push(`Fed ${fedVal.toFixed(1)}% (Nới lỏng)`); }
+          else { desc.push(`Fed ${fedVal.toFixed(1)}%`); }
+          count++;
+      }
+      if (cpiVal != null) {
+          if (cpiVal > 3.5) { mScore -= 0.8; desc.push(`CPI ${cpiVal.toFixed(1)}% (Cao)`); }
+          else if (cpiVal < 2.5) { mScore += 0.5; desc.push(`CPI ${cpiVal.toFixed(1)}% (Tốt)`); }
+          else { desc.push(`CPI ${cpiVal.toFixed(1)}%`); }
+          count++;
+      }
+      if (unrateVal != null) {
+          if (unrateVal > 4.5) { mScore -= 0.5; desc.push(`Thất nghiệp ${unrateVal.toFixed(1)}% (Rủi ro)`); }
+          else if (unrateVal < 4.0) { mScore += 0.3; desc.push(`Thất nghiệp ${unrateVal.toFixed(1)}% (Lao động khỏe)`); }
+          else { desc.push(`Thất nghiệp ${unrateVal.toFixed(1)}%`); }
+          count++;
+      }
+      
+      macroSignal = count > 0 ? clamp(mScore / count) : 0;
+      macroStatus = desc.length > 0 ? desc.join(' • ') : 'Macro ổn định';
+      
+      newsRiskScoreSum += macroSignal * 0.14;
+      availableWeight += 0.14;
+      signals.push({ name: 'Macro Pulse (Fed, CPI, Unrate)', weight: '14%', score: macroSignal * 14, status: macroStatus, pillar: 'newsRisk' });
   }
 
   if (Array.isArray(data.news)) {
@@ -258,40 +431,6 @@ export function calculateMarketBias(data, etfHistory = []) {
         });
       });
     }
-  }
-
-  // 4B. Fear & Greed Index (7%)
-  let fngSignal = 0;
-  let fngStatus = 'No data';
-  const fng = toFiniteNumber(data.fngData?.value);
-  if (fng != null) {
-    if (fng <= 20) { fngSignal = 1.0; fngStatus = `Fear & Greed ${fng} (Extreme Fear -> Mua tốt)`; }
-    else if (fng <= 35) { fngSignal = 0.5; fngStatus = `Fear & Greed ${fng} (Fear)`; }
-    else if (fng <= 65) { fngSignal = 0.0; fngStatus = `Fear & Greed ${fng} (Neutral)`; }
-    else if (fng <= 80) { fngSignal = -0.5; fngStatus = `Fear & Greed ${fng} (Greed)`; }
-    else { fngSignal = -1.0; fngStatus = `Fear & Greed ${fng} (Extreme Greed -> Quá nóng)`; }
-
-    fngSignal = clamp((50 - fng) / 30);
-    newsRiskScoreSum += fngSignal * 0.07;
-    availableWeight += 0.07;
-    signals.push({ name: 'Fear & Greed Index', weight: '7%', score: fngSignal * 7, status: fngStatus, pillar: 'newsRisk' });
-  }
-
-  // 4C. Binance Futures Long/Short Account Ratio (5%)
-  let lsSignal = 0;
-  let lsStatus = 'No data';
-  const latestLs = toFiniteNumber(data.lsHistory?.[data.lsHistory.length - 1]?.longShortRatio);
-  if (latestLs != null && latestLs > 0) {
-    if (latestLs > 2.5) { lsSignal = -0.8; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Quá nhiều Longs)`; }
-    else if (latestLs > 1.8) { lsSignal = -0.3; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng về Long)`; }
-    else if (latestLs > 1.2) { lsSignal = 0.2; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Hợp lý)`; }
-    else if (latestLs <= 0.8) { lsSignal = 0.6; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng Short -> Squeeze)`; }
-    else { lsSignal = 0.0; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Cân bằng)`; }
-
-    lsSignal = clamp((1 - latestLs) / 0.9);
-    newsRiskScoreSum += lsSignal * 0.04;
-    availableWeight += 0.04;
-    signals.push({ name: 'Long/Short Ratio', weight: '4%', score: lsSignal * 4, status: lsStatus, pillar: 'newsRisk' });
   }
 
   // ----------------------------------------------------
@@ -341,10 +480,10 @@ export function calculateMarketBias(data, etfHistory = []) {
     confidence: confidencePct,
     calendarRisk: calendarRiskLevel,
     pillars: {
-      microstructure: Math.round((microScoreSum / 0.26) * 100),
-      onChain: Math.round((onChainScoreSum / 0.25) * 100),
-      institutional: Math.round((instScoreSum / 0.20) * 100),
-      newsRisk: Math.round((newsRiskScoreSum / 0.19) * 100),
+      microstructure: Math.round((microScoreSum / 0.40) * 100) || 0,
+      onChain: Math.round((onChainScoreSum / 0.25) * 100) || 0,
+      institutional: Math.round((instScoreSum / 0.15) * 100) || 0,
+      newsRisk: Math.round((newsRiskScoreSum / 0.20) * 100) || 0,
     },
     signals,
     upcomingEvents,
