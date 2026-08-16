@@ -1,86 +1,112 @@
 /**
- * ATR Calculator — Calculates Average True Range (ATR) from Binance Klines.
- * Default: 14 periods, 5-minute candles.
+ * ATR Calculator for the MOVE TRACKER champion detector.
+ * Uses closed Binance USD-M Futures candles and exposes data freshness.
  */
+
+const FUTURES_KLINES_URL = 'https://fapi.binance.com/fapi/v1/klines';
+const CACHE_TTL_MS = 60 * 1000;
+const ATR_STALE_MS = 10 * 60 * 1000;
 
 let cachedAtr = {
-  val: 350, // default fallback (~$350 ATR for BTC on 5m)
+  value: null,
   lastUpdated: 0,
+  lastClosedCandleTime: null,
+  source: 'BINANCE_FUTURES',
+  interval: '5m',
+  period: 14,
+  status: 'UNAVAILABLE',
+  error: null,
 };
 
-const CACHE_TTL_MS = 3 * 60 * 1000; // Recalculate every 3 minutes
+let inFlightRequest = null;
 
-/**
- * Fetch 5m klines from Binance and calculate ATR(14)
- * @param {string} symbol
- * @param {string} interval
- * @param {number} period
- * @returns {Promise<number>} ATR value in USD
- */
-export async function getATR(symbol = 'BTCUSDT', interval = '5m', period = 14) {
-  const now = Date.now();
-  if (now - cachedAtr.lastUpdated < CACHE_TTL_MS && cachedAtr.val > 0) {
-    return cachedAtr.val;
-  }
-
-  try {
-    // Fetch (period + 10) candles to calculate EMA/SMA True Range smoothly
-    const limit = period + 15;
-    const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
-    if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
-    const data = await res.json();
-
-    if (!Array.isArray(data) || data.length < period + 1) {
-      return cachedAtr.val;
-    }
-
-    // Format candles: [openTime, open, high, low, close, volume, ...]
-    const candles = data.map(c => ({
-      high: parseFloat(c[2]),
-      low: parseFloat(c[3]),
-      close: parseFloat(c[4]),
-    }));
-
-    // Calculate True Range (TR) array
-    const trValues = [];
-    for (let i = 1; i < candles.length; i++) {
-      const high = candles[i].high;
-      const low = candles[i].low;
-      const prevClose = candles[i - 1].close;
-
-      const tr = Math.max(
-        high - low,
-        Math.abs(high - prevClose),
-        Math.abs(low - prevClose)
-      );
-      trValues.push(tr);
-    }
-
-    if (trValues.length < period) return cachedAtr.val;
-
-    // Initial ATR: Simple Average of first 'period' TR values
-    let atr = trValues.slice(0, period).reduce((sum, v) => sum + v, 0) / period;
-
-    // Wilder's Smoothing for remaining TR values
-    for (let i = period; i < trValues.length; i++) {
-      atr = (atr * (period - 1) + trValues[i]) / period;
-    }
-
-    cachedAtr = {
-      val: Math.round(atr * 100) / 100,
-      lastUpdated: now,
-    };
-
-    return cachedAtr.val;
-  } catch (err) {
-    console.warn('[ATR] Failed to fetch ATR, using fallback:', err);
-    return cachedAtr.val;
-  }
+function finiteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-/**
- * Synchronous getter for current cached ATR
- */
+export function calculateWilderATR(rawKlines, period = 14, now = Date.now()) {
+  const closed = (Array.isArray(rawKlines) ? rawKlines : [])
+    .filter((row) => Array.isArray(row) && finiteNumber(row[6]) != null && finiteNumber(row[6]) <= now)
+    .map((row) => ({ high: finiteNumber(row[2]), low: finiteNumber(row[3]), close: finiteNumber(row[4]), closeTime: finiteNumber(row[6]) }))
+    .filter((row) => row.high != null && row.low != null && row.close != null);
+
+  if (closed.length < period + 1) return { value: null, lastClosedCandleTime: closed.at(-1)?.closeTime ?? null };
+  const trueRanges = [];
+  for (let index = 1; index < closed.length; index += 1) {
+    const candle = closed[index];
+    const previousClose = closed[index - 1].close;
+    trueRanges.push(Math.max(candle.high - candle.low, Math.abs(candle.high - previousClose), Math.abs(candle.low - previousClose)));
+  }
+  if (trueRanges.length < period) return { value: null, lastClosedCandleTime: closed.at(-1)?.closeTime ?? null };
+
+  let atr = trueRanges.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+  for (let index = period; index < trueRanges.length; index += 1) atr = ((atr * (period - 1)) + trueRanges[index]) / period;
+  return { value: Number(atr.toFixed(2)), lastClosedCandleTime: closed.at(-1)?.closeTime ?? null };
+}
+
+function snapshotAtr(now = Date.now()) {
+  const ageMs = cachedAtr.lastUpdated ? now - cachedAtr.lastUpdated : Infinity;
+  const status = cachedAtr.value == null ? 'UNAVAILABLE' : ageMs > ATR_STALE_MS ? 'STALE' : cachedAtr.status;
+  return { ...cachedAtr, status, ageMs };
+}
+
+export async function getATR(symbol = 'BTCUSDT', interval = '5m', period = 14, options = {}) {
+  const now = options.now ?? Date.now();
+  const force = options.force === true;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  if (!force && cachedAtr.value != null && now - cachedAtr.lastUpdated < CACHE_TTL_MS && cachedAtr.interval === interval && cachedAtr.period === period) {
+    return cachedAtr.value;
+  }
+  if (inFlightRequest) return inFlightRequest;
+
+  inFlightRequest = (async () => {
+    try {
+      const params = new URLSearchParams({ symbol, interval, limit: String(Math.max(period + 16, 30)) });
+      const response = await fetchImpl(`${FUTURES_KLINES_URL}?${params}`);
+      if (!response.ok) throw new Error(`Binance Futures API error: ${response.status}`);
+      const calculated = calculateWilderATR(await response.json(), period, now);
+      if (calculated.value == null) throw new Error('Insufficient closed Futures candles for ATR');
+      cachedAtr = {
+        value: calculated.value,
+        lastUpdated: now,
+        lastClosedCandleTime: calculated.lastClosedCandleTime,
+        source: 'BINANCE_FUTURES',
+        interval,
+        period,
+        status: 'LIVE',
+        error: null,
+      };
+      return cachedAtr.value;
+    } catch (error) {
+      cachedAtr = { ...cachedAtr, status: cachedAtr.value == null ? 'UNAVAILABLE' : 'STALE', error: error instanceof Error ? error.message : String(error) };
+      console.warn('[ATR] Futures ATR unavailable:', error);
+      return cachedAtr.value;
+    } finally {
+      inFlightRequest = null;
+    }
+  })();
+  return inFlightRequest;
+}
+
 export function getCurrentATR() {
-  return cachedAtr.val;
+  return cachedAtr.value;
+}
+
+export function getATRState(now = Date.now()) {
+  return snapshotAtr(now);
+}
+
+export function __resetATRForTests() {
+  cachedAtr = {
+    value: null,
+    lastUpdated: 0,
+    lastClosedCandleTime: null,
+    source: 'BINANCE_FUTURES',
+    interval: '5m',
+    period: 14,
+    status: 'UNAVAILABLE',
+    error: null,
+  };
+  inFlightRequest = null;
 }

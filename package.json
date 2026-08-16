@@ -9,6 +9,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:scanner": "node --test src/services/coinScanner.test.js",
+    "test:move": "node --test src/services/moveTrackerCore.test.js src/services/atrCalculator.test.js src/services/moveEventStore.test.js",
+    "test": "npm run test:scanner && npm run test:move",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
@@ -33,6 +35,7 @@
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "fake-indexeddb": "^6.2.5",
     "gh-pages": "^6.3.0",
     "globals": "^17.6.0",
     "vite": "^8.0.12"

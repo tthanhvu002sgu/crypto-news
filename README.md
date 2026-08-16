@@ -6,7 +6,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 **Các tính năng cốt lõi:**
 - **Lịch Kinh Tế Vĩ Mô 7 Ngày (7-Day Economic Calendar):** Hiển thị lịch sự kiện vĩ mô toàn cầu (CPI, FOMC, NFP, GDP, PMI...) dưới dạng bento grid 7 ô vuông tương ứng 7 ngày trong tuần (cố định 1 hàng trên PC, cuộn ngang trên Mobile). Tích hợp Modal phân tích chuyên sâu **tác động của từng sự kiện đến thanh khoản Bitcoin & Crypto** với dữ liệu thời gian thực và curated fallback.
 - **Market Bias Engine (Công Thức Bias Total):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Microstructure (35%)*, *On-Chain (25%)*, *Institutional Flows (20%)*, *Macro & Risk Shock (20%)*. Tích hợp thanh thước đo Spectrum Gauge Bar với kim chỉ Pin chuyển màu dynamic, 4 bento card trụ cột và drawer bẻ nhỏ 10+ tín hiệu định lượng thành phần.
-- **Pump & Dump Move Tracker:** Tự động phát hiện, đo lường và theo dõi các nhịp biến động giá mạnh realtime (dựa trên ATR dynamic hoặc Fixed USD threshold). Đánh giá nhãn thông minh: *Whale Push (Đẩy giá thật)* vs *Liquidity Sweep (Quét thanh khoản)* vs *Stop Hunt*. Lưu trữ lịch sử báo cáo cố định 7 ngày chống mất log khi F5.
+- **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
   - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta realtime và phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
@@ -32,8 +32,8 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **COLD** mỗi 60 phút — FRED macro, on-chain, ETF, COT, Fear&Greed, CVD 30d, daily klines (TTL 2–12h).
   - Nút **SYNC NGAY** / auto 08:00 = full force (bỏ qua cache).
 - **Lưu trữ cục bộ & Persistence Multi-layer:**
-  - **0ms Synchronous Hydration:** `localStorage` (`hft_move_history_v1`, `hft_signal_log_ls_v1`, theme, module visibility) khôi phục tức thì khi F5.
-  - **IndexedDB Asynchronous Storage:** `CryptoSignalLog` (store `signals`) lưu vết lịch sử tín hiệu và move reports 7 ngày.
+  - **0ms Synchronous Hydration:** `localStorage` giữ settings và preview MOVE TRACKER gần nhất (`hft_move_preview_v2`) cùng theme/module visibility.
+  - **IndexedDB Research Storage:** `MoveTrackerResearch` (store `events`) lưu event schema v2 trong 90 ngày; migration một lần từ `hft_move_history_v1` và legacy `CryptoSignalLog/MOVE_REPORT`, có dedupe theo stable event ID.
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
@@ -45,13 +45,24 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
-- `services/moveTracker.js` — Phân tích biến động giá mạnh Pump & Dump, tính toán tỷ lệ nến hồi (Recovery %), phân loại hành vi cá mập và lưu vết 0ms sync + IndexedDB.
+- `services/moveTracker.js` — Điều phối champion detector, shadow flow research, trigger/end/outcome lifecycle và context OI/Funding/OBI.
+- `services/moveTrackerCore.js` — Các phép tính thuần cho detection windows, participation percentile, flow labels, MFE/MAE, recovery và thống kê timeframe.
+- `services/moveEventStore.js` — IndexedDB 90 ngày, migration legacy, query/filter, thống kê và export CSV/JSON cho MOVE TRACKER.
 - `services/economicCalendarService.js` — Fetch lịch kinh tế tuần từ FairEconomy JSON, phân tích tác động Crypto và fallback curated schedule.
 - `services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100) dựa trên 4 trụ cột định lượng.
 - `services/api.js` — REST multi-source (Binance, DefiLlama, FRED, ETF, COT, …) hỗ trợ SSR Z-Score Oscillator 200-day.
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-16] Nâng Cấp MOVE TRACKER Thành Realtime Detector + Research Log `(FEATURE FULL)`
+- **Tóm tắt:** Sửa lỗi runtime `getMoveReports is not defined`, thay persistence 50 event/7 ngày bằng IndexedDB 90 ngày, và tách dữ liệu tại trigger khỏi end/recovery/forward outcome để loại lookahead khỏi research log.
+- **Detection integrity:** ATR(14) chuyển sang Binance USD-M Futures 5m, chỉ dùng nến đã đóng, có trạng thái LIVE/STALE/UNAVAILABLE; champion ATR/Fixed tiếp tục tạo event như trước, còn participation và Spot/Futures flow chỉ chạy shadow.
+- **Event schema v2:** Ghi đủ score `15/30/60/120s`, trigger snapshot bất biến, end snapshot, outcome `+15s/+30s/+60s/+5m/+15m`, MFE/MAE, data gap, OI/Funding/OBI và context closed-candle `5m/15m/1h`.
+- **Nhãn mô tả:** Thay pseudo-causal Whale Push/Stop Hunt/Liquidity Sweep bằng flow labels `SPOT_CONFIRMED/FUTURES_LED/SPOT_LED/MIXED_FLOW/DATA_INCOMPLETE` và outcomes `CONTINUATION/PARTIAL_RETRACE/MEAN_REVERSION`.
+- **Research UI:** Bổ sung bảng thống kê hai lớp, sample-size warning `N<30`, event filters và export CSV/JSON; không hiển thị confidence giả xác suất.
+- **Verify:** `npm test` pass 19 tests; `npm run build` pass; browser local xác nhận ATR Futures LIVE, research/migration hiển thị và không còn lỗi `getMoveReports`.
+- **Files / areas chạm:** `src/services/moveTracker.js`, `src/services/moveTrackerCore.js`, `src/services/moveEventStore.js`, `src/services/atrCalculator.js`, `src/components/HftRadarTab.jsx`, `src/App.css`, tests, `package.json`, `README.md`.
 
 ### [2026-08-01] Bổ Sung Chú Thích Trực Quan Cho Volume Bubbles Dưới Chân Biểu Đồ Advanced Chart `(FEATURE FAST)`
 - **Lane / Mode:** FEATURE FAST & UI LEGEND

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 
 import { getCompletedHourCVD, getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
@@ -6,8 +6,13 @@ import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
-import { subscribeMoveTracker, updateMoveTrackerSettings, MOVE_CONFIG } from '../services/moveTracker';
-import { getCurrentATR } from '../services/atrCalculator';
+import {
+  downloadMoveResearch,
+  subscribeMoveTracker,
+  updateMoveTrackerContext,
+  updateMoveTrackerSettings,
+  MOVE_CONFIG,
+} from '../services/moveTracker';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1279,320 +1284,207 @@ function AdvancedChartWrapper({ theme, whaleData, whaleGap, children }) {
   return <AdvancedChart theme={theme} whaleData={clusteredWhaleData} moduleId="hft_heatmap">{children}</AdvancedChart>;
 }
 
-// ─── PANEL: Move Tracker (Pump & Dump Signal Log) ──────────────────────────────
+// ─── PANEL: Move Tracker — realtime trigger + research log ───────────────────
+
+const OUTCOME_LABELS = {
+  CONTINUATION: 'Continuation',
+  PARTIAL_RETRACE: 'Partial retrace',
+  MEAN_REVERSION: 'Mean reversion',
+  DATA_INCOMPLETE: 'Data incomplete',
+  UNRESOLVED: 'Pending',
+};
+
+const formatBps = (value) => value == null ? 'N/A' : `${value > 0 ? '+' : ''}${Number(value).toFixed(1)} bps`;
+
+function MoveStatsTable({ title, groups = [] }) {
+  return (
+    <div className="move-stats-block">
+      <div className="move-stats-title font-mono">{title}</div>
+      <div className="move-table-container">
+        <table className="move-table move-stats-table font-mono">
+          <thead><tr><th>Slice</th><th>N</th><th>Complete</th><th>Median +5m</th><th>MFE / MAE</th><th>Continue / Revert</th></tr></thead>
+          <tbody>
+            {groups.length === 0 ? (
+              <tr><td colSpan="6" className="move-stats-empty">Chưa đủ event đã hoàn tất +5m.</td></tr>
+            ) : groups.map((group) => (
+              <tr key={group.key}>
+                <td>{group.key}{group.smallSample && <span className="move-small-sample">MẪU NHỎ</span>}</td>
+                <td>{group.n}</td>
+                <td>{group.dataCompleteRate}%</td>
+                <td>{formatBps(group.medianReturnBps)}</td>
+                <td>{formatBps(group.medianMfeBps)} / {formatBps(group.medianMaeBps)}</td>
+                <td>{group.continuationRate == null ? 'N/A' : `${group.continuationRate}% / ${group.reversionRate}%`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function MoveTrackerPanel() {
   const [trackerState, setTrackerState] = useState({
-    status: 'IDLE',
-    activeMove: null,
-    pendingRecoveries: [],
-    moveHistory: [],
-    health: {},
-    thresholdUsd: null,
-    settings: {
-      mode: MOVE_CONFIG.MODE_ATR,
-      atrMult: MOVE_CONFIG.DEFAULT_ATR_MULT,
-      fixedUsd: MOVE_CONFIG.DEFAULT_FIXED_USD,
-      enabled: true,
-    },
+    status: 'IDLE', activeMove: null, pendingRecoveries: [], moveHistory: [], health: {}, thresholdUsd: null,
+    atrState: { value: null, status: 'UNAVAILABLE' }, researchStats: null,
+    settings: { mode: MOVE_CONFIG.MODE_ATR, atrMult: MOVE_CONFIG.DEFAULT_ATR_MULT, fixedUsd: MOVE_CONFIG.DEFAULT_FIXED_USD, enabled: true },
   });
-
   const [expandedMoveId, setExpandedMoveId] = useState(null);
-  const [currentAtr, setCurrentAtr] = useState(getCurrentATR());
   const [historyDirection, setHistoryDirection] = useState('ALL');
-  const [historyVerdict, setHistoryVerdict] = useState('ALL');
+  const [historyFlow, setHistoryFlow] = useState('ALL');
   const [nowTick, setNowTick] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = subscribeMoveTracker((state) => {
-      setTrackerState(state);
-      setCurrentAtr(getCurrentATR());
-    });
-    return unsubscribe;
-  }, []);
-
+  useEffect(() => subscribeMoveTracker(setTrackerState), []);
   useEffect(() => {
     const timer = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const {
-    status,
-    activeMove,
-    pendingRecoveries = [],
-    moveHistory,
-    settings,
-    health = {},
-    thresholdUsd,
-  } = trackerState;
+  const { status, activeMove, pendingRecoveries = [], moveHistory = [], settings, health = {}, thresholdUsd, atrState = {}, researchStats } = trackerState;
   const pendingMove = pendingRecoveries[0] || null;
   const displayMove = activeMove || pendingMove || moveHistory[0] || null;
-  const displayPhase = activeMove ? 'TRACKING' : pendingMove ? 'RECOVERY' : displayMove ? 'CLASSIFIED' : 'LISTENING';
-  const displayNow = nowTick || pendingMove?.endTime || activeMove?.triggerTime || 0;
-  const recoveryRemaining = pendingMove
-    ? Math.max(0, Math.ceil((pendingMove.recoveryEndsAt - displayNow) / 1000))
-    : 0;
-  const futuresAge = health.futuresLastTradeAt && nowTick ? nowTick - health.futuresLastTradeAt : Infinity;
-  const spotAge = health.spotLastTradeAt && nowTick ? nowTick - health.spotLastTradeAt : Infinity;
-  const connectionState = futuresAge < 10_000 && spotAge < 10_000
-    ? 'LIVE'
-    : futuresAge === Infinity && spotAge === Infinity
-      ? 'WARMING'
-      : 'DATA GAP';
-  const filteredHistory = useMemo(() => moveHistory.filter((move) => {
-    const directionMatch = historyDirection === 'ALL' || move.direction === historyDirection;
-    const verdictMatch = historyVerdict === 'ALL' || move.verdict === historyVerdict;
-    return directionMatch && verdictMatch;
-  }), [moveHistory, historyDirection, historyVerdict]);
+  const recoveryRemaining = pendingMove ? (nowTick ? Math.max(0, Math.ceil((pendingMove.recoveryEndsAt - nowTick) / 1000)) : 60) : 0;
+  const futuresAge = health.futuresLastTradeAt ? nowTick - health.futuresLastTradeAt : Infinity;
+  const spotAge = health.spotLastTradeAt ? nowTick - health.spotLastTradeAt : Infinity;
+  const connectionState = futuresAge < 10_000 && spotAge < 10_000 ? 'LIVE' : futuresAge === Infinity && spotAge === Infinity ? 'WARMING' : 'DATA GAP';
+  const filteredHistory = useMemo(() => moveHistory.filter((move) =>
+    (historyDirection === 'ALL' || move.direction === historyDirection) &&
+    (historyFlow === 'ALL' || move.flowLabel === historyFlow)
+  ), [moveHistory, historyDirection, historyFlow]);
 
   const statusBadge = useMemo(() => {
     if (!settings.enabled) return { label: 'ĐÃ TẠM DỪNG', cls: 'status-tag--idle' };
     if (status === 'TRACKING') return { label: 'ĐANG TRACKING', cls: 'status-tag--tracking' };
-    if (pendingMove) return { label: `RECOVERY ${recoveryRemaining}s`, cls: 'status-tag--recovery' };
-    return { label: 'ĐANG CHỜ TÍN HIỆU', cls: 'status-tag--idle' };
+    if (pendingMove) return { label: `POST-EVENT ${recoveryRemaining}s`, cls: 'status-tag--recovery' };
+    return { label: 'ĐANG CHỜ EVENT', cls: 'status-tag--idle' };
   }, [status, settings.enabled, pendingMove, recoveryRemaining]);
 
-  const futuresCvd = displayMove
-    ? displayMove.cvdDelta ?? ((displayMove.takerBuyVol || 0) - (displayMove.takerSellVol || 0))
-    : 0;
-  const spotCvd = displayMove?.spotCvdDelta ?? (
-    displayMove?.spotTradeCount > 0
-      ? (displayMove.spotTakerBuyVol || 0) - (displayMove.spotTakerSellVol || 0)
-      : null
-  );
-  const movePct = displayMove
-    ? displayMove.pctChange ?? (((displayMove.endPrice - displayMove.startPrice) / displayMove.startPrice) * 100)
-    : 0;
-  const durationSec = displayMove
-    ? displayMove.durationSec ?? Math.max(0, Math.round(((displayMove.endTime || displayNow) - displayMove.startTime) / 1000))
-    : 0;
+  const trigger = displayMove?.triggerSnapshot;
+  const end = displayMove?.endSnapshot;
+  const currentPrice = displayMove?.endPrice ?? displayMove?.triggerPrice;
+  const triggerMovePct = displayMove ? ((displayMove.triggerPrice - displayMove.startPrice) / displayMove.startPrice) * 100 : 0;
+  const atrText = atrState.value == null ? 'N/A' : `$${Number(atrState.value).toFixed(0)}`;
+  const thresholdText = Number.isFinite(thresholdUsd) ? `$${Math.round(thresholdUsd)}` : 'WAITING';
+
+  const handleExport = async (format) => {
+    setExporting(true);
+    try { await downloadMoveResearch(format); } finally { setExporting(false); }
+  };
 
   return (
     <section className="hft-panel glass-panel move-tracker-panel" aria-label="BTC move tracker">
       <header className="hft-panel-header move-tracker-header">
         <div className="move-heading-block">
-          <div className="hft-panel-title font-mono">
-            <span className="hft-icon">↕</span> MOVE TRACKER
-          </div>
+          <div className="hft-panel-title font-mono"><span className="hft-icon">↕</span> MOVE TRACKER</div>
           <div className="move-source-line font-mono">
             <span>BINANCE BTCUSDT</span>
             <span className={`move-health move-health--${connectionState.toLowerCase().replace(' ', '-')}`}>{connectionState}</span>
-            <span>FUTURES DETECTION · SPOT CONFIRMATION</span>
+            <span>CHAMPION PRICE DETECTOR · SHADOW FLOW RESEARCH</span>
           </div>
         </div>
         <div className="move-header-actions">
           <span className={`move-status-badge ${statusBadge.cls}`}>{statusBadge.label}</span>
-          <button
-            type="button"
-            className={`move-enable-btn ${settings.enabled ? 'is-on' : ''}`}
-            onClick={() => updateMoveTrackerSettings({ enabled: !settings.enabled })}
-            aria-pressed={settings.enabled}
-          >
-            {settings.enabled ? 'ON' : 'OFF'}
-          </button>
+          <button type="button" className={`move-enable-btn ${settings.enabled ? 'is-on' : ''}`} onClick={() => updateMoveTrackerSettings({ enabled: !settings.enabled })} aria-pressed={settings.enabled}>{settings.enabled ? 'ON' : 'OFF'}</button>
           <ModuleMenu moduleId="hft_move_tracker" />
         </div>
       </header>
 
       <div className="move-controls font-mono">
-        <label className="move-control-field">
-          <span>Detection</span>
-          <select
-            className="move-select"
-            value={settings.mode}
-            onChange={(e) => updateMoveTrackerSettings({ mode: e.target.value })}
-          >
-            <option value={MOVE_CONFIG.MODE_ATR}>ATR Dynamic (5m)</option>
-            <option value={MOVE_CONFIG.MODE_FIXED}>Fixed USD</option>
-          </select>
-        </label>
-          {settings.mode === MOVE_CONFIG.MODE_ATR ? (
-          <label className="move-control-field">
-            <span>Sensitivity</span>
-            <select
-              className="move-select"
-              value={settings.atrMult}
-              onChange={(e) => updateMoveTrackerSettings({ atrMult: Number(e.target.value) })}
-            >
-              <option value={1.0}>1.0 × ATR (${(currentAtr * 1.0).toFixed(0)})</option>
-              <option value={1.5}>1.5 × ATR (${(currentAtr * 1.5).toFixed(0)})</option>
-              <option value={2.0}>2.0 × ATR (${(currentAtr * 2.0).toFixed(0)})</option>
-              <option value={3.0}>3.0 × ATR (${(currentAtr * 3.0).toFixed(0)})</option>
-            </select>
-          </label>
-          ) : (
-          <label className="move-control-field">
-            <span>Threshold</span>
-            <select
-              className="move-select"
-              value={settings.fixedUsd}
-              onChange={(e) => updateMoveTrackerSettings({ fixedUsd: Number(e.target.value) })}
-            >
-              <option value={300}>≥ $300</option>
-              <option value={500}>≥ $500</option>
-              <option value={1000}>≥ $1,000</option>
-              <option value={1500}>≥ $1,500</option>
-            </select>
-          </label>
-          )}
-        <span className="move-atr-info">ATR(14) ${currentAtr.toFixed(0)} · active threshold ≈ ${Math.round(thresholdUsd || 0)}</span>
+        <label className="move-control-field"><span>Champion detector</span><select className="move-select" value={settings.mode} onChange={(event) => updateMoveTrackerSettings({ mode: event.target.value })}><option value={MOVE_CONFIG.MODE_ATR}>Futures ATR (closed 5m)</option><option value={MOVE_CONFIG.MODE_FIXED}>Fixed USD</option></select></label>
+        {settings.mode === MOVE_CONFIG.MODE_ATR ? (
+          <label className="move-control-field"><span>Sensitivity</span><select className="move-select" value={settings.atrMult} onChange={(event) => updateMoveTrackerSettings({ atrMult: Number(event.target.value) })}>{[1, 1.5, 2, 3].map((value) => <option key={value} value={value}>{value.toFixed(1)} × ATR</option>)}</select></label>
+        ) : (
+          <label className="move-control-field"><span>Threshold</span><select className="move-select" value={settings.fixedUsd} onChange={(event) => updateMoveTrackerSettings({ fixedUsd: Number(event.target.value) })}>{[300, 500, 1000, 1500].map((value) => <option key={value} value={value}>≥ ${value.toLocaleString()}</option>)}</select></label>
+        )}
+        <span className={`move-atr-info move-atr-info--${String(atrState.status).toLowerCase()}`}>Futures ATR(14) {atrText} · 120s threshold {thresholdText} · {atrState.status}</span>
       </div>
 
       {displayMove ? (
-        <div className={`move-card move-card--${displayMove.direction ? displayMove.direction.toLowerCase() : 'pump'}`}>
-          <div className="move-timeline font-mono" aria-label={`Move phase: ${displayPhase}`}>
-            {['DETECTED', 'TRACKING', 'RECOVERY', 'CLASSIFIED'].map((phase, index) => {
-              const activeIndex = displayPhase === 'LISTENING' ? -1 : ['DETECTED', 'TRACKING', 'RECOVERY', 'CLASSIFIED'].indexOf(displayPhase);
+        <div className={`move-card move-card--${displayMove.direction?.toLowerCase() || 'pump'}`}>
+          <div className="move-timeline font-mono">
+            {['TRIGGER', 'TRACKING', 'POST-EVENT', 'OUTCOMES'].map((phase, index) => {
+              const activeIndex = activeMove ? 1 : pendingMove ? 2 : displayMove.forwardOutcomes?.['900'] ? 3 : 2;
               return <span key={phase} className={index <= activeIndex ? 'is-complete' : ''}>{phase}</span>;
             })}
           </div>
           <div className="move-card-header">
             <div className="move-main-title">
-              <span className={`move-dir-tag move-dir-tag--${displayMove.direction ? displayMove.direction.toLowerCase() : 'pump'}`}>
-                {displayMove.direction === 'PUMP' ? '▲ PUMP' : '▼ DUMP'}
-              </span>
-              <span className="move-price-delta font-mono">
-                {displayMove.direction === 'PUMP' ? '+' : ''}${Math.round(displayMove.endPrice - displayMove.startPrice).toLocaleString()} ({movePct > 0 ? '+' : ''}{Number(movePct).toFixed(2)}%)
-              </span>
+              <span className={`move-dir-tag move-dir-tag--${displayMove.direction?.toLowerCase()}`}>{displayMove.direction === 'PUMP' ? '▲ PUMP' : '▼ DUMP'}</span>
+              <span className="move-price-delta font-mono">Trigger {displayMove.direction === 'PUMP' ? '+' : '-'}${Math.round(Math.abs(displayMove.triggerPrice - displayMove.startPrice)).toLocaleString()} ({triggerMovePct > 0 ? '+' : ''}{triggerMovePct.toFixed(2)}%) · {displayMove.detectionWindowSec}s</span>
             </div>
-
-            {displayMove.verdictLabel && (
-              <div className="move-verdict-badge" style={{ backgroundColor: `${displayMove.verdictColor}20`, borderColor: displayMove.verdictColor, color: displayMove.verdictColor }}>
-                <span className="verdict-icon">{displayMove.verdictIcon}</span>
-                <span className="verdict-label font-mono">{displayMove.verdictLabel}{displayMove.confidenceScore != null ? ` · ${displayMove.confidenceScore}%` : ''}</span>
-              </div>
-            )}
+            <div className="move-research-badges font-mono">
+              <span className={`move-tier move-tier--${String(displayMove.qualityTier).toLowerCase()}`}>{displayMove.qualityTier}</span>
+              <span className="move-flow-label">{displayMove.flowLabel}</span>
+              {displayMove.outcomeLabel !== 'UNRESOLVED' && <span className="move-outcome-label">{OUTCOME_LABELS[displayMove.outcomeLabel]}</span>}
+            </div>
           </div>
 
-          {pendingMove && (
-            <div className="move-recovery-progress" aria-label={`${recoveryRemaining} seconds remaining`}>
-              <span style={{ width: `${((60 - recoveryRemaining) / 60) * 100}%` }} />
-            </div>
-          )}
+          {pendingMove && <div className="move-recovery-progress" aria-label={`${recoveryRemaining} seconds remaining`}><span style={{ width: `${((60 - recoveryRemaining) / 60) * 100}%` }} /></div>}
 
-          {displayMove.verdictReason && (
-            <div className="move-verdict-reason font-mono">
-              <strong>Evidence-based read:</strong> {displayMove.verdictReason}
-            </div>
-          )}
-
+          <div className="move-snapshot-note font-mono"><strong>TRIGGER SNAPSHOT</strong> — dữ liệu bên dưới được đóng băng tại lúc alert; outcome hiển thị riêng sau khi đủ horizon.</div>
           <div className="move-primary-metrics font-mono">
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">PRICE PATH</span>
-              <span className="move-metric-val">${displayMove.startPrice?.toLocaleString()} → ${displayMove.endPrice?.toLocaleString()}</span>
-            </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">DURATION</span>
-              <span className="move-metric-val">{durationSec}s</span>
-            </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">FUTURES CVD</span>
-              <span className={`move-metric-val ${futuresCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>{futuresCvd >= 0 ? '+' : ''}${(futuresCvd / 1e6).toFixed(2)}M</span>
-            </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">SPOT CVD</span>
-              <span className={`move-metric-val ${spotCvd == null ? '' : spotCvd >= 0 ? 'text-emerald' : 'text-rose'}`}>{spotCvd == null ? 'N/A' : `${spotCvd >= 0 ? '+' : ''}$${(spotCvd / 1e6).toFixed(2)}M`}</span>
-            </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">RECOVERY 60S</span>
-              <span className="move-metric-val highlight">{displayMove.recoveryPct != null ? `${displayMove.recoveryPct}%` : pendingMove ? `${recoveryRemaining}s left` : displayMove.recoveryStatus === 'DATA_GAP' ? 'N/A · data gap' : 'Pending'}</span>
-            </div>
+            <div className="move-metric-item"><span className="move-metric-lbl">PRICE AT TRIGGER / NOW</span><span className="move-metric-val">${displayMove.triggerPrice?.toLocaleString()} / ${currentPrice?.toLocaleString()}</span></div>
+            <div className="move-metric-item"><span className="move-metric-lbl">FUTURES CVD @ TRIGGER</span><span className={`move-metric-val ${(trigger?.futures?.cvd || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>{fmtUsd(trigger?.futures?.cvd)}</span></div>
+            <div className="move-metric-item"><span className="move-metric-lbl">SPOT CVD @ TRIGGER</span><span className={`move-metric-val ${(trigger?.spot?.cvd || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>{trigger?.spot?.cvd == null ? 'N/A' : fmtUsd(trigger.spot.cvd)}</span></div>
+            <div className="move-metric-item"><span className="move-metric-lbl">PARTICIPATION</span><span className="move-metric-val">{trigger?.participationPercentile == null ? 'WARMING' : `P${trigger.participationPercentile}`}</span></div>
+            <div className="move-metric-item"><span className="move-metric-lbl">+5M OUTCOME</span><span className="move-metric-val highlight">{formatBps(displayMove.forwardOutcomes?.['300']?.continuationBps)} · {OUTCOME_LABELS[displayMove.forwardOutcomes?.['300']?.outcomeLabel] || 'Pending'}</span></div>
           </div>
 
           <details className="move-detail-disclosure">
-            <summary>Execution details and evidence</summary>
+            <summary>Decision-time vs post-event evidence</summary>
             <div className="move-metrics-grid font-mono">
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">FUTURES VOLUME / TRADES</span>
-              <span className="move-metric-val">${((displayMove.totalVolume || 0) / 1e6).toFixed(2)}M · {(displayMove.tradeCount || 0).toLocaleString()}</span>
+              <div className="move-metric-item"><span className="move-metric-lbl">TRIGGER FUTURES VOLUME</span><span className="move-metric-val">{fmtUsd(trigger?.futures?.totalVolume)} · {trigger?.futures?.tradeCount?.toLocaleString() || 0} trades</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">END FUTURES VOLUME</span><span className="move-metric-val">{end ? `${fmtUsd(end.futures?.totalVolume)} · ${end.futures?.tradeCount?.toLocaleString() || 0} trades` : 'Pending'}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">DATA QUALITY</span><span className="move-metric-val">{displayMove.dataQuality?.complete ? 'COMPLETE' : 'INCOMPLETE'} · baseline {displayMove.dataQuality?.baselineSampleCount ?? 0}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">OI / FUNDING / OBI</span><span className="move-metric-val">{trigger?.externalContext?.status || 'STALE'} · {trigger?.externalContext?.openInterest ?? 'N/A'} / {trigger?.externalContext?.fundingRate ?? 'N/A'} / {trigger?.externalContext?.obiPercent ?? 'N/A'}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">CONTEXT 5M / 15M / 1H</span><span className="move-metric-val">{['5m', '15m', '1h'].map((tf) => `${tf} ${displayMove.timeframeContext?.[tf]?.structure || 'N/A'}`).join(' · ')}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">FORWARD PATH</span><span className="move-metric-val">{[15, 30, 60, 300, 900].map((h) => `${h < 300 ? `${h}s` : `${h / 60}m`} ${formatBps(displayMove.forwardOutcomes?.[String(h)]?.continuationBps)}`).join(' · ')}</span></div>
             </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">FUTURES TAKER BUY</span>
-              <span className="move-metric-val">{displayMove.takerBuyRatio ?? Math.round(((displayMove.takerBuyVol || 0) / Math.max(1, displayMove.totalVolume || 0)) * 100)}%</span>
-            </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">SPOT VOLUME / TRADES</span>
-              <span className="move-metric-val">${((displayMove.spotTotalVolume || 0) / 1e6).toFixed(2)}M · {(displayMove.spotTradeCount || 0).toLocaleString()}</span>
-            </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">LARGE TRADES ≥ $100K</span>
-              <span className="move-metric-val">{displayMove.largeTradesCount || 0} · ${((displayMove.largeTradesVol || 0) / 1e6).toFixed(2)}M ({displayMove.largeTradeRatio || 0}%)</span>
-            </div>
-            <div className="move-metric-item">
-              <span className="move-metric-lbl">EXTREMES / MAX TRADE</span>
-              <span className="move-metric-val">${displayMove.peakPrice?.toLocaleString()} / ${displayMove.troughPrice?.toLocaleString()} · ${((displayMove.maxSingleTradeUsd || 0) / 1e3).toFixed(0)}K {displayMove.maxSingleTradeSide || ''}</span>
-            </div>
-            </div>
-            {displayMove.evidence?.length > 0 && (
-              <ul className="move-evidence-list font-mono">
-                {displayMove.evidence.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            )}
+            <div className="move-window-scores font-mono">{displayMove.detectionScores?.map((score) => <span key={score.windowSec}>{score.windowSec}s: {score.available ? `${Number(score.score).toFixed(2)}×` : 'N/A'}</span>)}</div>
           </details>
-          </div>
-      ) : (
-        <div className="move-empty-state font-mono">
-          <strong>{connectionState === 'LIVE' ? 'Listening to executed trades' : 'Waiting for both market streams'}</strong>
-          <span>Futures detects the move; Spot confirms or challenges it. Current rule: {settings.mode === 'ATR' ? `${settings.atrMult}× ATR across 15s–120s windows` : `$${settings.fixedUsd} across 15s–120s windows`}.</span>
         </div>
+      ) : (
+        <div className="move-empty-state font-mono"><strong>{connectionState === 'LIVE' && atrState.status === 'LIVE' ? 'Listening to executed trades' : 'Warming decision-time inputs'}</strong><span>Champion vẫn ghi mọi price event. Participation và Spot/Futures flow chỉ được gắn nhãn shadow, chưa lọc alert.</span></div>
       )}
+
+      <div className="move-research-section">
+        <div className="move-history-head">
+          <div><div className="move-history-title font-mono">90-DAY RESEARCH · {researchStats?.overall?.n ?? moveHistory.length} EVENTS</div><div className="move-research-disclaimer font-mono">Descriptive only · chưa phải edge giao dịch · slice N&lt;30 được đánh dấu mẫu nhỏ</div></div>
+          <div className="move-history-filters">
+            <button type="button" className="move-export-btn" disabled={exporting} onClick={() => handleExport('csv')}>CSV</button>
+            <button type="button" className="move-export-btn" disabled={exporting} onClick={() => handleExport('json')}>JSON</button>
+          </div>
+        </div>
+        <MoveStatsTable title="DETECTION HORIZON · +5M OUTCOME" groups={researchStats?.detectionHorizons} />
+        <MoveStatsTable title="MARKET CONTEXT · 5M / 15M / 1H" groups={researchStats?.timeframeContexts} />
+      </div>
 
       {moveHistory.length > 0 && (
         <div className="move-history-section">
           <div className="move-history-head">
-            <div className="move-history-title font-mono">7-DAY MOVE LOG · {filteredHistory.length}/{moveHistory.length}</div>
+            <div className="move-history-title font-mono">EVENT LOG · {filteredHistory.length}/{moveHistory.length}</div>
             <div className="move-history-filters">
-              <label>
-                <span className="sr-only">Filter by direction</span>
-                <select className="move-select" value={historyDirection} onChange={(event) => setHistoryDirection(event.target.value)}>
-                  <option value="ALL">All directions</option>
-                  <option value="PUMP">Pump</option>
-                  <option value="DUMP">Dump</option>
-                </select>
-              </label>
-              <label>
-                <span className="sr-only">Filter by verdict</span>
-                <select className="move-select" value={historyVerdict} onChange={(event) => setHistoryVerdict(event.target.value)}>
-                  <option value="ALL">All verdicts</option>
-                  <option value="WHALE_PUSH">Large-flow push</option>
-                  <option value="LIQUIDITY_SWEEP">Liquidity sweep</option>
-                  <option value="STOP_HUNT">Stop sweep</option>
-                  <option value="MIXED">Insufficient evidence</option>
-                </select>
-              </label>
+              <select className="move-select" aria-label="Filter move direction" value={historyDirection} onChange={(event) => setHistoryDirection(event.target.value)}><option value="ALL">All directions</option><option value="PUMP">Pump</option><option value="DUMP">Dump</option></select>
+              <select className="move-select" aria-label="Filter flow label" value={historyFlow} onChange={(event) => setHistoryFlow(event.target.value)}><option value="ALL">All flow labels</option><option value="SPOT_CONFIRMED">Spot confirmed</option><option value="FUTURES_LED">Futures led</option><option value="SPOT_LED">Spot led</option><option value="MIXED_FLOW">Mixed flow</option><option value="DATA_INCOMPLETE">Data incomplete</option></select>
             </div>
           </div>
-          <div className="move-table-container">
-            <table className="move-table font-mono">
-              <thead>
-                <tr>
-                  <th>Time</th><th>Move</th><th>Change</th><th>Futures / Spot CVD</th><th>Recovery</th><th>Classification</th><th><span className="sr-only">Details</span></th>
+          <div className="move-table-container"><table className="move-table font-mono"><thead><tr><th>Trigger</th><th>Move</th><th>Window</th><th>Shadow tier / flow</th><th>+5m</th><th>Outcome</th><th></th></tr></thead><tbody>
+            {filteredHistory.map((move) => (
+              <React.Fragment key={move.id}>
+                <tr className="move-tr">
+                  <td>{new Date(move.triggerTime).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+                  <td><span className={`move-badge move-badge--${move.direction?.toLowerCase()}`}>{move.direction}</span></td>
+                  <td>{move.detectionWindowSec ?? 'N/A'}s</td>
+                  <td><span className={`move-tier move-tier--${String(move.qualityTier).toLowerCase()}`}>{move.qualityTier}</span> · {move.flowLabel}</td>
+                  <td>{formatBps(move.forwardOutcomes?.['300']?.continuationBps)}</td>
+                  <td>{OUTCOME_LABELS[move.outcomeLabel] || move.outcomeLabel}</td>
+                  <td><button type="button" className="move-row-toggle" onClick={() => setExpandedMoveId(expandedMoveId === move.id ? null : move.id)} aria-expanded={expandedMoveId === move.id}>{expandedMoveId === move.id ? '−' : '+'}</button></td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredHistory.map((m) => (
-                  <React.Fragment key={m.id || m.startTime}>
-                  <tr className="move-tr">
-                    <td>{new Date(m.startTime).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
-                    <td>
-                      <span className={`move-badge move-badge--${m.direction?.toLowerCase() || 'pump'}`}>{m.direction}</span>
-                    </td>
-                    <td className={m.direction === 'PUMP' ? 'text-emerald' : 'text-rose'}>
-                      {m.direction === 'PUMP' ? '+' : ''}${Math.round(m.endPrice - m.startPrice)} ({m.pctChange}%)
-                    </td>
-                    <td><span className={m.cvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{m.cvdDelta >= 0 ? '+' : ''}${(m.cvdDelta / 1e6).toFixed(1)}M</span> / {m.spotCvdDelta == null ? <span>N/A</span> : <span className={m.spotCvdDelta >= 0 ? 'text-emerald' : 'text-rose'}>{m.spotCvdDelta >= 0 ? '+' : ''}${(m.spotCvdDelta / 1e6).toFixed(1)}M</span>}</td>
-                    <td>{m.recoveryPct == null ? 'N/A' : `${m.recoveryPct}%`}</td>
-                    <td><span className="verdict-inline" style={{ color: m.verdictColor }}>{m.verdictIcon} {m.verdictLabel}{m.confidenceScore != null ? ` · ${m.confidenceScore}%` : ''}</span></td>
-                    <td><button type="button" className="move-row-toggle" onClick={() => setExpandedMoveId(expandedMoveId === m.id ? null : m.id)} aria-expanded={expandedMoveId === m.id} aria-label="Toggle move details">{expandedMoveId === m.id ? '−' : '+'}</button></td>
-                  </tr>
-                  {expandedMoveId === m.id && (
-                    <tr className="move-detail-row"><td colSpan="7"><div><span>Futures volume ${(m.totalVolume / 1e6).toFixed(2)}M</span><span>Spot volume ${((m.spotTotalVolume || 0) / 1e6).toFixed(2)}M</span><span>Large trades {m.largeTradesCount} / ${((m.largeTradesVol || 0) / 1e6).toFixed(2)}M</span><span>Flow context {m.flowContext || 'N/A'}</span></div><p>{m.verdictReason}</p></td></tr>
-                  )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                {expandedMoveId === move.id && <tr className="move-detail-row"><td colSpan="7"><div><span>Trigger {fmtUsd(move.triggerSnapshot?.futures?.totalVolume)} Futures</span><span>End {fmtUsd(move.endSnapshot?.futures?.totalVolume)} Futures</span><span>Recovery {move.recovery?.recoveryPct == null ? 'N/A' : `${move.recovery.recoveryPct}%`}</span><span>Status {move.status}</span></div><p>Snapshot trigger bất biến. Mọi chỉ số end/recovery/outcome là dữ liệu hậu sự kiện và không được dùng để tái tạo alert.</p></td></tr>}
+              </React.Fragment>
+            ))}
+          </tbody></table></div>
         </div>
       )}
     </section>
@@ -1615,12 +1507,12 @@ export default function HftRadarTab({
   cvdHistory24h, cvdHistory7d, cvdHistory30d,
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
   cvdStatus, livePrice, whaleTrades, theme, volNodes,
-  data, liveVolume,
+  data, liveVolume, fundingRate,
 }) {
   const { isModuleHidden } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [whaleGap, setWhaleGap] = useState(() => {
     const saved = localStorage.getItem('hft_whale_gap');
     return saved ? Number(saved) : 100;
@@ -1678,6 +1570,16 @@ export default function HftRadarTab({
       if (whaleIntervalRef.current) clearInterval(whaleIntervalRef.current);
     };
   }, [depthLimit]);
+
+  useEffect(() => {
+    updateMoveTrackerContext({
+      openInterest: data?.openInterest ?? null,
+      fundingRate: fundingRate ?? data?.fundingRate ?? null,
+      obiPercent: orderBook?.obiPercent ?? null,
+      orderBookSignal: orderBook?.signal ?? null,
+      updatedAt: Date.now(),
+    });
+  }, [data?.openInterest, data?.fundingRate, fundingRate, orderBook?.obiPercent, orderBook?.signal]);
 
   return (
     <div className="hft-radar-layout">
