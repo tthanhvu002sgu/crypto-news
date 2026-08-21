@@ -584,6 +584,22 @@ function AppContent() {
     }
   };
 
+  // Close settings modal on Escape key & lock background scroll
+  useEffect(() => {
+    if (!showSettings) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowSettings(false);
+      }
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showSettings]);
+
   // ── Sidebar Accordion State ────────────────────────────────────────────────
   const [accordionOpen, setAccordionOpen] = useState(() => {
     try {
@@ -1762,215 +1778,223 @@ function AppContent() {
 
 
       {showSettings && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="glass-panel" style={{ width: '420px', padding: '24px', background: 'var(--bg-panel-solid)', display: 'flex', flexDirection: 'column', gap: '18px', borderRadius: 'var(--card-radius)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 className="font-mono" style={{ margin: 0, fontSize: '0.8rem', background: 'var(--gradient-aurora)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>⚙️ CÀI ĐẶT API KEYS</h3>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', cursor: 'pointer', padding: '4px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}>
-                <X size={14} />
-              </button>
-            </div>
-            
-            <p className="font-mono text-slate-400" style={{ fontSize: '0.62rem', margin: 0, lineHeight: 1.4 }}>
-              Nhập các khóa API cá nhân để Terminal đồng bộ trực tiếp dữ liệu vĩ mô & chứng khoán thực tế từ nguồn FRED & Alpha Vantage.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>FRED API KEY</label>
-              <input
-                type="text"
-                placeholder="Nhập FRED API key..."
-                value={apiKeys.fred}
-                onChange={(e) => setApiKeys(p => ({ ...p, fred: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
-              />
-              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
-                Lấy miễn phí tại: <a href="https://fred.stlouisfed.org/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>fred.stlouisfed.org</a>
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>ALPHA VANTAGE API KEY</label>
-              <input
-                type="text"
-                placeholder="Nhập Alpha Vantage key..."
-                value={apiKeys.alphaVantage}
-                onChange={(e) => setApiKeys(p => ({ ...p, alphaVantage: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
-              />
-              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
-                Lấy miễn phí tại: <a href="https://www.alphavantage.co/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>alphavantage.co</a>
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem' }}>OPENROUTER API KEY (TOP FREE MODELS)</label>
-              <input
-                type="password"
-                placeholder="sk-or-v1-..."
-                value={apiKeys.openrouter || ''}
-                onChange={(e) => setApiKeys(p => ({ ...p, openrouter: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
-              />
-              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
-                Lấy miễn phí tại: <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>openrouter.ai/keys</a>
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <FileSpreadsheet size={12} style={{ color: '#38bdf8' }} />
-                GOOGLE SHEETS WEBHOOK URL (SYNC 3 PHIÊN Á/ÂU/MỸ)
-              </label>
-              <input
-                type="text"
-                placeholder="https://script.google.com/macros/s/.../exec"
-                value={apiKeys.googleSheetsWebhook || ''}
-                onChange={(e) => setApiKeys(p => ({ ...p, googleSheetsWebhook: e.target.value }))}
-                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
-              />
-              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
-                URL Web App Google Apps Script để nhận dữ liệu ghi đè định kỳ cho AI đọc.
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+          <div className="glass-panel settings-modal-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-modal-header">
+              <h3 className="font-mono" style={{ margin: 0, fontSize: '0.8rem', background: 'var(--gradient-aurora)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚙️</span> CÀI ĐẶT & TÙY CHỈNH HỆ THỐNG
+              </h3>
               <button
-                className="btn-sync font-mono"
-                style={{ flex: 1, justifyContent: 'center', height: '34px', cursor: 'pointer' }}
-                onClick={() => {
-                  localStorage.setItem('app-api-keys', JSON.stringify(apiKeys));
-                  setShowSettings(false);
-                  addLog('Đã lưu cấu hình API Keys thành công. Đang tải lại dữ liệu...', 'ok');
-                  syncData(true, ['hot', 'warm', 'cold']);
-                }}
+                type="button"
+                className="settings-modal-close-btn"
+                onClick={() => setShowSettings(false)}
+                title="Đóng cài đặt (ESC)"
               >
-                LƯU & ĐỒNG BỘ
+                <X size={15} />
               </button>
             </div>
 
-            {/* Tab Reordering Controls */}
-            <div style={{ borderTop: '1px solid var(--border-panel)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 className="font-mono text-slate-300" style={{ margin: 0, fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Layers size={13} className="text-emerald" /> SẮP XẾP VỊ TRÍ THỨ TỰ TABS MENU
-                </h4>
+            <div className="settings-modal-body font-mono">
+              <p className="text-slate-400" style={{ fontSize: '0.62rem', margin: 0, lineHeight: 1.45 }}>
+                Nhập các khóa API cá nhân để Terminal đồng bộ trực tiếp dữ liệu vĩ mô & chứng khoán thực tế từ nguồn FRED & Alpha Vantage.
+              </p>
+
+              <div className="settings-modal-input-group">
+                <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>FRED API KEY</label>
+                <input
+                  type="text"
+                  className="settings-modal-input"
+                  placeholder="Nhập FRED API key..."
+                  value={apiKeys.fred}
+                  onChange={(e) => setApiKeys(p => ({ ...p, fred: e.target.value }))}
+                />
+                <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
+                  Lấy miễn phí tại: <a href="https://fred.stlouisfed.org/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>fred.stlouisfed.org</a>
+                </span>
+              </div>
+
+              <div className="settings-modal-input-group">
+                <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>ALPHA VANTAGE API KEY</label>
+                <input
+                  type="text"
+                  className="settings-modal-input"
+                  placeholder="Nhập Alpha Vantage key..."
+                  value={apiKeys.alphaVantage}
+                  onChange={(e) => setApiKeys(p => ({ ...p, alphaVantage: e.target.value }))}
+                />
+                <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
+                  Lấy miễn phí tại: <a href="https://www.alphavantage.co/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>alphavantage.co</a>
+                </span>
+              </div>
+
+              <div className="settings-modal-input-group">
+                <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>OPENROUTER API KEY (TOP FREE MODELS)</label>
+                <input
+                  type="password"
+                  className="settings-modal-input"
+                  placeholder="sk-or-v1-..."
+                  value={apiKeys.openrouter || ''}
+                  onChange={(e) => setApiKeys(p => ({ ...p, openrouter: e.target.value }))}
+                />
+                <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
+                  Lấy miễn phí tại: <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>openrouter.ai/keys</a>
+                </span>
+              </div>
+
+              <div className="settings-modal-input-group">
+                <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FileSpreadsheet size={12} style={{ color: '#38bdf8' }} />
+                  GOOGLE SHEETS WEBHOOK URL (SYNC 3 PHIÊN Á/ÂU/MỸ)
+                </label>
+                <input
+                  type="text"
+                  className="settings-modal-input"
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  value={apiKeys.googleSheetsWebhook || ''}
+                  onChange={(e) => setApiKeys(p => ({ ...p, googleSheetsWebhook: e.target.value }))}
+                />
+                <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
+                  URL Web App Google Apps Script để nhận dữ liệu ghi đè định kỳ cho AI đọc.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
                 <button
-                  type="button"
-                  onClick={resetTabOrder}
-                  className="font-mono text-slate-400"
-                  style={{ background: 'transparent', border: '1px solid var(--border-panel)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer' }}
+                  className="btn-sync font-mono"
+                  style={{ flex: 1, justifyContent: 'center', height: '34px', cursor: 'pointer' }}
+                  onClick={() => {
+                    localStorage.setItem('app-api-keys', JSON.stringify(apiKeys));
+                    setShowSettings(false);
+                    addLog('Đã lưu cấu hình API Keys thành công. Đang tải lại dữ liệu...', 'ok');
+                    syncData(true, ['hot', 'warm', 'cold']);
+                  }}
                 >
-                  Reset Mặc Định
+                  LƯU & ĐỒNG BỘ
                 </button>
               </div>
-              <p className="font-mono text-slate-400" style={{ fontSize: '0.55rem', margin: 0 }}>
-                Bấm ◄ / ► hoặc kéo thả trực tiếp trên thanh menu chính để thay đổi vị trí các tab.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
-                {tabOrder.map((id, index) => {
-                  const tabMeta = NAV_TABS_CONFIG.find(t => t.id === id);
-                  if (!tabMeta) return null;
-                  return (
-                    <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
-                      <span className="font-mono text-contrast" style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {tabMeta.icon} {tabMeta.label}
-                      </span>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          type="button"
-                          disabled={index === 0}
-                          onClick={() => moveTab(id, 'left')}
-                          className="font-mono"
-                          style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', color: index === 0 ? 'var(--text-slate-600)' : 'var(--text-contrast)', padding: '2px 8px', borderRadius: '4px', cursor: index === 0 ? 'not-allowed' : 'pointer', fontSize: '0.65rem' }}
-                        >
-                          ◄
-                        </button>
-                        <button
-                          type="button"
-                          disabled={index === tabOrder.length - 1}
-                          onClick={() => moveTab(id, 'right')}
-                          className="font-mono"
-                          style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', color: index === tabOrder.length - 1 ? 'var(--text-slate-600)' : 'var(--text-contrast)', padding: '2px 8px', borderRadius: '4px', cursor: index === tabOrder.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.65rem' }}
-                        >
-                          ►
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            <div style={{ borderTop: '1px solid var(--border-panel)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 className="font-mono text-slate-300" style={{ margin: 0, fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <EyeOff size={13} className="text-emerald" /> QUẢN LÝ MODULE ĐÃ ẨN
-                </h4>
-                {hiddenModules.length > 1 && (
+              {/* Tab Reordering Controls */}
+              <div className="settings-modal-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 className="text-slate-300" style={{ margin: 0, fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Layers size={13} className="text-emerald" /> SẮP XẾP VỊ TRÍ THỨ TỰ TABS MENU
+                  </h4>
                   <button
                     type="button"
-                    onClick={showAllModules}
-                    className="font-mono text-emerald"
-                    style={{ background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                    onClick={resetTabOrder}
+                    className="text-slate-400"
+                    style={{ background: 'transparent', border: '1px solid var(--border-panel)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer' }}
                   >
-                    Hiển thị tất cả ({hiddenModules.length})
+                    Reset Mặc Định
                   </button>
-                )}
-              </div>
-              
-              <p className="font-mono text-slate-400" style={{ fontSize: '0.55rem', margin: 0, lineHeight: 1.4 }}>
-                Bật toggle ON để hiển thị lại module đã ẩn (chỉ hiển thị các module đang ẩn để tránh nhiễu).
-              </p>
-
-              {hiddenModules.length === 0 ? (
-                <div className="font-mono text-slate-500" style={{ fontSize: '0.58rem', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px dashed var(--border-panel)', textAlign: 'center' }}>
-                  ✓ Không có module nào đang bị ẩn.
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' }}>
-                  {hiddenModules.map(id => {
-                    const meta = MODULES_CONFIG[id] || { label: id, category: 'Khác' };
+                <p className="text-slate-400" style={{ fontSize: '0.55rem', margin: 0 }}>
+                  Bấm ◄ / ► hoặc kéo thả trực tiếp trên thanh menu chính để thay đổi vị trí các tab.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {tabOrder.map((id, index) => {
+                    const tabMeta = NAV_TABS_CONFIG.find(t => t.id === id);
+                    if (!tabMeta) return null;
                     return (
                       <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span className="font-mono text-contrast" style={{ fontSize: '0.62rem', fontWeight: 600 }}>{meta.label}</span>
-                          <span className="font-mono text-slate-500" style={{ fontSize: '0.48rem' }}>[{meta.category}]</span>
+                        <span className="text-contrast" style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {tabMeta.icon} {tabMeta.label}
+                        </span>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={() => moveTab(id, 'left')}
+                            style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', color: index === 0 ? 'var(--text-slate-600)' : 'var(--text-contrast)', padding: '2px 8px', borderRadius: '4px', cursor: index === 0 ? 'not-allowed' : 'pointer', fontSize: '0.65rem' }}
+                          >
+                            ◄
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === tabOrder.length - 1}
+                            onClick={() => moveTab(id, 'right')}
+                            style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', color: index === tabOrder.length - 1 ? 'var(--text-slate-600)' : 'var(--text-contrast)', padding: '2px 8px', borderRadius: '4px', cursor: index === tabOrder.length - 1 ? 'not-allowed' : 'pointer', fontSize: '0.65rem' }}
+                          >
+                            ►
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => showModule(id)}
-                          title="Bật để hiển thị lại module này"
-                          style={{
-                            width: '36px',
-                            height: '20px',
-                            borderRadius: '10px',
-                            background: 'rgba(255,255,255,0.1)',
-                            border: '1px solid var(--border-panel)',
-                            position: 'relative',
-                            cursor: 'pointer',
-                            transition: 'all 0.25s ease',
-                            padding: 0
-                          }}
-                          className="module-toggle-off"
-                        >
-                          <span style={{
-                            display: 'block',
-                            width: '14px',
-                            height: '14px',
-                            borderRadius: '50%',
-                            background: 'var(--text-slate-400)',
-                            position: 'absolute',
-                            top: '2px',
-                            left: '2px',
-                            transition: 'all 0.25s ease'
-                          }} />
-                        </button>
                       </div>
                     );
                   })}
                 </div>
-              )}
+              </div>
+
+              {/* Hidden Modules Section */}
+              <div className="settings-modal-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 className="text-slate-300" style={{ margin: 0, fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <EyeOff size={13} className="text-emerald" /> QUẢN LÝ MODULE ĐÃ ẨN
+                  </h4>
+                  {hiddenModules.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={showAllModules}
+                      className="text-emerald"
+                      style={{ background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                    >
+                      Hiển thị tất cả ({hiddenModules.length})
+                    </button>
+                  )}
+                </div>
+                
+                <p className="text-slate-400" style={{ fontSize: '0.55rem', margin: 0, lineHeight: 1.4 }}>
+                  Bật toggle ON để hiển thị lại module đã ẩn (chỉ hiển thị các module đang ẩn để tránh nhiễu).
+                </p>
+
+                {hiddenModules.length === 0 ? (
+                  <div className="text-slate-500" style={{ fontSize: '0.58rem', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px dashed var(--border-panel)', textAlign: 'center' }}>
+                    ✓ Không có module nào đang bị ẩn.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {hiddenModules.map(id => {
+                      const meta = MODULES_CONFIG[id] || { label: id, category: 'Khác' };
+                      return (
+                        <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span className="text-contrast" style={{ fontSize: '0.62rem', fontWeight: 600 }}>{meta.label}</span>
+                            <span className="text-slate-500" style={{ fontSize: '0.48rem' }}>[{meta.category}]</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => showModule(id)}
+                            title="Bật để hiển thị lại module này"
+                            style={{
+                              width: '36px',
+                              height: '20px',
+                              borderRadius: '10px',
+                              background: 'rgba(255,255,255,0.1)',
+                              border: '1px solid var(--border-panel)',
+                              position: 'relative',
+                              cursor: 'pointer',
+                              transition: 'all 0.25s ease',
+                              padding: 0
+                            }}
+                            className="module-toggle-off"
+                          >
+                            <span style={{
+                              display: 'block',
+                              width: '14px',
+                              height: '14px',
+                              borderRadius: '50%',
+                              background: 'var(--text-slate-400)',
+                              position: 'absolute',
+                              top: '2px',
+                              left: '2px',
+                              transition: 'all 0.25s ease'
+                            }} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
