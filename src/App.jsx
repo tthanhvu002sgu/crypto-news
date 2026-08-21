@@ -16,8 +16,10 @@ import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
   Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, FileSpreadsheet
 } from 'lucide-react';
+import { calculateMarketBias } from './services/biasEngine';
+import { syncToGoogleSheetsFromBrowser } from './services/googleSheetSync';
 import GlossaryTab from './components/GlossaryTab';
 import HftRadarTab from './components/HftRadarTab';
 import SummaryTab from './components/SummaryTab';
@@ -551,14 +553,36 @@ function AppContent() {
       const saved = localStorage.getItem('app-api-keys');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { fred: '', alphaVantage: '', gemini: '', openrouter: '', ...parsed };
+        return { fred: '', alphaVantage: '', gemini: '', openrouter: '', googleSheetsWebhook: '', ...parsed };
       }
-      return { fred: '', alphaVantage: '', gemini: '', openrouter: '' };
+      return { fred: '', alphaVantage: '', gemini: '', openrouter: '', googleSheetsWebhook: '' };
     } catch {
-      return { fred: '', alphaVantage: '', gemini: '', openrouter: '' };
+      return { fred: '', alphaVantage: '', gemini: '', openrouter: '', googleSheetsWebhook: '' };
     }
   });
   const [showSettings, setShowSettings] = useState(false);
+  const [isSyncingSheet, setIsSyncingSheet] = useState(false);
+
+  const handleSyncGoogleSheet = async () => {
+    const webhookUrl = apiKeys.googleSheetsWebhook;
+    if (!webhookUrl || !webhookUrl.trim()) {
+      setShowSettings(true);
+      addLog('Vui lòng nhập Google Sheets Webhook URL trong cài đặt trước khi đồng bộ.', 'warn');
+      return;
+    }
+    try {
+      setIsSyncingSheet(true);
+      addLog('Đang đồng bộ dữ liệu chỉ số lên Google Sheet...', 'info');
+      const biasData = calculateMarketBias(data, data.etfHistory);
+      const result = await syncToGoogleSheetsFromBrowser(webhookUrl, data, biasData);
+      addLog(`[Google Sheets] Đã gửi đồng bộ phiên ${result.session}! Dữ liệu đang được ghi đè.`, 'ok');
+    } catch (err) {
+      console.error('[Sync Google Sheets]', err);
+      addLog(`[Google Sheets] Lỗi đồng bộ: ${err.message}`, 'error');
+    } finally {
+      setIsSyncingSheet(false);
+    }
+  };
 
   // ── Sidebar Accordion State ────────────────────────────────────────────────
   const [accordionOpen, setAccordionOpen] = useState(() => {
@@ -1210,6 +1234,16 @@ function AppContent() {
               : <React.Fragment><Radio size={10} /> WS OFF</React.Fragment>}
             </div>
           <div className="auto-refresh-badge font-mono" title="HOT 5m · WARM 15m · COLD 60m (TTL cache)">REST ⟳ TIERED</div>
+          <button 
+            className="btn-sync font-mono" 
+            onClick={handleSyncGoogleSheet} 
+            disabled={isSyncingSheet}
+            title="Đồng bộ ngay toàn bộ chỉ số lên Google Sheets"
+            style={{ borderColor: 'rgba(56, 189, 248, 0.4)', color: 'var(--color-sky-400, #38bdf8)' }}
+          >
+            <FileSpreadsheet size={13} className={isSyncingSheet ? 'spinning' : ''} />
+            {isSyncingSheet ? 'SYNC SHEET...' : 'SYNC SHEET'}
+          </button>
           <button className="btn-sync font-mono" onClick={() => syncData(true, ['hot', 'warm', 'cold'])} disabled={isSyncing}>
             <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
             {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
@@ -1780,6 +1814,23 @@ function AppContent() {
               />
               <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
                 Lấy miễn phí tại: <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>openrouter.ai/keys</a>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="font-mono text-slate-400" style={{ fontSize: '0.55rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileSpreadsheet size={12} style={{ color: '#38bdf8' }} />
+                GOOGLE SHEETS WEBHOOK URL (SYNC 3 PHIÊN Á/ÂU/MỸ)
+              </label>
+              <input
+                type="text"
+                placeholder="https://script.google.com/macros/s/.../exec"
+                value={apiKeys.googleSheetsWebhook || ''}
+                onChange={(e) => setApiKeys(p => ({ ...p, googleSheetsWebhook: e.target.value }))}
+                style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-contrast)', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', outline: 'none', transition: 'border-color 0.2s ease' }}
+              />
+              <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem' }}>
+                URL Web App Google Apps Script để nhận dữ liệu ghi đè định kỳ cho AI đọc.
               </span>
             </div>
 

@@ -1,0 +1,33 @@
+name: Sync Crypto Metrics to Google Sheets
+
+on:
+  schedule:
+    # 01:00 UTC = 08:00 AM GMT+7 (Phiên Á / Asia Session)
+    - cron: '0 1 * * *'
+    # 07:00 UTC = 14:00 PM GMT+7 (Phiên Âu / Europe Session)
+    - cron: '0 7 * * *'
+    # 13:00 UTC = 20:00 PM GMT+7 (Phiên Mỹ / US Session)
+    - cron: '0 13 * * *'
+  workflow_dispatch: # Cho phép bấm nút Sync thủ công bất kỳ lúc nào trên GitHub
+
+jobs:
+  sync:
+    name: Aggregate & Overwrite Google Sheets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run Sync Worker
+        env:
+          GOOGLE_SHEET_WEBHOOK_URL: ${{ secrets.GOOGLE_SHEET_WEBHOOK_URL }}
+        run: node scripts/syncGoogleSheet.mjs

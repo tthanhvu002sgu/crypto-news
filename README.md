@@ -17,6 +17,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%**.
 - **BTC SSR Oscillator (Glassnode Z-Score):** Đo lường sức mua Stablecoin so với Vốn hóa BTC chuẩn hóa bằng Z-Score (vị trí so với đường trung bình SMA 200 ngày và độ lệch chuẩn 2σ theo phương pháp Glassnode Oscillator). Tự động xác định vùng Mua/Bán cực đoan (Z < -2 / Z > +2) và đồng bộ nguồn vốn hóa DefiLlama.
 - **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
+- **Google Sheets Auto-Sync 3 Phiên (Á - Âu - Mỹ) & AI Prompt Staging:** Tự động tổng hợp và đồng bộ toàn bộ snapshot thị trường (Market Bias, On-Chain, Phái sinh, ETF, Macro Calendar, và Markdown Summary) lên file Google Sheets công khai thông qua Google Apps Script Webhook. Hoạt động tự động 24/7 theo 3 phiên giao dịch chính bằng GitHub Actions (08:00 Á, 14:00 Âu, 20:00 Mỹ) và hỗ trợ nút "SYNC SHEET" kích hoạt trực tiếp từ trình duyệt, giúp các mô hình AI độc lập dễ dàng truy xuất để phân tích định kỳ.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
 - **Frontend Framework:** React.js (Vite).
@@ -31,13 +32,17 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **WARM** mỗi 15 phút — global mcap, stablecoin, news, equities/yields, CVD 24h/7d, Economic Calendar.
   - **COLD** mỗi 60 phút — FRED macro, on-chain, ETF, COT, Fear&Greed, CVD 30d, daily klines (TTL 2–12h).
   - Nút **SYNC NGAY** / auto 08:00 = full force (bỏ qua cache).
+- **Tự động hóa đồng bộ Google Sheets 3 Phiên:**
+  - **GitHub Actions Worker:** Cron 3 phiên Á (01:00 UTC = 08:00 VN), Âu (07:00 UTC = 14:00 VN), Mỹ (13:00 UTC = 20:00 VN) chạy ngầm serverless hoàn toàn độc lập với web hosting (Vercel).
+  - **Google Apps Script Webhook:** Nhận payload JSON và ghi đè tự động 5 Tab: `OVERVIEW_BIAS`, `DERIVATIVES_FLOW`, `ETF_ONCHAIN`, `MACRO_CALENDAR`, `AI_PROMPT_SUMMARY`.
+  - **Client-side Web Sync:** Cho phép gửi trực tiếp từ browser mà không lo lỗi CORS.
 - **Lưu trữ cục bộ & Persistence Multi-layer:**
   - **0ms Synchronous Hydration:** `localStorage` giữ settings và preview MOVE TRACKER gần nhất (`hft_move_preview_v2`) cùng theme/module visibility.
   - **IndexedDB Research Storage:** `MoveTrackerResearch` (store `events`) lưu event schema v2 trong 90 ngày; migration một lần từ `hft_move_history_v1` và legacy `CryptoSignalLog/MOVE_REPORT`, có dedupe theo stable event ID.
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
-- `App.jsx`: Component gốc quản lý Routing/Tabs (Dashboard, HFT Radar, Cascade, AI Market Decision Lab) và WebSocket manager.
+- `App.jsx`: Component gốc quản lý Routing/Tabs (Dashboard, HFT Radar, Cascade, AI Market Decision Lab) và WebSocket manager, tích hợp nút SYNC SHEET và modal cài đặt API/Webhook.
 - `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC với thanh Gauge Spectrum, 4 bento card trụ cột và drawer bẻ nhỏ 10+ tín hiệu định lượng.
@@ -45,6 +50,10 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
+- `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias và gửi webhook.
+- `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
+- `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
+- `.github/workflows/sync-sheets.yml` — Workflow GitHub Actions chạy định kỳ 3 phiên theo cron.
 - `services/moveTracker.js` — Điều phối champion detector, shadow flow research, trigger/end/outcome lifecycle và context OI/Funding/OBI.
 - `services/moveTrackerCore.js` — Các phép tính thuần cho detection windows, participation percentile, flow labels, MFE/MAE, recovery và thống kê timeframe.
 - `services/moveEventStore.js` — IndexedDB 90 ngày, migration legacy, query/filter, thống kê và export CSV/JSON cho MOVE TRACKER.
@@ -54,6 +63,18 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-21] Tích Hợp Google Sheets Auto-Sync 3 Phiên Qua GitHub Actions & Webhook `(FEATURE FULL)`
+- **Lane / Mode:** FEATURE FULL & DATA PIPELINE
+- **Tóm tắt:** Xây dựng cơ chế tự động tổng hợp toàn bộ chỉ số định lượng, vĩ mô và phái sinh lên Google Sheets công khai 3 lần/ngày (theo phiên Á, Âu, Mỹ) phục vụ AI phân tích tự động.
+- **Thay đổi chính:**
+  - **Google Apps Script Webhook (`google-apps-script/Code.gs`):** Tiếp nhận dữ liệu, tự động xóa và ghi đè 5 Tab dữ liệu (`OVERVIEW_BIAS`, `DERIVATIVES_FLOW`, `ETF_ONCHAIN`, `MACRO_CALENDAR`, `AI_PROMPT_SUMMARY`) với giao diện bảng kẻ viền, header màu và tự căn chỉnh độ rộng cột.
+  - **Node.js Aggregator (`scripts/syncGoogleSheet.mjs`):** Script cào dữ liệu từ Binance, DefiLlama, Fear & Greed, FairEconomy, tính điểm Bias Engine và hỗ trợ cờ `--dry-run`.
+  - **GitHub Actions Cron (`.github/workflows/sync-sheets.yml`):** Tự động kích hoạt vào 08:00 (Á), 14:00 (Âu), 20:00 (Mỹ) hoàn toàn miễn phí trên Cloud mà không cần mở trình duyệt hay ảnh hưởng Vercel.
+  - **Client Sync & Settings Modal:** Thêm trường cấu hình Webhook URL trong Settings và nút `SYNC SHEET` trên Header Web App để kích hoạt đồng bộ tức thì.
+- **Files / areas chạm:** `scripts/syncGoogleSheet.mjs`, `google-apps-script/Code.gs`, `.github/workflows/sync-sheets.yml`, `src/services/googleSheetSync.js`, `src/services/googleSheetSync.test.js`, `src/App.jsx`, `package.json`, `README.md`.
+- **Ảnh hưởng README:** §1 / §2 / §3 / §4.
+- **Verify:** `npm run sync:sheets:dry` thành công; `npm test` pass 28/28 tests; `npm run build` thành công 100% (1.68s).
 
 ### [2026-08-21] Redesign MOVE TRACKER Thành Decision-Friendly Interface `(UX + RESEARCH SAFETY)`
 - **Tóm tắt:** Chuyển MOVE TRACKER từ màn hình research nhiều thuật ngữ thành giao diện giải thích theo thứ tự: hệ thống vừa quan sát gì, ý nghĩa là gì, điều gì không được suy ra và cần theo dõi gì tiếp theo.
