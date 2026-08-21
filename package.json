@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test:scanner": "node --test src/services/coinScanner.test.js",
     "test:move": "node --test src/services/moveTrackerCore.test.js src/services/atrCalculator.test.js src/services/moveEventStore.test.js",
-    "test": "npm run test:scanner && npm run test:move",
+    "test:macro": "node --test src/services/macroDashboardEngine.test.js",
+    "test": "npm run test:scanner && npm run test:move && npm run test:macro",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"

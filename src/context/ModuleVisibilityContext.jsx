@@ -9,6 +9,7 @@ export const MODULES_CONFIG = {
   
   // Dashboard Tab
   dash_bias: { id: 'dash_bias', label: 'Market Bias Engine (Công Thức Bias Total)', category: 'Dashboard' },
+  dash_macro_valuator: { id: 'dash_macro_valuator', label: 'Macro Dashboard v2 — Valuator + PnL Matrix', category: 'Dashboard' },
   dash_news: { id: 'dash_news', label: 'Tin Tức Vĩ Mô & Thị Trường', category: 'Dashboard' },
   dash_calendar: { id: 'dash_calendar', label: 'Lịch Kinh Tế Vĩ Mô (7 Ngày Trong Tuần)', category: 'Dashboard' },
   dash_polymarket: { id: 'dash_polymarket', label: 'Polymarket — Whale Tracker', category: 'Dashboard' },

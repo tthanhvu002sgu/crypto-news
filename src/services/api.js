@@ -50,6 +50,59 @@ export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 
   }
 };
 
+/**
+ * Long locked-timeframe history for Macro Dashboard v2.
+ * Binance caps one kline request at 1,000 rows, so requests are paged backwards.
+ * The final row may be the currently-forming D/W/M candle, matching TradingView W0.
+ */
+export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', requestedLimit = 1200) => {
+  const intervalMap = { D: '1d', W: '1w', M: '1M' };
+  const interval = intervalMap[timeframe] || '1w';
+  const targetLimit = Math.max(2, Math.min(Math.trunc(requestedLimit), 3000));
+  const rows = [];
+  let endTime;
+
+  try {
+    while (rows.length < targetLimit) {
+      const batchLimit = Math.min(1000, targetLimit - rows.length);
+      const params = { symbol, interval, limit: batchLimit };
+      if (endTime != null) params.endTime = endTime;
+
+      const response = await axios.get('https://api.binance.com/api/v3/klines', { params });
+      const batch = Array.isArray(response.data) ? response.data : [];
+      if (batch.length === 0) break;
+      rows.unshift(...batch);
+
+      const earliestOpenTime = Number(batch[0]?.[0]);
+      if (!Number.isFinite(earliestOpenTime) || batch.length < batchLimit) break;
+      const nextEndTime = earliestOpenTime - 1;
+      if (endTime != null && nextEndTime >= endTime) break;
+      endTime = nextEndTime;
+    }
+
+    const now = Date.now();
+    const uniqueRows = Array.from(new Map(rows.map((row) => [Number(row[0]), row])).values())
+      .sort((left, right) => Number(left[0]) - Number(right[0]))
+      .slice(-targetLimit);
+
+    return uniqueRows.map((row) => ({
+      time: new Date(Number(row[0])),
+      open: parseFloat(row[1]),
+      high: parseFloat(row[2]),
+      low: parseFloat(row[3]),
+      close: parseFloat(row[4]),
+      volume: parseFloat(row[5]),
+      closeTime: Number(row[6]),
+      quoteVolume: parseFloat(row[7]),
+      takerBuyQuoteVolume: parseFloat(row[10]),
+      isClosed: Number(row[6]) < now,
+    }));
+  } catch (error) {
+    console.error(`[API] Macro Dashboard klines (${symbol}, ${interval}):`, error.message);
+    return [];
+  }
+};
+
 /** Get CVD from the start of the local day using 5m klines */
 export const getDailyCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
   try {
@@ -2101,4 +2154,3 @@ export const getPolymarketTopMarkets = async () => {
 
   return [];
 };
-

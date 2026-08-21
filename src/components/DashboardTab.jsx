@@ -1,5 +1,6 @@
 import { Line, Bar } from 'react-chartjs-2';
 import MarketBiasCard from './MarketBiasCard';
+import MacroDashboardCard from './MacroDashboardCard';
 import PolymarketWhales from './PolymarketWhales';
 import EconomicCalendarPanel from './EconomicCalendarPanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
@@ -50,6 +51,9 @@ export default function DashboardTab({
       {/* Market Bias Engine Card */}
       {!isModuleHidden('dash_bias') && (
         <MarketBiasCard data={data} etfHistory={etfHistory} moduleId="dash_bias" />
+      )}
+      {!isModuleHidden('dash_macro_valuator') && (
+        <MacroDashboardCard livePrice={btcDisplay?.price} theme={theme} moduleId="dash_macro_valuator" />
       )}
       {/* News Slider */}
       {!isModuleHidden('dash_news') && data.news && data.news.length > 0 && (
