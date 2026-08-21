@@ -77,8 +77,6 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
 
   useEffect(() => {
     let cancelled = false;
-    setStatus('loading');
-    setError('');
     getBTCMacroKlines('BTCUSDT', settings.timeframe, 1200).then((rows) => {
       if (cancelled) return;
       setCandles(rows);
@@ -104,6 +102,16 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
   );
 
   const updateSetting = (key, value) => setSettings((previous) => ({ ...previous, [key]: value }));
+  const changeTimeframe = (value) => {
+    setStatus('loading');
+    setError('');
+    updateSetting('timeframe', value);
+  };
+  const reloadHistory = () => {
+    setStatus('loading');
+    setError('');
+    setReloadKey((value) => value + 1);
+  };
   const current = dashboard.current;
   const previous = dashboard.previous;
   const currentColor = decisionColor(current);
@@ -147,6 +155,18 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
         pointRadius: 0,
         tension: 0.12,
       },
+      {
+        label: 'Strong Accum',
+        data: visibleSeries.map((row) => (
+          row.composite >= 3 && !row.divergence ? row.price : null
+        )),
+        showLine: false,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#facc15',
+        pointBorderColor: isLight ? '#713f12' : '#fef08a',
+        pointBorderWidth: 1.25,
+      },
     ],
   }), [visibleSeries, isLight]);
 
@@ -161,7 +181,15 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
         labels: { color: isLight ? '#475569' : '#94a3b8', boxWidth: 10, boxHeight: 2, font: { size: 9 } },
       },
       tooltip: {
-        callbacks: { label: (context) => `${context.dataset.label}: $${fmtNumber(context.raw, 0)}` },
+        callbacks: {
+          label: (context) => {
+            if (context.dataset.label === 'Strong Accum') {
+              const score = visibleSeries[context.dataIndex]?.composite;
+              return `Strong Accum · BTC $${fmtNumber(context.raw, 0)} · score +${score}`;
+            }
+            return `${context.dataset.label}: $${fmtNumber(context.raw, 0)}`;
+          },
+        },
       },
     },
     scales: {
@@ -176,7 +204,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
         },
       },
     },
-  }), [isLight]);
+  }), [isLight, visibleSeries]);
 
   return (
     <section className="glass-panel macro-dashboard-card">
@@ -190,7 +218,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
           <p>Valuator + PnL Matrix · Pine parity mode</p>
         </div>
         <div className="macro-dashboard-actions">
-          <button type="button" onClick={() => setReloadKey((value) => value + 1)} title="Tải lại dữ liệu">
+          <button type="button" onClick={reloadHistory} title="Tải lại dữ liệu">
             <RefreshCw size={13} className={status === 'loading' ? 'macro-spin' : ''} />
           </button>
           <button type="button" onClick={() => setShowSettings((value) => !value)} className={showSettings ? 'active' : ''}>
@@ -202,7 +230,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
 
       {showSettings && (
         <div className="macro-settings font-mono">
-          <SettingSelect label="Locked TF" value={settings.timeframe} options={['D', 'W', 'M']} onChange={(value) => updateSetting('timeframe', value)} />
+          <SettingSelect label="Locked TF" value={settings.timeframe} options={['D', 'W', 'M']} onChange={changeTimeframe} />
           <SettingSelect label="Cost Basis" value={settings.costMethod} options={['SMA', 'VWAP', 'Median HL', 'EMA']} onChange={(value) => updateSetting('costMethod', value)} />
           <SettingSelect label="Cohort Weight" value={settings.weightScheme} options={['Equal', 'Short-heavy', 'Long-heavy']} onChange={(value) => updateSetting('weightScheme', value)} />
           <SettingSelect label="PnL Zone" value={settings.zoneMethod} options={['Percentile', 'Convergence']} onChange={(value) => updateSetting('zoneMethod', value)} />
