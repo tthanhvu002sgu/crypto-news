@@ -13,6 +13,7 @@ import {
   updateMoveTrackerSettings,
   MOVE_CONFIG,
 } from '../services/moveTracker';
+import { describeMoveEvent } from '../services/moveTrackerCore';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1287,11 +1288,11 @@ function AdvancedChartWrapper({ theme, whaleData, whaleGap, children }) {
 // ─── PANEL: Move Tracker — realtime trigger + research log ───────────────────
 
 const OUTCOME_LABELS = {
-  CONTINUATION: 'Continuation',
-  PARTIAL_RETRACE: 'Partial retrace',
-  MEAN_REVERSION: 'Mean reversion',
-  DATA_INCOMPLETE: 'Data incomplete',
-  UNRESOLVED: 'Pending',
+  CONTINUATION: 'Tiếp diễn ngắn hạn',
+  PARTIAL_RETRACE: 'Hồi lại một phần',
+  MEAN_REVERSION: 'Đảo chiều về trung bình',
+  DATA_INCOMPLETE: 'Dữ liệu chưa đủ',
+  UNRESOLVED: 'Đang chờ',
 };
 
 const formatBps = (value) => value == null ? 'N/A' : `${value > 0 ? '+' : ''}${Number(value).toFixed(1)} bps`;
@@ -1302,7 +1303,7 @@ function MoveStatsTable({ title, groups = [] }) {
       <div className="move-stats-title font-mono">{title}</div>
       <div className="move-table-container">
         <table className="move-table move-stats-table font-mono">
-          <thead><tr><th>Slice</th><th>N</th><th>Complete</th><th>Median +5m</th><th>MFE / MAE</th><th>Continue / Revert</th></tr></thead>
+          <thead><tr><th>Nhóm</th><th>N</th><th>Đủ dữ liệu</th><th>Trung vị +5m</th><th>MFE / MAE</th><th>Tiếp diễn / Đảo chiều</th></tr></thead>
           <tbody>
             {groups.length === 0 ? (
               <tr><td colSpan="6" className="move-stats-empty">Chưa đủ event đã hoàn tất +5m.</td></tr>
@@ -1362,6 +1363,7 @@ function MoveTrackerPanel() {
 
   const trigger = displayMove?.triggerSnapshot;
   const end = displayMove?.endSnapshot;
+  const interpretation = useMemo(() => describeMoveEvent(displayMove), [displayMove]);
   const currentPrice = displayMove?.endPrice ?? displayMove?.triggerPrice;
   const triggerMovePct = displayMove ? ((displayMove.triggerPrice - displayMove.startPrice) / displayMove.startPrice) * 100 : 0;
   const atrText = atrState.value == null ? 'N/A' : `$${Number(atrState.value).toFixed(0)}`;
@@ -1391,11 +1393,11 @@ function MoveTrackerPanel() {
       </header>
 
       <div className="move-controls font-mono">
-        <label className="move-control-field"><span>Champion detector</span><select className="move-select" value={settings.mode} onChange={(event) => updateMoveTrackerSettings({ mode: event.target.value })}><option value={MOVE_CONFIG.MODE_ATR}>Futures ATR (closed 5m)</option><option value={MOVE_CONFIG.MODE_FIXED}>Fixed USD</option></select></label>
+        <label className="move-control-field"><span>Cách phát hiện</span><select className="move-select" value={settings.mode} onChange={(event) => updateMoveTrackerSettings({ mode: event.target.value })}><option value={MOVE_CONFIG.MODE_ATR}>Futures ATR (nến 5m đã đóng)</option><option value={MOVE_CONFIG.MODE_FIXED}>Ngưỡng USD cố định</option></select></label>
         {settings.mode === MOVE_CONFIG.MODE_ATR ? (
-          <label className="move-control-field"><span>Sensitivity</span><select className="move-select" value={settings.atrMult} onChange={(event) => updateMoveTrackerSettings({ atrMult: Number(event.target.value) })}>{[1, 1.5, 2, 3].map((value) => <option key={value} value={value}>{value.toFixed(1)} × ATR</option>)}</select></label>
+          <label className="move-control-field"><span>Độ nhạy</span><select className="move-select" value={settings.atrMult} onChange={(event) => updateMoveTrackerSettings({ atrMult: Number(event.target.value) })}>{[1, 1.5, 2, 3].map((value) => <option key={value} value={value}>{value.toFixed(1)} × ATR</option>)}</select></label>
         ) : (
-          <label className="move-control-field"><span>Threshold</span><select className="move-select" value={settings.fixedUsd} onChange={(event) => updateMoveTrackerSettings({ fixedUsd: Number(event.target.value) })}>{[300, 500, 1000, 1500].map((value) => <option key={value} value={value}>≥ ${value.toLocaleString()}</option>)}</select></label>
+          <label className="move-control-field"><span>Ngưỡng</span><select className="move-select" value={settings.fixedUsd} onChange={(event) => updateMoveTrackerSettings({ fixedUsd: Number(event.target.value) })}>{[300, 500, 1000, 1500].map((value) => <option key={value} value={value}>≥ ${value.toLocaleString()}</option>)}</select></label>
         )}
         <span className={`move-atr-info move-atr-info--${String(atrState.status).toLowerCase()}`}>Futures ATR(14) {atrText} · 120s threshold {thresholdText} · {atrState.status}</span>
       </div>
@@ -1403,37 +1405,58 @@ function MoveTrackerPanel() {
       {displayMove ? (
         <div className={`move-card move-card--${displayMove.direction?.toLowerCase() || 'pump'}`}>
           <div className="move-timeline font-mono">
-            {['TRIGGER', 'TRACKING', 'POST-EVENT', 'OUTCOMES'].map((phase, index) => {
+            {['PHÁT HIỆN', 'THEO DÕI', 'HẬU SỰ KIỆN', 'KẾT QUẢ'].map((phase, index) => {
               const activeIndex = activeMove ? 1 : pendingMove ? 2 : displayMove.forwardOutcomes?.['900'] ? 3 : 2;
               return <span key={phase} className={index <= activeIndex ? 'is-complete' : ''}>{phase}</span>;
             })}
           </div>
           <div className="move-card-header">
             <div className="move-main-title">
-              <span className={`move-dir-tag move-dir-tag--${displayMove.direction?.toLowerCase()}`}>{displayMove.direction === 'PUMP' ? '▲ PUMP' : '▼ DUMP'}</span>
+              <span className={`move-dir-tag move-dir-tag--${displayMove.direction?.toLowerCase()}`}>{displayMove.direction === 'PUMP' ? '▲ XUNG LỰC TĂNG' : '▼ XUNG LỰC GIẢM'}</span>
               <span className="move-price-delta font-mono">Trigger {displayMove.direction === 'PUMP' ? '+' : '-'}${Math.round(Math.abs(displayMove.triggerPrice - displayMove.startPrice)).toLocaleString()} ({triggerMovePct > 0 ? '+' : ''}{triggerMovePct.toFixed(2)}%) · {displayMove.detectionWindowSec}s</span>
             </div>
+            <span className={`move-decision-state move-decision-state--${interpretation?.tone || 'neutral'} font-mono`}>{interpretation?.stateLabel}</span>
+          </div>
+
+          {pendingMove && <div className="move-recovery-progress" aria-label={`${recoveryRemaining} seconds remaining`}><span style={{ width: `${((60 - recoveryRemaining) / 60) * 100}%` }} /></div>}
+
+          <div className={`move-decision-brief move-decision-brief--${interpretation?.tone || 'neutral'}`}>
+            <div className="move-decision-copy">
+              <span className="move-decision-eyebrow font-mono">ĐIỀU HỆ THỐNG ĐANG QUAN SÁT</span>
+              <strong>{interpretation?.summary}</strong>
+              <p>{interpretation?.implication}</p>
+            </div>
+            <div className="move-decision-guardrail">
+              <span className="font-mono">KHÔNG CÓ NGHĨA</span>
+              <p>{interpretation?.limitation}</p>
+            </div>
+          </div>
+
+          <div className="move-decision-evidence font-mono">
+            <div><span>CƯỜNG ĐỘ</span><strong>{interpretation?.evidence.participation}</strong></div>
+            <div><span>NGUỒN DÒNG TIỀN</span><strong>{interpretation?.evidence.flow}</strong></div>
+            <div><span>BỐI CẢNH</span><strong>{interpretation?.evidence.timeframe}</strong></div>
+            <div><span>CHẤT LƯỢNG DỮ LIỆU</span><strong>{interpretation?.evidence.data}</strong></div>
+          </div>
+
+          <div className="move-watch-next">
+            <span className="font-mono">ĐIỀU CẦN THEO DÕI TIẾP</span>
+            <p>{interpretation?.watchNext}</p>
+          </div>
+
+          <details className="move-detail-disclosure">
+            <summary>Xem dữ liệu nghiên cứu và outcome ngắn hạn</summary>
+            <div className="move-snapshot-note font-mono"><strong>TRIGGER SNAPSHOT</strong> — dữ liệu decision-time được đóng băng tại lúc alert. Outcome +5m/+15m là hậu nghiệm và không dự báo xu hướng nhiều ngày.</div>
             <div className="move-research-badges font-mono">
               <span className={`move-tier move-tier--${String(displayMove.qualityTier).toLowerCase()}`}>{displayMove.qualityTier}</span>
               <span className="move-flow-label">{displayMove.flowLabel}</span>
               {displayMove.outcomeLabel !== 'UNRESOLVED' && <span className="move-outcome-label">{OUTCOME_LABELS[displayMove.outcomeLabel]}</span>}
             </div>
-          </div>
-
-          {pendingMove && <div className="move-recovery-progress" aria-label={`${recoveryRemaining} seconds remaining`}><span style={{ width: `${((60 - recoveryRemaining) / 60) * 100}%` }} /></div>}
-
-          <div className="move-snapshot-note font-mono"><strong>TRIGGER SNAPSHOT</strong> — dữ liệu bên dưới được đóng băng tại lúc alert; outcome hiển thị riêng sau khi đủ horizon.</div>
-          <div className="move-primary-metrics font-mono">
-            <div className="move-metric-item"><span className="move-metric-lbl">PRICE AT TRIGGER / NOW</span><span className="move-metric-val">${displayMove.triggerPrice?.toLocaleString()} / ${currentPrice?.toLocaleString()}</span></div>
-            <div className="move-metric-item"><span className="move-metric-lbl">FUTURES CVD @ TRIGGER</span><span className={`move-metric-val ${(trigger?.futures?.cvd || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>{fmtUsd(trigger?.futures?.cvd)}</span></div>
-            <div className="move-metric-item"><span className="move-metric-lbl">SPOT CVD @ TRIGGER</span><span className={`move-metric-val ${(trigger?.spot?.cvd || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>{trigger?.spot?.cvd == null ? 'N/A' : fmtUsd(trigger.spot.cvd)}</span></div>
-            <div className="move-metric-item"><span className="move-metric-lbl">PARTICIPATION</span><span className="move-metric-val">{trigger?.participationPercentile == null ? 'WARMING' : `P${trigger.participationPercentile}`}</span></div>
-            <div className="move-metric-item"><span className="move-metric-lbl">+5M OUTCOME</span><span className="move-metric-val highlight">{formatBps(displayMove.forwardOutcomes?.['300']?.continuationBps)} · {OUTCOME_LABELS[displayMove.forwardOutcomes?.['300']?.outcomeLabel] || 'Pending'}</span></div>
-          </div>
-
-          <details className="move-detail-disclosure">
-            <summary>Decision-time vs post-event evidence</summary>
             <div className="move-metrics-grid font-mono">
+              <div className="move-metric-item"><span className="move-metric-lbl">PRICE AT TRIGGER / NOW</span><span className="move-metric-val">${displayMove.triggerPrice?.toLocaleString()} / ${currentPrice?.toLocaleString()}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">FUTURES CVD @ TRIGGER</span><span className={`move-metric-val ${(trigger?.futures?.cvd || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>{fmtUsd(trigger?.futures?.cvd)}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">SPOT CVD @ TRIGGER</span><span className={`move-metric-val ${(trigger?.spot?.cvd || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>{trigger?.spot?.cvd == null ? 'N/A' : fmtUsd(trigger.spot.cvd)}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">+5M OUTCOME</span><span className="move-metric-val highlight">{formatBps(displayMove.forwardOutcomes?.['300']?.continuationBps)} · {OUTCOME_LABELS[displayMove.forwardOutcomes?.['300']?.outcomeLabel] || 'Pending'}</span></div>
               <div className="move-metric-item"><span className="move-metric-lbl">TRIGGER FUTURES VOLUME</span><span className="move-metric-val">{fmtUsd(trigger?.futures?.totalVolume)} · {trigger?.futures?.tradeCount?.toLocaleString() || 0} trades</span></div>
               <div className="move-metric-item"><span className="move-metric-lbl">END FUTURES VOLUME</span><span className="move-metric-val">{end ? `${fmtUsd(end.futures?.totalVolume)} · ${end.futures?.tradeCount?.toLocaleString() || 0} trades` : 'Pending'}</span></div>
               <div className="move-metric-item"><span className="move-metric-lbl">DATA QUALITY</span><span className="move-metric-val">{displayMove.dataQuality?.complete ? 'COMPLETE' : 'INCOMPLETE'} · baseline {displayMove.dataQuality?.baselineSampleCount ?? 0}</span></div>
@@ -1445,7 +1468,7 @@ function MoveTrackerPanel() {
           </details>
         </div>
       ) : (
-        <div className="move-empty-state font-mono"><strong>{connectionState === 'LIVE' && atrState.status === 'LIVE' ? 'Listening to executed trades' : 'Warming decision-time inputs'}</strong><span>Champion vẫn ghi mọi price event. Participation và Spot/Futures flow chỉ được gắn nhãn shadow, chưa lọc alert.</span></div>
+        <div className="move-empty-state font-mono"><strong>{connectionState === 'LIVE' && atrState.status === 'LIVE' ? 'Đang lắng nghe dòng lệnh thực thi' : 'Đang khởi tạo dữ liệu decision-time'}</strong><span>Hệ thống sẽ giải thích xung lực, nguồn dòng tiền và bối cảnh ngay khi phát hiện event mới.</span></div>
       )}
 
       <div className="move-research-section">
@@ -1456,8 +1479,8 @@ function MoveTrackerPanel() {
             <button type="button" className="move-export-btn" disabled={exporting} onClick={() => handleExport('json')}>JSON</button>
           </div>
         </div>
-        <MoveStatsTable title="DETECTION HORIZON · +5M OUTCOME" groups={researchStats?.detectionHorizons} />
-        <MoveStatsTable title="MARKET CONTEXT · 5M / 15M / 1H" groups={researchStats?.timeframeContexts} />
+        <MoveStatsTable title="CỬA SỔ PHÁT HIỆN · KẾT QUẢ SAU 5 PHÚT" groups={researchStats?.detectionHorizons} />
+        <MoveStatsTable title="BỐI CẢNH THỊ TRƯỜNG · 5M / 15M / 1H" groups={researchStats?.timeframeContexts} />
       </div>
 
       {moveHistory.length > 0 && (
@@ -1465,25 +1488,26 @@ function MoveTrackerPanel() {
           <div className="move-history-head">
             <div className="move-history-title font-mono">EVENT LOG · {filteredHistory.length}/{moveHistory.length}</div>
             <div className="move-history-filters">
-              <select className="move-select" aria-label="Filter move direction" value={historyDirection} onChange={(event) => setHistoryDirection(event.target.value)}><option value="ALL">All directions</option><option value="PUMP">Pump</option><option value="DUMP">Dump</option></select>
-              <select className="move-select" aria-label="Filter flow label" value={historyFlow} onChange={(event) => setHistoryFlow(event.target.value)}><option value="ALL">All flow labels</option><option value="SPOT_CONFIRMED">Spot confirmed</option><option value="FUTURES_LED">Futures led</option><option value="SPOT_LED">Spot led</option><option value="MIXED_FLOW">Mixed flow</option><option value="DATA_INCOMPLETE">Data incomplete</option></select>
+              <select className="move-select" aria-label="Lọc hướng biến động" value={historyDirection} onChange={(event) => setHistoryDirection(event.target.value)}><option value="ALL">Mọi hướng</option><option value="PUMP">Xung lực tăng</option><option value="DUMP">Xung lực giảm</option></select>
+              <select className="move-select" aria-label="Lọc nguồn dòng tiền" value={historyFlow} onChange={(event) => setHistoryFlow(event.target.value)}><option value="ALL">Mọi nguồn dòng tiền</option><option value="SPOT_CONFIRMED">Spot + Futures đồng thuận</option><option value="FUTURES_LED">Futures dẫn dắt</option><option value="SPOT_LED">Spot dẫn dắt</option><option value="MIXED_FLOW">Dòng tiền phân kỳ</option><option value="DATA_INCOMPLETE">Dữ liệu chưa đủ</option></select>
             </div>
           </div>
-          <div className="move-table-container"><table className="move-table font-mono"><thead><tr><th>Trigger</th><th>Move</th><th>Window</th><th>Shadow tier / flow</th><th>+5m</th><th>Outcome</th><th></th></tr></thead><tbody>
-            {filteredHistory.map((move) => (
-              <React.Fragment key={move.id}>
+          <div className="move-table-container"><table className="move-table font-mono"><thead><tr><th>Thời điểm</th><th>Biến động</th><th>Cửa sổ</th><th>Diễn giải tại trigger</th><th>+5m</th><th>Kết quả ngắn hạn</th><th></th></tr></thead><tbody>
+            {filteredHistory.map((move) => {
+              const historyInterpretation = describeMoveEvent(move);
+              return <React.Fragment key={move.id}>
                 <tr className="move-tr">
                   <td>{new Date(move.triggerTime).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                   <td><span className={`move-badge move-badge--${move.direction?.toLowerCase()}`}>{move.direction}</span></td>
                   <td>{move.detectionWindowSec ?? 'N/A'}s</td>
-                  <td><span className={`move-tier move-tier--${String(move.qualityTier).toLowerCase()}`}>{move.qualityTier}</span> · {move.flowLabel}</td>
+                  <td className="move-history-interpretation"><strong>{historyInterpretation?.stateLabel}</strong><span>{historyInterpretation?.evidence.flow}</span></td>
                   <td>{formatBps(move.forwardOutcomes?.['300']?.continuationBps)}</td>
                   <td>{OUTCOME_LABELS[move.outcomeLabel] || move.outcomeLabel}</td>
                   <td><button type="button" className="move-row-toggle" onClick={() => setExpandedMoveId(expandedMoveId === move.id ? null : move.id)} aria-expanded={expandedMoveId === move.id}>{expandedMoveId === move.id ? '−' : '+'}</button></td>
                 </tr>
                 {expandedMoveId === move.id && <tr className="move-detail-row"><td colSpan="7"><div><span>Trigger {fmtUsd(move.triggerSnapshot?.futures?.totalVolume)} Futures</span><span>End {fmtUsd(move.endSnapshot?.futures?.totalVolume)} Futures</span><span>Recovery {move.recovery?.recoveryPct == null ? 'N/A' : `${move.recovery.recoveryPct}%`}</span><span>Status {move.status}</span></div><p>Snapshot trigger bất biến. Mọi chỉ số end/recovery/outcome là dữ liệu hậu sự kiện và không được dùng để tái tạo alert.</p></td></tr>}
               </React.Fragment>
-            ))}
+            })}
           </tbody></table></div>
         </div>
       )}

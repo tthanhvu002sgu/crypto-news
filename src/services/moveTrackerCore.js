@@ -123,6 +123,108 @@ export function classifyShadowTier({ participationPercentile, futuresAligned, sp
   return 'PRICE_ONLY';
 }
 
+const FLOW_DESCRIPTIONS = {
+  SPOT_CONFIRMED: 'Spot + Futures đồng thuận',
+  FUTURES_LED: 'Futures dẫn dắt · Spot chưa xác nhận',
+  SPOT_LED: 'Spot dẫn dắt',
+  MIXED_FLOW: 'Dòng tiền phân kỳ',
+  DATA_INCOMPLETE: 'Chưa đủ dữ liệu dòng tiền',
+};
+
+function participationDescription(percentile) {
+  if (!Number.isFinite(percentile)) return 'Chưa đủ mẫu nền';
+  if (percentile >= 90) return `Rất cao · P${percentile}`;
+  if (percentile >= 70) return `Cao · P${percentile}`;
+  if (percentile >= 40) return `Trung bình · P${percentile}`;
+  return `Thấp · P${percentile}`;
+}
+
+function timeframeDescription(direction, timeframeContext = {}) {
+  const expected = direction === 'PUMP' ? 'UP' : 'DOWN';
+  const opposite = direction === 'PUMP' ? 'DOWN' : 'UP';
+  const directionText = direction === 'PUMP' ? 'tăng' : 'giảm';
+  const fiveMinute = timeframeContext?.['5m']?.structure;
+  const fifteenMinute = timeframeContext?.['15m']?.structure;
+  const oneHour = timeframeContext?.['1h']?.structure;
+
+  if (!oneHour) return { aligned1h: false, label: 'Chưa có cấu trúc 1h' };
+  if (oneHour === expected && fiveMinute === expected && fifteenMinute === expected) {
+    return { aligned1h: true, label: `Đồng thuận ${directionText} · 5m → 1h` };
+  }
+  if (oneHour === expected) {
+    return { aligned1h: true, label: `Ngắn hạn hỗn hợp · 1h vẫn ${directionText}` };
+  }
+  if (oneHour === opposite) {
+    return { aligned1h: false, label: `Xung lực đi ngược cấu trúc 1h` };
+  }
+  return { aligned1h: false, label: `Cấu trúc 1h đi ngang` };
+}
+
+/**
+ * Converts a research event into decision-friendly, descriptive language.
+ * This does not create a trading signal or use any post-event outcome.
+ */
+export function describeMoveEvent(event) {
+  if (!event) return null;
+  const direction = event.direction === 'DUMP' ? 'DUMP' : 'PUMP';
+  const directionText = direction === 'PUMP' ? 'tăng' : 'giảm';
+  const pressureText = direction === 'PUMP' ? 'lực mua' : 'lực bán';
+  const flowLabel = event.flowLabel ?? event.triggerSnapshot?.flowLabel ?? 'DATA_INCOMPLETE';
+  const qualityTier = event.qualityTier ?? event.triggerSnapshot?.qualityTier ?? 'DATA_INCOMPLETE';
+  const participationPercentile = event.triggerSnapshot?.participationPercentile;
+  const baselineSampleCount = event.dataQuality?.baselineSampleCount
+    ?? event.triggerSnapshot?.dataQuality?.baselineSampleCount
+    ?? 0;
+  const dataComplete = event.dataQuality?.complete === true
+    || event.triggerSnapshot?.dataQuality?.complete === true;
+  const timeframe = timeframeDescription(direction, event.timeframeContext);
+  const spotConfirmed = flowLabel === 'SPOT_CONFIRMED';
+  const regimeWatch = qualityTier === 'CONFLUENT' && spotConfirmed && timeframe.aligned1h && dataComplete;
+  const verifiedImpulse = qualityTier === 'CONFLUENT' && spotConfirmed && dataComplete;
+
+  let state = 'IMPULSE_DETECTED';
+  let stateLabel = `XUNG LỰC VỪA XUẤT HIỆN · ${directionText.toUpperCase()}`;
+  let summary = `Giá vừa có chuyển động ${directionText} vượt ngưỡng phát hiện.`;
+  let implication = 'Đây là một biến động đáng chú ý, nhưng chưa đủ bằng chứng để kết luận chuyển regime.';
+
+  if (!dataComplete) {
+    state = 'DATA_WARMING';
+    stateLabel = `XUNG LỰC VỪA XUẤT HIỆN · ${directionText.toUpperCase()}`;
+    summary = `Đã phát hiện ${pressureText} bất thường, nhưng dữ liệu nền chưa đủ để đánh giá mức độ đồng thuận.`;
+    implication = 'Chỉ nên xem đây là trạng thái theo dõi cho đến khi baseline và các nguồn dữ liệu hoàn tất.';
+  } else if (regimeWatch) {
+    state = 'REGIME_WATCH';
+    stateLabel = `THEO DÕI CHUYỂN REGIME · ${directionText.toUpperCase()}`;
+    summary = `${pressureText[0].toUpperCase()}${pressureText.slice(1)} bất thường xuất hiện cùng xác nhận Spot và cấu trúc 1h ${directionText}.`;
+    implication = direction === 'PUMP'
+      ? 'Nhịp hồi ngắn hạn có thể đang chuyển thành xu hướng dài hơn; giả thuyết mean-reversion cần được đánh giá lại.'
+      : 'Nhịp giảm ngắn hạn có thể đang lan thành xu hướng dài hơn; giả thuyết phục hồi cần được đánh giá lại.';
+  } else if (verifiedImpulse) {
+    state = 'VERIFIED_IMPULSE';
+    stateLabel = `XUNG LỰC ĐƯỢC XÁC NHẬN · ${directionText.toUpperCase()}`;
+    summary = `${pressureText[0].toUpperCase()}${pressureText.slice(1)} có participation cao và được Spot xác nhận, nhưng cấu trúc 1h chưa đồng thuận.`;
+    implication = 'Xung lực có sự tham gia thực, nhưng chưa đủ bằng chứng để nâng thành theo dõi chuyển regime.';
+  }
+
+  return {
+    state,
+    stateLabel,
+    tone: direction === 'PUMP' ? 'bull' : 'bear',
+    summary,
+    implication,
+    limitation: 'Không dự báo giá chắc chắn tiếp tục; đây là bằng chứng được chụp tại thời điểm trigger.',
+    watchNext: timeframe.aligned1h
+      ? `Theo dõi cấu trúc 1h có duy trì ${directionText} và các event tiếp theo có tiếp tục được Spot xác nhận hay không.`
+      : `Chờ cấu trúc 1h đồng thuận với hướng ${directionText} hoặc xuất hiện thêm xung lực được Spot xác nhận.`,
+    evidence: {
+      participation: participationDescription(participationPercentile),
+      flow: FLOW_DESCRIPTIONS[flowLabel] ?? flowLabel,
+      timeframe: timeframe.label,
+      data: dataComplete ? `Đầy đủ · baseline ${baselineSampleCount}` : `Chưa đủ nền · baseline ${baselineSampleCount}`,
+    },
+  };
+}
+
 export function calculateRecoveryPct(direction, startPrice, peakPrice, troughPrice, finalPrice) {
   if (direction === 'PUMP') {
     const excursion = peakPrice - startPrice;

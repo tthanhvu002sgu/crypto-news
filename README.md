@@ -55,6 +55,15 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-08-21] Redesign MOVE TRACKER Thành Decision-Friendly Interface `(UX + RESEARCH SAFETY)`
+- **Tóm tắt:** Chuyển MOVE TRACKER từ màn hình research nhiều thuật ngữ thành giao diện giải thích theo thứ tự: hệ thống vừa quan sát gì, ý nghĩa là gì, điều gì không được suy ra và cần theo dõi gì tiếp theo.
+- **Decision layer:** Bổ sung các trạng thái mô tả `XUNG LỰC VỪA XUẤT HIỆN`, `XUNG LỰC ĐƯỢC XÁC NHẬN` và `THEO DÕI CHUYỂN REGIME`. `REGIME WATCH` chỉ xuất hiện khi event có dữ liệu đầy đủ, tier `CONFLUENT`, flow `SPOT_CONFIRMED` và cấu trúc 1h đồng thuận; tuyệt đối không dùng outcome hậu sự kiện để tạo trạng thái.
+- **Information hierarchy:** Đưa bốn bằng chứng chính lên trước gồm cường độ, nguồn dòng tiền, bối cảnh đa khung và chất lượng dữ liệu. Raw CVD, ATR threshold, OI/Funding/OBI, detection scores và outcome +5m/+15m được thu gọn vào `Xem dữ liệu nghiên cứu và outcome ngắn hạn`.
+- **Ngôn ngữ & lịch sử:** Dịch nhãn kỹ thuật thành diễn giải tiếng Việt, làm rõ PUMP/DUMP chỉ là xung lực đã xảy ra, thêm guardrail “không dự báo giá chắc chắn tiếp tục”, và nâng cấp Event Log thành diễn giải tại trigger.
+- **Responsive:** Decision brief chuyển từ hai cột sang một cột trên mobile; evidence grid thích nghi 4 → 2 → 1 cột.
+- **Verify:** MOVE TRACKER tests pass 16/16; production build pass. Visual QA desktop xác nhận hierarchy mới hiển thị đúng; lint toàn repo vẫn bị chặn bởi 174 lỗi tồn tại sẵn ngoài phạm vi thay đổi.
+- **Files / areas chạm:** `src/services/moveTrackerCore.js`, `src/services/moveTrackerCore.test.js`, `src/components/HftRadarTab.jsx`, `src/App.css`, `README.md`.
+
 ### [2026-08-16] Nâng Cấp MOVE TRACKER Thành Realtime Detector + Research Log `(FEATURE FULL)`
 - **Tóm tắt:** Sửa lỗi runtime `getMoveReports is not defined`, thay persistence 50 event/7 ngày bằng IndexedDB 90 ngày, và tách dữ liệu tại trigger khỏi end/recovery/forward outcome để loại lookahead khỏi research log.
 - **Detection integrity:** ATR(14) chuyển sang Binance USD-M Futures 5m, chỉ dùng nến đã đóng, có trạng thái LIVE/STALE/UNAVAILABLE; champion ATR/Fixed tiếp tục tạo event như trước, còn participation và Spot/Futures flow chỉ chạy shadow.

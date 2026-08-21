@@ -9,6 +9,7 @@ import {
   classifyPriceOutcome,
   classifyShadowTier,
   computeMoveStats,
+  describeMoveEvent,
   selectMoveCandidate,
 } from './moveTrackerCore.js';
 
@@ -93,4 +94,38 @@ test('timeframe context ignores the open candle and stats mark small samples', (
   assert.equal(stats.detectionHorizons[0].n, 1);
   assert.equal(stats.detectionHorizons[0].smallSample, true);
   assert.equal(stats.timeframeContexts[0].key, '5m:UP');
+});
+
+test('decision interpretation promotes only complete, spot-confirmed confluence with aligned 1h context', () => {
+  const event = {
+    direction: 'PUMP',
+    qualityTier: 'CONFLUENT',
+    flowLabel: 'SPOT_CONFIRMED',
+    dataQuality: { complete: true, baselineSampleCount: 42 },
+    triggerSnapshot: { participationPercentile: 97.9 },
+    timeframeContext: {
+      '5m': { structure: 'DOWN' },
+      '15m': { structure: 'RANGE' },
+      '1h': { structure: 'UP' },
+    },
+  };
+  const interpretation = describeMoveEvent(event);
+  assert.equal(interpretation.state, 'REGIME_WATCH');
+  assert.equal(interpretation.evidence.participation, 'Rất cao · P97.9');
+  assert.equal(interpretation.evidence.timeframe, 'Ngắn hạn hỗn hợp · 1h vẫn tăng');
+  assert.match(interpretation.limitation, /Không dự báo/);
+});
+
+test('decision interpretation keeps incomplete events in a transparent warming state', () => {
+  const interpretation = describeMoveEvent({
+    direction: 'PUMP',
+    qualityTier: 'DATA_INCOMPLETE',
+    flowLabel: 'SPOT_CONFIRMED',
+    dataQuality: { complete: false, baselineSampleCount: 4 },
+    triggerSnapshot: { participationPercentile: 100 },
+    timeframeContext: { '1h': { structure: 'DOWN' } },
+  });
+  assert.equal(interpretation.state, 'DATA_WARMING');
+  assert.equal(interpretation.evidence.data, 'Chưa đủ nền · baseline 4');
+  assert.equal(interpretation.evidence.flow, 'Spot + Futures đồng thuận');
 });
