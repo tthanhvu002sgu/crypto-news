@@ -6,6 +6,15 @@ import { calculateMacroDashboard, MACRO_DASHBOARD_DEFAULTS } from '../services/m
 import ModuleMenu from './ModuleMenu';
 
 const SETTINGS_KEY = 'macro-dashboard-v2-settings';
+const HISTORY_LIMIT = 10000;
+const CHART_RANGES = ['3Y', '5Y', 'ALL'];
+
+const chartBarsForRange = (range, timeframe) => {
+  if (range === 'ALL') return Infinity;
+  const years = Number.parseInt(range, 10);
+  const barsPerYear = timeframe === 'D' ? 365 : timeframe === 'M' ? 12 : 52;
+  return years * barsPerYear;
+};
 
 const zoneColors = {
   GIFT: '#00e676',
@@ -65,6 +74,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [chartRange, setChartRange] = useState('ALL');
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -77,7 +87,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
 
   useEffect(() => {
     let cancelled = false;
-    getBTCMacroKlines('BTCUSDT', settings.timeframe, 1200).then((rows) => {
+    getBTCMacroKlines('BTCUSDT', settings.timeframe, HISTORY_LIMIT).then((rows) => {
       if (cancelled) return;
       setCandles(rows);
       if (rows.length > 0) setStatus('ready');
@@ -115,7 +125,10 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
   const current = dashboard.current;
   const previous = dashboard.previous;
   const currentColor = decisionColor(current);
-  const visibleSeries = dashboard.series.slice(-156);
+  const visibleBars = chartBarsForRange(chartRange, settings.timeframe);
+  const visibleSeries = Number.isFinite(visibleBars)
+    ? dashboard.series.slice(-visibleBars)
+    : dashboard.series;
   const isLight = theme === 'light';
 
   const chartData = useMemo(() => ({
@@ -278,7 +291,21 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
               <p>Z long <strong>{current.valZLong > 0 ? '+' : ''}{current.valZLong.toFixed(2)}</strong> · Z short <strong>{current.valZShort > 0 ? '+' : ''}{current.valZShort.toFixed(2)}</strong></p>
               <div className="macro-zone-sub font-mono">IMPLIED CAGR {fmtSigned(current.impliedCagr)} · σ {current.sigma.toFixed(3)}</div>
             </article>
-            <div className="macro-fv-chart"><Line data={chartData} options={chartOptions} /></div>
+            <div className="macro-fv-chart">
+              <div className="macro-chart-ranges font-mono" aria-label="Phạm vi biểu đồ">
+                {CHART_RANGES.map((range) => (
+                  <button
+                    type="button"
+                    key={range}
+                    className={chartRange === range ? 'active' : ''}
+                    onClick={() => setChartRange(range)}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
+              <Line data={chartData} options={chartOptions} />
+            </div>
           </div>
 
           <button type="button" className="macro-details-toggle font-mono" onClick={() => setShowDetails((value) => !value)}>
@@ -309,7 +336,9 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
           )}
 
           <footer className="macro-dashboard-footer font-mono">
-            <span>{effectiveCandles.length} BARS · {current.isClosed ? 'CLOSED CANDLE' : 'LIVE CANDLE W0'}</span>
+            <span>
+              {effectiveCandles.length} BARS · {effectiveCandles[0]?.time.toLocaleDateString('vi-VN')} → {current.time.toLocaleDateString('vi-VN')} · {current.isClosed ? 'CLOSED CANDLE' : 'LIVE CANDLE W0'}
+            </span>
             <span>PRICE-PATH PROXY · NOT ON-CHAIN REALIZED PRICE</span>
           </footer>
         </>

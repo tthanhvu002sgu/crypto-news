@@ -55,10 +55,12 @@ export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 
  * Binance caps one kline request at 1,000 rows, so requests are paged backwards.
  * The final row may be the currently-forming D/W/M candle, matching TradingView W0.
  */
-export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', requestedLimit = 1200) => {
+export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', requestedLimit = 10000) => {
   const intervalMap = { D: '1d', W: '1w', M: '1M' };
   const interval = intervalMap[timeframe] || '1w';
-  const targetLimit = Math.max(2, Math.min(Math.trunc(requestedLimit), 3000));
+  // Keep enough headroom to retrieve the complete BTCUSDT daily history. The
+  // loop still stops as soon as Binance returns its first partial page.
+  const targetLimit = Math.max(2, Math.min(Math.trunc(requestedLimit), 10000));
   const rows = [];
   let endTime;
 
