@@ -22,27 +22,37 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    var payload = JSON.parse(e.postData.contents);
+    var rawContents = e.postData.contents;
+    var payload;
+    try {
+      payload = JSON.parse(rawContents);
+    } catch (parseErr) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "error",
+        message: "JSON parse error: " + parseErr.toString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
     // 1. Tab: OVERVIEW_BIAS
     if (payload.overview && Array.isArray(payload.overview)) {
-      writeTableToSheet(ss, "OVERVIEW_BIAS", payload.overview, "#1e293b", "#38bdf8");
+      writeTableToSheet(ss, "OVERVIEW_BIAS", payload.overview, "#0f172a", "#38bdf8");
     }
 
     // 2. Tab: DERIVATIVES_FLOW
     if (payload.derivatives && Array.isArray(payload.derivatives)) {
-      writeTableToSheet(ss, "DERIVATIVES_FLOW", payload.derivatives, "#1e293b", "#10b981");
+      writeTableToSheet(ss, "DERIVATIVES_FLOW", payload.derivatives, "#0f172a", "#10b981");
     }
 
     // 3. Tab: ETF_ONCHAIN
     if (payload.etf_onchain && Array.isArray(payload.etf_onchain)) {
-      writeTableToSheet(ss, "ETF_ONCHAIN", payload.etf_onchain, "#1e293b", "#f59e0b");
+      writeTableToSheet(ss, "ETF_ONCHAIN", payload.etf_onchain, "#0f172a", "#f59e0b");
     }
 
     // 4. Tab: MACRO_CALENDAR
     if (payload.macro && Array.isArray(payload.macro)) {
-      writeTableToSheet(ss, "MACRO_CALENDAR", payload.macro, "#1e293b", "#ec4899");
+      writeTableToSheet(ss, "MACRO_CALENDAR", payload.macro, "#0f172a", "#ec4899");
     }
 
     // 5. Tab: AI_PROMPT_SUMMARY (Markdown text format)
@@ -54,7 +64,8 @@ function doPost(e) {
       status: "success",
       timestamp: new Date().toISOString(),
       session: payload.sessionName || "UNKNOWN",
-      message: "Data synced successfully to Google Sheets!"
+      completeness: payload.validation ? payload.validation.completenessScore : 100,
+      message: "Data synced successfully to 5 sheets in Google Spreadsheets!"
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
@@ -74,7 +85,7 @@ function doGet(e) {
 }
 
 /**
- * Ghi đè bảng dữ liệu 2D lên một Sheet và căn chỉnh format
+ * Ghi đè bảng dữ liệu 2D lên một Sheet và căn chỉnh format chuẩn đẹp
  */
 function writeTableToSheet(ss, sheetName, dataRows, headerBgColor, accentColor) {
   if (!dataRows || dataRows.length === 0) return;
@@ -100,6 +111,8 @@ function writeTableToSheet(ss, sheetName, dataRows, headerBgColor, accentColor) 
   headerRange.setFontFamily("Roboto Mono");
   headerRange.setFontSize(10);
   headerRange.setHorizontalAlignment("center");
+  headerRange.setVerticalAlignment("middle");
+  sheet.setRowHeight(1, 35);
 
   // Format Data Rows
   if (numRows > 1) {
@@ -107,13 +120,29 @@ function writeTableToSheet(ss, sheetName, dataRows, headerBgColor, accentColor) 
     dataRange.setFontFamily("Roboto Mono");
     dataRange.setFontSize(9);
     dataRange.setVerticalAlignment("middle");
+
+    // Alternating row background for readability
+    for (var r = 2; r <= numRows; r++) {
+      sheet.setRowHeight(r, 26);
+      var rowRange = sheet.getRange(r, 1, 1, numCols);
+      if (r % 2 === 0) {
+        rowRange.setBackground("#f8fafc");
+      } else {
+        rowRange.setBackground("#ffffff");
+      }
+    }
+
+    // Align First Column Left, Others Center/Right
+    var col1Range = sheet.getRange(2, 1, numRows - 1, 1);
+    col1Range.setHorizontalAlignment("left");
+    col1Range.setFontWeight("bold");
   }
 
   // Auto-resize columns
   for (var col = 1; col <= numCols; col++) {
     sheet.autoResizeColumn(col);
     var width = sheet.getColumnWidth(col);
-    sheet.setColumnWidth(col, Math.max(width + 20, 110));
+    sheet.setColumnWidth(col, Math.max(width + 25, 120));
   }
 
   sheet.setFrozenRows(1);
@@ -130,7 +159,7 @@ function writeMarkdownSummarySheet(ss, sheetName, markdownText, sessionName, tim
     sheet.clear();
   }
 
-  sheet.setColumnWidth(1, 950);
+  sheet.setColumnWidth(1, 1000);
 
   // Title Banner
   var titleCell = sheet.getRange("A1");
@@ -140,14 +169,18 @@ function writeMarkdownSummarySheet(ss, sheetName, markdownText, sessionName, tim
   titleCell.setFontWeight("bold");
   titleCell.setFontSize(12);
   titleCell.setFontFamily("Roboto Mono");
+  titleCell.setVerticalAlignment("middle");
+  sheet.setRowHeight(1, 40);
 
   // Subtitle
   var guideCell = sheet.getRange("A2");
-  guideCell.setValue("Hướng dẫn: AI hoặc người dùng có thể sao chép toàn bộ nội dung ô A4 bên dưới để nạp ngữ cảnh phân tích thị trường.");
+  guideCell.setValue("Hướng dẫn: Sao chép toàn bộ nội dung ô A4 bên dưới để nạp ngữ cảnh vào Claude / ChatGPT / Gemini theo chuẩn AI Market Decision Lab.");
   guideCell.setFontStyle("italic");
   guideCell.setFontColor("#64748b");
   guideCell.setFontFamily("Roboto Mono");
-  guideCell.setFontSize(9);
+  guideCell.setFontSize(9.5);
+  guideCell.setVerticalAlignment("middle");
+  sheet.setRowHeight(2, 25);
 
   // Markdown Content Cell
   var contentCell = sheet.getRange("A4");
@@ -158,5 +191,6 @@ function writeMarkdownSummarySheet(ss, sheetName, markdownText, sessionName, tim
   contentCell.setBackground("#f8fafc");
   contentCell.setFontColor("#0f172a");
   contentCell.setVerticalAlignment("top");
-  sheet.setRowHeight(4, 700);
+  sheet.setRowHeight(4, 800);
 }
+

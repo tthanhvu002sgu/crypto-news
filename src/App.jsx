@@ -19,7 +19,7 @@ import {
   ChevronDown, ChevronRight, FileSpreadsheet
 } from 'lucide-react';
 import { calculateMarketBias } from './services/biasEngine';
-import { syncToGoogleSheetsFromBrowser } from './services/googleSheetSync';
+import { syncToGoogleSheetsFromBrowser, validateExportReadiness } from './services/googleSheetSync';
 import GlossaryTab from './components/GlossaryTab';
 import HftRadarTab from './components/HftRadarTab';
 import SummaryTab from './components/SummaryTab';
@@ -233,6 +233,8 @@ const INIT = {
   m2Supply: null,
   highYield: null,
   qqq: null,
+  ethTicker: null,
+  solTicker: null,
   ethPrice: null,
   solPrice: null,
   linkPrice: null,
@@ -570,15 +572,53 @@ function AppContent() {
       addLog('Vui lòng nhập Google Sheets Webhook URL trong cài đặt trước khi đồng bộ.', 'warn');
       return;
     }
+
+    if (isSyncing) {
+      addLog('⚠ Dashboard đang trong tiến trình đồng bộ dữ liệu (SYNC NGAY). Vui lòng đợi hoàn tất trong giây lát...', 'warn');
+    }
+
     try {
       setIsSyncingSheet(true);
-      addLog('Đang đồng bộ dữ liệu chỉ số lên Google Sheet...', 'info');
-      const biasData = calculateMarketBias(data, data.etfHistory);
-      const result = await syncToGoogleSheetsFromBrowser(webhookUrl, data, biasData);
-      addLog(`[Google Sheets] Đã gửi đồng bộ phiên ${result.session}! Dữ liệu đang được ghi đè.`, 'ok');
+      addLog('Đang kiểm tra và chuẩn bị dữ liệu xuất Google Sheet...', 'info');
+
+      const biasData = calculateMarketBias(data, etfHistory);
+      
+      const validation = validateExportReadiness(data, biasData, etfHoldings, etfHistory, {
+        livePrice,
+        liveChange,
+        liveVolume,
+        liveHigh,
+        liveLow,
+        liveFunding,
+        liveEthPrice,
+        liveSolPrice
+      });
+
+      if (!validation.isValid) {
+        addLog(`❌ [Google Sheets] Không thể xuất do thiếu dữ liệu bắt buộc: ${validation.blockingErrors.join('; ')}`, 'error');
+        alert(`Không thể xuất Google Sheet:\n\n${validation.blockingErrors.map(e => '• ' + e).join('\n')}\n\nVui lòng nhấn "SYNC NGAY" để tải đủ dữ liệu trước khi xuất.`);
+        return;
+      }
+
+      if (validation.warnings.length > 0) {
+        addLog(`[Google Sheets] Dữ liệu hoàn thiện ${validation.completenessScore}% (Có ${validation.warnings.length} cảnh báo: ${validation.warnings.slice(0, 2).join('; ')}${validation.warnings.length > 2 ? '...' : ''})`, 'warn');
+      }
+
+      const result = await syncToGoogleSheetsFromBrowser(webhookUrl, data, biasData, etfHoldings, etfHistory, {
+        livePrice,
+        liveChange,
+        liveVolume,
+        liveHigh,
+        liveLow,
+        liveFunding,
+        liveEthPrice,
+        liveSolPrice
+      });
+
+      addLog(`✅ [Google Sheets] Đã gửi thành công phiên ${result.session}! Độ hoàn thiện dữ liệu: ${result.completenessScore}%.`, 'ok');
     } catch (err) {
       console.error('[Sync Google Sheets]', err);
-      addLog(`[Google Sheets] Lỗi đồng bộ: ${err.message}`, 'error');
+      addLog(`❌ [Google Sheets] Lỗi đồng bộ: ${err.message}`, 'error');
     } finally {
       setIsSyncingSheet(false);
     }
@@ -716,6 +756,8 @@ function AppContent() {
       if (wantHot) {
         // Short TTL — WS drives live price; REST is charts + offline fallback
         push('btc', fetchCached('binanceTicker', () => getBTCTicker24h('BTCUSDT'), CACHE_TTL.binanceTicker, addLog, 'BTC Ticker (Binance)', force));
+        push('ethTicker', fetchCached('ethTicker', () => getBTCTicker24h('ETHUSDT'), CACHE_TTL.binanceTicker, addLog, 'ETH Ticker (Binance)', force));
+        push('solTicker', fetchCached('solTicker', () => getBTCTicker24h('SOLUSDT'), CACHE_TTL.binanceTicker, addLog, 'SOL Ticker (Binance)', force));
         push('klines', fetchCached('binanceKlines1h', () => getBTCKlines('BTCUSDT', '1h', 48), CACHE_TTL.binanceKlines, addLog, 'BTC Klines 48h (Binance)', force));
         push('ls', fetchCached('binanceLs', () => getLongShortRatio('BTCUSDT', '1h', 24), CACHE_TTL.binanceLs, addLog, 'L/S Ratio 24h (Binance)', force));
         push('fund', fetchCached('binanceFunding', () => getFundingRate('BTCUSDT'), CACHE_TTL.binanceFunding, addLog, 'Funding Rate (Binance)', force));
@@ -758,6 +800,8 @@ function AppContent() {
       const byKey = Object.fromEntries(keys.map((k, i) => [k, results[i]]));
 
       const btc = wantHot ? settled(byKey.btc) : null;
+      const ethTicker = wantHot ? settled(byKey.ethTicker) : null;
+      const solTicker = wantHot ? settled(byKey.solTicker) : null;
       const klines = wantHot ? (settled(byKey.klines) || []) : [];
       const lsHistory = wantHot ? (settled(byKey.ls) || []) : [];
       const fundingRate = wantHot ? settled(byKey.fund) : null;
@@ -836,6 +880,10 @@ function AppContent() {
         sp500: sp500 ?? prev.sp500,
         vix: vix ?? prev.vix,
         qqq: qqq ?? prev.qqq,
+        ethTicker: ethTicker ?? prev.ethTicker,
+        solTicker: solTicker ?? prev.solTicker,
+        ethPrice: ethTicker?.price ?? (liveEthPrice ? { price: liveEthPrice } : prev.ethPrice),
+        solPrice: solTicker?.price ?? (liveSolPrice ? { price: liveSolPrice } : prev.solPrice),
         netLiquidity: netLiquidity ?? prev.netLiquidity,
         cotData: cotData ?? prev.cotData,
         fngData: fngData ?? prev.fngData,
