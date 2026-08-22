@@ -64,6 +64,13 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-08-22] Khôi Phục Ô Nhập Khóa Gemini API Key Trong Modal Cài Đặt `(FEATURE FAST)`
+- **Lane / Mode:** FEATURE FAST & UI SETTINGS
+- **Tóm tắt:** Bổ sung lại trường nhập khóa `GEMINI API KEY (GOOGLE AI STUDIO)` vào modal Cài đặt hệ thống (`App.jsx`), bảo đảm người dùng có thể cấu hình và lưu trực tiếp key vào `localStorage` phục vụ tính năng AI Decision Lab & AI Prompt Staging.
+- **Thay đổi chính:** Thêm `settings-modal-input-group` cho Gemini API key với link lấy key từ Google AI Studio (`aistudio.google.com`) và cập nhật mô tả hướng dẫn.
+- **Files / areas chạm:** `src/App.jsx`, `README.md`.
+- **Verify:** `npm test` pass 28/28 tests; `npm run build` pass (7.65s).
+
 ### [2026-08-21] Tích Hợp Google Sheets Auto-Sync 3 Phiên Qua GitHub Actions & Webhook `(FEATURE FULL)`
 - **Lane / Mode:** FEATURE FULL & DATA PIPELINE
 - **Tóm tắt:** Xây dựng cơ chế tự động tổng hợp toàn bộ chỉ số định lượng, vĩ mô và phái sinh lên Google Sheets công khai 3 lần/ngày (theo phiên Á, Âu, Mỹ) phục vụ AI phân tích tự động.

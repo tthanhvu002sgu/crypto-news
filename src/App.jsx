@@ -1796,7 +1796,7 @@ function AppContent() {
 
             <div className="settings-modal-body font-mono">
               <p className="text-slate-400" style={{ fontSize: '0.62rem', margin: 0, lineHeight: 1.45 }}>
-                Nhập các khóa API cá nhân để Terminal đồng bộ trực tiếp dữ liệu vĩ mô & chứng khoán thực tế từ nguồn FRED & Alpha Vantage.
+                Nhập các khóa API cá nhân để Terminal đồng bộ trực tiếp dữ liệu vĩ mô (FRED, Alpha Vantage), phân tích AI (Gemini, OpenRouter) và Google Sheets Webhook.
               </p>
 
               <div className="settings-modal-input-group">
@@ -1824,6 +1824,20 @@ function AppContent() {
                 />
                 <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
                   Lấy miễn phí tại: <a href="https://www.alphavantage.co/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>alphavantage.co</a>
+                </span>
+              </div>
+
+              <div className="settings-modal-input-group">
+                <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>GEMINI API KEY (GOOGLE AI STUDIO)</label>
+                <input
+                  type="password"
+                  className="settings-modal-input"
+                  placeholder="Nhập Gemini API key (AIzaSy...)"
+                  value={apiKeys.gemini || ''}
+                  onChange={(e) => setApiKeys(p => ({ ...p, gemini: e.target.value }))}
+                />
+                <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
+                  Lấy miễn phí tại: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>aistudio.google.com</a>
                 </span>
               </div>
 

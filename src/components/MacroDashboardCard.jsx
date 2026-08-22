@@ -176,8 +176,20 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
         showLine: false,
         pointRadius: 4,
         pointHoverRadius: 6,
-        pointBackgroundColor: '#facc15',
-        pointBorderColor: isLight ? '#713f12' : '#fef08a',
+        pointBackgroundColor: '#22c55e',
+        pointBorderColor: isLight ? '#14532d' : '#bbf7d0',
+        pointBorderWidth: 1.25,
+      },
+      {
+        label: 'Overbought',
+        data: visibleSeries.map((row) => (
+          row.composite <= -3 && !row.divergence ? row.price : null
+        )),
+        showLine: false,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#ef4444',
+        pointBorderColor: isLight ? '#7f1d1d' : '#fecaca',
         pointBorderWidth: 1.25,
       },
     ],
@@ -196,9 +208,10 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
       tooltip: {
         callbacks: {
           label: (context) => {
-            if (context.dataset.label === 'Strong Accum') {
+            if (context.dataset.label === 'Strong Accum' || context.dataset.label === 'Overbought') {
               const score = visibleSeries[context.dataIndex]?.composite;
-              return `Strong Accum · BTC $${fmtNumber(context.raw, 0)} · score +${score}`;
+              const signedScore = score > 0 ? `+${score}` : score;
+              return `${context.dataset.label} · BTC $${fmtNumber(context.raw, 0)} · score ${signedScore}`;
             }
             return `${context.dataset.label}: $${fmtNumber(context.raw, 0)}`;
           },
