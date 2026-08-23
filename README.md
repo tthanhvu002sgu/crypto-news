@@ -191,6 +191,18 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Files / areas chạm:** `src/services/api.js`, `src/components/HftRadarTab.jsx`, `README.md`
 - **Verify:** `npm run build` pass (2.37s); Volume Ratio tự động tính toán chính xác theo đúng khung thời gian đã chọn.
 
+### [2026-08-23] Gộp CVD FUTURES & SPOT Thành Một View Song Song `(REFACTOR)`
+- **Lane / Mode:** REFACTOR & UX MERGE
+- **Tóm tắt:** Loại bỏ bộ tab chuyển đổi `FUTURES`/`SPOT` trong panel **CVD & Order Flow**, gộp thành một view duy nhất hiển thị song song cả hai thị trường để tiện đối chiếu, so sánh phân kỳ và đánh giá xu hướng dòng tiền.
+- **Thay đổi chính:**
+  - **Biểu Đồ 2 Đường CVD (`HftRadarTab.jsx`):** Chart hiển thị đồng thời đường `FUTURES` (tím `#a78bfa`) và `SPOT` (xanh `#34d399`) trên cùng trục thời gian; tooltip hiển thị giá trị cả hai thị trường kèm giá BTC.
+  - **Hero Dual Values (`HftRadarTab.jsx`):** Hiển thị song song `CVD RÒNG FUTURES` và `CVD RÒNG SPOT` cho cùng khung thời gian.
+  - **Dual Volume Gauges (`HftRadarTab.jsx`):** Hai thanh Volume Ratio Buy/Sell độc lập (Futures & Spot) xếp dọc để so sánh áp lực mua/bán hai thị trường.
+  - **Dual Footprint Tables (`HftRadarTab.jsx`):** Trích xuất component `FootprintSection`, render hai bảng Footprint Nodes (FUTURES & SPOT) dùng chung slider `FOOTPRINT GAP`; fetch nodes + completed-hour CVD song song qua `Promise.all` cho cả hai market.
+  - **Hook `useMarketCvdSeries` + `useSessionDelta` (`HftRadarTab.jsx`):** Tái cấu trúc logic series CVD / delta realtime / displayVol thành hook dùng chung, chạy độc lập cho từng thị trường; xóa state `marketMode` và localStorage key `hft_cvd_market`.
+- **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (10.33s); panel hiển thị đồng thời CVD Futures & Spot trên cùng biểu đồ.
+
 ### [2026-07-29] Hiển Thị Thanh Tổng Volume Footprint & Trạng Thái Chờ Realtime Cho Tab SPOT/FUTURES `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & UI ENHANCEMENT
 - **Tóm tắt:** Bổ sung thanh Header hiển thị tổng khối lượng tích lũy `TỔNG VOL: $...` ngay trên bảng Footprint Nodes kèm nhãn phân biệt thị trường rõ ràng (`BIN-F PROXY` vs `BIN-S PROXY`), giúp người dùng thấy ngay sự khác biệt về quy mô giao dịch giữa Spot và Futures.

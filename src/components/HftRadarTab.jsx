@@ -92,6 +92,157 @@ const getChartOptsBase = (theme) => {
   };
 };
 
+// Shared hook: tracks the session-CVD baseline each time a history list refreshes,
+// so the realtime delta appended to the last candle stays correct per market.
+function useSessionDelta(sessionCvd, list) {
+  const ref = useRef({ list, base: sessionCvd || 0 });
+  if (ref.current.list !== list) {
+    ref.current = { list, base: sessionCvd || 0 };
+  }
+  return (sessionCvd || 0) - ref.current.base;
+}
+
+// Per-market CVD series (chart points + cumulative buy/sell volume).
+function useMarketCvdSeries({
+  tf, completedHourStart, completedHourCvd, stream,
+  fallbackSessionCvd, fallbackBuyVolume, fallbackSellVolume,
+  hist24, hist7, hist30, livePrice
+}) {
+  const sessionCvd = stream?.sessionCvd ?? fallbackSessionCvd;
+  const buyVolume = stream?.buyVolume ?? fallbackBuyVolume;
+  const sellVolume = stream?.sellVolume ?? fallbackSellVolume;
+
+  const delta24 = useSessionDelta(sessionCvd, hist24);
+  const delta7 = useSessionDelta(sessionCvd, hist7);
+  const delta30 = useSessionDelta(sessionCvd, hist30);
+
+  const activeCompleted = completedHourCvd?.startTime === completedHourStart
+    ? completedHourCvd
+    : null;
+  const list1h = useMemo(() => activeCompleted?.points ?? [], [activeCompleted]);
+
+  const history = tf === '24H' ? hist24 : tf === '7D' ? hist7 : hist30;
+  const delta = tf === '24H' ? delta24 : tf === '7D' ? delta7 : tf === '30D' ? delta30 : 0;
+
+  const chartList = useMemo(() => {
+    if (tf === '1H') return list1h;
+    if (!history || history.length === 0) return [];
+    const list = [...history];
+    const last = list[list.length - 1];
+    list[list.length - 1] = { ...last, cvd: last.cvd + delta, price: livePrice || last.price };
+    return list;
+  }, [tf, list1h, history, delta, livePrice]);
+
+  const displayVol = useMemo(() => {
+    if (tf === '1H') {
+      return activeCompleted
+        ? { buy: activeCompleted.buyVol, sell: activeCompleted.sellVol }
+        : { buy: 0, sell: 0 };
+    }
+    if (!history || history.length === 0) {
+      return { buy: buyVolume || 0, sell: sellVolume || 0 };
+    }
+    let buySum = 0;
+    let sellSum = 0;
+    for (let i = 0; i < history.length; i++) {
+      buySum += (history[i].buyVol || 0);
+      sellSum += (history[i].sellVol || 0);
+    }
+    buySum += buyVolume || 0;
+    sellSum += sellVolume || 0;
+    return { buy: buySum, sell: sellSum };
+  }, [tf, activeCompleted, buyVolume, sellVolume, history]);
+
+  return { chartList, displayVol };
+}
+
+const clusterVolNodes = (nodes, gap) => {
+  if (!nodes || nodes.length === 0) return [];
+  if (!gap || gap <= 1) return nodes;
+
+  const map = new Map();
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    const binPrice = Math.floor(n.price / gap) * gap;
+    let entry = map.get(binPrice);
+    if (!entry) {
+      entry = { price: binPrice, priceHigh: binPrice + gap - 1, buy: 0, sell: 0 };
+      map.set(binPrice, entry);
+    }
+    entry.buy += n.buy;
+    entry.sell += n.sell;
+  }
+
+  return Array.from(map.values()).sort((a, b) => b.price - a.price);
+};
+
+function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf }) {
+  if (!nodes || nodes.length === 0) {
+    return (
+      <div className="hft-empty font-mono" style={{ padding: '16px', textOverflow: 'ellipsis', overflow: 'hidden', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.65rem', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+        ⚡ Đang tích lũy dữ liệu Footprint Nodes realtime cho thị trường {marketLabel}...
+      </div>
+    );
+  }
+
+  const totalClusterVol = nodes.reduce((acc, n) => acc + n.buy + n.sell, 0);
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
+        <span>CỤM FOOTPRINT NODES ({marketLabel} - {cvdTf})</span>
+        <span style={{ color: accentColor, fontWeight: 600 }}>
+          TỔNG VOL ({cvdTf}): {fmtUsd(totalClusterVol)}
+        </span>
+      </div>
+      <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', padding: '4px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.65rem' }}>
+          <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-950)', zIndex: 10 }}>
+            <tr>
+              <th title={`Vùng giá (Node) gộp các mức giá dựa trên cấu hình GAP $${nodeGap}. Dữ liệu tích lũy realtime từ Binance ${marketLabel}.`} style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ ({marketLabel})</th>
+              <th title={`Volume Mua Chủ Động (Market Buy) trên Binance ${marketLabel} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
+              <th title={`Volume Bán Chủ Động (Market Sell) trên Binance ${marketLabel} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
+              <th title="Độ chênh lệch (Buy Vol - Sell Vol) tích lũy realtime. Dương (Xanh) = Hấp thụ mua mạnh (Support Node). Âm (Đỏ) = Áp lực bán mạnh (Resistance Node)." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {nodes.map(n => {
+              const delta = n.buy - n.sell;
+              const total = n.buy + n.sell;
+              if (total === 0) return null;
+
+              const maxSingleVol = Math.max(...nodes.map(cn => Math.max(cn.buy, cn.sell)));
+              const buyWidth = Math.min(100, (n.buy / maxSingleVol) * 100);
+              const sellWidth = Math.min(100, (n.sell / maxSingleVol) * 100);
+
+              return (
+                <tr key={n.price} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                  <td className="font-mono" style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-200)' }}>
+                    {n.price} <span style={{ color: 'var(--text-slate-500)', margin: '0 4px' }}>~</span> {n.priceHigh}
+                  </td>
+                  <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${buyWidth}%`, background: 'rgba(16, 185, 129, 0.15)', borderRadius: '2px', zIndex: 1 }} />
+                    <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-emerald-400)' }}>{fmtUsd(n.buy)}</span>
+                  </td>
+                  <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${sellWidth}%`, background: 'rgba(244, 63, 94, 0.15)', borderRadius: '2px', zIndex: 1 }} />
+                    <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-rose-400)' }}>{fmtUsd(n.sell)}</span>
+                  </td>
+                  <td className={`font-mono ${delta > 0 ? 'text-emerald' : 'text-rose'}`} style={{ padding: '8px', fontWeight: 600 }}>
+                    <div style={{ background: delta > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)', display: 'inline-block', padding: '2px 6px', borderRadius: '4px' }}>
+                      {delta > 0 ? '+' : ''}{fmtUsd(delta)}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 // ─── PANEL 1: CVD & Order Flow ────────────────────────────────────────────────
 
 function CVDPanel({
@@ -101,28 +252,13 @@ function CVDPanel({
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
   cvdStatus, livePrice, theme, volNodes = []
 }) {
-  const [marketMode, setMarketMode] = useState(() => {
-    const saved = localStorage.getItem('hft_cvd_market');
-    return saved === 'SPOT' ? 'SPOT' : 'FUTURES';
-  });
-
   const [cvdTf, setCvdTf] = useState('1H');
   const [completedHourStart, setCompletedHourStart] = useState(getLastCompletedHourStart);
-  const [completedHourCvd, setCompletedHourCvd] = useState(null);
+  const [completedHourCvdMap, setCompletedHourCvdMap] = useState({ FUTURES: null, SPOT: null });
   const [nodeGap, setNodeGap] = useState(() => {
     const saved = localStorage.getItem('hft_cvd_gap');
     return saved ? Number(saved) : 100;
   });
-
-  // Select active market dataset dynamically
-  const activeStream = marketMode === 'SPOT' ? spotStream : futuresStream;
-  const activeSessionCvd = activeStream?.sessionCvd ?? sessionCvd;
-  const activeBuyVolume = activeStream?.buyVolume ?? buyVolume;
-  const activeSellVolume = activeStream?.sellVolume ?? sellVolume;
-
-  const activeCvdHistory24h = marketMode === 'SPOT' ? cvdHistory24hSpot : cvdHistory24h;
-  const activeCvdHistory7d = marketMode === 'SPOT' ? cvdHistory7dSpot : cvdHistory7d;
-  const activeCvdHistory30d = marketMode === 'SPOT' ? cvdHistory30dSpot : cvdHistory30d;
 
   // 1H means the previous fully closed clock hour, never a rolling window.
   useEffect(() => {
@@ -137,147 +273,82 @@ function CVDPanel({
 
   useEffect(() => {
     let isCancelled = false;
-    getCompletedHourCVD('BTCUSDT', marketMode.toLowerCase(), completedHourStart)
-      .then((result) => {
-        if (!isCancelled) setCompletedHourCvd(result?.isComplete ? result : null);
-      });
+    Promise.all([
+      getCompletedHourCVD('BTCUSDT', 'futures', completedHourStart),
+      getCompletedHourCVD('BTCUSDT', 'spot', completedHourStart),
+    ]).then(([futuresResult, spotResult]) => {
+      if (!isCancelled) {
+        setCompletedHourCvdMap({
+          FUTURES: futuresResult?.isComplete ? futuresResult : null,
+          SPOT: spotResult?.isComplete ? spotResult : null,
+        });
+      }
+    });
     return () => { isCancelled = true; };
-  }, [marketMode, completedHourStart]);
+  }, [completedHourStart]);
 
-  const activeCompletedHourCvd = completedHourCvd?.startTime === completedHourStart
-    ? completedHourCvd
-    : null;
+  const futuresSeries = useMarketCvdSeries({
+    tf: cvdTf,
+    completedHourStart,
+    completedHourCvd: completedHourCvdMap.FUTURES,
+    stream: futuresStream,
+    fallbackSessionCvd: sessionCvd,
+    fallbackBuyVolume: buyVolume,
+    fallbackSellVolume: sellVolume,
+    hist24: cvdHistory24h,
+    hist7: cvdHistory7d,
+    hist30: cvdHistory30d,
+    livePrice,
+  });
 
-  const displayVol = useMemo(() => {
-    if (cvdTf === '1H') {
-      return activeCompletedHourCvd
-        ? { buy: activeCompletedHourCvd.buyVol, sell: activeCompletedHourCvd.sellVol }
-        : { buy: 0, sell: 0 };
-    }
-    const list = cvdTf === '24H' ? activeCvdHistory24h
-               : cvdTf === '7D' ? activeCvdHistory7d
-               : activeCvdHistory30d;
-    
-    if (!list || list.length === 0) {
-      return { buy: activeBuyVolume, sell: activeSellVolume };
-    }
+  const spotSeries = useMarketCvdSeries({
+    tf: cvdTf,
+    completedHourStart,
+    completedHourCvd: completedHourCvdMap.SPOT,
+    stream: spotStream,
+    fallbackSessionCvd: sessionCvd,
+    fallbackBuyVolume: buyVolume,
+    fallbackSellVolume: sellVolume,
+    hist24: cvdHistory24hSpot,
+    hist7: cvdHistory7dSpot,
+    hist30: cvdHistory30dSpot,
+    livePrice,
+  });
 
-    let buySum = 0;
-    let sellSum = 0;
-    for (let i = 0; i < list.length; i++) {
-      buySum += (list[i].buyVol || 0);
-      sellSum += (list[i].sellVol || 0);
-    }
-    // Add current session realtime volume delta
-    buySum += activeBuyVolume;
-    sellSum += activeSellVolume;
-
-    return { buy: buySum, sell: sellSum };
-  }, [cvdTf, activeCompletedHourCvd, activeBuyVolume, activeSellVolume, activeCvdHistory24h, activeCvdHistory7d, activeCvdHistory30d]);
-
-  const displayTotalVol = displayVol.buy + displayVol.sell;
-  const buyPct = displayTotalVol > 0 ? (displayVol.buy / displayTotalVol * 100) : 50;
-  const sellPct = 100 - buyPct;
-
-  const [tfFootprintNodes, setTfFootprintNodes] = useState(null);
+  const [tfNodeMap, setTfNodeMap] = useState(null);
 
   useEffect(() => {
     let isCancelled = false;
     const fetchTfNodes = async () => {
-      const nodes = await getFootprintNodesForTimeframe('BTCUSDT', marketMode.toLowerCase(), cvdTf);
+      const [futuresNodes, spotNodes] = await Promise.all([
+        getFootprintNodesForTimeframe('BTCUSDT', 'futures', cvdTf),
+        getFootprintNodesForTimeframe('BTCUSDT', 'spot', cvdTf),
+      ]);
       if (!isCancelled) {
-        setTfFootprintNodes(nodes);
+        setTfNodeMap({ FUTURES: futuresNodes, SPOT: spotNodes });
       }
     };
     fetchTfNodes();
     return () => { isCancelled = true; };
-  }, [cvdTf, marketMode]);
+  }, [cvdTf]);
 
-  const activeVolNodes = (tfFootprintNodes && tfFootprintNodes.length > 0)
-    ? tfFootprintNodes
-    : (activeStream?.volNodes ?? volNodes);
+  const futuresVolNodes = (tfNodeMap?.FUTURES && tfNodeMap.FUTURES.length > 0)
+    ? tfNodeMap.FUTURES
+    : (futuresStream?.volNodes ?? volNodes);
+  const spotVolNodes = (tfNodeMap?.SPOT && tfNodeMap.SPOT.length > 0)
+    ? tfNodeMap.SPOT
+    : (spotStream?.volNodes ?? volNodes);
 
-  const clusteredNodes = useMemo(() => {
-    if (!activeVolNodes || activeVolNodes.length === 0) return [];
-    if (!nodeGap || nodeGap <= 1) return activeVolNodes;
+  const clusteredFuturesNodes = useMemo(() => clusterVolNodes(futuresVolNodes, nodeGap), [futuresVolNodes, nodeGap]);
+  const clusteredSpotNodes = useMemo(() => clusterVolNodes(spotVolNodes, nodeGap), [spotVolNodes, nodeGap]);
 
-    const map = new Map();
-    for (let i = 0; i < activeVolNodes.length; i++) {
-      const n = activeVolNodes[i];
-      const binPrice = Math.floor(n.price / nodeGap) * nodeGap;
-      let entry = map.get(binPrice);
-      if (!entry) {
-        entry = { price: binPrice, priceHigh: binPrice + nodeGap - 1, buy: 0, sell: 0 };
-        map.set(binPrice, entry);
-      }
-      entry.buy += n.buy;
-      entry.sell += n.sell;
-    }
-    
-    // Convert to array and sort descending by price
-    const arr = Array.from(map.values()).sort((a, b) => b.price - a.price);
-    return arr;
-  }, [activeVolNodes, nodeGap]);
+  const futuresList = futuresSeries.chartList;
+  const spotList = spotSeries.chartList;
 
-  const baseSession24hRef = useRef(activeSessionCvd || 0);
-  const prevList24hRef = useRef(activeCvdHistory24h);
-  if (prevList24hRef.current !== activeCvdHistory24h) {
-    prevList24hRef.current = activeCvdHistory24h;
-    baseSession24hRef.current = activeSessionCvd || 0;
-  }
-  const delta24h = (activeSessionCvd || 0) - baseSession24hRef.current;
-
-  const baseSession7dRef = useRef(activeSessionCvd || 0);
-  const prevList7dRef = useRef(activeCvdHistory7d);
-  if (prevList7dRef.current !== activeCvdHistory7d) {
-    prevList7dRef.current = activeCvdHistory7d;
-    baseSession7dRef.current = activeSessionCvd || 0;
-  }
-  const delta7d = (activeSessionCvd || 0) - baseSession7dRef.current;
-
-
-
-
-
-  const baseSession30dRef = useRef(activeSessionCvd || 0);
-  const prevList30dRef = useRef(activeCvdHistory30d);
-  if (prevList30dRef.current !== activeCvdHistory30d) {
-    prevList30dRef.current = activeCvdHistory30d;
-    baseSession30dRef.current = activeSessionCvd || 0;
-  }
-  const delta30d = (activeSessionCvd || 0) - baseSession30dRef.current;
+  const latestCvdF = futuresList.length > 0 ? futuresList[futuresList.length - 1].cvd : null;
+  const latestCvdS = spotList.length > 0 ? spotList[spotList.length - 1].cvd : null;
 
   // Fixed 1H data comes from the prior completed hourly bucket.
-  const list1h = useMemo(() => activeCompletedHourCvd?.points ?? [], [activeCompletedHourCvd]);
-
-  const chartList = useMemo(() => {
-    if (cvdTf === '1H') return list1h;
-    if (cvdTf === '24H') {
-      if (!activeCvdHistory24h || activeCvdHistory24h.length === 0) return [];
-      const list = [...activeCvdHistory24h];
-      const last = list[list.length - 1];
-      list[list.length - 1] = { ...last, cvd: last.cvd + delta24h, price: livePrice || last.price };
-      return list;
-    }
-    if (cvdTf === '7D') {
-      if (!activeCvdHistory7d || activeCvdHistory7d.length === 0) return [];
-      const list = [...activeCvdHistory7d];
-      const last = list[list.length - 1];
-      list[list.length - 1] = { ...last, cvd: last.cvd + delta7d, price: livePrice || last.price };
-      return list;
-    }
-    if (cvdTf === '30D') {
-      if (!activeCvdHistory30d || activeCvdHistory30d.length === 0) return [];
-      const list = [...activeCvdHistory30d];
-      const last = list[list.length - 1];
-      list[list.length - 1] = { ...last, cvd: last.cvd + delta30d, price: livePrice || last.price };
-      return list;
-    }
-    return [];
-  }, [cvdTf, list1h, activeCvdHistory24h, activeCvdHistory7d, activeCvdHistory30d, delta24h, delta7d, delta30d, livePrice]);
-
-  const latestCvd = chartList.length > 0 ? chartList[chartList.length - 1].cvd : null;
-
   const chartOpts = useMemo(() => {
     const base = getChartOptsBase(theme);
     return {
@@ -288,9 +359,10 @@ function CVDPanel({
           ...base.plugins.tooltip,
           callbacks: {
             label: (ctx) => {
-              const item = chartList[ctx.dataIndex];
+              const source = ctx.dataset.label === 'FUTURES' ? futuresList : spotList;
+              const item = source[ctx.dataIndex];
               const btcStr = item?.price ? ` (BTC: $${Number(item.price).toLocaleString()})` : '';
-              return ` CVD: ${fmtCvdUsd(ctx.parsed.y)}${btcStr}`;
+              return ` ${ctx.dataset.label}: ${fmtCvdUsd(ctx.parsed.y)}${btcStr}`;
             }
           }
         }
@@ -306,10 +378,11 @@ function CVDPanel({
         }
       }
     };
-  }, [theme, chartList]);
+  }, [theme, futuresList, spotList]);
 
   const chartData = useMemo(() => {
-    const labels = chartList.map(item => {
+    const labelSource = futuresList.length > 0 ? futuresList : spotList;
+    const labels = labelSource.map(item => {
       if (item.time == null) return '';
       const d = new Date(item.time);
       if (isNaN(d.getTime())) return String(item.time);
@@ -328,36 +401,42 @@ function CVDPanel({
       return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
     });
 
-    const cvdVals = chartList.map(item => item.cvd);
-    const lastVal = cvdVals.length > 0 ? cvdVals[cvdVals.length - 1] : 0;
-    const isPos = lastVal >= 0;
-    const lineColor = isPos ? '#10b981' : '#f43f5e';
     const isLight = theme === 'light';
-    const bgColor = isPos
-      ? (isLight ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.15)')
-      : (isLight ? 'rgba(244, 63, 94, 0.1)' : 'rgba(244, 63, 94, 0.15)');
+    const mkDataset = (label, list, borderColor, backgroundColor) => ({
+      label,
+      data: list.map(item => item.cvd),
+      borderColor,
+      backgroundColor,
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      fill: true,
+      tension: 0.25,
+    });
 
     return {
       labels,
       datasets: [
         {
-          label: 'CVD',
-          data: cvdVals,
-          borderColor: lineColor,
-          backgroundColor: bgColor,
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 4,
-          fill: true,
-          tension: 0.25,
-        }
-      ]
+          ...mkDataset('FUTURES', futuresList, '#a78bfa', isLight ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.12)'),
+          fill: false,
+        },
+        {
+          ...mkDataset('SPOT', spotList, '#34d399', isLight ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)'),
+          fill: false,
+        },
+      ].filter(ds => ds.data.length > 0)
     };
-  }, [chartList, cvdTf, theme]);
+  }, [futuresList, spotList, cvdTf, theme]);
 
-  const totalClusterVol = useMemo(() => {
-    return clusteredNodes.reduce((acc, n) => acc + n.buy + n.sell, 0);
-  }, [clusteredNodes]);
+  const rangeLabel = cvdTf === '1H'
+    ? formatHourRange(completedHourStart)
+    : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA';
+
+  const gaugeMarkets = [
+    { key: 'FUTURES', accent: '#a78bfa', venueLabel: 'Futures (Phái sinh)', series: futuresSeries },
+    { key: 'SPOT', accent: '#34d399', venueLabel: 'Spot (Cơ sở)', series: spotSeries },
+  ];
 
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
@@ -373,14 +452,27 @@ function CVDPanel({
               className="hft-badge badge-api font-mono"
               style={{
                 cursor: 'help',
-                backgroundColor: marketMode === 'FUTURES' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                color: marketMode === 'FUTURES' ? '#a78bfa' : '#34d399',
-                border: `1px solid ${marketMode === 'FUTURES' ? 'rgba(139, 92, 246, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                color: '#a78bfa',
+                border: '1px solid rgba(139, 92, 246, 0.3)',
                 fontWeight: 600
               }}
-              title={marketMode === 'FUTURES' ? 'Binance Futures aggTrade — Thị trường Phái sinh (Benchmark Proxy)' : 'Binance Spot aggTrade — Thị trường Cơ sở (Spot Direct)'}
+              title="Binance Futures aggTrade — Thị trường Phái sinh (Benchmark Proxy)"
             >
-              {marketMode === 'FUTURES' ? 'BIN-F PROXY' : 'BIN-S PROXY'}
+              BIN-F PROXY
+            </span>
+            <span
+              className="hft-badge badge-api font-mono"
+              style={{
+                cursor: 'help',
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                color: '#34d399',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                fontWeight: 600
+              }}
+              title="Binance Spot aggTrade — Thị trường Cơ sở (Spot Direct)"
+            >
+              BIN-S PROXY
             </span>
             <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
               {cvdStatus === 'connected' ? '⚡ LIVE' : 'WS OFF'}
@@ -388,24 +480,6 @@ function CVDPanel({
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Market Selector Tabs (FUTURES vs SPOT) */}
-          <div className="etf-timeframe-toggle font-mono">
-            <button
-              onClick={() => { setMarketMode('FUTURES'); localStorage.setItem('hft_cvd_market', 'FUTURES'); }}
-              className={`toggle-btn ${marketMode === 'FUTURES' ? 'active' : ''}`}
-              title="Xem chỉ số CVD Thị trường Phái sinh (Binance Futures)"
-            >
-              FUTURES
-            </button>
-            <button
-              onClick={() => { setMarketMode('SPOT'); localStorage.setItem('hft_cvd_market', 'SPOT'); }}
-              className={`toggle-btn ${marketMode === 'SPOT' ? 'active' : ''}`}
-              title="Xem chỉ số CVD Thị trường Cơ sở (Binance Spot)"
-            >
-              SPOT
-            </button>
-          </div>
-
           {/* Timeframe Selector */}
           <div className="etf-timeframe-toggle font-mono">
             {['1H', '24H', '7D', '30D'].map(t => (
@@ -421,20 +495,28 @@ function CVDPanel({
           <ModuleMenu moduleId="hft_cvd" />
         </div>
       </div>
-      <div className="cvd-hero" style={{ paddingBottom: '8px' }}>
+      <div className="cvd-hero" style={{ paddingBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '10px 28px' }}>
         <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian">
-            {`CVD RÒNG ${marketMode} (${cvdTf === '1H' ? formatHourRange(completedHourStart) : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA'})`}
+          <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian trên Binance Futures (Phái sinh)">
+            {`CVD RÒNG FUTURES (${rangeLabel})`}
           </span>
-          <span className={`cvd-value font-mono ${(latestCvd ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {fmtCvdUsd(latestCvd)}
+          <span className={`cvd-value font-mono ${(latestCvdF ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+            {fmtCvdUsd(latestCvdF)}
+          </span>
+        </div>
+        <div className="cvd-value-wrap">
+          <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian trên Binance Spot (Cơ sở)">
+            {`CVD RÒNG SPOT (${rangeLabel})`}
+          </span>
+          <span className={`cvd-value font-mono ${(latestCvdS ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+            {fmtCvdUsd(latestCvdS)}
           </span>
         </div>
       </div>
 
-      {/* CVD Line Chart */}
+      {/* CVD Line Chart (FUTURES vs SPOT) */}
       <div className="cvd-chart-container" style={{ height: '180px', width: '100%', marginBottom: '16px' }}>
-        {chartList.length > 1 ? (
+        {(futuresList.length > 1 || spotList.length > 1) ? (
           <Line data={chartData} options={chartOpts} />
         ) : (
           <div className="hft-empty font-mono" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>
@@ -443,27 +525,34 @@ function CVDPanel({
         )}
       </div>
 
-      {/* Volume Gauge */}
-      <div className="vol-gauge-container" title={`Tỷ lệ Buy/Sell Volume ròng tích lũy trong khung ${cvdTf} từ Binance ${marketMode === 'FUTURES' ? 'Futures (Phái sinh)' : 'Spot (Cơ sở)'}`}>
-        <div className="vol-gauge-labels font-mono">
-          <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {buyPct.toFixed(1)}%</span>
-          <span className="text-slate-400" style={{ cursor: 'help' }} title={`Volume Ratio đo tỷ lệ Mua/Bán ròng trong khung thời gian ${cvdTf} của thị trường Binance ${marketMode}`}>Volume Ratio ({marketMode} - {cvdTf})</span>
-          <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {sellPct.toFixed(1)}%</span>
-        </div>
-        <div className="vol-gauge-bar">
-          <div className="vol-gauge-buy" style={{ width: `${buyPct}%` }} />
-          <div className="vol-gauge-sell" style={{ width: `${sellPct}%` }} />
-        </div>
-        <div className="vol-gauge-values font-mono">
-          <span>{fmtUsd(displayVol.buy)}</span>
-          <span>{fmtUsd(displayVol.sell)}</span>
-        </div>
-      </div>
+      {/* Volume Gauges (song song 2 thị trường để đối chiếu) */}
+      {gaugeMarkets.map(({ key, accent, venueLabel, series }) => {
+        const totalVol = series.displayVol.buy + series.displayVol.sell;
+        const bpct = totalVol > 0 ? (series.displayVol.buy / totalVol * 100) : 50;
+        const spct = 100 - bpct;
+        return (
+          <div className="vol-gauge-container" key={key} style={{ marginBottom: '10px' }} title={`Tỷ lệ Buy/Sell Volume ròng tích lũy trong khung ${cvdTf} từ Binance ${venueLabel}`}>
+            <div className="vol-gauge-labels font-mono">
+              <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {bpct.toFixed(1)}%</span>
+              <span className="font-mono" style={{ cursor: 'help', color: accent, fontWeight: 600 }} title={`Volume Ratio đo tỷ lệ Mua/Bán ròng trong khung thời gian ${cvdTf} của thị trường Binance ${key}`}>VOLUME RATIO ({key} - {cvdTf})</span>
+              <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {spct.toFixed(1)}%</span>
+            </div>
+            <div className="vol-gauge-bar">
+              <div className="vol-gauge-buy" style={{ width: `${bpct}%` }} />
+              <div className="vol-gauge-sell" style={{ width: `${spct}%` }} />
+            </div>
+            <div className="vol-gauge-values font-mono">
+              <span>{fmtUsd(series.displayVol.buy)}</span>
+              <span>{fmtUsd(series.displayVol.sell)}</span>
+            </div>
+          </div>
+        );
+      })}
 
       {/* Node Gap Config */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu Footprint Node được đồng bộ theo khung thời gian ${cvdTf} từ sàn Binance ${marketMode}.`}>FOOTPRINT GAP (${marketMode} - ${cvdTf})</span>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu Footprint Node được đồng bộ theo khung thời gian ${cvdTf} từ sàn Binance (cả Futures & Spot).`}>FOOTPRINT GAP ({cvdTf})</span>
           <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${nodeGap}</span>
         </div>
         <input
@@ -482,68 +571,11 @@ function CVDPanel({
           <span>10</span><span>50</span><span>100</span><span>250</span><span>500</span><span>1000</span>
         </div>
       </div>
-      
-      {/* Nodes Table Header Summary */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
-        <span>CỤM FOOTPRINT NODES ({marketMode} - {cvdTf})</span>
-        <span style={{ color: marketMode === 'FUTURES' ? '#a78bfa' : '#34d399', fontWeight: 600 }}>
-          TỔNG VOL ({cvdTf}): {fmtUsd(totalClusterVol)}
-        </span>
-      </div>
 
-      {/* Nodes Table */}
-      {clusteredNodes.length > 0 ? (
-        <div style={{ maxHeight: '250px', overflowY: 'auto', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', padding: '4px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.65rem' }}>
-            <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-950)', zIndex: 10 }}>
-              <tr>
-                <th title={`Vùng giá (Node) gộp các mức giá dựa trên cấu hình GAP $${nodeGap}. Dữ liệu tích lũy realtime từ Binance ${marketMode === 'FUTURES' ? 'Futures' : 'Spot'}.`} style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ ({marketMode})</th>
-                <th title={`Volume Mua Chủ Động (Market Buy) trên Binance ${marketMode} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
-                <th title={`Volume Bán Chủ Động (Market Sell) trên Binance ${marketMode} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
-                <th title="Độ chênh lệch (Buy Vol - Sell Vol) tích lũy realtime. Dương (Xanh) = Hấp thụ mua mạnh (Support Node). Âm (Đỏ) = Áp lực bán mạnh (Resistance Node)." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clusteredNodes.map(n => {
-                const delta = n.buy - n.sell;
-                const total = n.buy + n.sell;
-                if (total === 0) return null;
-                
-                // Dynamic shading base
-                const maxVol = Math.max(...clusteredNodes.map(cn => cn.buy + cn.sell));
-                const maxSingleVol = Math.max(...clusteredNodes.map(cn => Math.max(cn.buy, cn.sell)));
-                const buyWidth = Math.min(100, (n.buy / maxSingleVol) * 100);
-                const sellWidth = Math.min(100, (n.sell / maxSingleVol) * 100);
-                
-                return (
-                  <tr key={n.price} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                    <td className="font-mono" style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-200)' }}>
-                      {n.price} <span style={{ color: 'var(--text-slate-500)', margin: '0 4px' }}>~</span> {n.priceHigh}
-                    </td>
-                    <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
-                      <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${buyWidth}%`, background: 'rgba(16, 185, 129, 0.15)', borderRadius: '2px', zIndex: 1 }} />
-                      <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-emerald-400)' }}>{fmtUsd(n.buy)}</span>
-                    </td>
-                    <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
-                      <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${sellWidth}%`, background: 'rgba(244, 63, 94, 0.15)', borderRadius: '2px', zIndex: 1 }} />
-                      <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-rose-400)' }}>{fmtUsd(n.sell)}</span>
-                    </td>
-                    <td className={`font-mono ${delta > 0 ? 'text-emerald' : 'text-rose'}`} style={{ padding: '8px', fontWeight: 600 }}>
-                      <div style={{ background: delta > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)', display: 'inline-block', padding: '2px 6px', borderRadius: '4px' }}>
-                        {delta > 0 ? '+' : ''}{fmtUsd(delta)}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="hft-empty font-mono" style={{ padding: '16px', textOverflow: 'ellipsis', overflow: 'hidden', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.65rem', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
-          ⚡ Đang tích lũy dữ liệu Footprint Nodes realtime cho thị trường {marketMode}...
-        </div>
-      )}
+      {/* Nodes Tables — song song FUTURES & SPOT để so sánh dòng tiền hai thị trường */}
+      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} />
+      <div style={{ height: '12px' }} />
+      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} />
 
     </div>
   );
