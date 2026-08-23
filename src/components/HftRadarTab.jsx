@@ -14,6 +14,27 @@ import {
   MOVE_CONFIG,
 } from '../services/moveTracker';
 import { describeMoveEvent } from '../services/moveTrackerCore';
+import { subscribeCrosshair } from '../services/crosshairSync';
+
+// Plugin vẽ đường dọc highlight trên chart CVD theo crosshair của AdvancedChart
+const cvdSyncPlugin = {
+  id: 'cvdSync',
+  afterDatasetsDraw(chart, args, opts) {
+    if (opts == null || opts.index == null || opts.index < 0) return;
+    const { ctx, chartArea, scales } = chart;
+    const x = scales.x.getPixelForValue(opts.index);
+    if (!isFinite(x) || x < chartArea.left || x > chartArea.right) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(253, 224, 71, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+};
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -348,6 +369,35 @@ function CVDPanel({
   const latestCvdF = futuresList.length > 0 ? futuresList[futuresList.length - 1].cvd : null;
   const latestCvdS = spotList.length > 0 ? spotList[spotList.length - 1].cvd : null;
 
+  // ── Crosshair sync từ AdvancedChart ──
+  const [syncIdx, setSyncIdx] = useState(null);
+  const syncSourceRef = useRef(futuresList.length > 0 ? futuresList : spotList);
+  syncSourceRef.current = futuresList.length > 0 ? futuresList : spotList;
+
+  useEffect(() => {
+    return subscribeCrosshair((payload) => {
+      if (!payload || !payload.timeMs) {
+        setSyncIdx(null);
+        return;
+      }
+      const src = syncSourceRef.current;
+      if (!src || src.length === 0) {
+        setSyncIdx(null);
+        return;
+      }
+      let best = null;
+      let bestDist = Infinity;
+      for (let i = 0; i < src.length; i++) {
+        const t = src[i].time;
+        if (t == null) continue;
+        const d = Math.abs(t - payload.timeMs);
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+      // Bỏ qua nếu lệch quá xa (>3h) — crosshair không tương ứng dữ liệu hiện tại
+      setSyncIdx(best != null && bestDist <= 3 * 3600 * 1000 ? best : null);
+    });
+  }, []);
+
   // Fixed 1H data comes from the prior completed hourly bucket.
   const chartOpts = useMemo(() => {
     const base = getChartOptsBase(theme);
@@ -356,6 +406,7 @@ function CVDPanel({
       interaction: { mode: 'index', intersect: false },
       plugins: {
         ...base.plugins,
+        cvdSync: { index: syncIdx },
         tooltip: {
           ...base.plugins.tooltip,
           mode: 'index',
@@ -394,7 +445,7 @@ function CVDPanel({
         }
       }
     };
-  }, [theme, futuresList, spotList]);
+  }, [theme, futuresList, spotList, syncIdx]);
 
   const chartData = useMemo(() => {
     const labelSource = futuresList.length > 0 ? futuresList : spotList;
@@ -532,14 +583,40 @@ function CVDPanel({
       </div>
 
       {/* CVD Line Chart (FUTURES vs SPOT) */}
-      <div className="cvd-chart-container" style={{ height: '180px', width: '100%', marginBottom: '16px' }}>
+      <div className="cvd-chart-container" style={{ height: '180px', width: '100%', marginBottom: '16px', position: 'relative' }}>
         {(futuresList.length > 1 || spotList.length > 1) ? (
-          <Line data={chartData} options={chartOpts} />
+          <Line data={chartData} options={chartOpts} plugins={[cvdSyncPlugin]} />
         ) : (
           <div className="hft-empty font-mono" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>
             {cvdTf === '1H' ? 'Đang tải dữ liệu CVD của giờ đã chốt...' : 'Đang tải dữ liệu biểu đồ CVD...'}
           </div>
         )}
+
+        {/* Chip hiển thị CVD 2 thị trường tại điểm crosshair của AdvancedChart */}
+        {syncIdx != null && syncSourceRef.current[syncIdx] ? (() => {
+          const item = syncSourceRef.current[syncIdx];
+          const d = item.time != null ? new Date(item.time) : null;
+          const timeLabel = d && !isNaN(d.getTime())
+            ? (cvdTf === '24H'
+              ? `${String(d.getHours()).padStart(2, '0')}:00`
+              : cvdTf === '1H'
+                ? `${d.getHours()}h${d.getMinutes() > 0 ? String(d.getMinutes()).padStart(2, '0') : ''}`
+                : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:00`)
+            : '';
+          return (
+            <div className="font-mono" style={{
+              position: 'absolute', top: 4, right: 8, zIndex: 10,
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              background: 'rgba(10, 12, 18, 0.9)', border: '1px solid rgba(253, 224, 71, 0.5)',
+              borderRadius: '6px', padding: '3px 8px', fontSize: '0.58rem',
+              pointerEvents: 'none', whiteSpace: 'nowrap',
+            }}>
+              <span style={{ color: '#facc15' }}>⌖ {timeLabel}</span>
+              <span style={{ color: '#a78bfa' }}>F {fmtCvdUsd(futuresList[syncIdx]?.cvd)}</span>
+              <span style={{ color: '#34d399' }}>S {fmtCvdUsd(spotList[syncIdx]?.cvd)}</span>
+            </div>
+          );
+        })() : null}
       </div>
 
       {/* Volume Gauges (song song 2 thị trường để đối chiếu) */}

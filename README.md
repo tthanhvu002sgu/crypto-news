@@ -212,6 +212,20 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
 - **Verify:** `npm run build` pass (3.63s); hover 1 điểm hiện tooltip gộp cả hai thị trường, hai trục Y có thang độc lập.
 
+### [2026-08-23] Nâng Cấp ADVANCED PRICE ACTION: Info Chip, Wall Aging, Alert & Crosshair Sync `(FEATURE)`
+- **Lane / Mode:** FEATURE UX/UI + WALL INTELLIGENCE
+- **Tóm tắt:** Gói nâng cấp lớn cho panel **Advanced Price Action**: (UX) info chip POC/VAH/VAL kèm % distance + trạng thái Value Area, axis label cho POC & wall mạnh nhất, hover tooltip chi tiết từng price line, wall aging theo thời gian tồn tại, gom toolbar thành nhóm [Nav] | [Overlays ▾] | 🔔 Alert | TF, alert khi giá chạm mốc; (Tính năng) phát hiện wall bị **EATEN/PULLED** kèm event feed, đồng bộ crosshair AdvancedChart → CVD Panel.
+- **Thay đổi chính:**
+  - **Info Chip Overlay (`AdvancedChart.jsx`):** Badge `POC/VAH/VAL + %distance` ở góc trái chart, tự đổi màu + hiển thị `IN VA / ABOVE VA / BELOW VA` theo vị trí giá realtime.
+  - **Hover Highlight & Tooltip (`AdvancedChart.jsx`):** Crosshair detect price line gần nhất trong bán kính 6px → tooltip nổi (giá, USD, số lệnh, tuổi wall, cảnh báo ăn mòn); registry tách `staticLinesRef` (POC/LIQ) và `wallRegRef` (walls).
+  - **Wall Aging (`AdvancedChart.jsx`):** Wall mới (<45s) mờ + icon 🆕, wall ≥5 phút đậm + lineWidth 2 + icon ⏳ + số phút trên title; axis label bật cho wall có USD lớn nhất.
+  - **Wall Lifecycle Detection (`AdvancedChart.jsx`):** Track lịch sử wall qua `wallHistoryRef` — USD giảm >50% → event `EATEN`, mất khỏi top list ≥4s → `PULLED`, xuất hiện mới → `NEW`; hiển thị **WALL EVENTS feed** co giãn được dưới chart.
+  - **Price Alert (`AdvancedChart.jsx`):** Toggle 🔔 (persist localStorage) — giá chạm POC/Wall/Liq trong biên 0.15% → toast góc phải chart, cooldown 2 phút mỗi mốc chống spam.
+  - **Toolbar Regroup (`AdvancedChart.jsx`):** Chia nhóm Navigation (OFF/Latest/Auto), dropdown Overlays (Walls/Liq/Vol/TPO/Wall W), Alert, TF.
+  - **Crosshair Sync (`services/crosshairSync.js`, `HftRadarTab.jsx`):** Service pub/sub nhẹ — hover nến trên AdvancedChart phát `{timeMs}`; CVD Panel tìm điểm gần nhất, vẽ đường dọc vàng (plugin `cvdSync`) + chip `⌖ time · F $ · S $` hiển thị CVD Futures/Spot tại đúng thời điểm đó để đối chiếu phản ứng giá vs dòng tiền.
+- **Files / areas chạm:** `src/components/AdvancedChart.jsx`, `src/components/HftRadarTab.jsx`, `src/services/crosshairSync.js` (mới), `README.md`
+- **Verify:** `npm run build` pass (2.38s); chip VA cập nhật realtime, hover line hiện tooltip, wall events log NEW/EATEN/PULLED, crosshair chart sync sang CVD panel.
+
 ### [2026-07-29] Hiển Thị Thanh Tổng Volume Footprint & Trạng Thái Chờ Realtime Cho Tab SPOT/FUTURES `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & UI ENHANCEMENT
 - **Tóm tắt:** Bổ sung thanh Header hiển thị tổng khối lượng tích lũy `TỔNG VOL: $...` ngay trên bảng Footprint Nodes kèm nhãn phân biệt thị trường rõ ràng (`BIN-F PROXY` vs `BIN-S PROXY`), giúp người dùng thấy ngay sự khác biệt về quy mô giao dịch giữa Spot và Futures.

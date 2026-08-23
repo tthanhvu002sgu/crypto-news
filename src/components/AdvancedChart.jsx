@@ -3,8 +3,15 @@ import { createChart, CrosshairMode, LineStyle, CandlestickSeries, HistogramSeri
 import { getBTCKlines } from '../services/api';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import { emitCrosshair } from '../services/crosshairSync';
 
 const BINS = 150;
+
+const HOVER_TOLERANCE_PX = 6;
+const ALERT_TOUCH_PCT = 0.0015; // 0.15% quanh mốc
+const ALERT_COOLDOWN_MS = 2 * 60 * 1000;
+const WALL_NEW_MS = 45 * 1000;
+const WALL_OLD_MS = 5 * 60 * 1000;
 
 // ─── Helper: format USD values compactly ───────────────────────────────────────
 const fmtWallUsdCompact = (val) => {
@@ -704,9 +711,18 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const wsRef = useRef(null);
   const autoScrollRef = useRef(true);
   const latestPriceRef = useRef(null);
-  
+  // Registry các price line đang hiển thị (để hover-detect + alert)
+  const staticLinesRef = useRef([]); // POC/VAH/VAL/LIQ
+  const wallRegRef = useRef([]);     // Limit walls
+  const wallHistoryRef = useRef(new Map()); // key -> {side, avgP, usdValue, count, firstSeen, lastSeen, eatenNotified, announcedAt}
+  const alertCooldownRef = useRef(new Map());
+  const alertsOnRef = useRef(true);
+  const checkAlertsRef = useRef(() => {});
+  const wallEventSeqRef = useRef(0);
+
   const [loading, setLoading] = useState(true);
-  const [, setVpData] = useState(null);
+  const [vpData, setVpData] = useState(null);
+  const [livePx, setLivePx] = useState(null);
   const [klines, setKlines] = useState(null);
   const [showWalls, setShowWalls] = useState(true);
   const [showLiq, setShowLiq] = useState(true);
@@ -715,6 +731,46 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   const [timeframe, setTimeframe] = useState(() => localStorage.getItem('hft_timeframe') || '30m');
   const [autoScroll, setAutoScroll] = useState(true);
   const [wallTick, setWallTick] = useState(0);
+  const [hoverLine, setHoverLine] = useState(null);
+  const [overlaysOpen, setOverlaysOpen] = useState(false);
+  const [wallEvents, setWallEvents] = useState([]);
+  const [feedExpanded, setFeedExpanded] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [showAlerts, setShowAlerts] = useState(() => localStorage.getItem('hft_show_alerts') !== 'false');
+
+  useEffect(() => { alertsOnRef.current = showAlerts; }, [showAlerts]);
+
+  const pushWallEvent = (type, side, price, usdNew, usdOld) => {
+    setWallEvents(prev => [{
+      id: ++wallEventSeqRef.current,
+      type, side, price, usdNew, usdOld,
+      ts: Date.now(),
+    }, ...prev].slice(0, 30));
+  };
+
+  const fireToast = (text, color) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev.slice(-3), { id, text, color }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 6000);
+  };
+
+  // Alert khi giá chạm POC / Wall / Liq zone (kèm cooldown chống spam)
+  useEffect(() => {
+    checkAlertsRef.current = (price) => {
+      if (!alertsOnRef.current || !price) return;
+      const now = Date.now();
+      const all = [...staticLinesRef.current, ...wallRegRef.current];
+      for (const l of all) {
+        const key = `${l.kind}:${Math.round(l.price)}`;
+        const last = alertCooldownRef.current.get(key) || 0;
+        if (now - last < ALERT_COOLDOWN_MS) continue;
+        if (Math.abs(price - l.price) / l.price <= ALERT_TOUCH_PCT) {
+          alertCooldownRef.current.set(key, now);
+          fireToast(`🎯 ${l.hoverTitle} — giá đang chạm!`, l.color);
+        }
+      }
+    };
+  });
 
   // Settings state
   const [wallWidth, setWallWidth] = useState(() => parseInt(localStorage.getItem('hft_wall_width')) || 35);
@@ -831,6 +887,45 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
     }
   }, [theme]);
 
+  // Crosshair: hover-detect price lines gần cursor + phát tín hiệu sync sang CVD Panel
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const handler = (param) => {
+      if (!param.point || param.point.x == null || !seriesRef.current) {
+        setHoverLine(null);
+        emitCrosshair(null);
+        return;
+      }
+
+      emitCrosshair(param.time != null ? { timeMs: param.time * 1000 } : null);
+
+      const mid = seriesRef.current.coordinateToPrice(param.point.y);
+      const up = seriesRef.current.coordinateToPrice(param.point.y - HOVER_TOLERANCE_PX);
+      const down = seriesRef.current.coordinateToPrice(param.point.y + HOVER_TOLERANCE_PX);
+      if (mid == null || up == null || down == null) {
+        setHoverLine(null);
+        return;
+      }
+
+      const lo = Math.min(up, down);
+      const hi = Math.max(up, down);
+      let best = null;
+      let bestDist = Infinity;
+      [...staticLinesRef.current, ...wallRegRef.current].forEach(l => {
+        if (l.price >= lo && l.price <= hi) {
+          const d = Math.abs(l.price - mid);
+          if (d < bestDist) { bestDist = d; best = l; }
+        }
+      });
+      setHoverLine(best ? { ...best, x: param.point.x, y: param.point.y } : null);
+    };
+
+    chart.subscribeCrosshairMove(handler);
+    return () => chart.unsubscribeCrosshairMove(handler);
+  }, []);
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -885,6 +980,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
             const close = parseFloat(k.c);
             
             latestPriceRef.current = close;
+            setLivePx(close);
+            checkAlertsRef.current(close);
             seriesRef.current.update({ time, value: close });
 
             // Update klines array ref for volume bubbles
@@ -948,7 +1045,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         color: '#fbbf24',
         lineWidth: 2,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: false,
+        axisLabelVisible: true,
         title: `POC ${fmtPriceCompact(vp.pocPrice)}`,
       });
 
@@ -971,8 +1068,8 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       });
     }
 
+    const liqZones = showLiq ? calculateLiqZones(klines) : [];
     if (showLiq) {
-      const liqZones = calculateLiqZones(klines);
       liqZones.forEach(z => {
         const line = seriesRef.current.createPriceLine({
           price: z.price,
@@ -985,6 +1082,24 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         liqLinesRef.current.push(line);
       });
     }
+
+    // Registry phục vụ hover tooltip + price alert
+    staticLinesRef.current = [
+      ...(vp ? [{
+        kind: 'POC',
+        price: vp.pocPrice,
+        color: '#fbbf24',
+        hoverTitle: `POC ${fmtPriceCompact(vp.pocPrice)}`,
+        detail: `Value Area ${fmtPriceCompact(vp.valPrice)} → ${fmtPriceCompact(vp.vahPrice)}`,
+      }] : []),
+      ...liqZones.map(z => ({
+        kind: 'LIQ',
+        price: z.price,
+        color: z.color,
+        hoverTitle: `${z.label} ~${fmtPriceCompact(z.price)}`,
+        detail: 'Mức thanh khoản suy luận từ swing high/low (ESTIMATED)',
+      })),
+    ];
   }, [klines, showLiq]);
 
   // Handle Limit Walls independently with its own reset tick
@@ -995,63 +1110,118 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
     wallLinesRef.current = [];
     if (wallPrimitiveRef.current) wallPrimitiveRef.current.setData([]);
 
-    if (showWalls && whaleData) {
-      const fmtWallUsd = (val) => {
-        if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
-        if (val >= 1e3) return `$${(val / 1e3).toFixed(0)}K`;
-        return `$${val.toFixed(0)}`;
-      };
+    if (!showWalls || !whaleData) {
+      wallRegRef.current = [];
+      return;
+    }
 
-      const currentPrice = latestPriceRef.current || (klines && klines.length > 0 ? klines[klines.length - 1].close : 0);
+    const currentPrice = latestPriceRef.current || (klines && klines.length > 0 ? klines[klines.length - 1].close : 0);
 
-      // Top 3 Limit Buy (BID) Walls: MUST be strictly BELOW currentPrice
-      const topBids = (whaleData.whaleBids || [])
-        .filter(w => {
-          const avgP = w.avgPrice || w.price;
-          return currentPrice > 0 ? avgP < currentPrice : true;
-        })
-        .sort((a, b) => (b.avgPrice || b.price) - (a.avgPrice || a.price))
-        .slice(0, 3);
-
-      // Top 3 Limit Sell (ASK) Walls: MUST be strictly ABOVE currentPrice
-      const topAsks = (whaleData.whaleAsks || [])
-        .filter(w => {
-          const avgP = w.avgPrice || w.price;
-          return currentPrice > 0 ? avgP > currentPrice : true;
-        })
-        .sort((a, b) => (a.avgPrice || a.price) - (b.avgPrice || b.price))
-        .slice(0, 3);
-
-      topBids.forEach(w => {
+    // Top 3 Limit Buy (BID) Walls: MUST be strictly BELOW currentPrice
+    const topBids = (whaleData.whaleBids || [])
+      .filter(w => {
         const avgP = w.avgPrice || w.price;
-        const line = seriesRef.current.createPriceLine({
-          price: avgP,
-          color: '#38bdf8',
-          lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
-          axisLabelVisible: false,
-          title: `BUY WALL ${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
-        });
-        wallLinesRef.current.push(line);
-      });
+        return currentPrice > 0 ? avgP < currentPrice : true;
+      })
+      .sort((a, b) => (b.avgPrice || b.price) - (a.avgPrice || a.price))
+      .slice(0, 3);
 
-      topAsks.forEach(w => {
+    // Top 3 Limit Sell (ASK) Walls: MUST be strictly ABOVE currentPrice
+    const topAsks = (whaleData.whaleAsks || [])
+      .filter(w => {
         const avgP = w.avgPrice || w.price;
-        const line = seriesRef.current.createPriceLine({
-          price: avgP,
-          color: '#c084fc',
-          lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
-          axisLabelVisible: false,
-          title: `SELL WALL ${fmtPriceCompact(avgP)} | ${fmtWallUsd(w.usdValue)} | [${w.count || 1}]`,
-        });
-        wallLinesRef.current.push(line);
-      });
+        return currentPrice > 0 ? avgP > currentPrice : true;
+      })
+      .sort((a, b) => (a.avgPrice || a.price) - (b.avgPrice || b.price))
+      .slice(0, 3);
 
-      if (wallPrimitiveRef.current) {
-        wallPrimitiveRef.current.setOptions({ currentPrice, wallWidthPct: wallWidth });
-        wallPrimitiveRef.current.setData([...topBids, ...topAsks]);
+    // ── Wall lifecycle: aging + absorption/pull detection ──────────────
+    const now = Date.now();
+    const hist = wallHistoryRef.current;
+    const seenKeys = new Set();
+
+    const trackWall = (w, side) => {
+      const avgP = w.avgPrice || w.price;
+      const key = `${side}:${Math.round(avgP)}`;
+      seenKeys.add(key);
+      const prev = hist.get(key);
+      if (!prev) {
+        const rec = { side, avgP, usdValue: w.usdValue, count: w.count || 1, firstSeen: now, lastSeen: now, eatenNotified: false, announcedAt: 0 };
+        hist.set(key, rec);
+        if (now - rec.announcedAt > 60 * 1000) {
+          rec.announcedAt = now;
+          pushWallEvent('NEW', side, avgP, w.usdValue, null);
+        }
+        return rec;
       }
+      if (!prev.eatenNotified && prev.usdValue > 0 && w.usdValue < prev.usdValue * 0.5) {
+        prev.eatenNotified = true;
+        pushWallEvent('EATEN', side, avgP, w.usdValue, prev.usdValue);
+      }
+      prev.usdValue = w.usdValue;
+      prev.count = w.count || 1;
+      prev.lastSeen = now;
+      return prev;
+    };
+
+    topBids.forEach(w => trackWall(w, 'BID'));
+    topAsks.forEach(w => trackWall(w, 'ASK'));
+
+    // Wall biến mất khỏi top list ≥4s → coi như bị rút (PULLED)
+    hist.forEach((rec, key) => {
+      if (!seenKeys.has(key) && now - rec.lastSeen > 4000) {
+        pushWallEvent('PULLED', rec.side, rec.avgP, null, rec.usdValue);
+        hist.delete(key);
+      }
+    });
+
+    let strongestUsd = 0;
+
+    [...topBids, ...topAsks].forEach(w => strongestUsd = Math.max(strongestUsd, w.usdValue || 0));
+
+    const drawWallLine = (w, isBid) => {
+      const avgP = w.avgPrice || w.price;
+      const side = isBid ? 'BID' : 'ASK';
+      const rec = trackAlreadyDone(hist, side, avgP);
+      const age = rec ? now - rec.firstSeen : 0;
+      const isNew = age < WALL_NEW_MS;
+      const isOld = age >= WALL_OLD_MS;
+
+      const baseRgb = isBid ? '56, 189, 248' : '192, 132, 252';
+      const alpha = isNew ? 0.35 : isOld ? 0.95 : 0.6;
+      const ageIcon = isOld ? '⏳' : isNew ? '🆕' : '';
+
+      const line = seriesRef.current.createPriceLine({
+        price: avgP,
+        color: `rgba(${baseRgb}, ${alpha})`,
+        lineWidth: isOld ? 2 : 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: w.usdValue === strongestUsd,
+        title: `${ageIcon} ${isBid ? 'BUY' : 'SELL'} WALL ${fmtPriceCompact(avgP)} | ${fmtWallUsdCompact(w.usdValue)} | [${w.count || 1}]${isOld ? ` | ${Math.floor(age / 60000)}m` : ''}`,
+      });
+      wallLinesRef.current.push(line);
+
+      return {
+        kind: 'WALL',
+        price: avgP,
+        color: isBid ? '#38bdf8' : '#c084fc',
+        hoverTitle: `${isBid ? 'BUY WALL' : 'SELL WALL'} ${fmtPriceCompact(avgP)}`,
+        detail: `${fmtWallUsdCompact(w.usdValue)} · [${w.count || 1} lệnh] · tuổi ${age < 60000 ? `${Math.floor(age / 1000)}s` : `${Math.floor(age / 60000)}p`}${rec?.eatenNotified ? ' · ⚠ ĐANG BỊ ĂN MÒN' : ''}`,
+      };
+    };
+
+    // trackAlreadyDone: tra record đã track ở trên mà không đếm lại lifecycle
+    function trackAlreadyDone(h, side, avgP) {
+      return h.get(`${side}:${Math.round(avgP)}`) || null;
+    }
+
+    const bidEntries = topBids.map(w => drawWallLine(w, true));
+    const askEntries = topAsks.map(w => drawWallLine(w, false));
+    wallRegRef.current = [...bidEntries, ...askEntries];
+
+    if (wallPrimitiveRef.current) {
+      wallPrimitiveRef.current.setOptions({ currentPrice, wallWidthPct: wallWidth });
+      wallPrimitiveRef.current.setData([...topBids, ...topAsks]);
     }
   }, [whaleData, showWalls, wallTick, klines]);
 
@@ -1064,78 +1234,137 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
           <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
         </h3>
         <div className="advanced-chart-toolbar" aria-label="Chart controls">
-          
-          {/* Settings Inputs */}
-          <div className="advanced-chart-field" title="Tỉ lệ % chiều rộng của vùng Limit Wall">
-            <span>W</span>
-            <input 
-              type="number" 
-              value={wallWidth} 
-              onChange={handleWallWidthChange} 
-              aria-label="Wall width percentage"
-              min="10" max="100" 
-            />
-            <span>%</span>
+          {/* ── Nhóm 1: Navigation ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '8px', borderRight: '1px solid var(--border-panel)' }}>
+            <div className="advanced-chart-field" title="Khoảng cách từ nến hiện tại đến lề phải (đơn vị: số nến)">
+              <span>OFF</span>
+              <input
+                type="number"
+                value={rightOffset}
+                onChange={handleRightOffsetChange}
+                aria-label="Right offset in bars"
+                min="0" max="300"
+              />
+              <span>B</span>
+            </div>
+            <button
+              onClick={() => {
+                if (chartRef.current) {
+                  chartRef.current.timeScale().scrollToRealTime();
+                }
+              }}
+              title="Cuộn ngay đến nến mới nhất"
+              className="advanced-chart-control is-live font-mono"
+            >
+              ⏩ Latest
+            </button>
+            <button
+              onClick={() => {
+                const nextVal = !autoScroll;
+                setAutoScroll(nextVal);
+                autoScrollRef.current = nextVal;
+                if (nextVal && chartRef.current) {
+                  chartRef.current.timeScale().scrollToRealTime();
+                }
+              }}
+              title="Tự động bám sát theo nến realtime"
+              className={`advanced-chart-control font-mono ${autoScroll ? 'is-active is-auto' : ''}`}
+            >
+              ⚡ Auto
+            </button>
           </div>
-          
-          <div className="advanced-chart-field" title="Khoảng cách từ nến hiện tại đến lề phải (đơn vị: số nến)">
-            <span>OFF</span>
-            <input 
-              type="number" 
-              value={rightOffset} 
-              onChange={handleRightOffsetChange} 
-              aria-label="Right offset in bars"
-              min="0" max="300" 
-            />
-            <span>B</span>
+
+          {/* ── Nhóm 2: Overlays dropdown ── */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setOverlaysOpen(o => !o)}
+              title="Lớp phủ: Walls, Liq, Volume Bubbles, TPO, Wall width"
+              className={`advanced-chart-control font-mono ${overlaysOpen ? 'is-active' : ''}`}
+            >
+              ▤ Overlays ▾
+            </button>
+            {overlaysOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setOverlaysOpen(false)} />
+                <div
+                  style={{
+                    position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31,
+                    background: 'var(--bg-slate-950, #0b0e14)', border: '1px solid var(--border-panel)',
+                    borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column',
+                    gap: '8px', minWidth: '200px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                  }}
+                >
+                  <span className="font-mono" style={{ fontSize: '0.55rem', color: 'var(--text-slate-500)', fontWeight: 700 }}>OVERLAY LAYERS</span>
+                  <button
+                    onClick={() => setShowWalls(!showWalls)}
+                    title="Bật/tắt Limit Walls"
+                    className={`advanced-chart-control font-mono ${showWalls ? 'is-active is-walls' : ''}`}
+                    style={{ justifyContent: 'space-between' }}
+                  >
+                    🎯 Limit Walls {showWalls ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => setShowLiq(!showLiq)}
+                    title="Bật/tắt Liquidation Zones"
+                    className={`advanced-chart-control font-mono ${showLiq ? 'is-active is-liq' : ''}`}
+                    style={{ justifyContent: 'space-between' }}
+                  >
+                    🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const val = !showBubbles;
+                      setShowBubbles(val);
+                      localStorage.setItem('hft_show_bubbles', val);
+                    }}
+                    title="Bật/tắt Volume Bubbles"
+                    className={`advanced-chart-control font-mono ${showBubbles ? 'is-active is-live' : ''}`}
+                    style={{ justifyContent: 'space-between' }}
+                  >
+                    🫧 Vol Bubbles {showBubbles ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}
+                    title="Chuyển TPO: tắt, blocks, letters"
+                    className={`advanced-chart-control font-mono ${tpoMode !== 'off' ? 'is-active is-tpo' : ''}`}
+                    style={{ justifyContent: 'space-between' }}
+                  >
+                    🧩 TPO {tpoMode === 'off' ? 'OFF' : tpoMode === 'blocks' ? 'BLOCKS' : 'LETTERS'}
+                  </button>
+                  <div className="advanced-chart-field" title="Tỉ lệ % chiều rộng của vùng Limit Wall" style={{ marginTop: '2px' }}>
+                    <span>WALL W</span>
+                    <input
+                      type="number"
+                      value={wallWidth}
+                      onChange={handleWallWidthChange}
+                      aria-label="Wall width percentage"
+                      min="10" max="100"
+                    />
+                    <span>%</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
+
+          {/* ── Nhóm 3: Alert ── */}
           <button
             onClick={() => {
-              if (chartRef.current) {
-                chartRef.current.timeScale().scrollToRealTime();
-              }
+              const next = !showAlerts;
+              setShowAlerts(next);
+              localStorage.setItem('hft_show_alerts', String(next));
             }}
-            className="font-mono"
-            title="Cuộn ngay đến nến mới nhất"
-            className="advanced-chart-control is-live"
+            title="Báo động khi giá chạm POC / Wall / Liq Zone (cooldown 2 phút mỗi mốc)"
+            className={`advanced-chart-control font-mono ${showAlerts ? 'is-active is-liq' : ''}`}
           >
-            ⏩ Latest
+            🔔 Alert {showAlerts ? 'ON' : 'OFF'}
           </button>
-          <button
-            onClick={() => {
-              const nextVal = !autoScroll;
-              setAutoScroll(nextVal);
-              autoScrollRef.current = nextVal;
-              if (nextVal && chartRef.current) {
-                chartRef.current.timeScale().scrollToRealTime();
-              }
-            }}
-            className="font-mono"
-            title="Tự động bám sát theo nến realtime"
-            className={`advanced-chart-control ${autoScroll ? 'is-active is-auto' : ''}`}
-          >
-            ⚡ Auto
-          </button>
-          <button
-            onClick={() => setShowWalls(!showWalls)}
-            className="font-mono"
-            title="Bật/tắt Limit Walls"
-            className={`advanced-chart-control ${showWalls ? 'is-active is-walls' : ''}`}
-          >
-            🎯 Walls
-          </button>
-          <button
-            onClick={() => setShowLiq(!showLiq)}
-            className="font-mono"
-            title="Bật/tắt Liquidation Zones"
-            className={`advanced-chart-control ${showLiq ? 'is-active is-liq' : ''}`}
-          >
-            🔥 Liq
-          </button>
+
+          {/* ── Nhóm 4: Timeframe ── */}
           <div className="advanced-chart-field advanced-chart-timeframe">
             <span>TF</span>
-            <select 
-              value={timeframe} 
+            <select
+              value={timeframe}
               onChange={(e) => {
                 setTimeframe(e.target.value);
                 localStorage.setItem('hft_timeframe', e.target.value);
@@ -1150,26 +1379,6 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
               <option value="4h">4H</option>
             </select>
           </div>
-          <button
-            onClick={() => {
-              const val = !showBubbles;
-              setShowBubbles(val);
-              localStorage.setItem('hft_show_bubbles', val);
-            }}
-            className="font-mono"
-            title="Bật/tắt Volume Bubbles"
-            className={`advanced-chart-control ${showBubbles ? 'is-active is-live' : ''}`}
-          >
-            🫧 Vol
-          </button>
-          <button
-            onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}
-            className="font-mono"
-            title="Chuyển TPO: tắt, blocks, letters"
-            className={`advanced-chart-control ${tpoMode !== 'off' ? 'is-active is-tpo' : ''}`}
-          >
-            🧩 TPO {tpoMode === 'off' ? 'OFF' : tpoMode === 'blocks' ? 'BLK' : 'LTR'}
-          </button>
           {moduleId && <ModuleMenu moduleId={moduleId} />}
         </div>
       </div>
@@ -1178,6 +1387,87 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
       
       <div style={{ flex: 1, width: '100%', position: 'relative', minHeight: '400px' }}>
         <div ref={chartContainerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+
+        {/* ── Info Chip: POC / VAH / VAL + % distance + VA status ── */}
+        {vpData && livePx ? (() => {
+          const pctOf = (p) => ((livePx - p) / p) * 100;
+          const inVA = livePx <= vpData.vahPrice && livePx >= vpData.valPrice;
+          const vaStatus = inVA
+            ? { text: 'IN VA', color: '#fbbf24' }
+            : livePx > vpData.vahPrice
+              ? { text: 'ABOVE VA', color: '#34d399' }
+              : { text: 'BELOW VA', color: '#f43f5e' };
+          const chip = (label, price, color) => (
+            <span className="font-mono" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              padding: '3px 8px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: 600,
+              background: 'rgba(10, 12, 18, 0.85)', border: `1px solid ${color}55`, color,
+            }}>
+              {label} {fmtPriceCompact(price)}
+              <span style={{ opacity: 0.75, fontWeight: 400 }}>
+                ({pctOf(price) >= 0 ? '+' : ''}{pctOf(price).toFixed(2)}%)
+              </span>
+            </span>
+          );
+          return (
+            <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 12, display: 'flex', gap: '6px', flexWrap: 'wrap', pointerEvents: 'none' }}>
+              {chip('POC', vpData.pocPrice, '#fbbf24')}
+              {chip('VAH', vpData.vahPrice, 'rgba(251, 191, 36, 0.7)')}
+              {chip('VAL', vpData.valPrice, 'rgba(251, 191, 36, 0.7)')}
+              <span className="font-mono" style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '3px 8px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: 700,
+                background: 'rgba(10, 12, 18, 0.85)', border: `1px solid ${vaStatus.color}`,
+                color: vaStatus.color,
+              }}>
+                {vaStatus.text}
+              </span>
+            </div>
+          );
+        })() : null}
+
+        {/* ── Hover tooltip cho POC / Wall / Liq line ── */}
+        {hoverLine ? (
+          <div
+            className="font-mono"
+            style={{
+              position: 'absolute',
+              left: Math.min(hoverLine.x + 14, 9999),
+              top: Math.max(hoverLine.y - 44, 4),
+              zIndex: 14,
+              pointerEvents: 'none',
+              background: 'rgba(10, 12, 18, 0.95)',
+              border: `1px solid ${hoverLine.color}`,
+              borderRadius: '6px',
+              padding: '5px 9px',
+              fontSize: '0.62rem',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ color: hoverLine.color, fontWeight: 700 }}>{hoverLine.hoverTitle}</div>
+            <div style={{ color: 'var(--text-slate-400, #94a3b8)' }}>{hoverLine.detail}</div>
+          </div>
+        ) : null}
+
+        {/* ── Toast alerts ── */}
+        <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 15, display: 'flex', flexDirection: 'column', gap: '6px', pointerEvents: 'none', maxWidth: '320px' }}>
+          {toasts.map(t => (
+            <div key={t.id} className="font-mono" style={{
+              background: 'rgba(10, 12, 18, 0.95)',
+              border: `1px solid ${t.color}`,
+              borderLeft: `4px solid ${t.color}`,
+              borderRadius: '6px',
+              padding: '6px 10px',
+              fontSize: '0.65rem',
+              color: 'var(--text-slate-200, #e2e8f0)',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+            }}>
+              {t.text}
+            </div>
+          ))}
+        </div>
+
         {!autoScroll && (
           <button
             onClick={() => {
@@ -1210,6 +1500,51 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
           >
             ⏩ Đến nến mới nhất
           </button>
+        )}
+      </div>
+
+      {/* ── Wall Event Feed: NEW / EATEN / PULLED ── */}
+      <div style={{ marginTop: '10px', background: 'var(--bg-slate-950, #0b0e14)', border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '6px 8px' }}>
+        <div
+          className="font-mono"
+          onClick={() => setFeedExpanded(e => !e)}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontSize: '0.58rem', color: 'var(--text-slate-400)', fontWeight: 700 }}
+        >
+          <span>⚡ WALL EVENTS ({wallEvents.length})</span>
+          <span>{feedExpanded ? '▾ THU GỌN' : '▸ MỞ RỘNG'}</span>
+        </div>
+        {wallEvents.length > 0 && (
+          <div className="font-mono" style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: feedExpanded ? '160px' : '52px', overflowY: 'auto' }}>
+            {(feedExpanded ? wallEvents : wallEvents.slice(0, 3)).map(ev => {
+              const cfg = {
+                NEW: { label: 'NEW', color: '#38bdf8' },
+                EATEN: { label: 'EATEN ⚠', color: '#fbbf24' },
+                PULLED: { label: 'PULLED', color: '#f43f5e' },
+              }[ev.type];
+              const t = new Date(ev.ts);
+              const hh = String(t.getHours()).padStart(2, '0');
+              const mm = String(t.getMinutes()).padStart(2, '0');
+              const ss = String(t.getSeconds()).padStart(2, '0');
+              return (
+                <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.58rem' }}>
+                  <span style={{ color: 'var(--text-slate-500)' }}>{hh}:{mm}:{ss}</span>
+                  <span style={{
+                    padding: '1px 5px', borderRadius: '3px', fontWeight: 700,
+                    background: `${cfg.color}22`, color: cfg.color, border: `1px solid ${cfg.color}55`,
+                  }}>{cfg.label}</span>
+                  <span style={{ color: ev.side === 'BID' ? '#38bdf8' : '#c084fc' }}>{ev.side === 'BID' ? 'BUY WALL' : 'SELL WALL'}</span>
+                  <span style={{ color: 'var(--text-slate-300)' }}>{fmtPriceCompact(ev.price)}</span>
+                  {ev.usdOld != null && (
+                    <span style={{ color: 'var(--text-slate-500)' }}>
+                      {ev.type === 'EATEN'
+                        ? `${fmtWallUsdCompact(ev.usdOld)} → ${fmtWallUsdCompact(ev.usdNew)}`
+                        : `was ${fmtWallUsdCompact(ev.usdOld)}`}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
