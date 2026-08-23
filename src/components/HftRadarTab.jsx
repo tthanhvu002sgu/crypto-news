@@ -353,10 +353,13 @@ function CVDPanel({
     const base = getChartOptsBase(theme);
     return {
       ...base,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         ...base.plugins,
         tooltip: {
           ...base.plugins.tooltip,
+          mode: 'index',
+          intersect: false,
           callbacks: {
             label: (ctx) => {
               const source = ctx.dataset.label === 'FUTURES' ? futuresList : spotList;
@@ -371,8 +374,21 @@ function CVDPanel({
         ...base.scales,
         y: {
           ...base.scales.y,
+          display: futuresList.length > 0,
           ticks: {
             ...base.scales.y.ticks,
+            color: '#a78bfa',
+            callback: (val) => fmtCvdUsd(val)
+          }
+        },
+        y1: {
+          ...base.scales.y,
+          position: 'right',
+          display: spotList.length > 0,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            ...base.scales.y.ticks,
+            color: '#34d399',
             callback: (val) => fmtCvdUsd(val)
           }
         }
@@ -402,11 +418,12 @@ function CVDPanel({
     });
 
     const isLight = theme === 'light';
-    const mkDataset = (label, list, borderColor, backgroundColor) => ({
+    const mkDataset = (label, list, borderColor, backgroundColor, yAxisID) => ({
       label,
       data: list.map(item => item.cvd),
       borderColor,
       backgroundColor,
+      yAxisID,
       borderWidth: 2,
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -418,11 +435,11 @@ function CVDPanel({
       labels,
       datasets: [
         {
-          ...mkDataset('FUTURES', futuresList, '#a78bfa', isLight ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.12)'),
+          ...mkDataset('FUTURES', futuresList, '#a78bfa', isLight ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.12)', 'y'),
           fill: false,
         },
         {
-          ...mkDataset('SPOT', spotList, '#34d399', isLight ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)'),
+          ...mkDataset('SPOT', spotList, '#34d399', isLight ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)', 'y1'),
           fill: false,
         },
       ].filter(ds => ds.data.length > 0)

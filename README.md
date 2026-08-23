@@ -203,6 +203,15 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
 - **Verify:** `npm run build` pass (10.33s); panel hiển thị đồng thời CVD Futures & Spot trên cùng biểu đồ.
 
+### [2026-08-23] Trục Y Kép Cho Biểu Đồ CVD & Tooltip Gộp 2 Thị Trường `(FEATURE)`
+- **Lane / Mode:** FEATURE FAST & CHART UX
+- **Tóm tắt:** Biểu đồ CVD chuyển sang trục Y kép: trục trái (tím) là quy mô CVD **Futures**, trục phải (xanh) là quy mô CVD **Spot** — mỗi thị trường có thang đo riêng vì chênh lệch lớn về volume. Tooltip gộp chung hiển thị đồng thời giá trị cả hai thị trường khi hover vào bất kỳ điểm nào.
+- **Thay đổi chính:**
+  - **Dual Y-Axes (`HftRadarTab.jsx`):** Thêm scale `y1` position right cho SPOT (`drawOnChartArea: false`), tick màu đồng bộ màu đường line tương ứng; axis tự ẩn khi market không có dữ liệu.
+  - **Merged Tooltip (`HftRadarTab.jsx`):` Đặt `interaction/tooltip mode: 'index'` để một lần hover hiện cả FUTURES + SPOT kèm giá BTC.
+- **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
+- **Verify:** `npm run build` pass (3.63s); hover 1 điểm hiện tooltip gộp cả hai thị trường, hai trục Y có thang độc lập.
+
 ### [2026-07-29] Hiển Thị Thanh Tổng Volume Footprint & Trạng Thái Chờ Realtime Cho Tab SPOT/FUTURES `(FEATURE)`
 - **Lane / Mode:** FEATURE FAST & UI ENHANCEMENT
 - **Tóm tắt:** Bổ sung thanh Header hiển thị tổng khối lượng tích lũy `TỔNG VOL: $...` ngay trên bảng Footprint Nodes kèm nhãn phân biệt thị trường rõ ràng (`BIN-F PROXY` vs `BIN-S PROXY`), giúp người dùng thấy ngay sự khác biệt về quy mô giao dịch giữa Spot và Futures.
