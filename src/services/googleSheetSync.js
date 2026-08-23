@@ -316,10 +316,10 @@ export function buildGoogleSheetPayload(data, biasData, etfHoldings, etfHistory,
     ['DANH MỤC / CHỈ SỐ', 'GIÁ TRỊ HIỆN TẠI', 'BIÊN ĐỘ / TRẠNG THÁI', 'ĐÁNH GIÁ ĐỊNH LƯỢNG & NGUỒN'],
     ['THÔNG TIN ĐỒNG BỘ', session.name, timestampVn, `Độ hoàn thiện: ${validation.completenessScore}% | Nguồn: ${options?.source || 'Web Client'}`],
     ['MARKET BIAS TOTAL', `${biasTotal > 0 ? '+' : ''}${biasTotal} / 100`, biasLabel, `Confidence: ${biasData?.confidence ?? '---'}% | Tổng hợp 4 trụ cột định lượng`],
-    ['Trụ Cột 1: Microstructure (40%)', `${pillars.microstructure > 0 ? '+' : ''}${pillars.microstructure} / 100`, 'Funding + CVD + F&G + OI + L/S', 'Cấu trúc thanh khoản vi mô & dòng lệnh phái sinh'],
+    ['Trụ Cột 1: Institutional Flows (40%)', `${pillars.institutional > 0 ? '+' : ''}${pillars.institutional} / 100`, 'Spot ETF Flows + CME COT Positioning', 'Dòng tiền quỹ tổ chức Wall Street'],
     ['Trụ Cột 2: On-Chain (25%)', `${pillars.onChain > 0 ? '+' : ''}${pillars.onChain} / 100`, 'MVRV + Production Cost + SSR + Addrs', 'Định giá chuỗi khối cơ bản & thợ đào'],
-    ['Trụ Cột 3: Institutional Flows (15%)', `${pillars.institutional > 0 ? '+' : ''}${pillars.institutional} / 100`, 'Spot ETF Flows + CME COT Positioning', 'Dòng tiền quỹ tổ chức Wall Street'],
-    ['Trụ Cột 4: Macro & Risk Shock (20%)', `${(pillars.newsRisk ?? pillars.macro ?? 0) > 0 ? '+' : ''}${pillars.newsRisk ?? pillars.macro ?? 0} / 100`, 'Fed + CPI + Real Yield + DXY + VIX', 'Môi trường vĩ mô toàn cầu & lịch kinh tế'],
+    ['Trụ Cột 3: Macro & Risk Shock (20%)', `${(pillars.newsRisk ?? pillars.macro ?? 0) > 0 ? '+' : ''}${pillars.newsRisk ?? pillars.macro ?? 0} / 100`, 'Fed + CPI + Real Yield + DXY + VIX', 'Môi trường vĩ mô toàn cầu & lịch kinh tế'],
+    ['Trụ Cột 4: Microstructure (15%)', `${pillars.microstructure > 0 ? '+' : ''}${pillars.microstructure} / 100`, 'Funding + CVD + F&G + OI + L/S', 'Cấu trúc thanh khoản vi mô & dòng lệnh phái sinh'],
     ['Bitcoin (BTC/USDT)', fmtUsd(btcPrice), btcChange != null ? `${btcChange >= 0 ? '+' : ''}${fmt(btcChange)}% (24h)` : '---', `Vol 24h: ${fmtB(btcVolume)} | Biên độ: ${fmtUsd(btcLow, 0)} - ${fmtUsd(btcHigh, 0)}`],
     ['Ethereum (ETH/USDT)', fmtUsd(ethPrice), ethChange != null ? `${ethChange >= 0 ? '+' : ''}${fmt(ethChange)}% (24h)` : '---', `Vol 24h: ${fmtB(ethVolume)} | Binance Spot`],
     ['Solana (SOL/USDT)', fmtUsd(solPrice), solChange != null ? `${solChange >= 0 ? '+' : ''}${fmt(solChange)}% (24h)` : '---', `Vol 24h: ${fmtB(solVolume)} | Binance Spot`],
@@ -554,10 +554,10 @@ ${latest7Flows.length > 0 ? latest7Flows.map(f => `  - Ngày ${f.date || '---'}:
 ## 7. ĐÁNH GIÁ MARKET BIAS ENGINE
 - **Tổng Điểm Định Lượng:** **${biasTotal > 0 ? '+' : ''}${biasTotal} / 100** -> Trạng thái: **${biasLabel}** (Độ tin cậy: ${biasData?.confidence ?? '---'}%)
 - **Điểm 4 Trụ Cột Thành Phần:**
-  - *Microstructure (40%):* **${pillars.microstructure}/100**
+  - *Institutional Flows (40%):* **${pillars.institutional}/100**
   - *On-Chain (25%):* **${pillars.onChain}/100**
-  - *Institutional Flows (15%):* **${pillars.institutional}/100**
   - *Macro & Risk Shock (20%):* **${pillars.newsRisk ?? pillars.macro ?? 0}/100**
+  - *Microstructure (15%):* **${pillars.microstructure}/100**
 
 ---
 

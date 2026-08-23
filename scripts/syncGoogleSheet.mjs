@@ -242,7 +242,22 @@ function calculateBiasSnapshot(tickers, derivatives, fng, stablecoins, obiData, 
   const fundingRate = derivatives?.fundingRate || 0;
   const fngVal = fng?.value || 50;
 
-  // 1. Microstructure (40%)
+  // 1. Institutional Flows (40%)
+  let instScore = 15;
+
+  // 2. On-Chain (25%)
+  let onChainScore = 10;
+  const mvrv = btcMvrvData?.mvrv;
+  if (mvrv != null) {
+    if (mvrv < 1.2) onChainScore = 35;
+    else if (mvrv < 2.0) onChainScore = 15;
+    else if (mvrv > 2.8) onChainScore = -25;
+  }
+
+  // 3. Macro & Risk (20%)
+  let macroScore = 5;
+
+  // 4. Microstructure (15%)
   let microScore = 0;
   if (fundingRate > 0.0003) microScore -= 20;
   else if (fundingRate > 0.00005) microScore += 10;
@@ -256,22 +271,7 @@ function calculateBiasSnapshot(tickers, derivatives, fng, stablecoins, obiData, 
 
   microScore = Math.max(-100, Math.min(100, microScore));
 
-  // 2. On-Chain (25%)
-  let onChainScore = 10;
-  const mvrv = btcMvrvData?.mvrv;
-  if (mvrv != null) {
-    if (mvrv < 1.2) onChainScore = 35;
-    else if (mvrv < 2.0) onChainScore = 15;
-    else if (mvrv > 2.8) onChainScore = -25;
-  }
-
-  // 3. Institutional Flows (15%)
-  let instScore = 15;
-
-  // 4. Macro & Risk (20%)
-  let macroScore = 5;
-
-  const totalScore = Math.round((microScore * 0.40) + (onChainScore * 0.25) + (instScore * 0.15) + (macroScore * 0.20));
+  const totalScore = Math.round((instScore * 0.40) + (onChainScore * 0.25) + (macroScore * 0.20) + (microScore * 0.15));
   
   let label = 'TRUNG LẬP (NEUTRAL)';
   if (totalScore >= 35) label = 'BULLISH MẠNH (STRONG BUY)';
@@ -284,10 +284,10 @@ function calculateBiasSnapshot(tickers, derivatives, fng, stablecoins, obiData, 
     label,
     confidence: 80,
     pillars: {
-      microstructure: microScore,
-      onChain: onChainScore,
       institutional: instScore,
-      newsRisk: macroScore
+      onChain: onChainScore,
+      newsRisk: macroScore,
+      microstructure: microScore
     }
   };
 }

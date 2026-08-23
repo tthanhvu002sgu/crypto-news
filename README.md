@@ -5,7 +5,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 **Các tính năng cốt lõi:**
 - **Lịch Kinh Tế Vĩ Mô 7 Ngày (7-Day Economic Calendar):** Hiển thị lịch sự kiện vĩ mô toàn cầu (CPI, FOMC, NFP, GDP, PMI...) dưới dạng bento grid 7 ô vuông tương ứng 7 ngày trong tuần (cố định 1 hàng trên PC, cuộn ngang trên Mobile). Tích hợp Modal phân tích chuyên sâu **tác động của từng sự kiện đến thanh khoản Bitcoin & Crypto** với dữ liệu thời gian thực và curated fallback.
-- **Market Bias Engine (Công Thức Bias Total):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Microstructure (35%)*, *On-Chain (25%)*, *Institutional Flows (20%)*, *Macro & Risk Shock (20%)*. Tích hợp thanh thước đo Spectrum Gauge Bar với kim chỉ Pin chuyển màu dynamic, 4 bento card trụ cột và drawer bẻ nhỏ 10+ tín hiệu định lượng thành phần.
+- **Market Bias Engine (Công Thức Bias Total):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Dòng tiền Định chế (40%)*, *On-Chain Fundamentals (25%)*, *Vĩ mô & Môi trường Rủi ro (20%)*, *Vi cấu trúc phái sinh (15%)*. Tích hợp thanh thước đo Spectrum Gauge Bar với kim chỉ Pin chuyển màu dynamic, 4 bento card trụ cột và drawer bẻ nhỏ 10+ tín hiệu định lượng thành phần.
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
@@ -63,6 +63,18 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-23] Tái Cấu Trúc Trọng Số Total Bias Engine (40% Định Chế - 25% On-Chain - 20% Vĩ Mô - 15% Vi Mô) `(FEATURE FAST)`
+- **Lane / Mode:** FEATURE FAST & QUANT MODEL
+- **Tóm tắt:** Tái cân bằng hệ thống trọng số của Market Bias Engine từ mô hình vi cấu trúc ngắn hạn (40% Micro cũ) sang mô hình theo dấu dòng tiền định chế và định giá chu kỳ bền vững, triệt tiêu hiện tượng nhiễu tín hiệu (data whipsaw/whiplash).
+- **Thay đổi chính:**
+  - **Dòng tiền Định chế (40%):** Spot ETF 7-Day Net Flow (28%), CME COT Institutional Asset Managers (12%).
+  - **Dữ liệu On-Chain & Định giá (25%):** MVRV Ratio (9%), NUPL (4%), SSR (4%), Supply in Profit (3%), Active Addresses (3%), Mining Cost Floor (2%).
+  - **Vĩ mô & Môi trường Rủi ro (20%):** Macro Pulse Fed/CPI/Unemployment (14%), VIX Volatility Index (6%).
+  - **Vi cấu trúc thị trường (15%):** Spot CVD (4%), Futures CVD (3%), Funding Rate (3%), Open Interest & Price Action (2%), Fear & Greed (2%), Long/Short Ratio (1%).
+  - Đồng bộ thứ tự, trọng số, thang đo `fillRatio` và hiển thị trên thẻ `MarketBiasCard.jsx`, `googleSheetSync.js` và `syncGoogleSheet.mjs`.
+- **Files / areas chạm:** `src/services/biasEngine.js`, `src/components/MarketBiasCard.jsx`, `src/services/googleSheetSync.js`, `scripts/syncGoogleSheet.mjs`, `README.md`.
+- **Verify:** `node --test` pass 32/32 unit tests; `npm run build` thành công 100% (9.27s).
 
 ### [2026-08-22] Khôi Phục Ô Nhập Khóa Gemini API Key Trong Modal Cài Đặt `(FEATURE FAST)`
 - **Lane / Mode:** FEATURE FAST & UI SETTINGS

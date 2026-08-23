@@ -13,10 +13,10 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
   const formatPillarScore = (val) => `${val >= 0 ? '+' : ''}${val}`;
 
   const getPillarStatus = (val) => {
-    if (val >= 15) return { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', label: 'MẠNH ▲' };
-    if (val > 0) return { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)', label: 'TÍCH CỰC' };
-    if (val === 0) return { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.2)', label: 'TRUNG LẬP' };
-    if (val > -15) return { color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.25)', label: 'TIÊU CỰC' };
+    if (val >= 40) return { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', label: 'MẠNH ▲' };
+    if (val > 10) return { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.25)', label: 'TÍCH CỰC' };
+    if (val >= -10) return { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.2)', label: 'TRUNG LẬP' };
+    if (val > -40) return { color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.25)', label: 'TIÊU CỰC' };
     return { color: '#f43f5e', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)', label: 'YẾU ▼' };
   };
 
@@ -25,13 +25,13 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
 
   const pillarsList = [
     {
-      key: 'microstructure',
+      key: 'institutional',
       code: '01',
-      title: 'VI CẤU TRÚC PHÁI SINH',
+      title: 'DÒNG TIỀN ĐỊNH CHẾ',
       weight: '40%',
-      subtext: 'Spot/Futures CVD, Funding, OI, F&G, L/S',
-      score: bias.pillars.microstructure,
-      maxPts: 40,
+      subtext: 'BTC Spot ETF 7D Net Flow, CME COT',
+      score: bias.pillars.institutional,
+      maxPts: 100,
     },
     {
       key: 'onChain',
@@ -40,33 +40,33 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
       weight: '25%',
       subtext: 'MVRV, NUPL, Supply in Profit, SSR, Mining',
       score: bias.pillars.onChain,
-      maxPts: 25,
-    },
-    {
-      key: 'institutional',
-      code: '03',
-      title: 'DÒNG TIỀN ĐỊNH CHẾ',
-      weight: '15%',
-      subtext: 'BTC Spot ETF Net Flow, CME COT',
-      score: bias.pillars.institutional,
-      maxPts: 15,
+      maxPts: 100,
     },
     {
       key: 'newsRisk',
-      code: '04',
+      code: '03',
       title: 'VĨ MÔ & RỦI RO',
       weight: '20%',
       subtext: 'Macro Pulse (Fed, CPI, Unrate), VIX, Lịch sự kiện',
       score: bias.pillars.newsRisk,
-      maxPts: 20,
+      maxPts: 100,
+    },
+    {
+      key: 'microstructure',
+      code: '04',
+      title: 'VI CẤU TRÚC PHÁI SINH',
+      weight: '15%',
+      subtext: 'Spot/Futures CVD, Funding, OI, F&G, L/S',
+      score: bias.pillars.microstructure,
+      maxPts: 100,
     },
   ];
 
   const pillarMetaMap = {
-    microstructure: { code: '01', label: 'MICRO' },
+    institutional: { code: '01', label: 'ETF FLOW' },
     onChain: { code: '02', label: 'ON-CHAIN' },
-    institutional: { code: '03', label: 'ETF FLOW' },
-    newsRisk: { code: '04', label: 'MACRO' },
+    newsRisk: { code: '03', label: 'MACRO' },
+    microstructure: { code: '04', label: 'MICRO' },
   };
 
   const handlePillarClick = (pillarKey) => {
@@ -141,7 +141,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
 
           {/* Right: Technical Summary Description */}
           <div className="bias-description font-mono">
-            Định lượng tổng hợp từ 4 trụ cột chính: Vi cấu trúc phái sinh, Dữ liệu On-chain, Dòng tiền định chế ETF &amp; Rủi ro tin tức vĩ mô. Click vào trụ cột để lọc tín hiệu.
+            Định lượng tổng hợp từ 4 trụ cột chính: Dòng tiền định chế (40%), Dữ liệu On-chain (25%), Vĩ mô &amp; Rủi ro (20%) &amp; Vi cấu trúc phái sinh (15%). Click vào trụ cột để lọc tín hiệu.
           </div>
         </div>
 
