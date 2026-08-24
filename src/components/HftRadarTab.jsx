@@ -98,6 +98,7 @@ const getChartOptsBase = (theme) => {
         titleColor: tooltipTitle,
         bodyColor: tooltipBody,
         padding: 10,
+        caretPadding: 16,
       },
     },
     scales: {
