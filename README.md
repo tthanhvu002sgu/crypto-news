@@ -5,7 +5,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 **Các tính năng cốt lõi:**
 - **Lịch Kinh Tế Vĩ Mô 7 Ngày (7-Day Economic Calendar):** Hiển thị lịch sự kiện vĩ mô toàn cầu (CPI, FOMC, NFP, GDP, PMI...) dưới dạng bento grid 7 ô vuông tương ứng 7 ngày trong tuần (cố định 1 hàng trên PC, cuộn ngang trên Mobile). Tích hợp Modal phân tích chuyên sâu **tác động của từng sự kiện đến thanh khoản Bitcoin & Crypto** với dữ liệu thời gian thực và curated fallback.
-- **Market Bias Engine (Công Thức Bias Total):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Dòng tiền Định chế (40%)*, *On-Chain Fundamentals (25%)*, *Vĩ mô & Môi trường Rủi ro (20%)*, *Vi cấu trúc phái sinh (15%)*. Tích hợp thanh thước đo Spectrum Gauge Bar với kim chỉ Pin chuyển màu dynamic, 4 bento card trụ cột và drawer bẻ nhỏ 10+ tín hiệu định lượng thành phần.
+- **Market Bias Engine (Công Thức Bias Total & 3-Layer Regime):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Dòng tiền Định chế (40%)*, *On-Chain Fundamentals & Network (25%)*, *Vĩ mô & Thanh khoản Toàn cầu (20%)*, *Vi cấu trúc & BTC Trend Regime (15%)*. Loại bỏ tính trùng lặp MVRV, đưa DXY, US 10Y Yield, Net Liquidity, High-Yield Spread và 1.000 nến Daily BTC vào tính điểm thực tế. Đồng thời bóc tách 3 tầng nhận định trực quan: `Valuation Bias` (Định giá), `Trend Bias` (Cấu trúc xu hướng), `Tactical Bias` (Chiến thuật/Đòn bẩy ngắn hạn).
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
@@ -45,24 +45,37 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `App.jsx`: Component gốc quản lý Routing/Tabs (Dashboard, HFT Radar, Cascade, AI Market Decision Lab) và WebSocket manager, tích hợp nút SYNC SHEET và modal cài đặt API/Webhook.
 - `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
-- `MarketBiasCard.jsx`: Component định lượng xu hướng BTC với thanh Gauge Spectrum, 4 bento card trụ cột và drawer bẻ nhỏ 10+ tín hiệu định lượng.
+- `MarketBiasCard.jsx`: Component định lượng xu hướng BTC với thanh Gauge Spectrum, 4 bento card trụ cột, thanh tóm tắt 3 tầng Regime và drawer bẻ nhỏ 14+ tín hiệu định lượng.
 - `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel`, `WhaleTradesPanel`, `AdvancedChart` (tích hợp Bubble Anomaly Robust Z-Score), `TargetLiquidityPanel`, `OrderBookPanel`.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
-- `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias và gửi webhook.
+- `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias trực tiếp bằng `biasEngine.js` và gửi webhook.
 - `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
 - `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
+- `src/services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100) và 3-layer regime (Valuation, Trend, Tactical) dựa trên 4 trụ cột định lượng chuẩn hóa.
+- `src/services/biasEngine.test.js` — Bộ unit test tự động cho toàn bộ logic định lượng, parsing VIX an toàn, MVRV deduplication và trend calculation.
 - `.github/workflows/sync-sheets.yml` — Workflow GitHub Actions chạy định kỳ 3 phiên theo cron.
 - `services/moveTracker.js` — Điều phối champion detector, shadow flow research, trigger/end/outcome lifecycle và context OI/Funding/OBI.
 - `services/moveTrackerCore.js` — Các phép tính thuần cho detection windows, participation percentile, flow labels, MFE/MAE, recovery và thống kê timeframe.
 - `services/moveEventStore.js` — IndexedDB 90 ngày, migration legacy, query/filter, thống kê và export CSV/JSON cho MOVE TRACKER.
 - `services/economicCalendarService.js` — Fetch lịch kinh tế tuần từ FairEconomy JSON, phân tích tác động Crypto và fallback curated schedule.
-- `services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100) dựa trên 4 trụ cột định lượng.
 - `services/api.js` — REST multi-source (Binance, DefiLlama, FRED, ETF, COT, …) hỗ trợ SSR Z-Score Oscillator 200-day.
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-26] Nâng Cấp Toàn Diện Market Bias Engine & Tích Hợp Macro Liquidity / BTC Trend Regime `(FEATURE FULL)`
+- **Lane / Mode:** FEATURE FULL & QUANT REFACTOR
+- **Tóm tắt:** Nâng cấp toàn diện công thức định lượng của Market Bias Engine; khắc phục lỗi parsing object VIX, xóa bỏ tính trùng lặp MVRV (triple-counting), đưa Macro Liquidity (DXY, 10Y Yield, Net Liquidity, High-Yield Spread, Equities) và 1.000 nến Daily BTC (MA50/200, Slopes, Momentum, Realized Vol) vào tính điểm thực tế; đồng bộ 100% logic tính toán giữa Web Dashboard và GitHub Actions Google Sheets Worker.
+- **Thay đổi chính:**
+  - **Sửa VIX & Parity Sync:** Đọc an toàn `data.vix?.price ?? data.vix?.val ?? data.vix`. Chuyển `syncGoogleSheet.mjs` sang import trực tiếp `calculateMarketBias` từ `biasEngine.js`, loại bỏ hoàn toàn các biến mock hard-code.
+  - **Triệt tiêu MVRV Triple-Count:** Chuyển MVRV thành mỏ neo định giá duy nhất (8%), không cộng dồn thêm điểm từ NUPL (4%) và Supply in Profit (3%). Phân bổ trọng số cho SSR Oscillator (5%), Active Addresses (4%), Mining Cost Floor (4%), và On-chain Network Tx Demand (4%).
+  - **Trụ cột 3 (Vĩ mô & Thanh khoản - 20%):** Tích hợp Monetary Pulse (6%), US Net Liquidity `(Walcl - TGA - RRP)` & High-Yield Credit Spread (5%), DXY & US 10Y Yield (4%), S&P500/QQQ Equities Risk Appetite (2%), VIX & 24h High Impact Calendar Event Dampening (3%).
+  - **Trụ cột 4 (Vi cấu trúc & Trend Regime - 15%):** Tính toán MA50, MA200, MA50 Slope, 7D/30D/90D Returns và 30D Realized Volatility từ nến daily Binance. Nâng cấp kiểm định chéo Funding Rate âm: nếu đi kèm Spot CVD gom hàng $\rightarrow$ Short Squeeze; nếu đi kèm Spot CVD xả hàng $\rightarrow$ Xác nhận Downtrend thực.
+  - **Phân tầng 3 lớp Bias (3-Layer Regime):** Xuất ra và hiển thị trực quan `Valuation Bias` (Rẻ/Đắt), `Trend Bias` (Xu hướng cấu trúc MA), `Macro Liquidity` (Mở rộng/Co hẹp), và `Tactical Bias` (Chiến thuật ngắn hạn) trên cả UI Card và Google Sheets export.
+- **Files / areas chạm:** `src/services/biasEngine.js`, `src/services/biasEngine.test.js` (new), `src/components/MarketBiasCard.jsx`, `src/services/googleSheetSync.js`, `scripts/syncGoogleSheet.mjs`, `package.json`, `README.md`.
+- **Verify:** `npm test` pass 38/38 unit tests (5 test suites: scanner, move, macro, sheets, bias); `npm run sync:sheets:dry` pass 100% với điểm +49 Bullish; `npm run build` thành công 100% (5.95s).
 
 ### [2026-08-23] Tái Cấu Trúc Trọng Số Total Bias Engine (40% Định Chế - 25% On-Chain - 20% Vĩ Mô - 15% Vi Mô) `(FEATURE FAST)`
 - **Lane / Mode:** FEATURE FAST & QUANT MODEL

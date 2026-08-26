@@ -36,27 +36,27 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
     {
       key: 'onChain',
       code: '02',
-      title: 'DỮ LIỆU ON-CHAIN',
+      title: 'ON-CHAIN & MẠNG LƯỚI',
       weight: '25%',
-      subtext: 'MVRV, NUPL, Supply in Profit, SSR, Mining',
+      subtext: 'MVRV Anchor, SSR Z-Score, Addrs, Mining Floor, Tx Demand',
       score: bias.pillars.onChain,
       maxPts: 100,
     },
     {
       key: 'newsRisk',
       code: '03',
-      title: 'VĨ MÔ & RỦI RO',
+      title: 'VĨ MÔ & THANH KHOẢN',
       weight: '20%',
-      subtext: 'Macro Pulse (Fed, CPI, Unrate), VIX, Lịch sự kiện',
+      subtext: 'Fed/CPI Pulse, Net Liquidity, HY Spread, DXY, 10Y, VIX',
       score: bias.pillars.newsRisk,
       maxPts: 100,
     },
     {
       key: 'microstructure',
       code: '04',
-      title: 'VI CẤU TRÚC PHÁI SINH',
+      title: 'VI CẤU TRÚC & XU HƯỚNG',
       weight: '15%',
-      subtext: 'Spot/Futures CVD, Funding, OI, F&G, L/S',
+      subtext: 'BTC Daily MA50/200, CVD, Funding Confluence, OI, F&G',
       score: bias.pillars.microstructure,
       maxPts: 100,
     },
@@ -66,7 +66,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
     institutional: { code: '01', label: 'ETF FLOW' },
     onChain: { code: '02', label: 'ON-CHAIN' },
     newsRisk: { code: '03', label: 'MACRO' },
-    microstructure: { code: '04', label: 'MICRO' },
+    microstructure: { code: '04', label: 'TREND/MICRO' },
   };
 
   const handlePillarClick = (pillarKey) => {
@@ -79,6 +79,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
   };
 
   const activePillarObj = pillarsList.find(p => p.key === activePillarFilter);
+  const regime = bias.regime || {};
 
   return (
     <div className="glass-panel bias-card-container hallmark-bias-card">
@@ -120,6 +121,26 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
         </div>
       </div>
 
+      {/* ── 3-Layer Bias Regime Chips ─────────────────────────────────── */}
+      <div className="bias-regime-bar font-mono" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '8px 16px 0 16px', fontSize: '11px' }}>
+        <div style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <span style={{ color: 'var(--text-muted)' }}>TREND: </span>
+          <strong style={{ color: regime.trend?.includes('UPTREND') ? '#34d399' : regime.trend?.includes('DOWNTREND') ? '#f87171' : 'var(--text-contrast)' }}>{regime.trend || 'UNKNOWN'}</strong>
+        </div>
+        <div style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <span style={{ color: 'var(--text-muted)' }}>VALUATION: </span>
+          <strong style={{ color: regime.valuation === 'DEEP_VALUE' || regime.valuation === 'UNDERVALUED' ? '#34d399' : regime.valuation === 'OVERHEATED' ? '#f87171' : 'var(--text-contrast)' }}>{regime.valuation || 'FAIR_VALUE'}</strong>
+        </div>
+        <div style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <span style={{ color: 'var(--text-muted)' }}>LIQUIDITY: </span>
+          <strong style={{ color: regime.liquidity === 'EXPANDING' ? '#34d399' : regime.liquidity === 'CONTRACTING' ? '#f87171' : 'var(--text-contrast)' }}>{regime.liquidity || 'NEUTRAL'}</strong>
+        </div>
+        <div style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <span style={{ color: 'var(--text-muted)' }}>TACTICAL: </span>
+          <strong style={{ color: regime.tactical?.includes('SHORT_SQUEEZE') || regime.tactical?.includes('ACCUMULATION') ? '#34d399' : regime.tactical?.includes('LONG_SQUEEZE') || regime.tactical?.includes('DISTRIBUTION') ? '#f87171' : 'var(--text-contrast)' }}>{regime.tactical || 'BALANCED'}</strong>
+        </div>
+      </div>
+
       {/* ── Main Score Display & Gauge Meter ───────────────────────────── */}
       <div className="bias-main-meter-box">
         <div className="bias-score-row">
@@ -141,7 +162,7 @@ export default function MarketBiasCard({ data, etfHistory, moduleId = 'dash_bias
 
           {/* Right: Technical Summary Description */}
           <div className="bias-description font-mono">
-            Định lượng tổng hợp từ 4 trụ cột chính: Dòng tiền định chế (40%), Dữ liệu On-chain (25%), Vĩ mô &amp; Rủi ro (20%) &amp; Vi cấu trúc phái sinh (15%). Click vào trụ cột để lọc tín hiệu.
+            Định lượng đa tầng từ 4 trụ cột: Định chế (40%), On-chain &amp; Mạng (25%), Vĩ mô &amp; Thanh khoản (20%), Vi cấu trúc &amp; Trend MA (15%). Click vào trụ cột để lọc tín hiệu.
           </div>
         </div>
 
