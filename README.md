@@ -17,6 +17,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%**.
 - **BTC SSR Oscillator (Glassnode Z-Score):** Đo lường sức mua Stablecoin so với Vốn hóa BTC chuẩn hóa bằng Z-Score (vị trí so với đường trung bình SMA 200 ngày và độ lệch chuẩn 2σ theo phương pháp Glassnode Oscillator). Tự động xác định vùng Mua/Bán cực đoan (Z < -2 / Z > +2) và đồng bộ nguồn vốn hóa DefiLlama.
 - **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
+- **Scanner Shortlist Engine v7 (BUY & SELL):** Hệ thống xếp hạng shortlist khách quan theo 4 Pillars (*Quality 5đ, Relative Strength vs BTC 8đ, Flow CVD/OI 6đ, Market Context 6đ* — Thang 25đ). Bảo tồn quota momentum (30 liquid + 10 gainer + 10 loser), phân tích Price Action thuần nến đóng không lookahead (`4H uptrend · gần range high · volume expansion`), progressive disclosure 5 cột (Coin, Strength, Flow, Quality, Rank Score), accordion mở rộng hiển thị raw metrics, top 3 lý do và cảnh báo vi cấu trúc.
 - **Google Sheets Auto-Sync 3 Phiên (Á - Âu - Mỹ) & AI Prompt Staging:** Tự động tổng hợp và đồng bộ toàn bộ snapshot thị trường (Market Bias, On-Chain, Phái sinh, ETF, Macro Calendar, và Markdown Summary) lên file Google Sheets công khai thông qua Google Apps Script Webhook. Hoạt động tự động 24/7 theo 3 phiên giao dịch chính bằng GitHub Actions (08:00 Á, 14:00 Âu, 20:00 Mỹ) và hỗ trợ nút "SYNC SHEET" kích hoạt trực tiếp từ trình duyệt, giúp các mô hình AI độc lập dễ dàng truy xuất để phân tích định kỳ.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
@@ -64,6 +65,28 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-27] Tái Cấu Trúc Toàn Diện SCANNER Thành Shortlist Ranking Engine 4 Pillars & Progressive Disclosure UI `(FEATURE FULL)`
+- **Lane / Mode:** FEATURE FULL & QUANT / UI REFACTOR
+- **Tóm tắt:** Chuyển đổi toàn diện Scanner từ giao diện nhiều chỉ báo sang **Shortlist Ranking Engine** tinh gọn tập trung trả lời 3 câu hỏi cốt lõi: (1) *Coin nào đáng xem?*, (2) *Vì sao được chọn?*, (3) *Dữ liệu có đủ tin cậy không?* Tuyệt đối không đưa entry, stop hay target. Tái cấu trúc chấm điểm theo 4 Pillars độc lập (Quality 5đ, Relative Strength 8đ, Flow CVD/OI 6đ, Market Context 6đ — Thang chuẩn 25đ); bảo tồn quota momentum universe (30 liquid + 10 gainer + 10 loser); bổ sung công cụ phân tích Price Action thuần nến đóng không lookahead (`4H uptrend · gần range high · volume expansion`); tái thiết kế giao diện Desktop 5 cột trọng tâm kết hợp accordion mở rộng chi tiết và chế độ Compact Card thông minh trên Mobile.
+- **Thay đổi chính:**
+  - **Bảo Tồn Quota Universe & Tránh Mất Momentum (`coinScanner.js`):** Cơ chế lọc chia quota rõ ràng (30 Core Liquid + 10 Top Gainers + 10 Top Losers 24H); loại bỏ hoàn toàn lỗi sort volume 30D cuối đè mất các ứng viên momentum mới nổi.
+  - **Mô Hình Điểm 4 Pillars Độc Lập & Đối Xứng BUY/SELL (`coinScanner.js`):**
+    - *Quality (5.0):* Thanh khoản 30D, Vốn hóa, VolCV ổn định (&le;0.6), Spread Futures hẹp (&le;0.03%), Data coverage.
+    - *Relative Strength vs BTC (8.0):* Phân vị RS composite đa khung (1H/4H/24H) trong universe và Breakout/Breakdown ATR.
+    - *Flow CVD/OI (6.0):* CVD Futures chuẩn hóa, CVD Spot gom/xả ròng, CVD Trend Ratio gia tốc và OI đồng thuận biến động giá 4H.
+    - *Market Context (6.0):* Xu hướng EMA 4H & Slope, Daily Trend 1D, RSI sweet spot (42-68 / 32-58) và Macro BTC/ETF. Trừ điểm phạt nếu bị kéo xa EMA21 (&gt;8%) hoặc trade quá crowded (Funding cao / Basis giãn rộng).
+    - *Metadata xuất ra:* Tự động sinh `pillarState`, `positiveReasons` (top 3 lý do mạnh nhất), `warnings` (cảnh báo vi cấu trúc), `flowState`, `trendState`.
+  - **Công Cụ Phân Tích Price Action Thuần Nến Đóng (`detectPriceActionContext`):** Xác định 4H Structure (UPTREND / DOWNTREND / RANGE / UNCLEAR), Vị trí giá (IN_RANGE / NEAR_RANGE_HIGH / NEAR_RANGE_LOW / BREAKOUT / EXTENDED), Chất lượng Breakout (STRONG_CLOSE / WICK_HEAVY_SWEEP), và Trạng thái biến động (COMPRESSION / NORMAL / EXPANSION). Xuất ra câu bối cảnh súc tích hiển thị trực tiếp trên UI.
+  - **Công Cụ Đánh Giá Chất Lượng Shortlist (`evaluateShortlistUtility`):** Đo lường Precision@5 (tỷ lệ Top 5 outperform BTC), Relative Return trung bình so với Universe, và Candidate Turnover mà không overfit threshold.
+  - **Giao diện Progressive Disclosure 5 Cột Desktop & Mobile Compact Cards (`ScannerTab.jsx`, `App.css`):**
+    - Bảng Desktop 5 cột: `Coin`, `Strength` (STRONG/NEUTRAL/WEAK), `Flow` (FLOW CONFIRMED/DIVERGENT), `Quality` (LIQUID/ACCEPTABLE), `Rank Score` (ƯU TIÊN CAO/ĐÁNG THEO DÕI/THEO DÕI THÊM + Chevron).
+    - Click row hoặc phím Enter/Space mở accordion chi tiết: hiển thị bối cảnh Price Action, Top 3 lý do, Cảnh báo vi cấu trúc, 4 thẻ điểm Pillars, và bảng Raw Decision Metrics bento grid.
+    - Mobile Card View: Tự động chuyển đổi thành thẻ bo góc compact, tránh hoàn toàn lỗi tràn ngang màn hình.
+    - Modal / Drawer "Cách Scanner Hoạt Động": Giải thích cặn kẽ 4 pillars, cơ chế CVD proxy và disclaimer miễn trừ trách nhiệm.
+    - Phân loại rõ ràng 3 trạng thái lỗi/rỗng: `PROVIDER_UNAVAILABLE`, `INSUFFICIENT_COVERAGE`, `NO_CANDIDATES`.
+- **Files / areas chạm:** `src/services/coinScanner.js`, `src/services/coinScanner.test.js`, `src/components/ScannerTab.jsx`, `src/App.css`, `README.md`.
+- **Verify:** `npm run test:scanner` pass 9/9 tests; `npm test` pass 47/47 tests (biasEngine: 19, googleSheetSync: 6, moveTracker: 16, macroDashboard: 5, coinScanner: 9); `npm run build` pass 100% (1.55s, 0 errors); ESLint pass 0 errors.
 
 ### [2026-08-27] Tích Hợp Hiển Thị Song Song BTC Price (Đối Chứng Khách Quan), Ma Trận Phân Kỳ/Xác Nhận & Provenance Snapshot Store `(FEATURE FULL)`
 - **Lane / Mode:** FEATURE FULL & UX/DATA INTEGRITY

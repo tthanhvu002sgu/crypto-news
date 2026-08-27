@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const ALGORITHM_VERSION = 'v6';
+const ALGORITHM_VERSION = 'v7';
 const RESULT_CACHE_TTL = 5 * 60 * 1000;
 const UNIVERSE_CACHE_TTL = 4 * 60 * 60 * 1000;
 const RESULT_CACHE_KEY = `crypto_scanner_${ALGORITHM_VERSION}_results`;
@@ -34,7 +34,7 @@ function storageSet(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // A full localStorage must never block a scan.
+    // LocalStorage failure must never block a scan.
   }
 }
 
@@ -136,8 +136,6 @@ export async function getMarketCapMap() {
   const addFirst = (symbol, marketCap) => {
     const key = String(symbol || '').toUpperCase();
     const cap = number(marketCap);
-    // Providers return assets in descending market-cap order. Keeping the first
-    // prevents a small duplicate ticker from overwriting the canonical asset.
     if (key && cap > 0 && !capMap.has(key)) capMap.set(key, cap);
   };
 
@@ -149,7 +147,7 @@ export async function getMarketCapMap() {
     (response.data || []).forEach(item => addFirst(item.symbol, item.market_cap));
     if (capMap.size) return capMap;
   } catch {
-    // Continue with the secondary provider.
+    // Continue with secondary provider.
   }
 
   try {
@@ -225,6 +223,13 @@ async function fetchUniverseMetric(symbol) {
   }
 }
 
+/**
+ * Builds universe by preserving explicit quotas:
+ * - 30 Core Liquidity pairs (top 24h volume)
+ * - 10 Top Positive Momentum pairs (top 24h gainers)
+ * - 10 Top Negative Momentum pairs (top 24h losers)
+ * Deduplicates and preserves all quota candidates without losing momentum coins to final sort.
+ */
 export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
   try {
     const response = await axios.get('https://api.binance.com/api/v3/ticker/24hr', { timeout: 8000 });
@@ -232,17 +237,30 @@ export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
       .filter(item => item.symbol.endsWith('USDT')
         && !EXCLUDED_SYMBOLS.has(item.symbol)
         && number(item.quoteVolume, 0) >= 3_000_000);
-    // Blend the liquid core with both tails of current momentum. This avoids
-    // missing a newly strong coin simply because it was outside top 24h volume.
+
+    if (liquidPairs.length === 0) return [];
+
+    // Quotas: 30 Core liquid + 10 Top gainers + 10 Top losers
+    const coreLiquid = [...liquidPairs]
+      .sort((a, b) => number(b.quoteVolume, 0) - number(a.quoteVolume, 0))
+      .slice(0, 30);
+
+    const topGainers = [...liquidPairs]
+      .sort((a, b) => number(b.priceChangePercent, 0) - number(a.priceChangePercent, 0))
+      .slice(0, 10);
+
+    const topLosers = [...liquidPairs]
+      .sort((a, b) => number(a.priceChangePercent, 0) - number(b.priceChangePercent, 0))
+      .slice(0, 10);
+
     const candidateMap = new Map();
-    const addCandidates = items => items.forEach(item => candidateMap.set(item.symbol, item));
-    addCandidates([...liquidPairs]
-      .sort((a, b) => number(b.quoteVolume, 0) - number(a.quoteVolume, 0)).slice(0, 110));
-    addCandidates([...liquidPairs]
-      .sort((a, b) => number(b.priceChangePercent, 0) - number(a.priceChangePercent, 0)).slice(0, 25));
-    addCandidates([...liquidPairs]
-      .sort((a, b) => number(a.priceChangePercent, 0) - number(b.priceChangePercent, 0)).slice(0, 25));
-    const candidates = [...candidateMap.values()];
+    [...coreLiquid, ...topGainers, ...topLosers].forEach(item => {
+      if (!candidateMap.has(item.symbol)) {
+        candidateMap.set(item.symbol, item);
+      }
+    });
+
+    const candidates = [...candidateMap.values()].slice(0, limit);
 
     const cached = storageGet(UNIVERSE_CACHE_KEY);
     const cacheFresh = cached && Date.now() - cached.timestamp < UNIVERSE_CACHE_TTL;
@@ -255,6 +273,7 @@ export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
     });
     storageSet(UNIVERSE_CACHE_KEY, { timestamp: Date.now(), metrics: [...cachedMetrics.values()] });
 
+    // Map each candidate while preserving momentum membership
     return candidates.map(item => {
       const metric = cachedMetrics.get(item.symbol);
       if (!metric) return null;
@@ -272,7 +291,7 @@ export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
         avgDailyVol30d: metric.avgDailyVol30d,
         volCV: metric.volCV,
       };
-    }).filter(Boolean).sort((a, b) => b.vol30d - a.vol30d).slice(0, limit);
+    }).filter(Boolean);
   } catch (error) {
     console.error('[Scanner] Universe fetch failed:', error.message);
     return [];
@@ -299,6 +318,96 @@ async function optionalGet(url, config) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Pure closed-candle Price Action context detector (No lookahead).
+ * Evaluates 4H Structure, Price Position, Breakout Quality, and Volatility State.
+ */
+export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema55, emaSlopePct, breakoutAtr, breakdownAtr, atr1h, volumeZ1h) {
+  // 1. Structure 4H
+  let structure4h = 'UNCLEAR';
+  if (ema21 && ema55) {
+    const emaDiffPct = Math.abs(ema21 - ema55) / ema55;
+    const slope = emaSlopePct || 0;
+    if (emaDiffPct < 0.004 || (Math.abs(slope) < 0.2 && emaDiffPct < 0.008)) {
+      structure4h = 'RANGE';
+    } else if (ema21 > ema55 && slope > -0.1) {
+      structure4h = 'UPTREND';
+    } else if (ema21 < ema55 && slope < 0.1) {
+      structure4h = 'DOWNTREND';
+    } else {
+      structure4h = 'RANGE';
+    }
+  }
+
+  // 2. Price Position relative to range & EMA
+  let pricePosition = 'IN_RANGE';
+  const currentPrice = closes1h?.at(-1) || closes4h?.at(-1) || 0;
+  const distanceToEmaPct = ema21 > 0 ? ((currentPrice / ema21) - 1) * 100 : 0;
+
+  if (Math.abs(distanceToEmaPct) > 7.0) {
+    pricePosition = 'EXTENDED';
+  } else if ((breakoutAtr !== null && breakoutAtr > 0.25) || (breakdownAtr !== null && breakdownAtr > 0.25)) {
+    pricePosition = 'BREAKOUT';
+  } else if (breakoutAtr !== null && breakoutAtr >= -0.5 && breakoutAtr <= 0.25) {
+    pricePosition = 'NEAR_RANGE_HIGH';
+  } else if (breakdownAtr !== null && breakdownAtr >= -0.5 && breakdownAtr <= 0.25) {
+    pricePosition = 'NEAR_RANGE_LOW';
+  }
+
+  // 3. Breakout Quality
+  let breakoutQuality = 'NONE';
+  if (pricePosition === 'BREAKOUT' && Array.isArray(spot1h) && spot1h.length >= 2) {
+    const lastCandle = spot1h.at(-1);
+    const candleOpen = number(lastCandle?.[1], 0);
+    const candleHigh = number(lastCandle?.[2], 0);
+    const candleLow = number(lastCandle?.[3], 0);
+    const candleClose = number(lastCandle?.[4], 0);
+    const candleRange = candleHigh - candleLow;
+    const bodyRange = Math.abs(candleClose - candleOpen);
+
+    if (candleRange > 0) {
+      if (bodyRange / candleRange >= 0.55) {
+        breakoutQuality = 'STRONG_CLOSE';
+      } else {
+        breakoutQuality = 'WICK_HEAVY_SWEEP';
+      }
+    }
+  }
+
+  // 4. Volatility State
+  let volatilityState = 'NORMAL';
+  if (volumeZ1h !== null) {
+    if (volumeZ1h >= 1.5) {
+      volatilityState = 'EXPANSION';
+    } else if (volumeZ1h <= -0.8) {
+      volatilityState = 'COMPRESSION';
+    }
+  }
+
+  // 5. Generate concise summary statement (Tiếng Việt)
+  const structText = structure4h === 'UPTREND' ? '4H uptrend'
+    : structure4h === 'DOWNTREND' ? '4H downtrend'
+    : structure4h === 'RANGE' ? '4H range đi ngang' : '4H cấu trúc chưa rõ';
+
+  const posText = pricePosition === 'EXTENDED' ? 'giá đã kéo xa EMA21'
+    : pricePosition === 'BREAKOUT' ? (breakoutQuality === 'STRONG_CLOSE' ? 'breakout nến đóng dứt khoát' : 'breakout quét râu')
+    : pricePosition === 'NEAR_RANGE_HIGH' ? 'gần range high'
+    : pricePosition === 'NEAR_RANGE_LOW' ? 'gần range low' : 'dao động trong range';
+
+  const volText = volatilityState === 'EXPANSION' ? 'volume mở rộng'
+    : volatilityState === 'COMPRESSION' ? 'biên độ nén chặt' : 'vol bình thường';
+
+  const statement = `${structText} · ${posText} · ${volText}`;
+
+  return {
+    structure4h,
+    pricePosition,
+    breakoutQuality,
+    volatilityState,
+    statement,
+  };
 }
 
 async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark) {
@@ -387,6 +496,10 @@ async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark) {
     const availableOptional = [isDailyUptrend, oiChange4h, funding.fundingRate, funding.basisPct]
       .filter(value => value !== null && value !== undefined).length;
 
+    const paContext = detectPriceActionContext(
+      closes4h, closes1h, spot1h, ema21, ema55, emaSlopePct, breakoutAtr, breakdownAtr, atr1h, volumeZ1h,
+    );
+
     return {
       ...pair,
       currentPrice: currentClose,
@@ -419,6 +532,7 @@ async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark) {
       fundingRate: round(funding.fundingRate, 6),
       basisPct: round(funding.basisPct, 4),
       dataCoverage: round((5 + availableOptional) / 9, 2),
+      paContext,
     };
   } catch (error) {
     console.warn(`[Scanner] Skipping ${pair.symbol}:`, error.message);
@@ -426,123 +540,235 @@ async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark) {
   }
 }
 
-function addPoint(state, bucket, points, label, type = 'neutral') {
-  state[bucket] += points;
-  state.tags.push({ label, type });
-  state.breakdown.push({ category: bucket.toUpperCase(), item: label, pts: points });
+function addPoint(state, pillar, points, label, type = 'neutral') {
+  state[pillar] = (state[pillar] || 0) + points;
+  state.tags.push({ label, pts: points, type, pillar });
+  state.breakdown.push({ category: pillar.toUpperCase(), item: label, pts: points });
 }
 
 function directionValue(direction, value) {
   return direction === 'BUY' ? value : -value;
 }
 
+/**
+ * Pillar 1: Quality (Max 5.0)
+ * Liquidity, spread, volume consistency, and data coverage.
+ */
 function scoreQuality(coin, state) {
-  if (coin.vol30d >= 1_000_000_000) addPoint(state, 'quality', 1, 'Vol 30D > $1B', 'emerald');
-  else if (coin.vol30d >= 300_000_000) addPoint(state, 'quality', 0.5, 'Vol 30D > $300M', 'emerald');
-  if (coin.marketCap >= 2_000_000_000) addPoint(state, 'quality', 1, 'Large cap', 'emerald');
-  else if (coin.marketCap >= 1_000_000_000) addPoint(state, 'quality', 0.5, 'Mid cap', 'emerald');
-  if (coin.volCV <= 0.6) addPoint(state, 'quality', 1, `VolCV ${coin.volCV}`, 'emerald');
-  else if (coin.volCV <= 0.9) addPoint(state, 'quality', 0.5, `VolCV ${coin.volCV}`, 'cyan');
-  if (coin.spreadPct <= 0.03) addPoint(state, 'quality', 1, `Spread ${coin.spreadPct}%`, 'emerald');
-  else if (coin.spreadPct <= 0.08) addPoint(state, 'quality', 0.5, `Spread ${coin.spreadPct}%`, 'cyan');
-  if (coin.dataCoverage >= 0.85) addPoint(state, 'quality', 1, 'Data coverage cao', 'emerald');
-  else if (coin.dataCoverage >= 0.7) addPoint(state, 'quality', 0.5, 'Data coverage du', 'cyan');
+  if (coin.vol30d >= 1_000_000_000) addPoint(state, 'quality', 1.25, 'Vol 30D > $1B', 'emerald');
+  else if (coin.vol30d >= 300_000_000) addPoint(state, 'quality', 0.75, 'Vol 30D > $300M', 'emerald');
+
+  if (coin.marketCap >= 2_000_000_000) addPoint(state, 'quality', 1.25, 'Large Cap (>$2B)', 'emerald');
+  else if (coin.marketCap >= 1_000_000_000) addPoint(state, 'quality', 0.75, 'Mid Cap (>$1B)', 'emerald');
+
+  if (coin.volCV <= 0.6) addPoint(state, 'quality', 1.0, `Vol CV thấp (${coin.volCV})`, 'emerald');
+  else if (coin.volCV <= 0.9) addPoint(state, 'quality', 0.5, `Vol CV ổn định (${coin.volCV})`, 'cyan');
+
+  if (coin.spreadPct <= 0.03) addPoint(state, 'quality', 0.75, `Spread rất hẹp (${coin.spreadPct}%)`, 'emerald');
+  else if (coin.spreadPct <= 0.08) addPoint(state, 'quality', 0.5, `Spread chấp nhận (${coin.spreadPct}%)`, 'cyan');
+
+  if (coin.dataCoverage >= 0.85) addPoint(state, 'quality', 0.75, 'Data coverage cao (≥85%)', 'emerald');
+  else if (coin.dataCoverage >= 0.7) addPoint(state, 'quality', 0.5, 'Data coverage đủ', 'cyan');
+
+  state.quality = clamp(state.quality, 0, 5.0);
 }
 
-function scoreStrength(coin, direction, state) {
+/**
+ * Pillar 2: Relative Strength vs BTC (Max 8.0)
+ * Multi-horizon relative performance & breakout momentum vs BTC.
+ */
+function scoreRelativeStrength(coin, direction, state) {
   const sign = value => directionValue(direction, number(value, 0));
   const percentile = direction === 'BUY' ? coin.strengthPercentile : 100 - coin.strengthPercentile;
-  if (percentile >= 85) addPoint(state, 'strength', 3, `RS vs BTC top ${100 - Math.round(percentile)}%`, 'emerald');
-  else if (percentile >= 70) addPoint(state, 'strength', 2, 'RS vs BTC manh', 'emerald');
-  else if (percentile >= 55) addPoint(state, 'strength', 1, 'RS vs BTC kha', 'cyan');
 
-  if (sign(coin.relativeStrength4h) > 0.4) addPoint(state, 'strength', 1, 'Outperform BTC 4H', 'emerald');
-  if (sign(coin.relativeStrength24h) > 1) addPoint(state, 'strength', 1, 'Outperform BTC 24H', 'emerald');
+  if (percentile >= 85) addPoint(state, 'relativeStrength', 3.0, `RS vs BTC Top ${100 - Math.round(percentile)}%`, 'emerald');
+  else if (percentile >= 70) addPoint(state, 'relativeStrength', 2.0, 'RS vs BTC mạnh', 'emerald');
+  else if (percentile >= 55) addPoint(state, 'relativeStrength', 1.0, 'RS vs BTC khá', 'cyan');
 
-  if (sign(coin.futuresCvdRatio24h) >= 3) addPoint(state, 'strength', 2, 'Futures CVD xac nhan', 'emerald');
-  else if (sign(coin.futuresCvdRatio24h) >= 1) addPoint(state, 'strength', 1, 'Futures CVD cung chieu', 'cyan');
-  if (sign(coin.spotCvdRatio24h) >= 1) addPoint(state, 'strength', 1.5, 'Spot CVD xac nhan', 'emerald');
-  if (sign(coin.cvdTrendRatio) > 0.5) addPoint(state, 'strength', 1, 'CVD dang tang toc', 'cyan');
+  if (sign(coin.relativeStrength4h) > 0.4) addPoint(state, 'relativeStrength', 1.5, 'Outperform BTC 4H', 'emerald');
+  if (sign(coin.relativeStrength24h) > 1.0) addPoint(state, 'relativeStrength', 1.5, 'Outperform BTC 24H', 'emerald');
+  if (sign(coin.relativeStrength1h) > 0.2) addPoint(state, 'relativeStrength', 1.0, 'Outperform BTC 1H', 'cyan');
 
-  const trend4h = coin.ema21 > coin.ema55 ? 1 : -1;
-  if (directionValue(direction, trend4h) > 0) addPoint(state, 'strength', 1, 'EMA 4H cung chieu', 'emerald');
-  if (sign(coin.emaSlopePct) > 0) addPoint(state, 'strength', 0.5, 'EMA21 co do doc', 'cyan');
-  if (coin.isDailyUptrend !== null && directionValue(direction, coin.isDailyUptrend ? 1 : -1) > 0) {
-    addPoint(state, 'strength', 1, 'Daily trend xac nhan', 'emerald');
-  }
   const breakout = direction === 'BUY' ? coin.breakoutAtr : coin.breakdownAtr;
-  if (breakout >= 0.25) addPoint(state, 'strength', 1, `Breakout ${breakout} ATR`, 'amber');
-  state.strength = Math.min(12, state.strength);
+  if (breakout >= 0.25) addPoint(state, 'relativeStrength', 1.0, `Breakout ${breakout} ATR`, 'amber');
+
+  state.relativeStrength = clamp(state.relativeStrength, 0, 8.0);
 }
 
-function scoreEntry(coin, direction, state) {
+/**
+ * Pillar 3: Flow (Max 6.0)
+ * Spot/Futures taker flow agreement, CVD acceleration, and OI confirmation.
+ */
+function scoreFlow(coin, direction, state) {
   const sign = value => directionValue(direction, number(value, 0));
-  if (coin.volumeZ1h >= 2) addPoint(state, 'entry', 1.5, `Volume z-score ${coin.volumeZ1h}`, 'amber');
-  else if (coin.volumeZ1h >= 1) addPoint(state, 'entry', 1, `Volume z-score ${coin.volumeZ1h}`, 'cyan');
 
-  if (coin.oiChange4h !== null && sign(coin.return4h) > 0 && coin.oiChange4h > 1) {
-    addPoint(state, 'entry', 1.5, `Price + OI xac nhan (${coin.oiChange4h}%)`, 'emerald');
+  if (sign(coin.futuresCvdRatio24h) >= 3.0) addPoint(state, 'flow', 2.0, 'Futures CVD xác nhận mạnh', 'emerald');
+  else if (sign(coin.futuresCvdRatio24h) >= 1.0) addPoint(state, 'flow', 1.0, 'Futures CVD cùng chiều', 'cyan');
+
+  if (sign(coin.spotCvdRatio24h) >= 1.0) addPoint(state, 'flow', 1.5, 'Spot CVD gom hàng xác nhận', 'emerald');
+  if (sign(coin.cvdTrendRatio) > 0.5) addPoint(state, 'flow', 1.0, 'CVD đang tăng tốc', 'cyan');
+
+  if (coin.oiChange4h !== null && sign(coin.return4h) > 0 && coin.oiChange4h > 1.0) {
+    addPoint(state, 'flow', 1.5, `Price + OI tăng đồng thuận (+${coin.oiChange4h}%)`, 'emerald');
   }
 
-  const funding = sign(coin.fundingRate);
-  const basis = sign(coin.basisPct);
-  const flowConfirmed = sign(coin.futuresCvdRatio24h) > 1 && sign(coin.return4h) > 0;
-  if (flowConfirmed && funding < -0.02 && basis <= 0) {
-    addPoint(state, 'entry', 1, 'Crowding nguoc chieu: squeeze setup', 'amber');
-  } else if (funding > 0.04 || basis > 0.25) {
-    state.breakdown.push({ category: 'ENTRY', item: 'Trade dang crowded', pts: -1 });
-    state.entry -= 1;
-  } else if (finite(coin.fundingRate)) {
-    addPoint(state, 'entry', 0.5, 'Funding/basis can bang', 'cyan');
+  state.flow = clamp(state.flow, 0, 6.0);
+}
+
+/**
+ * Pillar 4: Market Context & Crowding (Max 6.0)
+ * 4H/1D Trend alignment, RSI sweet spot, macro context, and crowding penalties.
+ */
+function scoreMarketContext(coin, direction, state, macroContext = {}) {
+  const sign = value => directionValue(direction, number(value, 0));
+
+  const trend4h = coin.ema21 > coin.ema55 ? 1 : -1;
+  if (directionValue(direction, trend4h) > 0) addPoint(state, 'marketContext', 1.5, 'EMA 4H cùng chiều', 'emerald');
+  if (sign(coin.emaSlopePct) > 0) addPoint(state, 'marketContext', 0.5, 'EMA21 có độ dốc', 'cyan');
+
+  if (coin.isDailyUptrend !== null && directionValue(direction, coin.isDailyUptrend ? 1 : -1) > 0) {
+    addPoint(state, 'marketContext', 1.5, 'Daily Trend 1D xác nhận', 'emerald');
   }
 
   const rsiGood = direction === 'BUY'
     ? coin.rsi14 >= 42 && coin.rsi14 <= 68
     : coin.rsi14 >= 32 && coin.rsi14 <= 58;
-  if (rsiGood) addPoint(state, 'entry', 1, `RSI ${coin.rsi14}`, 'cyan');
-
-  const distanceToEma = ((coin.currentPrice / coin.ema21) - 1) * 100;
-  const directedDistance = directionValue(direction, distanceToEma);
-  if (directedDistance >= -1 && directedDistance <= 3) addPoint(state, 'entry', 1, 'Entry gan EMA21', 'cyan');
-  else if (directedDistance > 8) {
-    state.entry -= 1;
-    state.breakdown.push({ category: 'ENTRY', item: 'Gia da qua xa EMA21', pts: -1 });
-  }
-  state.entry = clamp(state.entry, 0, 6);
-}
-
-export function scoreCoinDirection(coin, direction, macroContext = {}) {
-  const state = { quality: 0, strength: 0, entry: 0, macro: 0, tags: [], breakdown: [] };
-  scoreQuality(coin, state);
-  scoreStrength(coin, direction, state);
-  scoreEntry(coin, direction, state);
+  if (rsiGood) addPoint(state, 'marketContext', 1.0, `RSI vùng cân bằng (${coin.rsi14})`, 'cyan');
 
   if (typeof macroContext.isBtcBullish === 'boolean'
     && directionValue(direction, macroContext.isBtcBullish ? 1 : -1) > 0) {
-    addPoint(state, 'macro', 1, 'BTC regime cung chieu', 'cyan');
+    addPoint(state, 'marketContext', 0.75, 'BTC Macro regime cùng chiều', 'cyan');
   }
   if (typeof macroContext.isEtfInflow === 'boolean'
     && directionValue(direction, macroContext.isEtfInflow ? 1 : -1) > 0) {
-    addPoint(state, 'macro', 1, 'ETF flow cung chieu', 'cyan');
+    addPoint(state, 'marketContext', 0.75, 'ETF Inflow cùng chiều', 'cyan');
   }
 
-  const score = round(clamp(state.quality, 0, 5)
-    + clamp(state.strength, 0, 12)
-    + clamp(state.entry, 0, 6)
-    + clamp(state.macro, 0, 2), 1);
-  const status = score >= 18 ? 'RAT MANH' : score >= 14 ? 'DAT CHUAN' : 'THEO DOI';
+  // Crowding / Extension Penalties
+  const funding = sign(coin.fundingRate);
+  const basis = sign(coin.basisPct);
+  if (funding > 0.04 || basis > 0.25) {
+    state.marketContext -= 1.0;
+    state.breakdown.push({ category: 'MARKETCONTEXT', item: 'Vị thế quá crowded (Funding/Basis cao)', pts: -1.0 });
+  }
+
+  const distanceToEma = ((coin.currentPrice / coin.ema21) - 1) * 100;
+  const directedDistance = directionValue(direction, distanceToEma);
+  if (directedDistance > 8.0) {
+    state.marketContext -= 1.0;
+    state.breakdown.push({ category: 'MARKETCONTEXT', item: 'Giá đã quá xa EMA21 (>8%)', pts: -1.0 });
+  }
+
+  state.marketContext = clamp(state.marketContext, 0, 6.0);
+}
+
+/** Detects potential risks, crowding and data warnings */
+function detectWarnings(coin, direction) {
+  const warnings = [];
+  const sign = value => directionValue(direction, number(value, 0));
+
+  if (sign(coin.fundingRate) > 0.04) {
+    warnings.push({ code: 'CROWDED_FUNDING', message: `Funding Rate cao (${coin.fundingRate}%), rủi ro crowded trade`, level: 'amber' });
+  } else if (sign(coin.fundingRate) < -0.03 && sign(coin.return4h) > 0) {
+    warnings.push({ code: 'NEGATIVE_FUNDING_OPPOSING', message: 'Funding âm đối kháng, theo dõi squeeze', level: 'cyan' });
+  }
+
+  if (coin.basisPct !== null && Math.abs(coin.basisPct) > 0.25) {
+    warnings.push({ code: 'WIDE_BASIS', message: `Basis giãn rộng (${coin.basisPct}%)`, level: 'amber' });
+  }
+
+  if (coin.spreadPct > 0.08) {
+    warnings.push({ code: 'WIDE_SPREAD', message: `Spread rộng (${coin.spreadPct}%)`, level: 'amber' });
+  }
+
+  if (coin.volCV > 0.9) {
+    warnings.push({ code: 'ERRATIC_VOL', message: `Volume biến động cao (VolCV ${coin.volCV})`, level: 'amber' });
+  }
+
+  if (coin.dataCoverage < 0.8) {
+    warnings.push({ code: 'PARTIAL_DATA', message: `Độ phủ dữ liệu ${Math.round(coin.dataCoverage * 100)}%`, level: 'neutral' });
+  }
+
+  if (direction === 'BUY' && coin.rsi14 > 72) {
+    warnings.push({ code: 'RSI_OVERBOUGHT', message: `RSI 4H quá mua (${coin.rsi14})`, level: 'amber' });
+  } else if (direction === 'SELL' && coin.rsi14 < 28) {
+    warnings.push({ code: 'RSI_OVERSOLD', message: `RSI 4H quá bán (${coin.rsi14})`, level: 'amber' });
+  }
+
+  const distanceToEma = ((coin.currentPrice / coin.ema21) - 1) * 100;
+  if (Math.abs(distanceToEma) > 6.0) {
+    warnings.push({ code: 'STRETCHED_EMA', message: `Giá cách xa EMA21 4H (${round(distanceToEma, 1)}%)`, level: 'amber' });
+  }
+
+  return warnings;
+}
+
+export function scoreCoinDirection(coin, direction, macroContext = {}) {
+  const state = { quality: 0, relativeStrength: 0, flow: 0, marketContext: 0, tags: [], breakdown: [] };
+  scoreQuality(coin, state);
+  scoreRelativeStrength(coin, direction, state);
+  scoreFlow(coin, direction, state);
+  scoreMarketContext(coin, direction, state, macroContext);
+
+  const totalScore = round(state.quality + state.relativeStrength + state.flow + state.marketContext, 1);
+
+  // States per pillar
+  const qualityState = state.quality >= 4.0 ? 'LIQUID' : state.quality >= 3.0 ? 'ACCEPTABLE' : 'BORDERLINE';
+  const strengthState = state.relativeStrength >= 6.0 ? 'STRONG' : state.relativeStrength >= 3.5 ? 'NEUTRAL' : 'WEAK';
+
+  const signFuturesFlow = directionValue(direction, number(coin.futuresCvdRatio24h, 0));
+  const signSpotFlow = directionValue(direction, number(coin.spotCvdRatio24h, 0));
+  let flowState = 'NEUTRAL';
+  if (signFuturesFlow > 1.0 && signSpotFlow > 0.5) flowState = 'FLOW CONFIRMED';
+  else if (signFuturesFlow > 0 || signSpotFlow > 0) flowState = 'PARTIAL FLOW';
+  else if (signFuturesFlow < -1.0 || signSpotFlow < -1.0) flowState = 'DIVERGENT';
+
+  const trendState = coin.paContext?.structure4h || (coin.ema21 > coin.ema55 ? 'UPTREND' : 'DOWNTREND');
+
+  // Status mapping
+  let status = 'THEO DÕI THÊM';
+  let statusColor = '#94a3b8';
+  if (totalScore >= 18.0) {
+    status = 'ƯU TIÊN CAO';
+    statusColor = '#10b981';
+  } else if (totalScore >= 14.0) {
+    status = 'ĐÁNG THEO DÕI';
+    statusColor = '#0284c7';
+  }
+
+  // Top 3 positive reasons sorted by point contribution
+  const positiveReasons = [...state.tags]
+    .filter(tag => tag.pts > 0)
+    .sort((a, b) => b.pts - a.pts)
+    .slice(0, 3)
+    .map(tag => tag.label);
+
+  const warnings = detectWarnings(coin, direction);
+
   return {
     ...coin,
     direction,
-    score,
+    score: totalScore,
     qualityScore: round(state.quality, 1),
-    strengthScore: round(state.strength, 1),
-    entryScore: round(state.entry, 1),
-    macroScore: round(state.macro, 1),
+    strengthScore: round(state.relativeStrength, 1),
+    flowScore: round(state.flow, 1),
+    contextScore: round(state.marketContext, 1),
+    pillarScores: {
+      quality: { score: round(state.quality, 1), max: 5.0, state: qualityState },
+      strength: { score: round(state.relativeStrength, 1), max: 8.0, state: strengthState },
+      flow: { score: round(state.flow, 1), max: 6.0, state: flowState },
+      context: { score: round(state.marketContext, 1), max: 6.0, state: trendState },
+    },
+    qualityState,
+    strengthState,
+    flowState,
+    trendState,
+    positiveReasons,
+    warnings,
     tags: state.tags,
     breakdown: state.breakdown,
     status,
-    statusColor: score >= 18 ? '#34d399' : score >= 14 ? '#fbbf24' : '#94a3b8',
+    statusColor,
   };
 }
 
@@ -582,6 +808,41 @@ function assignStrengthPercentiles(coins) {
   });
 }
 
+/**
+ * Diagnostic utility to evaluate shortlist ranking quality against forward price outcomes.
+ * Does not optimize thresholds on the same observed fold.
+ */
+export function evaluateShortlistUtility(snapshot, forwardOutcomes = {}) {
+  if (!snapshot || !Array.isArray(snapshot.topBuy)) return null;
+
+  const btcReturn = number(forwardOutcomes.btcReturn24h, 0);
+  const buyOutcomes = snapshot.topBuy.map(coin => {
+    const coinReturn = number(forwardOutcomes[coin.symbol]?.return24h, null);
+    const relReturn = coinReturn !== null && btcReturn !== null ? coinReturn - btcReturn : null;
+    return {
+      symbol: coin.symbol,
+      score: coin.score,
+      relReturn,
+      outperformed: relReturn !== null ? relReturn > 0 : null,
+    };
+  });
+
+  const validEvaluated = buyOutcomes.filter(item => item.outperformed !== null);
+  const precisionAt5 = validEvaluated.length > 0
+    ? validEvaluated.filter(item => item.outperformed).length / validEvaluated.length
+    : null;
+
+  const validRelReturns = validEvaluated.map(item => item.relReturn).filter(finite);
+  const avgRelReturnTop5 = validRelReturns.length > 0 ? average(validRelReturns) : null;
+
+  return {
+    evaluatedCount: validEvaluated.length,
+    precisionAt5: precisionAt5 !== null ? round(precisionAt5 * 100, 1) : null,
+    avgRelReturnTop5: avgRelReturnTop5 !== null ? round(avgRelReturnTop5, 2) : null,
+    details: buyOutcomes,
+  };
+}
+
 export async function runFullScan(macroContext = {}, forceRefresh = false) {
   const signature = macroSignature(macroContext);
   const cached = storageGet(RESULT_CACHE_KEY);
@@ -591,18 +852,61 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
     return cached;
   }
 
-  const [marketCapMap, futuresBookMap, fundingMap, benchmark] = await Promise.all([
-    getMarketCapMap(),
-    getFuturesBookTickers(),
-    getFundingRatesMap(),
-    getBenchmarkReturns(),
-  ]);
+  let errorState = null;
+  let marketCapMap = new Map();
+  let futuresBookMap = new Map();
+  let fundingMap = new Map();
+  let benchmark = { h1: null, h4: null, h24: null };
+
+  try {
+    const fetched = await Promise.all([
+      getMarketCapMap(),
+      getFuturesBookTickers(),
+      getFundingRatesMap(),
+      getBenchmarkReturns(),
+    ]);
+    marketCapMap = fetched[0];
+    futuresBookMap = fetched[1];
+    fundingMap = fetched[2];
+    benchmark = fetched[3];
+  } catch (error) {
+    console.error('[Scanner] Failed fetching auxiliary data:', error);
+    errorState = 'PROVIDER_UNAVAILABLE';
+  }
+
   const universe = await getTop30dVolumePairs(marketCapMap, 50);
+  if (!universe || universe.length === 0) {
+    if (!errorState) errorState = 'PROVIDER_UNAVAILABLE';
+    const emptyResult = {
+      algorithmVersion: ALGORITHM_VERSION,
+      macroSignature: signature,
+      topBuy: [],
+      topSell: [],
+      scannedCount: 0,
+      analyzedCount: 0,
+      qualifiedCount: 0,
+      errorState,
+      timestamp: Date.now(),
+      dataFreshness: {
+        timestamp: Date.now(),
+        oldestSource: 'Binance REST',
+        ageSeconds: 0,
+        coverageAvg: 0,
+      },
+    };
+    return emptyResult;
+  }
+
   const analyzed = (await mapConcurrent(
     universe,
     5,
     pair => analyzeCoin(pair, futuresBookMap, fundingMap, benchmark),
   )).filter(Boolean);
+
+  if (analyzed.length < universe.length * 0.4) {
+    errorState = 'INSUFFICIENT_COVERAGE';
+  }
+
   const qualified = analyzed.filter(passesQualityGate);
   assignStrengthPercentiles(qualified);
 
@@ -614,15 +918,26 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
       sell: { ...sell, directionalEdge: round(sell.score - buy.score, 1) },
     };
   });
+
   const sorter = (a, b) => b.score - a.score
     || b.directionalEdge - a.directionalEdge
     || b.vol30d - a.vol30d;
+
   const topBuy = scored.map(item => item.buy)
     .filter(coin => coin.score >= 14 && coin.directionalEdge >= 3)
     .sort(sorter).slice(0, 5);
+
   const topSell = scored.map(item => item.sell)
     .filter(coin => coin.score >= 14 && coin.directionalEdge >= 3)
     .sort(sorter).slice(0, 5);
+
+  if (!errorState && qualified.length === 0) {
+    errorState = 'NO_CANDIDATES';
+  }
+
+  const avgCoverage = analyzed.length > 0
+    ? round(average(analyzed.map(c => c.dataCoverage || 0)), 2)
+    : 0;
 
   const result = {
     algorithmVersion: ALGORITHM_VERSION,
@@ -633,8 +948,17 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
     analyzedCount: analyzed.length,
     qualifiedCount: qualified.length,
     rejectedMissingMarketCap: analyzed.filter(coin => !finite(coin.marketCap)).length,
+    errorState,
     timestamp: Date.now(),
+    dataFreshness: {
+      timestamp: Date.now(),
+      oldestSource: 'Binance 4H/Daily Klines',
+      ageSeconds: 0,
+      coverageAvg: avgCoverage,
+    },
   };
+
   storageSet(RESULT_CACHE_KEY, result);
   return result;
 }
+
