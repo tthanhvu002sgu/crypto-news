@@ -194,8 +194,234 @@ export function calculateBtcTrendRegime(dailyKlines, currentPrice = null) {
   };
 }
 
-export function calculateMarketBias(data, etfHistory = []) {
+export function parseToDate(val) {
+  if (!val) return null;
+  if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
+  if (typeof val === 'number') {
+    if (val < 1e11) return new Date(val * 1000);
+    return new Date(val);
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    // Match DD/MM/YY or DD/MM/YYYY
+    const ddmmyyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (ddmmyyMatch) {
+      const day = parseInt(ddmmyyMatch[1], 10);
+      const month = parseInt(ddmmyyMatch[2], 10) - 1;
+      let year = parseInt(ddmmyyMatch[3], 10);
+      if (year < 100) year += 2000;
+      const d = new Date(Date.UTC(year, month, day));
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+    const d = new Date(trimmed);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+export function getDaysAgo(val, referenceTime = Date.now()) {
+  const d = parseToDate(val);
+  if (!d) return null;
+  const ref = typeof referenceTime === 'number' ? referenceTime : new Date(referenceTime).getTime();
+  const diffMs = ref - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return Math.max(0, diffDays);
+}
+
+export function calculateDataFreshness(data, etfHistory = [], referenceTime = Date.now()) {
+  const sources = [];
+
+  // 1. BTC Price Freshness
+  const priceTs = data?.btc?.lastUpdated || data?.btc?.timestamp;
+  let priceUpdatedStr = 'Live (WS)';
+  if (priceTs) {
+    const minAgo = Math.max(0, Math.floor((referenceTime - new Date(priceTs).getTime()) / (60 * 1000)));
+    priceUpdatedStr = minAgo <= 1 ? 'Vừa xong (Live)' : `${minAgo}m`;
+  }
+
+  // 2. Spot ETF Flow
+  const isEtfFallback = !Array.isArray(etfHistory) || etfHistory.length === 0 || etfHistory.isFallback === true || etfHistory.status === 'FALLBACK' || etfHistory.source === 'STATIC_BUNDLE';
+  if (isEtfFallback) {
+    sources.push({ key: 'etf', name: 'Spot ETF Flows', status: 'FALLBACK', ageDays: null, label: 'ETF (Fallback)' });
+  } else {
+    const latestEtf = etfHistory[etfHistory.length - 1];
+    const etfDate = etfHistory.lastObservationDate || latestEtf?.date;
+    const days = getDaysAgo(etfDate, referenceTime);
+    sources.push({
+      key: 'etf',
+      name: 'Spot ETF Flows',
+      status: 'REAL',
+      ageDays: days,
+      label: days != null ? (days === 0 ? 'ETF Nay' : `ETF ${days}d`) : 'ETF Live'
+    });
+  }
+
+  // 3. CME COT
+  const isCotFallback = !data?.cotData?.assetManager || isItemFallback(data?.cotData);
+  if (isCotFallback) {
+    sources.push({ key: 'cot', name: 'CME COT', status: 'FALLBACK', ageDays: null, label: 'COT (Fallback)' });
+  } else {
+    const cotDate = data.cotData.rawDate || data.cotData.date;
+    const days = getDaysAgo(cotDate, referenceTime);
+    sources.push({
+      key: 'cot',
+      name: 'CME COT',
+      status: 'REAL',
+      ageDays: days,
+      label: days != null ? (days === 0 ? 'COT Nay' : `COT ${days}d`) : 'COT Live'
+    });
+  }
+
+  // 4. On-Chain Metrics (MVRV / Mining)
+  const isOnChainFallback = isItemFallback(data?.onChainMetrics);
+  if (isOnChainFallback) {
+    sources.push({ key: 'onchain', name: 'On-Chain MVRV', status: 'FALLBACK', ageDays: null, label: 'On-chain (Fallback)' });
+  } else if (data?.onChainMetrics?.date || data?.onChainMetrics?.time) {
+    const onChainDate = data.onChainMetrics.date || data.onChainMetrics.time;
+    const days = getDaysAgo(onChainDate, referenceTime);
+    sources.push({
+      key: 'onchain',
+      name: 'On-Chain MVRV',
+      status: 'REAL',
+      ageDays: days,
+      label: days != null ? (days === 0 ? 'On-chain Nay' : `On-chain ${days}d`) : 'On-chain Live'
+    });
+  }
+
+  // 5. Macro (FRED Net Liquidity / CPI / Yield)
+  const isNetLiqFallback = isItemFallback(data?.netLiquidity) || data?.netLiquidityIsFallback;
+  if (!isNetLiqFallback && data?.netLiquidity?.date) {
+    const days = getDaysAgo(data.netLiquidity.date, referenceTime);
+    sources.push({
+      key: 'macro',
+      name: 'US Net Liquidity',
+      status: 'REAL',
+      ageDays: days,
+      label: days != null ? (days === 0 ? 'Macro Nay' : `Macro ${days}d`) : 'Macro Live'
+    });
+  }
+
+  // Find oldest among valid, active non-fallback sources
+  const validSources = sources.filter(s => s.status === 'REAL' && s.ageDays != null);
+  let oldestDataStr = 'Live (<1d)';
+  let oldestSource = null;
+
+  if (validSources.length > 0) {
+    validSources.sort((a, b) => b.ageDays - a.ageDays);
+    oldestSource = validSources[0];
+    oldestDataStr = oldestSource.label;
+  } else if (sources.some(s => s.status === 'FALLBACK')) {
+    oldestDataStr = 'Data: Fallback';
+  }
+
+  return {
+    priceUpdatedStr,
+    oldestDataStr,
+    oldestSource,
+    sources
+  };
+}
+
+export function evaluateBiasPriceConfirmation(biasScore, btcChange24h) {
+  const score = toFiniteNumber(biasScore) ?? 0;
+  const chg = toFiniteNumber(btcChange24h) ?? 0;
+
+  const isBiasBull = score >= 15;
+  const isBiasBear = score <= -15;
+  const isPriceUp = chg >= 0.5;
+  const isPriceDown = chg <= -0.5;
+
+  if (isBiasBull && isPriceUp) {
+    return {
+      state: 'CONFIRMED_BULLISH',
+      biasDirection: 'BULLISH',
+      priceDirection: 'UP',
+      label: 'Bullish được price xác nhận',
+      shortLabel: 'XÁC NHẬN TĂNG ▲',
+      description: 'Động lực định lượng đa tầng (định chế, on-chain, vĩ mô) và hành vi giá 24h đồng thuận hướng tăng.',
+      color: '#10b981',
+      bg: 'rgba(16, 185, 129, 0.12)',
+      border: 'rgba(16, 185, 129, 0.3)',
+      icon: 'check-circle'
+    };
+  }
+
+  if (isBiasBull && isPriceDown) {
+    return {
+      state: 'BULLISH_DIVERGENCE',
+      biasDirection: 'BULLISH',
+      priceDirection: 'DOWN',
+      label: 'Bullish divergence — thesis chưa được xác nhận',
+      shortLabel: 'PHÂN KỲ TĂNG ⚡',
+      description: 'Bias định lượng tích cực nhưng giá 24h đang giảm. Dòng tiền ngầm/vĩ mô tích lũy nhưng thesis chưa phản ánh vào giá.',
+      color: '#f59e0b',
+      bg: 'rgba(245, 158, 11, 0.12)',
+      border: 'rgba(245, 158, 11, 0.3)',
+      icon: 'alert-triangle'
+    };
+  }
+
+  if (isBiasBear && isPriceUp) {
+    return {
+      state: 'BEARISH_DIVERGENCE',
+      biasDirection: 'BEARISH',
+      priceDirection: 'UP',
+      label: 'Bearish divergence — cảnh giác',
+      shortLabel: 'PHÂN KỲ GIẢM ⚠',
+      description: 'Giá 24h tăng nhưng Bias định lượng vĩ mô/on-chain đang yếu hoặc âm. Cảnh giác bẫy tăng giá (bull trap).',
+      color: '#f43f5e',
+      bg: 'rgba(244, 63, 94, 0.12)',
+      border: 'rgba(244, 63, 94, 0.3)',
+      icon: 'alert-circle'
+    };
+  }
+
+  if (isBiasBear && isPriceDown) {
+    return {
+      state: 'CONFIRMED_BEARISH',
+      biasDirection: 'BEARISH',
+      priceDirection: 'DOWN',
+      label: 'Bearish được price xác nhận',
+      shortLabel: 'XÁC NHẬN GIẢM ▼',
+      description: 'Cả Bias định lượng và hành vi giá 24h đều đồng thuận hướng giảm. Áp lực bán chiếm ưu thế.',
+      color: '#f87171',
+      bg: 'rgba(248, 113, 113, 0.12)',
+      border: 'rgba(248, 113, 113, 0.3)',
+      icon: 'trending-down'
+    };
+  }
+
+  return {
+    state: 'NEUTRAL_ALIGNED',
+    biasDirection: 'NEUTRAL',
+    priceDirection: isPriceUp ? 'UP' : isPriceDown ? 'DOWN' : 'FLAT',
+    label: 'Thị trường cân bằng / Chưa có phân kỳ',
+    shortLabel: 'TRUNG LẬP ⚖',
+    description: 'Tín hiệu Bias và giá dao động trong biên độ trung tính, thị trường đang tích lũy hoặc chờ chất xúc tác mới.',
+    color: '#94a3b8',
+    bg: 'rgba(148, 163, 184, 0.1)',
+    border: 'rgba(148, 163, 184, 0.25)',
+    icon: 'activity'
+  };
+}
+
+function isItemFallback(item) {
+  if (item == null) return false;
+  if (typeof item === 'object') {
+    return item.isFallback === true || item.status === 'FALLBACK' || item.status === 'UNAVAILABLE';
+  }
+  return false;
+}
+
+export function calculateMarketBias(data, etfHistory = [], options = {}) {
+  const currentPrice = options?.livePrice ?? data?.btc?.price ?? null;
+  const currentChange = options?.liveChange ?? data?.btc?.change ?? 0;
+  const refTime = options?.referenceTime ?? Date.now();
+
+  const freshness = calculateDataFreshness(data, etfHistory, refTime);
+
   if (!data) {
+    const confirmation = evaluateBiasPriceConfirmation(0, currentChange);
     return {
       score: 0,
       label: 'NEUTRAL',
@@ -205,6 +431,15 @@ export function calculateMarketBias(data, etfHistory = []) {
       pillars: { institutional: 0, onChain: 0, newsRisk: 0, microstructure: 0 },
       signals: [],
       upcomingEvents: [],
+      freshness,
+      confirmation,
+      priceContext: {
+        price: currentPrice,
+        change: currentChange,
+        high: null,
+        low: null,
+        volume: null,
+      },
       regime: {
         valuation: 'FAIR_VALUE',
         trend: 'UNKNOWN',
@@ -226,14 +461,15 @@ export function calculateMarketBias(data, etfHistory = []) {
   let instScoreSum = 0;
 
   // 1A. Spot ETF 7-Day Net Flow (28%)
-  let etfSignal = 0;
-  let etfStatus = 'No data';
-  if (Array.isArray(etfHistory) && etfHistory.length > 0) {
+  const isEtfFallback = etfHistory?.isFallback === true || etfHistory?.status === 'FALLBACK' || etfHistory?.source === 'STATIC_BUNDLE';
+  if (Array.isArray(etfHistory) && etfHistory.length > 0 && !isEtfFallback) {
     const allFlows = etfHistory.map((item) => toFiniteNumber(item.flow)).filter((flow) => flow != null);
     const last7 = allFlows.slice(-7);
     const sum7d = last7.reduce((acc, flow) => acc + flow, 0);
     const flowStr = `${sum7d >= 0 ? '+' : ''}$${sum7d.toFixed(1)}M`;
 
+    let etfSignal = 0;
+    let etfStatus = 'No data';
     if (sum7d > 800) { etfSignal = 1.0; etfStatus = `ETF Flow 7D: ${flowStr} (Gom rất mạnh)`; }
     else if (sum7d > 250) { etfSignal = 0.5; etfStatus = `ETF Flow 7D: ${flowStr} (Vào ổn định)`; }
     else if (sum7d > -250) { etfSignal = 0.0; etfStatus = `ETF Flow 7D: ${flowStr} (Đi ngang)`; }
@@ -249,15 +485,18 @@ export function calculateMarketBias(data, etfHistory = []) {
     instScoreSum += etfSignal * 0.28;
     availableWeight += 0.28;
     signals.push({ name: 'ETF 7D Net Flow', weight: '28%', score: etfSignal * 28, status: etfStatus, pillar: 'institutional' });
+  } else if (isEtfFallback) {
+    signals.push({ name: 'ETF 7D Net Flow', weight: '0% (FALLBACK)', score: 0, status: 'Dữ liệu ETF fallback / tĩnh (loại khỏi tính điểm)', pillar: 'institutional', isFallback: true });
   }
 
   // 1B. CME COT Institutional Flow (12%)
-  let cotSignal = 0;
-  let cotStatus = 'No data';
-  if (data.cotData?.assetManager) {
+  const isCotFallback = isItemFallback(data.cotData) || data.cotData?.isFallback === true;
+  if (data.cotData?.assetManager && !isCotFallback) {
     const netPos = toFiniteNumber(data.cotData.assetManager.net);
     const netChange = toFiniteNumber(data.cotData.assetManager.netChange);
     if (netPos != null) {
+      let cotSignal = 0;
+      let cotStatus = 'No data';
       if (netPos > 3000) { cotSignal = 1.0; cotStatus = `CME Asset Mgr Net +${netPos} (Long áp đảo)`; }
       else if (netPos > 1000) { cotSignal = 0.5; cotStatus = `CME Asset Mgr Net +${netPos} (Long ưu thế)`; }
       else if (netPos > -1000) { cotSignal = 0.0; cotStatus = `CME Asset Mgr Net ${netPos} (Cân bằng)`; }
@@ -273,18 +512,20 @@ export function calculateMarketBias(data, etfHistory = []) {
       availableWeight += 0.12;
       signals.push({ name: 'CME COT Flow', weight: '12%', score: cotSignal * 12, status: cotStatus, pillar: 'institutional' });
     }
+  } else if (isCotFallback) {
+    signals.push({ name: 'CME COT Flow', weight: '0% (FALLBACK)', score: 0, status: 'Dữ liệu CME COT fallback / chưa cập nhật (loại khỏi tính điểm)', pillar: 'institutional', isFallback: true });
   }
 
   // ----------------------------------------------------
   // PILLAR 2: ON-CHAIN FUNDAMENTALS & NETWORK (25%)
   // ----------------------------------------------------
   let onChainScoreSum = 0;
-  const mvrv = toFiniteNumber(data.onChainMetrics?.mvrv);
+  const mvrv = !isItemFallback(data.onChainMetrics) ? toFiniteNumber(data.onChainMetrics?.mvrv) : null;
 
   // 2A. MVRV Ratio (Single Valuation Anchor - 8%)
-  let mvrvSignal = 0;
-  let mvrvStatus = 'No data';
   if (mvrv != null) {
+    let mvrvSignal = 0;
+    let mvrvStatus = 'No data';
     if (mvrv < 1.0) { mvrvSignal = 1.0; mvrvStatus = `MVRV ${mvrv} (Rất rẻ / Vùng đáy)`; }
     else if (mvrv < 1.4) { mvrvSignal = 0.7; mvrvStatus = `MVRV ${mvrv} (Vùng tích lũy tốt)`; }
     else if (mvrv < 2.2) { mvrvSignal = 0.2; mvrvStatus = `MVRV ${mvrv} (Định giá hợp lý)`; }
@@ -298,11 +539,12 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 2B. SSR (Stablecoin Supply Ratio) Oscillator (5%)
-  let ssrSignal = 0;
-  let ssrStatus = 'No data';
+  const isSsrFallback = isItemFallback(data.ssrMa) || isItemFallback(data.stablecoins);
   const p = data.btc?.price;
   const m = (typeof data.ssrMa === 'object' && data.ssrMa?.stablecoinTotal) || data.stablecoins?.total;
-  if (p && m && typeof data.ssrMa === 'object' && data.ssrMa?.ma200) {
+  if (!isSsrFallback && p && m && typeof data.ssrMa === 'object' && data.ssrMa?.ma200) {
+    let ssrSignal = 0;
+    let ssrStatus = 'No data';
     const ssr = (p * 19740000) / m;
     const z = data.ssrMa.stdDev200 > 0 ? (ssr - data.ssrMa.ma200) / data.ssrMa.stdDev200 : 0;
     if (z < -2) { ssrSignal = 1.0; ssrStatus = `SSR Z-Score ${z.toFixed(2)} (Oversold - Sức mua chờ lớn)`; }
@@ -317,11 +559,11 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 2C. Active Addresses (4%)
-  let addrSignal = 0;
-  let addrStatus = 'No data';
-  if (data.onChainMetrics?.activeAddresses) {
+  if (!isItemFallback(data.onChainMetrics) && data.onChainMetrics?.activeAddresses) {
     const addrs = toFiniteNumber(data.onChainMetrics.activeAddresses);
     if (addrs != null && addrs > 0) {
+      let addrSignal = 0;
+      let addrStatus = 'No data';
       if (addrs > 1000000) { addrSignal = 1.0; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng cực sôi động)`; }
       else if (addrs > 850000) { addrSignal = 0.5; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng hoạt động tốt)`; }
       else if (addrs > 700000) { addrSignal = 0.0; addrStatus = `${(addrs / 1000).toFixed(0)}k addrs (Mạng bình thường)`; }
@@ -334,13 +576,16 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 2D. Mining Production Cost Floor (4%)
-  let miningSignal = 0;
-  let miningStatus = 'No data';
-  if (data.btc?.price > 0 && data.onChain?.difficulty > 0) {
-    const hashRateEH = (data.onChain.difficulty * Math.pow(2, 32)) / (600 * 1e18);
+  const diffInput = !isItemFallback(data.onChain) ? toFiniteNumber(data.onChain?.difficultyRaw ?? data.onChain?.difficulty) : null;
+  if (data.btc?.price > 0 && diffInput != null && diffInput > 0) {
+    // Normalize difficulty: if in Trillion units (< 1e6), multiply by 1e12
+    const rawDiff = diffInput < 1e6 ? diffInput * 1e12 : diffInput;
+    const hashRateEH = (rawDiff * Math.pow(2, 32)) / (600 * 1e18);
     const estCostMid = Math.round(hashRateEH * 420 + 38000);
     const priceToCostRatio = data.btc.price / (estCostMid || 65000);
 
+    let miningSignal = 0;
+    let miningStatus = 'No data';
     if (priceToCostRatio < 1.05) { miningSignal = 1.0; miningStatus = `Giá sát phí đào ~$${(estCostMid/1000).toFixed(0)}k (Đáy hỗ trợ thợ đào)`; }
     else if (priceToCostRatio < 1.30) { miningSignal = 0.5; miningStatus = `Biên lợi nhuận thợ đào thấp (Vùng an toàn)`; }
     else if (priceToCostRatio < 1.80) { miningSignal = 0.0; miningStatus = `Lợi nhuận thợ đào bình thường`; }
@@ -352,10 +597,11 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 2E. On-chain Network Transaction Demand (4%)
-  let txSignal = 0;
-  let txStatus = 'No data';
-  const txCount = toFiniteNumber(data.onChainMetrics?.txCount ?? data.onChain?.txCount24h);
+  const isTxFallback = isItemFallback(data.onChainMetrics) && isItemFallback(data.onChain);
+  const txCount = !isTxFallback ? toFiniteNumber(data.onChainMetrics?.txCount ?? data.onChain?.txCount24h) : null;
   if (txCount != null && txCount > 0) {
+    let txSignal = 0;
+    let txStatus = 'No data';
     if (txCount > 500000) { txSignal = 0.8; txStatus = `${(txCount/1000).toFixed(0)}k txs/24h (Nhu cầu giao dịch rất cao)`; }
     else if (txCount > 350000) { txSignal = 0.3; txStatus = `${(txCount/1000).toFixed(0)}k txs/24h (Nhu cầu giao dịch ổn định)`; }
     else if (txCount > 250000) { txSignal = -0.2; txStatus = `${(txCount/1000).toFixed(0)}k txs/24h (Nhu cầu giao dịch trung bình)`; }
@@ -372,11 +618,11 @@ export function calculateMarketBias(data, etfHistory = []) {
   let newsRiskScoreSum = 0;
 
   // 3A. Monetary Policy & Real Rates Pulse (6%)
-  let macroPulseSignal = 0;
-  let macroPulseStatus = 'No data';
-  const fedVal = toFiniteNumber(data.fedFundsRate?.val ?? data.fedFundsRate);
-  const cpiVal = toFiniteNumber(data.cpi?.val ?? data.cpi);
-  const unrateVal = toFiniteNumber(data.unrate?.val ?? data.unrate);
+  const fedVal = !isItemFallback(data.fedFundsRate) ? toFiniteNumber(data.fedFundsRate?.val ?? data.fedFundsRate) : null;
+  const rawCpi = !isItemFallback(data.cpi) ? toFiniteNumber(data.cpi?.val ?? data.cpi) : null;
+  // Safeguard: CPI must be YoY percentage (e.g. 0-20%), not raw index level (> 50)
+  const cpiVal = (rawCpi != null && rawCpi <= 50) ? rawCpi : null;
+  const unrateVal = !isItemFallback(data.unrate) ? toFiniteNumber(data.unrate?.val ?? data.unrate) : null;
   
   if (fedVal != null || cpiVal != null || unrateVal != null) {
     let mScore = 0;
@@ -407,8 +653,8 @@ export function calculateMarketBias(data, etfHistory = []) {
       else if (realRate < 0.5) { mScore += 0.3; desc.push(`Real Rate ${realRate.toFixed(1)}% (Hỗ trợ định giá)`); }
     }
     
-    macroPulseSignal = count > 0 ? clamp(mScore / count) : 0;
-    macroPulseStatus = desc.length > 0 ? desc.join(' • ') : 'Macro ổn định';
+    const macroPulseSignal = count > 0 ? clamp(mScore / count) : 0;
+    const macroPulseStatus = desc.length > 0 ? desc.join(' • ') : 'Macro ổn định';
     
     newsRiskScoreSum += macroPulseSignal * 0.06;
     availableWeight += 0.06;
@@ -416,11 +662,10 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 3B. US Net Liquidity & Credit Stress (5%)
-  let liqSignal = 0;
-  let liqStatus = 'No data';
-  const netLiq = toFiniteNumber(data.netLiquidity);
-  const hySpread = toFiniteNumber(data.highYield?.val ?? data.highYield);
-  const m2 = toFiniteNumber(data.m2Supply?.val ?? data.m2Supply);
+  const isNetLiqFallback = isItemFallback(data.netLiquidity) || data.netLiquidityIsFallback === true;
+  const netLiq = !isNetLiqFallback ? toFiniteNumber(data.netLiquidity?.val ?? data.netLiquidity) : null;
+  const hySpread = !isItemFallback(data.highYield) ? toFiniteNumber(data.highYield?.val ?? data.highYield) : null;
+  const m2 = !isItemFallback(data.m2Supply) ? toFiniteNumber(data.m2Supply?.val ?? data.m2Supply) : null;
 
   if (netLiq != null || hySpread != null || m2 != null) {
     let lScore = 0;
@@ -448,8 +693,8 @@ export function calculateMarketBias(data, etfHistory = []) {
       lCount++;
     }
 
-    liqSignal = lCount > 0 ? clamp(lScore / lCount) : 0;
-    liqStatus = lDesc.length > 0 ? lDesc.join(' • ') : 'Thanh khoản bình thường';
+    const liqSignal = lCount > 0 ? clamp(lScore / lCount) : 0;
+    const liqStatus = lDesc.length > 0 ? lDesc.join(' • ') : 'Thanh khoản bình thường';
 
     newsRiskScoreSum += liqSignal * 0.05;
     availableWeight += 0.05;
@@ -457,10 +702,8 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 3C. Global Currency (DXY) & US 10Y Yield (4%)
-  let dxyYieldSignal = 0;
-  let dxyYieldStatus = 'No data';
-  const dxyVal = toFiniteNumber(data.dxy?.price ?? data.dxy);
-  const yield10yVal = toFiniteNumber(data.tenYearYield?.val ?? data.tenYearYield);
+  const dxyVal = !isItemFallback(data.dxy) ? toFiniteNumber(data.dxy?.price ?? data.dxy?.val ?? data.dxy) : null;
+  const yield10yVal = !isItemFallback(data.tenYearYield) ? toFiniteNumber(data.tenYearYield?.val ?? data.tenYearYield) : null;
 
   if (dxyVal != null || yield10yVal != null) {
     let dyScore = 0;
@@ -482,8 +725,8 @@ export function calculateMarketBias(data, etfHistory = []) {
       dyCount++;
     }
 
-    dxyYieldSignal = dyCount > 0 ? clamp(dyScore / dyCount) : 0;
-    dxyYieldStatus = dyDesc.length > 0 ? dyDesc.join(' • ') : 'Tỷ giá & lợi suất cân bằng';
+    const dxyYieldSignal = dyCount > 0 ? clamp(dyScore / dyCount) : 0;
+    const dxyYieldStatus = dyDesc.length > 0 ? dyDesc.join(' • ') : 'Tỷ giá & lợi suất cân bằng';
 
     newsRiskScoreSum += dxyYieldSignal * 0.04;
     availableWeight += 0.04;
@@ -491,15 +734,15 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 3D. Equities Risk Appetite (S&P 500 / Nasdaq) (2%)
-  let eqSignal = 0;
-  let eqStatus = 'No data';
-  const spChg = toFiniteNumber(data.sp500?.changePercent);
-  const qqqChg = toFiniteNumber(data.qqq?.changePercent);
+  const isSpFallback = isItemFallback(data.sp500);
+  const isQqqFallback = isItemFallback(data.qqq);
+  const spChg = !isSpFallback ? toFiniteNumber(data.sp500?.changePercent) : null;
+  const qqqChg = !isQqqFallback ? toFiniteNumber(data.qqq?.changePercent) : null;
 
   if (spChg != null || qqqChg != null) {
     const avgChg = ((spChg ?? 0) + (qqqChg ?? 0)) / ((spChg != null && qqqChg != null) ? 2 : 1);
-    eqSignal = clamp(avgChg / 1.5);
-    eqStatus = `S&P500 ${spChg != null ? (spChg >= 0 ? '+' : '') + spChg.toFixed(2) + '%' : '---'} • QQQ ${qqqChg != null ? (qqqChg >= 0 ? '+' : '') + qqqChg.toFixed(2) + '%' : '---'} (Khẩu vị rủi ro chứng khoán)`;
+    const eqSignal = clamp(avgChg / 1.5);
+    const eqStatus = `S&P500 ${spChg != null ? (spChg >= 0 ? '+' : '') + spChg.toFixed(2) + '%' : '---'} • QQQ ${qqqChg != null ? (qqqChg >= 0 ? '+' : '') + qqqChg.toFixed(2) + '%' : '---'} (Khẩu vị rủi ro chứng khoán)`;
 
     newsRiskScoreSum += eqSignal * 0.02;
     availableWeight += 0.02;
@@ -509,7 +752,7 @@ export function calculateMarketBias(data, etfHistory = []) {
   // 3E. VIX Volatility & 24h Calendar Event Shock (3%)
   let vixSignal = 0;
   let vixStatus = 'No data';
-  const vixVal = toFiniteNumber(data.vix?.price ?? data.vix?.val ?? data.vix);
+  const vixVal = !isItemFallback(data.vix) ? toFiniteNumber(data.vix?.price ?? data.vix?.val ?? data.vix) : null;
   
   if (vixVal != null && vixVal > 0) {
     if (vixVal < 15) { vixSignal = 0.8; vixStatus = `VIX ${vixVal.toFixed(1)} (Risk-On ổn định)`; }
@@ -565,13 +808,13 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 4B. Spot CVD (24h, 7d, 30d) (3%)
-  let spotCvdSignal = 0;
-  let spotCvdStatus = 'No data';
-  const spot24 = toFiniteNumber(data.cvdHistory24hSpot?.[data.cvdHistory24hSpot.length - 1]?.cvd);
+  const spot24 = !isItemFallback(data.cvdHistory24hSpot) ? toFiniteNumber(data.cvdHistory24hSpot?.[data.cvdHistory24hSpot.length - 1]?.cvd) : null;
   const spot7d = toFiniteNumber(data.cvdHistory7dSpot?.[data.cvdHistory7dSpot.length - 1]?.cvd);
   const spot30d = toFiniteNumber(data.cvdHistory30dSpot?.[data.cvdHistory30dSpot.length - 1]?.cvd);
+  let spotCvdSignal = 0;
   
   if (spot24 != null && btcVolume != null && btcVolume > 0) {
+    let spotCvdStatus = 'No data';
     const cvdRatio = spot24 / btcVolume; 
     let baseScore = clamp(Math.tanh(cvdRatio / 0.05));
     if (spot7d != null) {
@@ -596,13 +839,12 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 4C. Futures CVD (24h, 7d, 30d) (2%)
-  let futCvdSignal = 0;
-  let futCvdStatus = 'No data';
-  const fut24 = toFiniteNumber(data.cvdHistory24h?.[data.cvdHistory24h.length - 1]?.cvd);
+  const fut24 = !isItemFallback(data.cvdHistory24h) ? toFiniteNumber(data.cvdHistory24h?.[data.cvdHistory24h.length - 1]?.cvd) : null;
   const fut7d = toFiniteNumber(data.cvdHistory7d?.[data.cvdHistory7d.length - 1]?.cvd);
   const fut30d = toFiniteNumber(data.cvdHistory30d?.[data.cvdHistory30d.length - 1]?.cvd);
   
   if (fut24 != null && btcVolume != null && btcVolume > 0) {
+    let futCvdStatus = 'No data';
     const cvdRatio = fut24 / btcVolume;
     let baseScore = clamp(Math.tanh(cvdRatio / 0.08));
     if (fut7d != null) {
@@ -613,7 +855,7 @@ export function calculateMarketBias(data, etfHistory = []) {
       if (fut30d > 0 && fut24 > 0) baseScore += 0.1;
       else if (fut30d < 0 && fut24 < 0) baseScore -= 0.1;
     }
-    futCvdSignal = clamp(baseScore);
+    const futCvdSignal = clamp(baseScore);
     
     if (futCvdSignal > 0.6) futCvdStatus = 'Futures Long Chủ Đạo';
     else if (futCvdSignal > 0.2) futCvdStatus = 'Futures Nghiêng Long';
@@ -627,10 +869,11 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 4D. Funding Rate & Leverage Confluence (2%)
-  let frSignal = 0;
-  let frStatus = 'No data';
-  const fr = toFiniteNumber(data.fundingRate);
+  const isFrFallback = isItemFallback(data.fundingRate) || data.fundingRateIsFallback === true;
+  const fr = !isFrFallback ? toFiniteNumber(data.fundingRate?.val ?? data.fundingRate) : null;
   if (fr != null) {
+    let frSignal = 0;
+    let frStatus = 'No data';
     const frPct = (fr * 100).toFixed(3) + '%';
     const isSpotBuying = spotCvdSignal > 0.1;
     const isSpotDumping = spotCvdSignal < -0.1;
@@ -670,11 +913,12 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 4E. Open Interest Surge + Price Action (2%)
-  let oiSignal = 0;
-  let oiStatus = 'No data';
-  const currentOi = toFiniteNumber(data.openInterest);
-  const prevOi = toFiniteNumber(data.oiHistory?.[0]?.sumOpenInterest);
+  const isOiFallback = isItemFallback(data.openInterest) || data.oiIsFallback === true;
+  const currentOi = !isOiFallback ? toFiniteNumber(data.openInterest?.val ?? data.openInterest) : null;
+  const prevOi = toFiniteNumber(data.oiHistory?.[0]?.sumOpenInterest ?? data.oiHistory?.[data.oiHistory.length - 1]?.sumOpenInterest);
   if (currentOi != null && prevOi != null && prevOi > 0) {
+    let oiSignal = 0;
+    let oiStatus = 'No data';
     const oiChangePct = prevOi > 0 ? ((currentOi - prevOi) / prevOi) * 100 : 0;
     const priceChange = data.btc?.change || 0;
 
@@ -691,10 +935,11 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 4F. Fear & Greed Index (2%)
-  let fngSignal = 0;
-  let fngStatus = 'No data';
-  const fng = toFiniteNumber(data.fngData?.value);
+  const isFngFallback = isItemFallback(data.fngData) || data.fngData?.isFallback === true;
+  const fng = !isFngFallback ? toFiniteNumber(data.fngData?.value ?? data.fngData?.val ?? data.fngData) : null;
   if (fng != null) {
+    let fngSignal = 0;
+    let fngStatus = 'No data';
     if (fng <= 20) { fngSignal = 1.0; fngStatus = `Fear & Greed ${fng} (Extreme Fear -> Mua tốt)`; }
     else if (fng <= 35) { fngSignal = 0.5; fngStatus = `Fear & Greed ${fng} (Fear)`; }
     else if (fng <= 65) { fngSignal = 0.0; fngStatus = `Fear & Greed ${fng} (Neutral)`; }
@@ -708,10 +953,16 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // 4G. Long/Short Ratio (1%)
-  let lsSignal = 0;
-  let lsStatus = 'No data';
-  const latestLs = toFiniteNumber(data.lsHistory?.[data.lsHistory.length - 1]?.longShortRatio);
+  const isLsFallback = isItemFallback(data.lsHistory) || data.lsIsFallback === true;
+  const lsFromHistory = Array.isArray(data.lsHistory) && data.lsHistory.length > 0
+    ? toFiniteNumber(data.lsHistory[data.lsHistory.length - 1]?.longShortRatio)
+    : null;
+  const lsDirect = toFiniteNumber(data.longShortRatio ?? data.globalLs);
+  const latestLs = !isLsFallback ? (lsFromHistory ?? lsDirect) : null;
+
   if (latestLs != null && latestLs > 0) {
+    let lsSignal = 0;
+    let lsStatus = 'No data';
     if (latestLs > 2.5) { lsSignal = -0.8; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Quá nhiều Longs)`; }
     else if (latestLs > 1.8) { lsSignal = -0.3; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Nghiêng về Long)`; }
     else if (latestLs > 1.2) { lsSignal = 0.2; lsStatus = `Retail L/S Ratio ${latestLs.toFixed(2)} (Hợp lý)`; }
@@ -725,7 +976,7 @@ export function calculateMarketBias(data, etfHistory = []) {
   }
 
   // ----------------------------------------------------
-  // TOTAL SCORE COMPUTATION
+  // TOTAL SCORE COMPUTATION (ZERO-FALLBACK CONFIDENCE)
   // ----------------------------------------------------
   const totalWeightedRaw = instScoreSum + onChainScoreSum + newsRiskScoreSum + microScoreSum;
   
@@ -787,6 +1038,8 @@ export function calculateMarketBias(data, etfHistory = []) {
   else if (spotCvdSignal > 0.3) tacticalRegime = 'SPOT_ACCUMULATION';
   else if (spotCvdSignal < -0.3) tacticalRegime = 'SPOT_DISTRIBUTION';
 
+  const confirmation = evaluateBiasPriceConfirmation(clampedScore, currentChange);
+
   return {
     score: clampedScore,
     label,
@@ -802,6 +1055,15 @@ export function calculateMarketBias(data, etfHistory = []) {
     },
     signals,
     upcomingEvents,
+    freshness,
+    confirmation,
+    priceContext: {
+      price: currentPrice,
+      change: currentChange,
+      high: data?.btc?.high ?? null,
+      low: data?.btc?.low ?? null,
+      volume: data?.btc?.volume ?? null,
+    },
     regime: {
       valuation: valuationRegime,
       trend: trendRegime.regimeLabel,

@@ -238,7 +238,7 @@ const INIT = {
   ethPrice: null,
   solPrice: null,
   linkPrice: null,
-  netLiquidity: 6050.25, // default baseline
+  netLiquidity: null,
   cotData: null,
   fngData: null,
   cvdHistory24h: [],
@@ -252,6 +252,8 @@ const INIT = {
 
 // US Spot Bitcoin ETFs Baseline Holdings (Fallback)
 const BASELINE_ETF_HOLDINGS = {
+  isFallback: true,
+  status: 'FALLBACK',
   funds: [
     { name: 'BlackRock (IBIT)', holdings: 774434, marketShare: '61.5%' },
     { name: 'Grayscale (GBTC)', holdings: 145028, marketShare: '11.5%' },
@@ -261,7 +263,7 @@ const BASELINE_ETF_HOLDINGS = {
   total: 1258664
 };
 
-const BASELINE_ETF_FLOWS = [
+const BASELINE_ETF_FLOWS = Object.assign([
   { date: '26/05/26', flow: -333.6 },
   { date: '27/05/26', flow: -733.4 },
   { date: '28/05/26', flow: -223.3 },
@@ -271,9 +273,11 @@ const BASELINE_ETF_FLOWS = [
   { date: '03/06/26', flow: -396.6 },
   { date: '04/06/26', flow: 3.2 },
   { date: '05/06/26', flow: -325.7 },
-];
+], { isFallback: true, status: 'FALLBACK' });
 
 const BASELINE_CME_COT = {
+  isFallback: true,
+  status: 'FALLBACK',
   date: '02/06/2026',
   openInterest: 19882,
   assetManager: { long: 5256, longChange: -694, short: 2153, shortChange: 555, net: 3103, netChange: -1249 },

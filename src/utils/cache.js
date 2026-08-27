@@ -33,13 +33,32 @@ export function readCacheValue(cacheKey) {
 }
 
 /**
+ * Read cache metadata including age and stale status.
+ */
+export function getCacheMetadata(cacheKey, expiryMs = 3600000) {
+  const entry = readCacheEntry(cacheKey);
+  if (!entry || entry.time == null) return { exists: false, time: null, ageHours: null, isFresh: false, isStale: true };
+  const ageMs = Date.now() - entry.time;
+  const ageHours = parseFloat((ageMs / 3600000).toFixed(1));
+  return {
+    exists: true,
+    time: entry.time,
+    ageHours,
+    isFresh: ageMs < expiryMs,
+    isStale: ageMs >= expiryMs
+  };
+}
+
+/**
  * Fetch with localStorage TTL cache.
  * - Fresh cache + !force → return cache (no network)
- * - Network fail + any cache → return stale cache
+ * - Network fail + cache within maxStaleAge → return stale cache tagged with isStale
+ * - Network fail + expired cache → return null (prevents infinite stale fallback)
  * - force → always network
  */
-export async function fetchCached(cacheKey, fetchFn, expiryMs, addLog, label, force = false) {
+export async function fetchCached(cacheKey, fetchFn, expiryMs, addLog, label, force = false, maxStaleAgeMs = 7 * 24 * 3600 * 1000) {
   let cachedVal = null;
+  let cachedTime = null;
   let hasCached = false;
 
   try {
@@ -47,6 +66,7 @@ export async function fetchCached(cacheKey, fetchFn, expiryMs, addLog, label, fo
     if (cached) {
       const { val, time } = JSON.parse(cached);
       cachedVal = val;
+      cachedTime = time;
       hasCached = true;
       if (!force && Date.now() - time < expiryMs) {
         if (addLog && label) addLog(`✓ ${label} (Dữ liệu cache)`, 'ok');
@@ -73,9 +93,17 @@ export async function fetchCached(cacheKey, fetchFn, expiryMs, addLog, label, fo
     }
     throw new Error('Phản hồi trống hoặc lỗi API');
   } catch (e) {
-    if (hasCached) {
+    if (hasCached && cachedTime && (Date.now() - cachedTime <= maxStaleAgeMs)) {
       if (addLog && label) {
-        addLog(`⚠ ${label} — lỗi truy vấn, dùng tạm cache cũ`, 'warning');
+        const ageHours = ((Date.now() - cachedTime) / 3600000).toFixed(1);
+        addLog(`⚠ ${label} — lỗi truy vấn, dùng tạm cache (${ageHours}h trước)`, 'warning');
+      }
+      if (cachedVal && typeof cachedVal === 'object') {
+        return {
+          ...cachedVal,
+          isStale: true,
+          cachedAt: cachedTime
+        };
       }
       return cachedVal;
     }

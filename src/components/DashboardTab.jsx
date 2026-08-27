@@ -5,7 +5,6 @@ import PolymarketWhales from './PolymarketWhales';
 import EconomicCalendarPanel from './EconomicCalendarPanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
-
 const isPlausibleCpiYoY = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && number >= -20 && number <= 50;
@@ -50,12 +49,11 @@ export default function DashboardTab({
     <div className="dashboard-layout">
       {/* Market Bias Engine Card */}
       {!isModuleHidden('dash_bias') && (
-        <MarketBiasCard data={data} etfHistory={etfHistory} moduleId="dash_bias" />
+        <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} moduleId="dash_bias" />
       )}
       {!isModuleHidden('dash_macro_valuator') && (
         <MacroDashboardCard livePrice={btcDisplay?.price} theme={theme} moduleId="dash_macro_valuator" />
       )}
-      {/* News Slider */}
       {!isModuleHidden('dash_news') && data.news && data.news.length > 0 && (
         <div className="news-slider-wrapper glass-panel" style={{ position: 'relative' }}>
           <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>

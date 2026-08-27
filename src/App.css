@@ -4242,6 +4242,381 @@
   color: var(--color-emerald-400);
 }
 
+.bias-benchmark-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px dashed rgba(52, 211, 153, 0.3);
+  color: var(--color-emerald-400, #34d399);
+  letter-spacing: 0.03em;
+}
+
+.bias-toggle-btn.is-active-btn {
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.5);
+  color: #34d399;
+}
+
+/* Regime Chips */
+.bias-regime-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 14px 0;
+  font-size: 11px;
+}
+
+.bias-regime-chip {
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+}
+
+.bias-regime-chip .chip-label {
+  color: var(--text-muted, var(--text-slate-400));
+}
+
+/* ── Dual Benchmark Cards (BTC Price vs Market Bias) ── */
+.bias-dual-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 768px) {
+  .bias-dual-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bias-benchmark-card {
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  border-radius: 8px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all 0.2s ease;
+}
+
+.bias-benchmark-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.bias-card-top-tag {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bias-card-top-tag .tag-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--text-slate-400);
+  text-transform: uppercase;
+}
+
+.bias-card-top-tag .tag-role-pill {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: var(--text-slate-300);
+  letter-spacing: 0.03em;
+}
+
+.bias-card-top-tag .tag-confidence-badge {
+  font-size: 0.62rem;
+  color: var(--text-slate-400);
+}
+
+.bias-benchmark-val-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bias-price-num {
+  font-size: 1.65rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.bias-currency-unit {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-slate-400);
+}
+
+.bias-change-pill {
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+
+.bias-change-pill.is-up {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.bias-change-pill.is-down {
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.bias-score-num {
+  font-size: 1.65rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.bias-score-status {
+  font-size: 0.95rem;
+  font-weight: 800;
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+
+.bias-score-scale-denom {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.bias-benchmark-meta-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.65rem;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-slate-400);
+}
+
+.bias-benchmark-meta-footer .meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bias-benchmark-meta-footer .meta-icon {
+  opacity: 0.7;
+}
+
+/* ── Bias–Price Confirmation Banner ── */
+.bias-confirmation-banner {
+  border-radius: 8px;
+  border: 1px solid;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bias-confirmation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bias-conf-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+}
+
+.bias-conf-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid;
+  letter-spacing: 0.04em;
+}
+
+.bias-conf-desc {
+  font-size: 0.68rem;
+  color: var(--text-slate-300);
+  line-height: 1.45;
+}
+
+/* ── Transparency & Weight Note ── */
+.bias-transparency-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.05);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.65rem;
+  color: var(--text-slate-400);
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.bias-transparency-note .note-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.bias-transparency-note strong {
+  color: var(--text-contrast);
+}
+
+.bias-transparency-note em {
+  font-style: normal;
+  color: var(--color-amber-400, #f59e0b);
+  font-weight: 700;
+}
+
+/* ── Real-Time Snapshot History Drawer ── */
+.bias-snapshots-drawer {
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.snapshots-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.snapshots-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--color-emerald-400);
+  letter-spacing: 0.04em;
+}
+
+.snapshots-counter-badge {
+  font-size: 0.62rem;
+  color: var(--text-slate-400);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-panel);
+}
+
+.snapshots-disclaimer-sub {
+  font-size: 0.63rem;
+  color: var(--text-slate-400);
+  line-height: 1.4;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.snapshots-warming-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--border-panel);
+  font-size: 0.72rem;
+}
+
+.warming-spinner-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-emerald-400);
+  box-shadow: 0 0 8px var(--color-emerald-400);
+  animation: pulse-dot 1.5s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.snapshots-table-wrap {
+  overflow-x: auto;
+}
+
+.snapshots-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.65rem;
+}
+
+.snapshots-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-panel);
+  color: var(--text-slate-400);
+  font-weight: 700;
+  text-align: left;
+}
+
+.snapshots-table td {
+  padding: 8px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.snap-conf-tag {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.snap-conf-tag.tag-CONFIRMED_BULLISH {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.snap-conf-tag.tag-BULLISH_DIVERGENCE {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.snap-conf-tag.tag-BEARISH_DIVERGENCE {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.12);
+}
+
+.snap-conf-tag.tag-CONFIRMED_BEARISH {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.snap-conf-tag.tag-NEUTRAL_ALIGNED {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+}
+
 .bias-main-meter-box {
   background: var(--bg-slate-950);
   border: 1px solid var(--border-panel);
@@ -4306,6 +4681,7 @@
 /* Gauge Track */
 .bias-gauge-wrapper {
   margin-top: 10px;
+  margin-bottom: 14px;
 }
 
 .bias-gauge-track {

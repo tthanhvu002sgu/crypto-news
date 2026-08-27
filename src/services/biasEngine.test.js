@@ -1,6 +1,6 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
-import { calculateMarketBias, calculateBtcTrendRegime, toFiniteNumber, clamp } from './biasEngine.js';
+import { calculateMarketBias, calculateBtcTrendRegime, toFiniteNumber, clamp, evaluateBiasPriceConfirmation, calculateDataFreshness, parseToDate, getDaysAgo } from './biasEngine.js';
 
 describe('biasEngine unit tests', () => {
   it('toFiniteNumber parses numbers, strings with commas and percentage correctly', () => {
@@ -159,4 +159,161 @@ describe('biasEngine unit tests', () => {
     const vixSig = bias.signals.find((s) => s.name.includes('VIX & Calendar'));
     assert.ok(vixSig && vixSig.score < 0, 'Upcoming 24h High Impact event should dampen risk score');
   });
+
+  it('excludes fallback signals from available weight and confidence calculation', () => {
+    const etfFallback = [
+      { date: '18/06/26', flow: 200 }
+    ];
+    etfFallback.isFallback = true;
+
+    const dataWithFallbacks = {
+      btc: { price: 90000, volume: 1000000000 },
+      cotData: { isFallback: true, assetManager: { net: 5000 } },
+      fedFundsRate: { val: 4.5, isFallback: true },
+      cpi: { val: 2.7, isFallback: true },
+      netLiquidity: 6120,
+      netLiquidityIsFallback: true,
+      fundingRate: 0.0001,
+    };
+
+    const bias = calculateMarketBias(dataWithFallbacks, etfFallback);
+    const etfSig = bias.signals.find(s => s.name.includes('ETF'));
+    const cotSig = bias.signals.find(s => s.name.includes('COT'));
+    const fedSig = bias.signals.find(s => s.name.includes('Monetary Policy'));
+    const netLiqSig = bias.signals.find(s => s.name.includes('Net Liquidity'));
+
+    assert.ok(etfSig && etfSig.weight.includes('0%'), 'ETF fallback should have 0% weight');
+    assert.ok(cotSig && cotSig.weight.includes('0%'), 'COT fallback should have 0% weight');
+    assert.strictEqual(fedSig, undefined, 'Fallback macro pulse should be omitted from scoring');
+    assert.strictEqual(netLiqSig, undefined, 'Fallback net liquidity should be omitted from scoring');
+    assert.ok(bias.confidence < 30, 'Confidence must be low when 40% institutional and macro are fallbacks');
+  });
+
+  it('normalizes mining difficulty whether provided in Trillions (<1e6) or Raw (>1e6)', () => {
+    // 85.24 Trillion vs 85.24 * 1e12 Raw
+    const dataTrillion = {
+      btc: { price: 90000, volume: 1000000000 },
+      onChain: { difficulty: 85.24 } // in Trillion
+    };
+    const dataRaw = {
+      btc: { price: 90000, volume: 1000000000 },
+      onChain: { difficulty: 85.24 * 1e12 } // in Raw
+    };
+
+    const biasT = calculateMarketBias(dataTrillion);
+    const biasR = calculateMarketBias(dataRaw);
+
+    const sigT = biasT.signals.find(s => s.name.includes('Mining Cost'));
+    const sigR = biasR.signals.find(s => s.name.includes('Mining Cost'));
+
+    assert.ok(sigT && sigR, 'Mining signals should exist in both');
+    assert.strictEqual(sigT.score, sigR.score, 'Trillion and Raw difficulty must produce identical score');
+  });
+
+  it('ignores raw FRED CPI index levels (>50) to prevent corrupting inflation score', () => {
+    const dataRawIndex = {
+      btc: { price: 90000, volume: 1000000000 },
+      fedFundsRate: 4.5,
+      cpi: 314.54, // Raw index level from FRED CPIAUCSL instead of YoY %
+    };
+
+    const bias = calculateMarketBias(dataRawIndex);
+    const macroSig = bias.signals.find(s => s.name.includes('Monetary Policy'));
+    assert.ok(macroSig, 'Macro signal should still score fed funds');
+    assert.ok(!macroSig.status.includes('314.5%'), 'CPI index level > 50 must not be displayed or scored as 314.5% inflation');
+  });
+
+  it('supports direct numeric longShortRatio and globalLs as well as lsHistory array', () => {
+    const dataDirectLs = {
+      btc: { price: 90000, volume: 1000000000 },
+      longShortRatio: 2.8,
+    };
+    const bias = calculateMarketBias(dataDirectLs);
+    const lsSig = bias.signals.find(s => s.name.includes('Long/Short'));
+    assert.ok(lsSig, 'L/S signal should be present when longShortRatio is directly provided');
+    assert.ok(lsSig.score < 0, 'L/S ratio 2.8 (crowded long) should be bearish');
+  });
+
+  describe('evaluateBiasPriceConfirmation unit tests', () => {
+    it('evaluates CONFIRMED_BULLISH when Bias is positive and 24h price is up', () => {
+      const res = evaluateBiasPriceConfirmation(38, 1.8);
+      assert.strictEqual(res.state, 'CONFIRMED_BULLISH');
+      assert.strictEqual(res.label, 'Bullish được price xác nhận');
+      assert.strictEqual(res.shortLabel, 'XÁC NHẬN TĂNG ▲');
+      assert.strictEqual(res.color, '#10b981');
+    });
+
+    it('evaluates BULLISH_DIVERGENCE when Bias is positive and 24h price is down', () => {
+      const res = evaluateBiasPriceConfirmation(35, -2.4);
+      assert.strictEqual(res.state, 'BULLISH_DIVERGENCE');
+      assert.strictEqual(res.label, 'Bullish divergence — thesis chưa được xác nhận');
+      assert.strictEqual(res.shortLabel, 'PHÂN KỲ TĂNG ⚡');
+      assert.strictEqual(res.color, '#f59e0b');
+    });
+
+    it('evaluates BEARISH_DIVERGENCE when Bias is negative and 24h price is up (Bull trap risk)', () => {
+      const res = evaluateBiasPriceConfirmation(-40, 2.5);
+      assert.strictEqual(res.state, 'BEARISH_DIVERGENCE');
+      assert.strictEqual(res.label, 'Bearish divergence — cảnh giác');
+      assert.strictEqual(res.shortLabel, 'PHÂN KỲ GIẢM ⚠');
+      assert.strictEqual(res.color, '#f43f5e');
+    });
+
+    it('evaluates CONFIRMED_BEARISH when Bias is negative and 24h price is down', () => {
+      const res = evaluateBiasPriceConfirmation(-55, -3.2);
+      assert.strictEqual(res.state, 'CONFIRMED_BEARISH');
+      assert.strictEqual(res.label, 'Bearish được price xác nhận');
+      assert.strictEqual(res.shortLabel, 'XÁC NHẬN GIẢM ▼');
+      assert.strictEqual(res.color, '#f87171');
+    });
+
+    it('evaluates NEUTRAL_ALIGNED when Bias is neutral', () => {
+      const res = evaluateBiasPriceConfirmation(5, 0.2);
+      assert.strictEqual(res.state, 'NEUTRAL_ALIGNED');
+      assert.strictEqual(res.shortLabel, 'TRUNG LẬP ⚖');
+    });
+  });
+
+  describe('calculateDataFreshness & Date parsing unit tests', () => {
+    it('parses various date formats (DD/MM/YY, ISO, Unix timestamp) and calculates days ago correctly', () => {
+      const refTime = new Date('2026-08-27T12:00:00Z').getTime();
+      
+      const date1 = parseToDate('22/08/26');
+      assert.strictEqual(date1.getUTCDate(), 22);
+      assert.strictEqual(date1.getUTCMonth(), 7); // August is index 7
+      assert.strictEqual(getDaysAgo('22/08/26', refTime), 5);
+
+      const date2 = parseToDate('2026-08-26');
+      assert.strictEqual(getDaysAgo(date2, refTime), 1);
+    });
+
+    it('identifies the oldest data source (e.g. CME COT 5d) among non-fallback active feeds', () => {
+      const refTime = new Date('2026-08-27T12:00:00Z').getTime();
+      const mockData = {
+        btc: { price: 112450, change: 1.8, lastUpdated: '2026-08-27T11:58:00Z' },
+        cotData: { date: '22/08/26', assetManager: { net: 3500 } },
+        onChainMetrics: { date: '2026-08-26', mvrv: 1.8 },
+      };
+      const mockEtfHistory = [
+        { date: '26/08/26', flow: 150 }
+      ];
+
+      const freshness = calculateDataFreshness(mockData, mockEtfHistory, refTime);
+      assert.strictEqual(freshness.oldestDataStr, 'COT 5d');
+      assert.strictEqual(freshness.priceUpdatedStr, '2m');
+    });
+
+    it('handles fallback feeds gracefully without falsely reporting fallback dates as oldest active', () => {
+      const refTime = new Date('2026-08-27T12:00:00Z').getTime();
+      const mockData = {
+        btc: { price: 112450, change: 1.8 },
+        cotData: { date: '01/01/2020', isFallback: true, assetManager: { net: 100 } },
+      };
+      const mockEtfHistory = [{ date: '26/08/26', flow: 200 }];
+
+      const freshness = calculateDataFreshness(mockData, mockEtfHistory, refTime);
+      assert.strictEqual(freshness.oldestDataStr, 'ETF 1d', 'Fallback COT should not be chosen as oldest active source');
+    });
+  });
 });
+

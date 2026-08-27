@@ -65,6 +65,35 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-08-27] Tích Hợp Hiển Thị Song Song BTC Price (Đối Chứng Khách Quan), Ma Trận Phân Kỳ/Xác Nhận & Provenance Snapshot Store `(FEATURE FULL)`
+- **Lane / Mode:** FEATURE FULL & UX/DATA INTEGRITY
+- **Tóm tắt:** Nâng cấp toàn diện giao diện `MarketBiasCard` sang cấu trúc Dual-Benchmark hiển thị song song BTC Price với vai trò "đối chứng khách quan" (không coi giá tăng là bằng chứng mặc định Bias đúng); tự động phân loại 4 trạng thái xác nhận & phân kỳ (Confirmed Bullish, Bullish Divergence, Bearish Divergence, Confirmed Bearish); bổ sung Data Freshness Engine nhận diện nguồn dữ liệu cũ nhất thực tế (`Data oldest: COT 5d`, `ETF 1d`); ghi chú minh bạch 3% trọng số xu hướng giá & 97% độc lập; tích hợp `biasSnapshotStore.js` lưu trữ snapshot thời gian thực trong `localStorage` loại bỏ 100% look-ahead bias.
+- **Thay đổi chính:**
+  - **Dual-Benchmark Layout (`MarketBiasCard.jsx`):** Cột trái hiển thị `BTC PRICE` (Giá hiện tại, % thay đổi 24H, Timestamp cập nhật giá, Vol 24H); Cột phải hiển thị `MARKET BIAS` (Score -100 đến +100, Confidence %, Data oldest freshness, Zero-Fallback indicator).
+  - **Ma Trận Phân Kỳ & Xác Nhận (`evaluateBiasPriceConfirmation`):** Đánh giá đồng thuận/phân kỳ giữa Bias định lượng và hành vi giá 24h:
+    - *Tăng / Tăng:* `Bullish được price xác nhận` (Xanh lá).
+    - *Tăng / Giảm:* `Bullish divergence — thesis chưa được xác nhận` (Vàng hổ phách).
+    - *Giảm / Tăng:* `Bearish divergence — cảnh giác` (Đỏ hồng / Bẫy giá).
+    - *Giảm / Giảm:* `Bearish được price xác nhận` (Đỏ hồng).
+    - *Trung lập:* `Thị trường cân bằng / Chưa có phân kỳ`.
+  - **Data Freshness Engine (`calculateDataFreshness`):** Phân tích độ trễ thực tế của từng nguồn (BTC Price, Spot ETF, CME COT, On-chain MVRV, Macro US Net Liquidity); phát hiện nguồn cũ nhất và hiển thị dạng `Data oldest: COT 5d`; loại trừ ngày của fallback khỏi chỉ số độ tươi hoạt động.
+  - **Minh Bạch Trọng Số (Transparency Disclaimer):** Thêm ghi chú khẳng định Bias Engine chỉ chứa 3% tín hiệu xu hướng giá (MA50/200 & Realized Vol); 97% còn lại độc lập từ định chế, on-chain, vĩ mô và phái sinh.
+  - **Real-Time Snapshot Store (`biasSnapshotStore.js`):** Quản lý snapshot thực tế phát sinh trong phiên, có cơ chế throttling (1 phút) và giới hạn 500 bản ghi. Tuyệt đối không backfill giả lập để bảo toàn tính trung thực của dữ liệu lịch sử.
+- **Files / areas chạm:** `src/services/biasEngine.js`, `src/services/biasEngine.test.js`, `src/services/biasSnapshotStore.js` (new), `src/components/MarketBiasCard.jsx`, `src/components/DashboardTab.jsx`, `src/App.css`, `README.md`.
+- **Verify:** `npm test` pass 46/46 unit tests (biasEngine: 19 tests, googleSheetSync: 6 tests, moveTracker: 16 tests, macroDashboard: 5 tests); `npm run build` thành công 100% (7.92s).
+
+### [2026-08-26] Đại Tu Toàn Diện Data Integrity & Triệt Tiêu Fake Hard-Code / Fallback Masquerading Trong Bias Engine & Google Sheets Worker `(FEATURE FULL)`
+- **Lane / Mode:** FEATURE FULL & DATA INTEGRITY
+- **Tóm tắt:** Triệt tiêu hoàn toàn hiện tượng worker Google Sheets và browser dùng dữ liệu tĩnh/hard-code fake (ETF 1.25M BTC, ETF flow 4 phiên cố định, CME COT 19/08/2026, DXY 103.5, VIX 15.5, S&P 500 5,900) mà vẫn báo "Hoàn thiện 100%"; tích hợp Data Provenance Gate vào Bias Engine (chỉ tính Confidence từ dữ liệu LIVE/LAGGED_VALID thực tế; loại bỏ 100% trọng số của fallback); chuẩn hóa đơn vị Mining Cost (Trillion vs Raw Difficulty) và bảo vệ CPI FRED YoY (`pc1` units vs unscaled raw index); chuyển worker `syncGoogleSheet.mjs` sang dùng chung pipeline fetcher thực tế với browser (CVD đa khung 24h/7d/30d, L/S history, OI history, live Bitbo ETF, live CFTC COT, Yahoo Finance realtime).
+- **Thay đổi chính:**
+  - **Data Provenance & Zero-Fallback Gate (`biasEngine.js`):** Thêm hàm `isItemFallback()`. Toàn bộ tín hiệu fallback (`isFallback: true` hoặc `status: 'FALLBACK'/'UNAVAILABLE'`) tự động bị loại khỏi `availableWeight` và gán nhãn `0% (FALLBACK)`. Chỉ số Confidence % được tính nghiêm ngặt từ tỷ lệ trọng số thực (`availableWeight / 0.95 * 100`).
+  - **Đồng bộ Live Pipeline Cho Standalone Worker (`syncGoogleSheet.mjs`):** Xóa bỏ 100% biến mock fake. Tích hợp các fetcher thực tế từ `api.js`: Tickers, Klines, CVD Đa khung (Spot/Futures 24h/7d/30d), OI history, L/S history, OBI Depth 100 & Whale Walls, Blockchain.info stats, CoinMetrics MVRV (BTC/ETH), SSR MA, DefiLlama stablecoins, Yahoo Finance (DXY, VIX, S&P 500, QQQ, US 10Y Yield), Bitbo ETF Holdings, Farside ETF Flows, và CFTC CME COT.
+  - **Sửa Đơn vị Mining Difficulty & CPI YoY Fred:** Chuẩn hóa tự động `calculateBtcProductionCostRange` và `estimateBtcProductionCost` cho cả 2 định dạng độ khó (Trillion `< 1e6` và Raw `> 1e6`). Thêm sanity guard cho CPI FRED: loại bỏ các giá trị chỉ số raw thô `> 50` để tránh ngộ nhận điểm lạm phát.
+  - **Kiểm định Độ Đầy Đủ Trung Thực (`googleSheetSync.js`):** Cập nhật `validateExportReadiness()` quét 14 chiều dữ liệu thực; tự động trừ điểm `completenessScore` và sinh cảnh báo minh bạch khi phát hiện fallback/chưa tải được dữ liệu.
+  - **Bảo Vệ Bộ Nhớ Đệm (`cache.js`):** Thêm `maxStaleAgeMs` (giới hạn tối đa 7 ngày) và cờ `isStale` để ngăn chặn cache quá hạn giả mạo làm dữ liệu tươi mới.
+- **Files / areas chạm:** `src/services/api.js`, `src/services/biasEngine.js`, `src/services/biasEngine.test.js`, `src/services/googleSheetSync.js`, `src/services/googleSheetSync.test.js`, `src/utils/cache.js`, `scripts/syncGoogleSheet.mjs`, `src/App.jsx`, `README.md`.
+- **Verify:** `npm test` pass 38/38 unit tests (biasEngine: 11 tests, googleSheetSync: 6 tests, moveTracker: 16 tests, macroDashboard: 5 tests); `npm run sync:sheets:dry` pass 100% với dữ liệu live thực tế (DXY 99.15, VIX 15.54, SP500 7678.80, ETF live rows appended, độ hoàn thiện 93%); `npm run build` thành công 100%.
+
 ### [2026-08-26] Nâng Cấp Toàn Diện Market Bias Engine & Tích Hợp Macro Liquidity / BTC Trend Regime `(FEATURE FULL)`
 - **Lane / Mode:** FEATURE FULL & QUANT REFACTOR
 - **Tóm tắt:** Nâng cấp toàn diện công thức định lượng của Market Bias Engine; khắc phục lỗi parsing object VIX, xóa bỏ tính trùng lặp MVRV (triple-counting), đưa Macro Liquidity (DXY, 10Y Yield, Net Liquidity, High-Yield Spread, Equities) và 1.000 nến Daily BTC (MA50/200, Slopes, Momentum, Realized Vol) vào tính điểm thực tế; đồng bộ 100% logic tính toán giữa Web Dashboard và GitHub Actions Google Sheets Worker.

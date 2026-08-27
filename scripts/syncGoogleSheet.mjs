@@ -2,8 +2,9 @@
  * Standalone Crypto Metrics Aggregator & Google Sheets Sync Worker
  * 
  * Chức năng:
- * - Thu thập toàn bộ chỉ số Crypto, Phái sinh, On-chain, ETF, Vĩ mô từ Binance, DefiLlama, Alternative.me, FairEconomy, CoinMetrics, FRED.
+ * - Thu thập toàn bộ chỉ số Crypto, Phái sinh, On-chain, ETF, Vĩ mô LIVE từ Binance, DefiLlama, Alternative.me, FairEconomy, CoinMetrics, FRED, Yahoo Finance.
  * - Sử dụng chung Data Contract và hàm buildGoogleSheetPayload với Browser Web App.
+ * - Loại bỏ toàn bộ fake hard-coded fallback để đảm bảo Data Integrity.
  * - Gửi Webhook ghi đè dữ liệu lên Google Sheet (5 Tab).
  * 
  * Cách chạy:
@@ -14,26 +15,47 @@
 import axios from 'axios';
 import { buildGoogleSheetPayload, getCurrentSessionVN, validateExportReadiness } from '../src/services/googleSheetSync.js';
 import { calculateMarketBias } from '../src/services/biasEngine.js';
+import {
+  getBTCTicker24h,
+  getIntradayCVD,
+  getHistoricalCVD,
+  getFundingRate,
+  getOpenInterest,
+  getOIHistory,
+  getLongShortRatio,
+  getOrderBookDepth,
+  getWhaleWalls,
+  getBTCOnChain,
+  getBTCOnChainMetrics,
+  getETHOnChainMetrics,
+  getStablecoinData,
+  getGlobalCryptoData,
+  getSsrMovingAverageData,
+  getFearAndGreed,
+  getYahooStockQuote,
+  getYahoo10YYield,
+  getDXYQuote,
+  getFredAPIMetric,
+  getUSCPIInflationYoY,
+  getUSNetLiquidityData,
+  getETFHoldings,
+  getETFFlowHistory,
+  getCMECot
+} from '../src/services/api.js';
 
 const WEBHOOK_URL = process.env.GOOGLE_SHEET_WEBHOOK_URL || process.argv.find(arg => arg.startsWith('--url='))?.split('=')[1];
 const IS_DRY_RUN = process.argv.includes('--dry-run') || !WEBHOOK_URL;
 const FRED_API_KEY = process.env.FRED_API_KEY || process.argv.find(arg => arg.startsWith('--fred-key='))?.split('=')[1] || '';
 
-// ─── DATA FETCHERS ────────────────────────────────────────────────────────────
+// ─── BINANCE TICKERS ─────────────────────────────────────────────────────────
 
-async function fetchBinanceTickers() {
+async function fetchTickers() {
   try {
     const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
     const results = {};
     for (const sym of symbols) {
-      const res = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}`, { timeout: 8000 });
-      results[sym] = {
-        price: parseFloat(res.data.lastPrice),
-        change: parseFloat(res.data.priceChangePercent),
-        high: parseFloat(res.data.highPrice),
-        low: parseFloat(res.data.lowPrice),
-        volume: parseFloat(res.data.quoteVolume),
-      };
+      const ticker = await getBTCTicker24h(sym);
+      if (ticker) results[sym] = ticker;
     }
     return results;
   } catch (err) {
@@ -42,7 +64,9 @@ async function fetchBinanceTickers() {
   }
 }
 
-async function fetchBinanceDailyKlines() {
+// ─── BINANCE DAILY KLINES ───────────────────────────────────────────────────
+
+async function fetchDailyKlines() {
   try {
     const res = await axios.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=300', { timeout: 10000 });
     return res.data.map(k => ({
@@ -62,153 +86,64 @@ async function fetchBinanceDailyKlines() {
   }
 }
 
-async function fetchDerivativesData() {
+// ─── DERIVATIVES & ORDER FLOW ────────────────────────────────────────────────
+
+async function fetchDerivativesFlow() {
   try {
-    const [frRes, oiRes, lsRes, topLsRes] = await Promise.allSettled([
-      axios.get('https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=1', { timeout: 8000 }),
-      axios.get('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT', { timeout: 8000 }),
-      axios.get('https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=BTCUSDT&period=1h&limit=1', { timeout: 8000 }),
+    const [fr, oi, oiHist, lsHist, topLsRes] = await Promise.allSettled([
+      getFundingRate('BTCUSDT'),
+      getOpenInterest('BTCUSDT'),
+      getOIHistory('BTCUSDT', '1h', 24),
+      getLongShortRatio('BTCUSDT', '1h', 24),
       axios.get('https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=BTCUSDT&period=1h&limit=1', { timeout: 8000 })
     ]);
 
-    const fundingRate = frRes.status === 'fulfilled' && frRes.value.data?.[0] ? parseFloat(frRes.value.data[0].fundingRate) : null;
-    const openInterest = oiRes.status === 'fulfilled' && oiRes.value.data?.openInterest ? parseFloat(oiRes.value.data.openInterest) : null;
-    const globalLs = lsRes.status === 'fulfilled' && lsRes.value.data?.[0] ? parseFloat(lsRes.value.data[0].longShortRatio) : null;
+    const fundingRate = fr.status === 'fulfilled' ? fr.value : null;
+    const openInterest = oi.status === 'fulfilled' ? oi.value : null;
+    const oiHistory = oiHist.status === 'fulfilled' && Array.isArray(oiHist.value) ? oiHist.value : [];
+    const lsHistory = lsHist.status === 'fulfilled' && Array.isArray(lsHist.value) ? lsHist.value : [];
+    const globalLs = lsHistory.length > 0 ? lsHistory[lsHistory.length - 1]?.longShortRatio : null;
     const topLs = topLsRes.status === 'fulfilled' && topLsRes.value.data?.[0] ? parseFloat(topLsRes.value.data[0].longShortRatio) : null;
 
-    return { fundingRate, openInterest, globalLs, topLs };
+    return { fundingRate, openInterest, oiHistory, lsHistory, globalLs, topLs };
   } catch (err) {
     console.warn('[Sync] Lỗi fetch Phái sinh:', err.message);
-    return { fundingRate: null, openInterest: null, globalLs: null, topLs: null };
+    return { fundingRate: null, openInterest: null, oiHistory: [], lsHistory: [], globalLs: null, topLs: null };
   }
 }
 
-async function fetchFearAndGreed() {
-  try {
-    const res = await axios.get('https://api.alternative.me/fng/?limit=1', { timeout: 6000 });
-    const item = res.data?.data?.[0];
-    return item ? { value: parseInt(item.value, 10), sentiment: item.value_classification } : null;
-  } catch (err) {
-    console.warn('[Sync] Lỗi Fear & Greed:', err.message);
-    return null;
-  }
-}
+// ─── CVD MULTI-TIMEFRAME ─────────────────────────────────────────────────────
 
-async function fetchStablecoins() {
+async function fetchCvdData() {
   try {
-    const res = await axios.get('https://stablecoins.llama.fi/stablecoins?includePrices=true', { timeout: 8000 });
-    const peggedAssets = res.data?.peggedAssets || [];
-    let totalCirculatingUsd = 0;
-    let usdt = 0;
-    let usdc = 0;
-    for (const coin of peggedAssets) {
-      const circ = Number(coin.circulating?.peggedUSD || 0);
-      totalCirculatingUsd += circ;
-      if (coin.symbol === 'USDT') usdt = circ;
-      if (coin.symbol === 'USDC') usdc = circ;
-    }
-    return { total: totalCirculatingUsd, usdt, usdc };
-  } catch (err) {
-    console.warn('[Sync] Lỗi Stablecoins DefiLlama:', err.message);
-    return null;
-  }
-}
+    const [spot24, fut24, spot7d, fut7d, spot30d, fut30d] = await Promise.allSettled([
+      getIntradayCVD('BTCUSDT', 'spot'),
+      getIntradayCVD('BTCUSDT', 'futures'),
+      getHistoricalCVD('BTCUSDT', '4h', 42, 'spot'),
+      getHistoricalCVD('BTCUSDT', '4h', 42, 'futures'),
+      getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'),
+      getHistoricalCVD('BTCUSDT', '1d', 30, 'futures')
+    ]);
 
-async function fetchGlobalCrypto() {
-  try {
-    const res = await axios.get('https://api.coingecko.com/api/v3/global', { timeout: 8000 });
-    const d = res.data?.data;
-    if (!d) return {};
     return {
-      totalMarketCap: d.total_market_cap?.usd,
-      btcDominance: d.market_cap_percentage?.btc,
-      ethDominance: d.market_cap_percentage?.eth
+      cvdHistory24hSpot: spot24.status === 'fulfilled' && Array.isArray(spot24.value) ? spot24.value : [],
+      cvdHistory24h: fut24.status === 'fulfilled' && Array.isArray(fut24.value) ? fut24.value : [],
+      cvdHistory7dSpot: spot7d.status === 'fulfilled' && Array.isArray(spot7d.value) ? spot7d.value : [],
+      cvdHistory7d: fut7d.status === 'fulfilled' && Array.isArray(fut7d.value) ? fut7d.value : [],
+      cvdHistory30dSpot: spot30d.status === 'fulfilled' && Array.isArray(spot30d.value) ? spot30d.value : [],
+      cvdHistory30d: fut30d.status === 'fulfilled' && Array.isArray(fut30d.value) ? fut30d.value : []
     };
   } catch (err) {
-    console.warn('[Sync] Lỗi Global Crypto:', err.message);
-    return {};
-  }
-}
-
-async function fetchOrderBookImbalance() {
-  try {
-    const res = await axios.get('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=100', { timeout: 8000 });
-    const bids = res.data.bids || [];
-    const asks = res.data.asks || [];
-    
-    let bidVol = 0;
-    let askVol = 0;
-    let maxBid = { price: 0, notional: 0 };
-    let maxAsk = { price: 0, notional: 0 };
-
-    for (const [p, q] of bids) {
-      const notional = parseFloat(p) * parseFloat(q);
-      bidVol += notional;
-      if (notional > maxBid.notional) maxBid = { price: parseFloat(p), notional };
-    }
-    for (const [p, q] of asks) {
-      const notional = parseFloat(p) * parseFloat(q);
-      askVol += notional;
-      if (notional > maxAsk.notional) maxAsk = { price: parseFloat(p), notional };
-    }
-
-    const total = bidVol + askVol;
-    const obi = total > 0 ? ((bidVol - askVol) / total) * 100 : 0;
+    console.warn('[Sync] Lỗi fetch CVD:', err.message);
     return {
-      obi,
-      bidVol,
-      askVol,
-      topBidWall: maxBid.notional > 0 ? maxBid : null,
-      topAskWall: maxAsk.notional > 0 ? maxAsk : null
+      cvdHistory24hSpot: [], cvdHistory24h: [],
+      cvdHistory7dSpot: [], cvdHistory7d: [],
+      cvdHistory30dSpot: [], cvdHistory30d: []
     };
-  } catch (err) {
-    console.warn('[Sync] Lỗi Depth OBI:', err.message);
-    return { obi: 0, bidVol: 0, askVol: 0, topBidWall: null, topAskWall: null };
   }
 }
 
-async function fetchOnChainBlockchainInfo() {
-  try {
-    const res = await axios.get('https://api.blockchain.info/stats', { timeout: 8000 });
-    return {
-      difficulty: res.data.difficulty,
-      hashRate: res.data.hash_rate ? res.data.hash_rate / 1e6 : null, // convert to EH/s
-      txCount24h: res.data.n_tx
-    };
-  } catch (err) {
-    console.warn('[Sync] Lỗi Blockchain.info:', err.message);
-    return null;
-  }
-}
-
-async function fetchCoinMetricsMvrv(asset = 'btc') {
-  try {
-    const res = await axios.get('https://community-api.coinmetrics.io/v4/timeseries/asset-metrics', {
-      params: {
-        assets: asset,
-        metrics: 'AdrActCnt,TxCnt,CapMVRVCur',
-        frequency: '1d',
-        page_size: 10
-      },
-      timeout: 8000
-    });
-    const items = res.data?.data || [];
-    if (items.length === 0) return null;
-    const reversed = [...items].reverse();
-    const latestMvrv = reversed.find(d => d.CapMVRVCur != null && d.CapMVRVCur !== '');
-    const latestTx = reversed.find(d => d.AdrActCnt && d.TxCnt) || latestMvrv || reversed[0];
-    if (!latestMvrv && !latestTx) return null;
-    return {
-      mvrv: latestMvrv?.CapMVRVCur ? parseFloat(latestMvrv.CapMVRVCur) : null,
-      activeAddresses: latestTx.AdrActCnt ? parseInt(latestTx.AdrActCnt, 10) : null,
-      txCount: latestTx.TxCnt ? parseInt(latestTx.TxCnt, 10) : null,
-      date: (latestMvrv || latestTx).time ? (latestMvrv || latestTx).time.split('T')[0] : null
-    };
-  } catch (err) {
-    console.warn(`[Sync] Lỗi CoinMetrics (${asset}):`, err.message);
-    return null;
-  }
-}
+// ─── ECONOMIC CALENDAR ───────────────────────────────────────────────────────
 
 async function fetchEconomicCalendar() {
   try {
@@ -237,26 +172,6 @@ async function fetchEconomicCalendar() {
   }
 }
 
-async function fetchFredSeries(seriesId) {
-  if (!FRED_API_KEY) return null;
-  try {
-    const res = await axios.get('https://api.stlouisfed.org/fred/series/observations', {
-      params: {
-        series_id: seriesId,
-        api_key: FRED_API_KEY,
-        file_type: 'json',
-        sort_order: 'desc',
-        limit: 2
-      },
-      timeout: 8000
-    });
-    const obs = res.data?.observations?.[0];
-    return obs && obs.value !== '.' ? parseFloat(obs.value) : null;
-  } catch (err) {
-    return null;
-  }
-}
-
 // ─── MAIN BUILDER & DISPATCHER ────────────────────────────────────────────────
 
 async function main() {
@@ -269,67 +184,72 @@ async function main() {
   console.log(`  Thời gian: ${timestampVn}`);
   console.log(`======================================================\n`);
 
-  console.log('[1/5] Đang lấy Tickers, Klines & Phái sinh từ Binance...');
-  const [tickers, dailyKlines, derivatives, obiData] = await Promise.all([
-    fetchBinanceTickers(),
-    fetchBinanceDailyKlines(),
-    fetchDerivativesData(),
-    fetchOrderBookImbalance()
+  console.log('[1/5] Đang lấy Tickers, Klines, CVD Đa khung & Phái sinh từ Binance...');
+  const [tickers, dailyKlines, derivatives, cvdData, orderBookDepth, whaleWalls] = await Promise.all([
+    fetchTickers(),
+    fetchDailyKlines(),
+    fetchDerivativesFlow(),
+    fetchCvdData(),
+    getOrderBookDepth('BTCUSDT', 100),
+    getWhaleWalls('BTCUSDT', 500000)
   ]);
 
-  console.log('[2/5] Đang lấy Fear & Greed, Stablecoins, Global Market, On-Chain...');
-  const [fng, stablecoins, globalCrypto, onChain, btcMvrv, ethMvrv, calendarEvents] = await Promise.all([
-    fetchFearAndGreed(),
-    fetchStablecoins(),
-    fetchGlobalCrypto(),
-    fetchOnChainBlockchainInfo(),
-    fetchCoinMetricsMvrv('btc'),
-    fetchCoinMetricsMvrv('eth'),
+  console.log('[2/5] Đang lấy Fear & Greed, Stablecoins, Global Market, On-Chain & SSR...');
+  const [fng, stablecoins, globalCrypto, onChain, btcMvrv, ethMvrv, ssrMa, calendarEvents] = await Promise.all([
+    getFearAndGreed(),
+    getStablecoinData(),
+    getGlobalCryptoData(),
+    getBTCOnChain(),
+    getBTCOnChainMetrics(),
+    getETHOnChainMetrics(),
+    getSsrMovingAverageData(),
     fetchEconomicCalendar()
   ]);
 
-  console.log('[3/5] Đang lấy chỉ số Vĩ mô (FRED / Proxies)...');
-  const [fedFundsRate, cpi, tenYearYield, walcl, tga, rrp, highYield, m2] = await Promise.all([
-    fetchFredSeries('FEDFUNDS'),
-    fetchFredSeries('CPIAUCSL'),
-    fetchFredSeries('DGS10'),
-    fetchFredSeries('WALCL'),
-    fetchFredSeries('WDTGAL'),
-    fetchFredSeries('RRPONTSYD'),
-    fetchFredSeries('BAMLH0A0HYM2EY'),
-    fetchFredSeries('M2SL')
+  console.log('[3/5] Đang lấy chỉ số Vĩ mô (FRED / Yahoo Finance) & Dòng tiền Tổ chức (ETF/COT)...');
+  const [
+    fedFundsRate,
+    cpiYoY,
+    tenYearYieldFred,
+    unrate,
+    highYieldSpread,
+    m2Supply,
+    netLiquidityData,
+    dxyQuote,
+    vixQuote,
+    sp500Quote,
+    qqqQuote,
+    tenYearYahoo,
+    etfHoldingsLive,
+    etfFlowLive,
+    cotDataLive
+  ] = await Promise.all([
+    FRED_API_KEY ? getFredAPIMetric('FEDFUNDS', FRED_API_KEY) : Promise.resolve(null),
+    FRED_API_KEY ? getUSCPIInflationYoY(FRED_API_KEY) : Promise.resolve(null),
+    FRED_API_KEY ? getFredAPIMetric('DGS10', FRED_API_KEY) : Promise.resolve(null),
+    FRED_API_KEY ? getFredAPIMetric('UNRATE', FRED_API_KEY) : Promise.resolve(null),
+    FRED_API_KEY ? getFredAPIMetric('BAMLH0A0HYM2EY', FRED_API_KEY) : Promise.resolve(null),
+    FRED_API_KEY ? getFredAPIMetric('M2SL', FRED_API_KEY) : Promise.resolve(null),
+    FRED_API_KEY ? getUSNetLiquidityData(FRED_API_KEY) : Promise.resolve(null),
+    getDXYQuote(),
+    getYahooStockQuote('^VIX'),
+    getYahooStockQuote('^GSPC'),
+    getYahooStockQuote('QQQ'),
+    getYahoo10YYield(),
+    getETFHoldings(),
+    getETFFlowHistory(),
+    getCMECot()
   ]);
 
-  let netLiquidity = null;
-  if (walcl != null && tga != null && rrp != null) {
-    netLiquidity = parseFloat(((walcl / 1000) - (tga / 1000) - rrp).toFixed(2));
-  } else {
-    netLiquidity = 6120; // Fallback proxy (~$6.12T)
-  }
+  const effectiveTenYearYield = tenYearYieldFred ?? tenYearYahoo;
+  const effectiveNetLiquidity = netLiquidityData?.netLiquidity ?? null;
 
-  // Curated ETF & COT baseline
-  const etfHoldings = {
-    total: 1258664,
-    funds: [
-      { name: 'BlackRock (IBIT)', holdings: 774434, marketShare: '61.5%' },
-      { name: 'Grayscale (GBTC)', holdings: 145028, marketShare: '11.5%' },
-      { name: 'Fidelity (FBTC)', holdings: 180084, marketShare: '14.3%' },
-      { name: 'Others (ARKB, BITB...)', holdings: 159118, marketShare: '12.6%' }
-    ]
-  };
-
-  const etfHistory = [
-    { date: '18/08/26', flow: 125.4 },
-    { date: '19/08/26', flow: -42.8 },
-    { date: '20/08/26', flow: 215.3 },
-    { date: '21/08/26', flow: 88.6 }
-  ];
-
-  const cotData = {
-    date: '19/08/2026',
-    openInterest: 21850,
-    assetManager: { long: 5850, short: 1420, net: 4430, netChange: 320 },
-    leveragedFunds: { long: 5120, short: 12340, net: -7220, netChange: -410 }
+  const orderBookObj = {
+    obiPercent: orderBookDepth?.imbalancePercent ?? null,
+    bidVolumeUsd: orderBookDepth?.bidVolumeUsd ?? null,
+    askVolumeUsd: orderBookDepth?.askVolumeUsd ?? null,
+    topBidWall: whaleWalls?.bidWall ? { price: whaleWalls.bidWall.price, notional: whaleWalls.bidWall.notional } : null,
+    topAskWall: whaleWalls?.askWall ? { price: whaleWalls.askWall.price, notional: whaleWalls.askWall.notional } : null
   };
 
   const dashboardData = {
@@ -339,6 +259,8 @@ async function main() {
     btcDailyKlinesAll: dailyKlines,
     fundingRate: derivatives.fundingRate,
     openInterest: derivatives.openInterest,
+    oiHistory: derivatives.oiHistory,
+    lsHistory: derivatives.lsHistory,
     longShortRatio: derivatives.globalLs,
     topTraderLsRatio: derivatives.topLs,
     fngData: fng,
@@ -347,24 +269,26 @@ async function main() {
     onChain: onChain,
     onChainMetrics: btcMvrv,
     ethOnChainMetrics: ethMvrv,
-    fedFundsRate: fedFundsRate ?? 4.5,
-    cpi: cpi ?? 2.7,
-    tenYearYield: tenYearYield ?? 4.25,
-    dxy: { price: 103.5 },
-    vix: { price: 15.5 },
-    sp500: { price: 5900, changePercent: 0.35 },
-    qqq: { price: 510, changePercent: 0.45 },
-    highYield: highYield ?? 3.65,
-    m2Supply: m2 ?? 21400,
-    netLiquidity: netLiquidity,
-    orderBook: {
-      obiPercent: obiData.obi,
-      bidVolumeUsd: obiData.bidVol,
-      askVolumeUsd: obiData.askVol,
-      topBidWall: obiData.topBidWall,
-      topAskWall: obiData.topAskWall
-    },
-    cotData: cotData,
+    ssrMa: ssrMa,
+    fedFundsRate: fedFundsRate,
+    cpi: cpiYoY,
+    unrate: unrate,
+    tenYearYield: effectiveTenYearYield,
+    dxy: dxyQuote ? { price: dxyQuote } : null,
+    vix: vixQuote,
+    sp500: sp500Quote,
+    qqq: qqqQuote,
+    highYield: highYieldSpread,
+    m2Supply: m2Supply,
+    netLiquidity: effectiveNetLiquidity,
+    cvdHistory24hSpot: cvdData.cvdHistory24hSpot,
+    cvdHistory24h: cvdData.cvdHistory24h,
+    cvdHistory7dSpot: cvdData.cvdHistory7dSpot,
+    cvdHistory7d: cvdData.cvdHistory7d,
+    cvdHistory30dSpot: cvdData.cvdHistory30dSpot,
+    cvdHistory30d: cvdData.cvdHistory30d,
+    orderBook: orderBookObj,
+    cotData: cotDataLive,
     news: calendarEvents.map(e => ({
       title: `[LỊCH SỰ KIỆN] ${e.title}`,
       time: e.date,
@@ -373,24 +297,24 @@ async function main() {
   };
 
   console.log('[4/5] Đang tính toán Market Bias Engine chuẩn hóa...');
-  const biasData = calculateMarketBias(dashboardData, etfHistory);
+  const biasData = calculateMarketBias(dashboardData, etfFlowLive || []);
   biasData.upcomingEvents = calendarEvents;
 
-  const validation = validateExportReadiness(dashboardData, biasData, etfHoldings, etfHistory);
+  const validation = validateExportReadiness(dashboardData, biasData, etfHoldingsLive, etfFlowLive);
   console.log(`Độ hoàn thiện dữ liệu: ${validation.completenessScore}% (Hợp lệ: ${validation.isValid})`);
   if (validation.warnings.length > 0) {
     console.log('Cảnh báo dữ liệu:', validation.warnings);
   }
 
-  const payload = buildGoogleSheetPayload(dashboardData, biasData, etfHoldings, etfHistory, {
+  const payload = buildGoogleSheetPayload(dashboardData, biasData, etfHoldingsLive, etfFlowLive, {
     source: 'GitHub Actions / CLI Worker',
     calendarEvents: calendarEvents
   });
 
   if (IS_DRY_RUN) {
-    console.log('\n[DRY RUN MODE] Dữ liệu thu thập thành công! Không gửi Webhook.');
-    console.log('Market Bias Score:', `${biasData.score > 0 ? '+' : ''}${biasData.score} / 100 (${biasData.label})`);
-    console.log('Bias Regime: Valuation =', biasData.regime?.valuation, '| Trend =', biasData.regime?.trend, '| Liquidity =', biasData.regime?.liquidity);
+    console.log('\n[DRY RUN MODE] Dữ liệu thu thập hoàn tất! Không gửi Webhook.');
+    console.log('Market Bias Score:', `${biasData.score > 0 ? '+' : ''}${biasData.score} / 100 (${biasData.label}) | Confidence: ${biasData.confidence}%`);
+    console.log('Bias Regime: Valuation =', biasData.regime?.valuation, '| Trend =', biasData.regime?.trend, '| Liquidity =', biasData.regime?.liquidity, '| Tactical =', biasData.regime?.tactical);
     console.log('Tab 1 (OVERVIEW_BIAS):', payload.overview.length, 'dòng');
     console.log('Tab 2 (DERIVATIVES_FLOW):', payload.derivatives.length, 'dòng');
     console.log('Tab 3 (ETF_ONCHAIN):', payload.etf_onchain.length, 'dòng');

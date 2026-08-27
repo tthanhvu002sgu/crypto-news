@@ -15,14 +15,58 @@ test('getCurrentSessionVN returns valid session name and code', () => {
 });
 
 test('calculateBtcProductionCostRange returns valid bounds for mining difficulty', () => {
-  const difficulty = 110_000_000_000_000; // 110T
-  const cost = calculateBtcProductionCostRange(difficulty);
-  assert.ok(cost.min > 50000);
-  assert.ok(cost.max > cost.min);
-  assert.match(cost.formatted, /\$\d+,?\d+ - \$\d+,?\d+/);
+  const difficultyRaw = 110_000_000_000_000; // 110T in Raw
+  const difficultyTrillion = 110;             // 110 in Trillion
+  const costRaw = calculateBtcProductionCostRange(difficultyRaw);
+  const costTrillion = calculateBtcProductionCostRange(difficultyTrillion);
+
+  assert.ok(costRaw.min > 50000);
+  assert.ok(costRaw.max > costRaw.min);
+  assert.match(costRaw.formatted, /\$\d+,?\d+ - \$\d+,?\d+/);
+  assert.strictEqual(costRaw.formatted, costTrillion.formatted, 'Raw and Trillion difficulty must produce same formatted cost');
 
   const nullCost = calculateBtcProductionCostRange(null);
   assert.equal(nullCost.formatted, 'N/A');
+});
+
+test('validateExportReadiness penalizes completeness score when fields are fallbacks', () => {
+  const realData = {
+    btc: { price: 95000, change: 2.5, volume: 30000000000 },
+    ethTicker: { price: 2700 },
+    solTicker: { price: 180 },
+    fundingRate: 0.0001,
+    openInterest: 120000,
+    fngData: { value: 65 },
+    stablecoins: { total: 150000000000 },
+    onChainMetrics: { mvrv: 1.8 },
+    onChain: { difficulty: 110 },
+    fedFundsRate: 4.5,
+    cpi: 2.7,
+    dxy: 103,
+    vix: 15,
+    cvdHistory24hSpot: [{ cvd: 1000 }],
+    cvdHistory24h: [{ cvd: 2000 }],
+    cotData: { assetManager: { net: 1000 } }
+  };
+  const mockBias = { score: 45 };
+  const realEtfHistory = [{ date: '21/08/26', flow: 150.5 }];
+
+  const resReal = validateExportReadiness(realData, mockBias, { total: 1250000 }, realEtfHistory);
+  assert.ok(resReal.completenessScore >= 90);
+
+  // Now create fallback data
+  const fallbackEtf = [...realEtfHistory];
+  fallbackEtf.isFallback = true;
+  const fallbackData = {
+    ...realData,
+    fedFundsRate: { val: 4.5, isFallback: true },
+    cpi: { val: 2.7, isFallback: true },
+    cotData: { isFallback: true, assetManager: { net: 1000 } }
+  };
+
+  const resFallback = validateExportReadiness(fallbackData, mockBias, { total: 1250000 }, fallbackEtf);
+  assert.ok(resFallback.completenessScore < resReal.completenessScore, 'Fallback data must reduce completeness score');
+  assert.ok(resFallback.warnings.some(w => w.includes('fallback')), 'Warnings must state fallback usage');
 });
 
 test('validateExportReadiness blocks when required fields are missing', () => {

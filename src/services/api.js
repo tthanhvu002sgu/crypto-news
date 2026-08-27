@@ -1,12 +1,12 @@
 import axios from 'axios';
-import staticFlowHistory from '../data/etfFlowHistoryStatic.json';
+import staticFlowHistory from '../data/etfFlowHistoryStatic.json' with { type: 'json' };
 
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-const getFredUrl = () => '/api-fred/fred/series/observations';
-const getAlphaUrl = () => '/api-alphavantage/query';
-const getCoinMetricsUrl = () => '/api-coinmetrics/v4/timeseries/asset-metrics';
+const getFredUrl = () => (typeof window !== 'undefined' ? '/api-fred/fred/series/observations' : 'https://api.stlouisfed.org/fred/series/observations');
+const getAlphaUrl = () => (typeof window !== 'undefined' ? '/api-alphavantage/query' : 'https://www.alphavantage.co/query');
+const getCoinMetricsUrl = () => (typeof window !== 'undefined' ? '/api-coinmetrics/v4/timeseries/asset-metrics' : 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics');
 
 // ─── BINANCE PUBLIC API ────────────────────────────────────────────────────────
 
@@ -559,9 +559,11 @@ const BTC_BLOCK_SUBSIDY = 3.125; // post-2024 halving
  */
 export function estimateBtcProductionCost(difficulty, jPerTh, usdPerKwh, opexMult = 1.1) {
   if (!difficulty || difficulty <= 0) return null;
+  // If difficulty is passed in Trillions (e.g. 85.24 < 1e6), normalize to raw difficulty
+  const rawDiff = difficulty < 1e6 ? difficulty * 1e12 : difficulty;
   const joulesPerHash = jPerTh * 1e-12;
   const energyCostPerBlock =
-    (difficulty * BTC_HASHES_PER_DIFFICULTY * joulesPerHash * usdPerKwh) / JOULES_PER_KWH;
+    (rawDiff * BTC_HASHES_PER_DIFFICULTY * joulesPerHash * usdPerKwh) / JOULES_PER_KWH;
   return (energyCostPerBlock / BTC_BLOCK_SUBSIDY) * opexMult;
 }
 
@@ -607,10 +609,13 @@ export const getBTCOnChain = async () => {
   try {
     const res = await axios.get('https://blockchain.info/stats?format=json', { timeout: 8000 });
     const d = res.data;
+    const rawDiff = d.difficulty ? Number(d.difficulty) : null;
     return {
       // Hash Rate: chuyển từ GH/s sang EH/s (Exahash)
       hashRate: d.hash_rate ? (d.hash_rate / 1e9).toFixed(2) : null,         // EH/s
-      difficulty: d.difficulty ? (d.difficulty / 1e12).toFixed(2) : null,    // Trillion
+      difficulty: rawDiff ? (rawDiff / 1e12).toFixed(2) : null,              // Trillion (display string)
+      difficultyTrillion: rawDiff ? parseFloat((rawDiff / 1e12).toFixed(2)) : null,
+      difficultyRaw: rawDiff,                                                // Raw difficulty number
       txCount24h: d.n_tx || null,
       totalBTC: d.totalbc ? (d.totalbc / 1e8).toFixed(0) : null,             // BTC mined
       minutesBetweenBlocks: d.minutes_between_blocks
@@ -618,7 +623,7 @@ export const getBTCOnChain = async () => {
       // Mempool: trung bình fee (satoshi/byte) từ estimated_transaction_volume
       avgTxSizeBytes: d.median_fee || null,
       // Range estimate (not a false-precision point) — see estimateBtcProductionCostRange
-      productionCost: d.difficulty ? estimateBtcProductionCostRange(d.difficulty) : null,
+      productionCost: rawDiff ? estimateBtcProductionCostRange(rawDiff) : null,
     };
   } catch (e) {
     console.error('[API] Blockchain.info:', e.message);
@@ -1467,7 +1472,10 @@ export const getFredCSVMetric = async (seriesId, units = 'lin') => {
 
 // ─── YAHOO FINANCE STOCK/INDEX QUOTE ──────────────────────────────────────────
 export const getYahooStockQuote = async (ticker) => {
-  const url = `/api-yahoo/v8/finance/chart/${ticker}`;
+  const isNode = typeof window === 'undefined';
+  const url = isNode 
+    ? `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`
+    : `/api-yahoo/v8/finance/chart/${ticker}`;
   const params = {
     interval: '1d',
     range: '1d',
@@ -1491,6 +1499,7 @@ export const getYahooStockQuote = async (ticker) => {
   try {
     const res = await axios.get(url, {
       params,
+      headers: isNode ? { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } : {},
       timeout: 8000
     });
     const parsed = parseYahooMeta(res.data);
@@ -1774,14 +1783,18 @@ export const getAlphaVantageQuote = async (symbol, apiKey) => {
  */
 export const getETFHoldings = async () => {
   try {
-    const url = '/api-bitbo/etf/';
+    const isNode = typeof window === 'undefined';
+    const url = isNode ? 'https://bitbo.io/etf/' : '/api-bitbo/etf/';
     let html = '';
     
     try {
-      const res = await axios.get(url, { timeout: 8000 });
+      const res = await axios.get(url, {
+        headers: isNode ? { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } : {},
+        timeout: 8000
+      });
       html = res.data;
     } catch (err) {
-      console.warn('[API] ETF holdings proxy fetch failed, trying Jina Reader...', err.message);
+      console.warn('[API] ETF holdings direct/proxy fetch failed, trying Jina Reader...', err.message);
       html = await fetchWithJina('https://bitbo.io/etf/', 'text');
       if (!html) {
         throw new Error('Jina Reader returned empty content for Bitbo');
@@ -1953,15 +1966,25 @@ export const getETFFlowHistory = async () => {
       if (newRows.length > 0) {
         newRows.sort((a, b) => toSortableDate(a.date).localeCompare(toSortableDate(b.date)));
         console.log(`[API] ETF Flow: appended ${newRows.length} new rows from /btc/`);
-        return [...baseHistory, ...newRows];
+        const combined = [...baseHistory, ...newRows];
+        combined.isFallback = false;
+        combined.source = 'FARSIDE_LIVE';
+        combined.lastObservationDate = combined[combined.length - 1]?.date;
+        return combined;
       }
     }
   } catch (e) {
     console.warn('[API] ETF Flow /btc/ fetch failed, using static data only:', e.message);
   }
 
-  // Return static data as fallback (always valid)
-  return baseHistory.length > 0 ? baseHistory : null;
+  // Return static data as fallback (marked as fallback)
+  if (baseHistory.length > 0) {
+    baseHistory.isFallback = true;
+    baseHistory.source = 'STATIC_BUNDLE';
+    baseHistory.lastObservationDate = lastStaticDate;
+    return baseHistory;
+  }
+  return null;
 };
 
 /**
@@ -2080,12 +2103,15 @@ export const getCMECot = async () => {
       
       return {
         date: formattedDate,
+        rawDate: dateStr,
         openInterest,
         dealerIntermediary,
         assetManager,
         leveragedFunds,
         otherReportables,
-        nonReportable
+        nonReportable,
+        isFallback: false,
+        source: 'CFTC_TRADINGSTER'
       };
     }
     return null;

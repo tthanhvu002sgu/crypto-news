@@ -66,8 +66,11 @@ export function calculateBtcProductionCostRange(difficulty) {
   const diff = toFiniteNumber(difficulty);
   if (!diff || diff <= 0) return { min: null, max: null, formatted: 'N/A' };
   
+  // Normalize difficulty if passed in Trillion units (< 1e6)
+  const rawDiff = diff < 1e6 ? diff * 1e12 : diff;
+  
   // Baseline energy model: 26 J/TH @ $0.05/kWh + 10% opex
-  const hashesPerBlock = diff * Math.pow(2, 32);
+  const hashesPerBlock = rawDiff * Math.pow(2, 32);
   const joulesPerHash = 26 * 1e-12;
   const kwhPerBlock = (hashesPerBlock * joulesPerHash) / 3.6e6;
   const energyCostPerBlock = kwhPerBlock * 0.05;
@@ -83,8 +86,16 @@ export function calculateBtcProductionCostRange(difficulty) {
   };
 }
 
+const isFieldFallback = (val) => {
+  if (val == null) return false;
+  if (typeof val === 'object') {
+    return val.isFallback === true || val.status === 'FALLBACK' || val.status === 'UNAVAILABLE';
+  }
+  return false;
+};
+
 /**
- * Kiểm tra tính đầy đủ và độ mới của dữ liệu trước khi xuất
+ * Kiểm tra tính đầy đủ, nguồn gốc và độ mới của dữ liệu trước khi xuất
  */
 export function validateExportReadiness(data, biasData, etfHoldings, etfHistory, options = {}) {
   const blockingErrors = [];
@@ -92,75 +103,99 @@ export function validateExportReadiness(data, biasData, etfHoldings, etfHistory,
   const laggedInfo = [];
 
   const btcPrice = toFiniteNumber(data?.btc?.price ?? options?.livePrice);
-  const fundingRate = toFiniteNumber(data?.fundingRate ?? options?.liveFunding);
-  const openInterest = toFiniteNumber(data?.openInterest);
+  const fundingRate = toFiniteNumber(data?.fundingRate?.val ?? data?.fundingRate ?? options?.liveFunding);
+  const openInterest = toFiniteNumber(data?.openInterest?.val ?? data?.openInterest);
   const biasScore = toFiniteNumber(biasData?.score);
 
   // 1. REQUIRED FIELDS CHECK
-  if (btcPrice == null || btcPrice <= 0) {
+  if (btcPrice == null || btcPrice <= 0 || data?.btc?.isFallback) {
     blockingErrors.push('Thiếu giá Bitcoin (BTC Price) từ Binance REST / WebSocket.');
   }
-  if (fundingRate == null) {
+  if (fundingRate == null || data?.fundingRateIsFallback || isFieldFallback(data?.fundingRate)) {
     blockingErrors.push('Thiếu tỷ lệ Funding Rate từ Binance Futures.');
   }
-  if (openInterest == null || openInterest <= 0) {
+  if (openInterest == null || openInterest <= 0 || data?.oiIsFallback || isFieldFallback(data?.openInterest)) {
     blockingErrors.push('Thiếu khối lượng Open Interest (OI) từ Binance Futures.');
   }
   if (biasScore == null) {
     blockingErrors.push('Chưa tính toán được Market Bias Engine Score.');
   }
 
-  // 2. OPTIONAL FIELDS CHECK
+  // 2. OPTIONAL FIELDS CHECK (Check real vs fallback)
   const ethPrice = toFiniteNumber(data?.ethTicker?.price ?? data?.eth?.price ?? data?.ethPrice?.price ?? data?.ethPrice ?? options?.liveEthPrice);
-  if (ethPrice == null) {
+  if (ethPrice == null || isFieldFallback(data?.ethTicker)) {
     warnings.push('Chưa tải được giá Ethereum (ETH Ticker).');
   }
 
   const solPrice = toFiniteNumber(data?.solTicker?.price ?? data?.sol?.price ?? data?.solPrice?.price ?? data?.solPrice ?? options?.liveSolPrice);
-  if (solPrice == null) {
+  if (solPrice == null || isFieldFallback(data?.solTicker)) {
     warnings.push('Chưa tải được giá Solana (SOL Ticker).');
   }
 
-  if (data?.fngData?.value == null) {
+  if (data?.fngData?.value == null || isFieldFallback(data?.fngData)) {
     warnings.push('Thiếu chỉ số Fear & Greed (Alternative.me).');
   }
 
   const stablecoinTotal = toFiniteNumber(data?.stablecoins?.total ?? data?.stablecoins?.totalCirculatingUsd);
-  if (stablecoinTotal == null) {
+  if (stablecoinTotal == null || isFieldFallback(data?.stablecoins)) {
     warnings.push('Thiếu tổng vốn hóa Stablecoin (CoinGecko / DefiLlama).');
   }
 
-  if (data?.onChainMetrics?.mvrv == null) {
+  if (data?.onChainMetrics?.mvrv == null || isFieldFallback(data?.onChainMetrics)) {
     warnings.push('Thiếu chỉ số On-chain BTC MVRV (CoinMetrics).');
   }
 
-  if (data?.onChain?.difficulty == null) {
+  if ((data?.onChain?.difficulty == null && data?.onChain?.difficultyRaw == null) || isFieldFallback(data?.onChain)) {
     warnings.push('Thiếu độ khó khai thác Difficulty & Hashrate (Blockchain.info).');
   }
 
-  if (data?.fedFundsRate == null && data?.cpi == null) {
+  const hasFed = data?.fedFundsRate != null && !isFieldFallback(data?.fedFundsRate);
+  const hasCpi = data?.cpi != null && !isFieldFallback(data?.cpi);
+  if (!hasFed && !hasCpi) {
     warnings.push('Thiếu chỉ số kinh tế vĩ mô FRED (Lãi suất Fed / CPI).');
+  }
+
+  const hasDxy = data?.dxy != null && !isFieldFallback(data?.dxy);
+  const hasVix = data?.vix != null && !isFieldFallback(data?.vix);
+  if (!hasDxy || !hasVix) {
+    warnings.push('Thiếu chỉ số thị trường quốc tế DXY hoặc VIX.');
+  }
+
+  const hasSpotCvd = Array.isArray(data?.cvdHistory24hSpot) && data.cvdHistory24hSpot.length > 0 && !data?.cvdHistory24hSpot?.isFallback;
+  const hasFutCvd = Array.isArray(data?.cvdHistory24h) && data.cvdHistory24h.length > 0 && !data?.cvdHistory24h?.isFallback;
+  if (!hasSpotCvd || !hasFutCvd) {
+    warnings.push('Thiếu dữ liệu dòng lệnh Spot CVD hoặc Futures CVD 24h.');
   }
 
   // 3. PUBLICATION_LAGGED FIELDS CHECK
   const flows = Array.isArray(etfHistory) ? etfHistory : [];
+  const isEtfFallback = flows.length === 0 || flows.isFallback === true || flows.status === 'FALLBACK' || flows.source === 'STATIC_BUNDLE';
   if (flows.length === 0) {
+    warnings.push('Chưa có lịch sử dòng tiền Spot ETF.');
     laggedInfo.push({ field: 'Spot ETF Flows', status: 'CHƯA CÓ LỊCH SỬ', detail: 'Chưa nạp lịch sử dòng tiền ETF từ Farside.' });
+  } else if (isEtfFallback) {
+    warnings.push('Dòng tiền Spot ETF đang dùng dữ liệu tĩnh fallback.');
+    laggedInfo.push({ field: 'Spot ETF Flows', status: 'FALLBACK_TĨNH', detail: `Dữ liệu tĩnh cũ (${flows[flows.length - 1]?.date || '---'}) - loại khỏi bias score.` });
   } else {
     const latestFlow = flows[flows.length - 1];
     laggedInfo.push({ field: 'Spot ETF Flows', status: 'LAGGED_DAILY', detail: `Ngày quan sát gần nhất: ${latestFlow?.date || '---'}` });
   }
 
+  const isCotFallback = !data?.cotData?.assetManager || isFieldFallback(data?.cotData);
   if (!data?.cotData?.assetManager) {
+    warnings.push('Chưa có báo cáo vị thế CME COT.');
     laggedInfo.push({ field: 'CME COT Positioning', status: 'CHƯA CÓ DỮ LIỆU', detail: 'Chưa có báo cáo vị thế CME COT từ CFTC.' });
+  } else if (isCotFallback) {
+    warnings.push('Vị thế CME COT đang dùng baseline fallback.');
+    laggedInfo.push({ field: 'CME COT Positioning', status: 'FALLBACK_TĨNH', detail: `Báo cáo baseline (${data.cotData.date || '---'}) - loại khỏi bias score.` });
   } else {
     laggedInfo.push({ field: 'CME COT Positioning', status: 'LAGGED_WEEKLY', detail: `Ngày báo cáo: ${data.cotData.date || 'Thứ 6 gần nhất'}` });
   }
 
-  // Completeness score
-  const totalCheckedFields = 12;
-  const passedFields = totalCheckedFields - blockingErrors.length - warnings.length;
-  const completenessScore = Math.max(0, Math.round((passedFields / totalCheckedFields) * 100));
+  // Total checked fields = 14
+  const totalCheckedFields = 14;
+  const passedFields = Math.max(0, totalCheckedFields - blockingErrors.length - warnings.length);
+  const completenessScore = Math.max(0, Math.min(100, Math.round((passedFields / totalCheckedFields) * 100)));
 
   return {
     isValid: blockingErrors.length === 0,
