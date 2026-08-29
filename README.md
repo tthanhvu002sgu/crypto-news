@@ -9,7 +9,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
-  - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta đa khung (`1H`, `24H`, `7D`, `30D`) với **Mốc Neo Cố Định UTC Anchor (`2020-01-01T00:00:00.000Z`)** và **Sổ Cái Snapshot Ngày Đóng Bất Biến v1 (`hft_cvd_daily_snapshots_v1`)**. Biểu đồ rebase riêng từng cửa sổ về mốc 0 bằng `cumulativeWithinWindow`, nên điểm cuối và dấu trên hai trục Y Spot/Futures luôn khớp số `windowNetDelta` ở thẻ Hero; `cumulativeFromAnchor` vẫn được bảo toàn cho lưu trữ/audit và chống trôi dữ liệu. Market Bias Engine, Google Sheets sync và AI Market Decision Lab tiếp tục tiêu thụ độc lập `windowNetDelta`. Tích hợp phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
+  - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta đa khung (`1H`, `24H`, `7D`, `30D`) với **Mốc Neo Cố Định UTC Anchor (`2020-01-01T00:00:00.000Z`)** và **Sổ Cái Snapshot Ngày Đóng Bất Biến v1 (`hft_cvd_daily_snapshots_v1`)**. Biểu đồ rebase riêng từng cửa sổ về mốc 0 bằng `cumulativeWithinWindow`; Spot và Futures dùng chung một trục Y tiền tệ để cùng một độ cao luôn mang cùng trị số/đơn vị, đồng thời điểm cuối khớp `windowNetDelta` ở thẻ Hero. `cumulativeFromAnchor` vẫn được bảo toàn cho lưu trữ/audit và chống trôi dữ liệu. Market Bias Engine, Google Sheets sync và AI Market Decision Lab tiếp tục tiêu thụ độc lập `windowNetDelta`. Tích hợp phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến bằng Robust Z-Score & Taker Delta). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
@@ -49,7 +49,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC với thanh Gauge Spectrum, 4 bento card trụ cột, thanh tóm tắt 3 tầng Regime và drawer bẻ nhỏ 14+ tín hiệu định lượng.
-- `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel` (tích hợp UTC Anchor và phân tách Net Delta), `WhaleTradesPanel`, `AdvancedChart` (tích hợp Bubble Anomaly Robust Z-Score), `TargetLiquidityPanel`, `OrderBookPanel`.
+- `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel` (tích hợp UTC Anchor, phân tách Net Delta và shared monetary Y-axis cho Spot/Futures), `WhaleTradesPanel`, `AdvancedChart` (tích hợp Bubble Anomaly Robust Z-Score), `TargetLiquidityPanel`, `OrderBookPanel`.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
@@ -69,6 +69,15 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-29] Hợp Nhất Scale Y CVD Spot/Futures Để Loại Bỏ Đọc Chéo Sai M/B `(FAST)`
+- **Mode / Type / Action / Lane:** FEATURE / BUGFIX / EXECUTE / FAST
+- **Tóm tắt:** Loại bỏ hai autoscale Y độc lập khiến cùng một vị trí trên chart mang hai giá trị khác nhau (ví dụ Futures `−$400M` nhưng đọc chéo sang trục Spot thành vùng dương, hoặc Spot triệu USD bị đối chiếu nhầm với tick tỷ USD).
+- **Thay đổi chính:** Gắn cả hai dataset vào scale `y` dùng chung, chỉ giữ một zero baseline và một hệ tick `fmtCvdUsd`; thêm nhãn `CVD RÒNG · SPOT + FUTURES` để chỉ rõ đây là scale tiền tệ chung.
+- **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
+- **Ảnh hưởng README:** §1 / §3
+- **Verify:** Production build, CVD regression tests và smoke-test trực quan 1H/7D/30D; cùng một đường ngang chỉ còn một trị số Y cho cả Spot và Futures.
+- **Notes / nợ kỹ thuật:** Không thêm unit test UI vì repo chưa có harness render Chart.js; dùng browser smoke-test làm regression evidence.
 
 ### [2026-08-29] Đồng Bộ Trục Y CVD Spot/Futures Với Net Delta Theo Cửa Sổ `(FAST)`
 - **Mode / Type / Action / Lane:** FEATURE / BUGFIX / EXECUTE / FAST
