@@ -383,6 +383,33 @@ export async function syncDailySnapshots(symbol = 'BTCUSDT', market = 'futures',
   return existingSnapshots;
 }
 
+/**
+ * Checks if the daily snapshot ledger is stale (missing yesterday's closed UTC day or empty).
+ */
+export function isLedgerStale(market = 'futures', now = Date.now()) {
+  const snapshots = getDailySnapshots(market);
+  if (!snapshots || snapshots.length === 0) return true;
+
+  const todayUtcMidnight = getUtcMidnight(now);
+  const yesterdayUtcMidnight = todayUtcMidnight - 86400000;
+  const lastSnap = snapshots[snapshots.length - 1];
+
+  // If last snapshot is before yesterday's closed day, ledger is stale and needs backfill
+  return (lastSnap.openTime + 86400000) <= yesterdayUtcMidnight;
+}
+
+/**
+ * Ensures daily snapshots are synchronized up to yesterday's closed UTC day.
+ * Only makes a network request if the store is empty, stale, or force=true.
+ */
+export async function ensureDailySnapshots(symbol = 'BTCUSDT', market = 'futures', { axiosInstance = axios, now = Date.now(), force = false } = {}) {
+  let snapshots = getDailySnapshots(market);
+  if (force || isLedgerStale(market, now)) {
+    snapshots = await syncDailySnapshots(symbol, market, { axiosInstance, now });
+  }
+  return snapshots;
+}
+
 // ─── SERIES ENGINE & MULTI-TIMEFRAME BUILDER ──────────────────────────────────
 
 /**
@@ -406,6 +433,7 @@ export function buildCvdSeries({
   timeframe = '24H',
   rawKlines = [],
   dailySnapshots = [],
+  targetCount = null,
   now = Date.now()
 }) {
   const normKlines = rawKlines
@@ -435,11 +463,9 @@ export function buildCvdSeries({
   const baseCumulative = baselineSnapshot ? baselineSnapshot.cumulativeFromAnchor : 0;
 
   let runningCumulative = baseCumulative;
-  let windowNetDelta = 0;
 
-  const points = normKlines.map(k => {
+  const allPoints = normKlines.map(k => {
     runningCumulative += k.delta;
-    windowNetDelta += k.delta;
 
     return {
       time: k.openTime,
@@ -453,6 +479,14 @@ export function buildCvdSeries({
       isClosed: Boolean(k.isClosed)
     };
   });
+
+  // Slice exactly the requested target display count if specified (e.g. 24 for 24H, 42 for 7D, 30 for 30D)
+  const points = (targetCount && targetCount > 0 && targetCount < allPoints.length)
+    ? allPoints.slice(-targetCount)
+    : allPoints;
+
+  // windowNetDelta strictly sums the delta of the displayed window points
+  const windowNetDelta = points.reduce((sum, p) => sum + (p.delta || 0), 0);
 
   return {
     market,

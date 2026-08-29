@@ -123,7 +123,16 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
     - Modal / Drawer "Cách Scanner Hoạt Động": Giải thích cặn kẽ 4 pillars, cơ chế CVD proxy và disclaimer miễn trừ trách nhiệm.
     - Phân loại rõ ràng 3 trạng thái lỗi/rỗng: `PROVIDER_UNAVAILABLE`, `INSUFFICIENT_COVERAGE`, `NO_CANDIDATES`.
 - **Files / areas chạm:** `src/services/coinScanner.js`, `src/services/coinScanner.test.js`, `src/components/ScannerTab.jsx`, `src/App.css`, `README.md`.
-- **Verify:** `npm run test:scanner` pass 9/9 tests; `npm test` pass 47/47 tests (biasEngine: 19, googleSheetSync: 6, moveTracker: 16, macroDashboard: 5, coinScanner: 9); `npm run build` pass 100% (1.55s, 0 errors); ESLint pass 0 errors.
+### [2026-08-29] Khắc Phục Toàn Diện 4 Lỗi Cửa Sổ Trượt, Contract Object AI Summary, Incremental Sync & Net Delta Bucket Trong Stable CVD Engine `(BUGFIX FULL)`
+- **Lane / Mode:** BUGFIX FULL & CVD STABILITY
+- **Tóm tắt:** Triệt tiêu hoàn toàn hiện tượng lệch mỏ neo khi cửa sổ trượt (rolling baseline shift), hỗ trợ chuẩn hóa contract object `{ points, windowNetDelta }` trong AI Summary & Charts, tự động backfill snapshot hàng ngày (incremental ledger sync khi browser mở lại sau nhiều ngày), và chuẩn hóa số lượng bucket chính xác (24 nến cho 24H, 42 nến cho 7D, 30 nến cho 30D) trong `windowNetDelta`.
+- **Thay đổi chính:**
+  - **Khắc phục Baseline Shift Khi Cửa Sổ Trượt (`cvdService.js`, `api.js`):** Tích hợp tích lũy liên tục bắt đầu từ mốc UTC midnight (`00:00:00 UTC`) của ngày sớm nhất trong cửa sổ hiển thị, lấy baseline từ snapshot ngày trước đó. Mọi timestamp nến cùng thời điểm đều nhận chính xác 100% `cumulativeFromAnchor` bất biến dù query ở bất kỳ thời điểm nào trong ngày.
+  - **Tách Biệt Display Slicing & Window Net Delta:** `buildCvdSeries` nhận `targetCount` (24 cho 24H, 42 cho 7D, 30 cho 30D) để cắt đúng $N$ nến hiển thị và tính `windowNetDelta` nghiêm ngặt trên $N$ nến này, không bao gồm nến đệm dùng dựng baseline.
+  - **Incremental Sync Cho Ledger Daily Snapshots:** Bổ sung `isLedgerStale()` và `ensureDailySnapshots()`. Khi phát hiện snapshot gần nhất nhỏ hơn ngày UTC hôm qua, hệ thống tự động fetch và chốt các ngày đã đóng còn thiếu mà không cần reset store hay chạy full backfill thừa thãi.
+  - **Chuẩn Hóa Contract Object Trong AI Summary & Charts (`SummaryTab.jsx`, `SummaryCharts.jsx`):** Trích xuất an toàn `getSeriesPoints(series)` và `getSeriesNetDelta(series)`, loại bỏ nguy cơ `filter is not a function`, hiển thị biểu đồ và so sánh phân kỳ Spot/Futures Net Delta minh bạch.
+- **Files / areas chạm:** `src/services/cvdService.js`, `src/services/cvdService.test.js`, `src/services/api.js`, `src/components/SummaryTab.jsx`, `src/components/SummaryCharts.jsx`, `README.md`.
+- **Verify:** `npm test` pass 59/59 unit tests (cvdService: 13 tests, biasEngine: 19 tests, googleSheetSync: 6 tests, moveTracker: 16 tests, macroDashboard: 5 tests); `npm run sync:sheets:dry` pass 100%; `npm run build` thành công 100% (15.71s).
 
 ### [2026-08-27] Tích Hợp Hiển Thị Song Song BTC Price (Đối Chứng Khách Quan), Ma Trận Phân Kỳ/Xác Nhận & Provenance Snapshot Store `(FEATURE FULL)`
 - **Lane / Mode:** FEATURE FULL & UX/DATA INTEGRITY

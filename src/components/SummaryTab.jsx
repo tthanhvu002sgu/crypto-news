@@ -423,10 +423,32 @@ export default function SummaryTab({
       console.warn('Error fetching data for report:', error);
     }
 
-    const activeCvd7d = cvd7d.length > 0 ? cvd7d : (data.cvdHistory7d || []);
-    const activeCvd30d = cvd30d.length > 0 ? cvd30d : (data.cvdHistory30d || []);
-    const activeSpotCvd7d = spotCvd7d.length > 0 ? spotCvd7d : (data.cvdHistory7dSpot || []);
-    const activeSpotCvd30d = spotCvd30d.length > 0 ? spotCvd30d : (data.cvdHistory30dSpot || []);
+    const getSeriesPoints = (series) => {
+      if (!series) return [];
+      if (Array.isArray(series)) return series;
+      if (Array.isArray(series.points)) return series.points;
+      return [];
+    };
+    const getSeriesNetDelta = (series) => {
+      if (series == null) return null;
+      if (typeof series.windowNetDelta === 'number') return series.windowNetDelta;
+      const pts = getSeriesPoints(series);
+      if (pts.length === 0) return null;
+      const sumDelta = pts.reduce((sum, p) => sum + (toFiniteNumber(p.delta) || 0), 0);
+      if (sumDelta !== 0 || pts.some(p => p.delta !== undefined)) return sumDelta;
+      return toFiniteNumber(pts[pts.length - 1]?.cvd);
+    };
+
+    const activeCvd7dSeries = (cvd7d?.points?.length > 0 || cvd7d?.length > 0) ? cvd7d : (data.cvdHistory7d || []);
+    const activeCvd30dSeries = (cvd30d?.points?.length > 0 || cvd30d?.length > 0) ? cvd30d : (data.cvdHistory30d || []);
+    const activeSpotCvd7dSeries = (spotCvd7d?.points?.length > 0 || spotCvd7d?.length > 0) ? spotCvd7d : (data.cvdHistory7dSpot || []);
+    const activeSpotCvd30dSeries = (spotCvd30d?.points?.length > 0 || spotCvd30d?.length > 0) ? spotCvd30d : (data.cvdHistory30dSpot || []);
+
+    const activeCvd7d = getSeriesPoints(activeCvd7dSeries);
+    const activeCvd30d = getSeriesPoints(activeCvd30dSeries);
+    const activeSpotCvd7d = getSeriesPoints(activeSpotCvd7dSeries);
+    const activeSpotCvd30d = getSeriesPoints(activeSpotCvd30dSeries);
+
     if (activeCvd30d.length > 0 || activeCvd7d.length > 0) {
       setReportCvdData(activeCvd30d.length > 0 ? activeCvd30d : activeCvd7d);
     }
@@ -489,10 +511,10 @@ export default function SummaryTab({
         .join('\n');
     };
 
-    const cvdBlock = (series, label) => {
-      const valid = (series || []).filter(
+    const cvdBlock = (seriesInput, label) => {
+      const valid = getSeriesPoints(seriesInput).filter(
         (point) =>
-          toFiniteNumber(point.cvd) !== null &&
+          toFiniteNumber(point.cvd ?? point.cumulativeFromAnchor) !== null &&
           toFiniteNumber(point.price) !== null
       );
       if (valid.length === 0) {
@@ -503,7 +525,7 @@ export default function SummaryTab({
       const lastPrice = toFiniteNumber(valid[valid.length - 1].price);
       const priceChange =
         firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : null;
-      const finalCvd = toFiniteNumber(valid[valid.length - 1].cvd);
+      const netDelta = getSeriesNetDelta(seriesInput) ?? valid.reduce((sum, p) => sum + (toFiniteNumber(p.delta) || 0), 0);
       const midpoint = Math.floor(valid.length / 2);
       const firstHalfDelta = valid
         .slice(0, midpoint)
@@ -515,27 +537,23 @@ export default function SummaryTab({
         .map(
           (point) =>
             `  - ${safeIsoTime(point.time)} | Price $${formatNumber(point.price, 0)} | ` +
-            `Rebased cumulative CVD ${formatSigned(point.cvd, 0, ' USD')}`
+            `Cumulative CVD ${formatSigned(point.cumulativeFromAnchor ?? point.cvd, 0, ' USD')}`
         )
         .join('\n');
 
       return `### ${label}
-- Scope: Binance BTCUSDT klines; taker-buy quote volume minus taker-sell quote volume; cumulative series rebased at the start of this window.
+- Scope: Binance BTCUSDT klines; taker-buy quote volume minus taker-sell quote volume; stable UTC anchor (2020-01-01) cumulative series with independent window net delta.
 - Price change across window: ${formatSigned(priceChange, 2, '%')}
-- Final rebased cumulative CVD: ${formatSigned(finalCvd, 0, ' USD')}
+- Window Net Taker Delta: ${formatSigned(netDelta, 0, ' USD')}
 - First-half net taker delta: ${formatSigned(firstHalfDelta, 0, ' USD')}
 - Second-half net taker delta: ${formatSigned(secondHalfDelta, 0, ' USD')}
-- Sampled paired path:
+- Sampled paired path (Cumulative from Anchor):
 ${path}`;
     };
 
     const compareCvdVenues = (futuresSeries, spotSeries, label) => {
-      const finalCvd = (series) => {
-        const last = [...(series || [])].reverse().find((point) => toFiniteNumber(point.cvd) !== null);
-        return toFiniteNumber(last?.cvd);
-      };
-      const futuresValue = finalCvd(futuresSeries);
-      const spotValue = finalCvd(spotSeries);
+      const futuresValue = getSeriesNetDelta(futuresSeries);
+      const spotValue = getSeriesNetDelta(spotSeries);
       const agreement = futuresValue === null || spotValue === null
         ? 'N/A'
         : futuresValue === 0 || spotValue === 0
@@ -543,11 +561,10 @@ ${path}`;
           : Math.sign(futuresValue) === Math.sign(spotValue)
             ? 'Aligned direction'
             : 'Divergent direction';
-      return `- ${label} Futures CVD: ${formatSigned(futuresValue, 0, ' USD')}\n` +
-        `- ${label} Spot CVD: ${formatSigned(spotValue, 0, ' USD')}\n` +
+      return `- ${label} Futures Net CVD: ${formatSigned(futuresValue, 0, ' USD')}\n` +
+        `- ${label} Spot Net CVD: ${formatSigned(spotValue, 0, ' USD')}\n` +
         `- Venue comparison: ${agreement}. Do not net, average, or treat the two venue values as interchangeable.`;
     };
-
     const wallQuality = (usdValue) => {
       const millions = (toFiniteNumber(usdValue) || 0) / 1e6;
       if (millions < 10) return 'Sub-10M / usually immaterial for BTC';
@@ -1615,7 +1632,7 @@ ${promptData}
                 }
                 // 4. Lịch sử Giá & CVD Chart - place strictly under CVD / Price section
                 else if (!renderedCharts.has('cvd') && (lowerText.includes('cvd') || lowerText.includes('taker flow') || lowerText.includes('lịch sử giá') || lowerText.includes('historical price'))) {
-                  const cvdSource = reportCvdData.length > 0 ? reportCvdData : (data.cvdHistory30d?.length > 0 ? data.cvdHistory30d : data.cvdHistory7d);
+                  const cvdSource = reportCvdData?.length > 0 ? reportCvdData : (data.cvdHistory30d?.points || data.cvdHistory30d || data.cvdHistory7d?.points || data.cvdHistory7d || []);
                   chartToRender = <CvdChart key="cvd" cvdData={cvdSource} />;
                   renderedCharts.add('cvd');
                 }

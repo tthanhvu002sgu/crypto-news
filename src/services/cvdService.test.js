@@ -16,6 +16,8 @@ import {
   getSnapshotByDate,
   upsertDailySnapshots,
   syncDailySnapshots,
+  isLedgerStale,
+  ensureDailySnapshots,
   buildCvdSeries,
   extractCvdNetDelta
 } from './cvdService.js';
@@ -35,10 +37,9 @@ describe('CVD Service & Immutable Daily Snapshot Engine', () => {
     assert.equal(getUtcMidnight(CVD_ANCHOR_TIMESTAMP), CVD_ANCHOR_TIMESTAMP);
   });
 
-  it('2. Same timestamp produces identical cumulativeFromAnchor regardless of window size (24 vs 25 vs 42 candles)', () => {
-    // Setup closed daily snapshot baseline
+  it('2. Same timestamp produces identical cumulativeFromAnchor across independent requests with sliding windows', () => {
+    // Setup closed daily snapshot baseline (Aug 27 closed snapshot)
     const day1Open = Date.UTC(2026, 7, 27, 0, 0, 0); // 2026-08-27
-    const day2Open = Date.UTC(2026, 7, 28, 0, 0, 0); // 2026-08-28
 
     const snap1 = createDailySnapshot({
       market: 'futures',
@@ -49,56 +50,63 @@ describe('CVD Service & Immutable Daily Snapshot Engine', () => {
       sellVolume: 5000000,
       closePrice: 60000
     });
-    const snap2 = createDailySnapshot({
-      market: 'futures',
-      openTime: day2Open,
-      dailyDelta: 2000000,
-      cumulativeFromAnchor: 7000000,
-      buyVolume: 8000000,
-      sellVolume: 6000000,
-      closePrice: 61000
-    });
 
-    upsertDailySnapshots('futures', [snap1, snap2]);
+    upsertDailySnapshots('futures', [snap1]);
     const snapshots = getDailySnapshots('futures');
 
-    // Create 3 hourly candles on 2026-08-28 (10:00, 11:00, 12:00 UTC)
+    // On 2026-08-28 (midnight = 00:00 UTC):
+    // 10:00 candle (h1), 11:00 candle (h2), 12:00 candle (h3), 13:00 candle (h4)
     const h1Time = Date.UTC(2026, 7, 28, 10, 0, 0);
     const h2Time = Date.UTC(2026, 7, 28, 11, 0, 0);
     const h3Time = Date.UTC(2026, 7, 28, 12, 0, 0);
+    const h4Time = Date.UTC(2026, 7, 28, 13, 0, 0);
 
-    const kline1 = [h1Time, '61000', '61200', '60900', '61100', '100', h1Time + 3600000 - 1, '6110000', 1000, '55', '3360500', '0'];
-    const kline2 = [h2Time, '61100', '61300', '61000', '61250', '120', h2Time + 3600000 - 1, '7350000', 1200, '70', '4287500', '0'];
-    const kline3 = [h3Time, '61250', '61500', '61200', '61400', '150', h3Time + 3600000 - 1, '9210000', 1500, '90', '5526000', '0'];
+    const kline1 = [h1Time, '61000', '61200', '60900', '61100', '100', h1Time + 3600000 - 1, '6110000', 1000, '55', '3360500', '0']; // delta: +611,000
+    const kline2 = [h2Time, '61100', '61300', '61000', '61250', '120', h2Time + 3600000 - 1, '7350000', 1200, '70', '4287500', '0']; // delta: +1,225,000
+    const kline3 = [h3Time, '61250', '61500', '61200', '61400', '150', h3Time + 3600000 - 1, '9210000', 1500, '90', '5526000', '0']; // delta: +1,842,000
+    const kline4 = [h4Time, '61400', '61600', '61300', '61500', '160', h4Time + 3600000 - 1, '9840000', 1600, '95', '5844000', '0']; // delta: +1,848,000
 
-    // Series A: 3 candles (h1, h2, h3)
+    // Request A: Made at 12:30 UTC. Fetched klines starting from midnight boundary [k1, k2, k3].
+    // Target display count = 2 (points for h2: 11:00 and h3: 12:00)
     const seriesA = buildCvdSeries({
       market: 'futures',
       interval: '1h',
       timeframe: '24H',
       rawKlines: [kline1, kline2, kline3],
       dailySnapshots: snapshots,
-      now: h3Time + 3600000
+      targetCount: 2,
+      now: h3Time + 1800000
     });
 
-    // Sliced view B: last 2 candles (h2, h3)
-    const seriesBPoints = seriesA.points.slice(-2);
+    // Request B: Made at 13:30 UTC (window slid by 1 hour). Fetched klines starting from midnight boundary [k1, k2, k3, k4].
+    // Target display count = 2 (points for h3: 12:00 and h4: 13:00)
+    const seriesB = buildCvdSeries({
+      market: 'futures',
+      interval: '1h',
+      timeframe: '24H',
+      rawKlines: [kline1, kline2, kline3, kline4],
+      dailySnapshots: snapshots,
+      targetCount: 2,
+      now: h4Time + 1800000
+    });
 
-    // Delta of h3 candle
-    const normK3 = normalizeKline(kline3);
+    assert.equal(seriesA.points.length, 2, 'Series A has exactly 2 display points');
+    assert.equal(seriesB.points.length, 2, 'Series B has exactly 2 display points');
+
+    // Shared timestamp h3Time (12:00) across independent Request A and Request B
     const pointH3inA = seriesA.points.find(p => p.time === h3Time);
-    const pointH3inB = seriesBPoints.find(p => p.time === h3Time);
+    const pointH3inB = seriesB.points.find(p => p.time === h3Time);
 
-    assert.equal(pointH3inA.delta, Math.round(normK3.delta));
-    assert.equal(pointH3inB.delta, Math.round(normK3.delta));
+    assert.ok(pointH3inA, 'h3 exists in series A');
+    assert.ok(pointH3inB, 'h3 exists in series B');
 
-    // CRITICAL: cumulativeFromAnchor at h2 and h3 is strictly invariant and does NOT rebase from 0
-    const pointH2inA = seriesA.points.find(p => p.time === h2Time);
-    const pointH2inB = seriesBPoints.find(p => p.time === h2Time);
-    assert.equal(pointH2inA.cumulativeFromAnchor, pointH2inB.cumulativeFromAnchor);
+    // CRITICAL: cumulativeFromAnchor at h3 is 100% IDENTICAL across independent queries
     assert.equal(pointH3inA.cumulativeFromAnchor, pointH3inB.cumulativeFromAnchor);
-    assert.equal(pointH2inA.cumulativeFromAnchor, 6836000);
-    assert.equal(pointH3inA.cumulativeFromAnchor, 8678000);
+    assert.equal(pointH3inA.cumulativeFromAnchor, 5000000 + 611000 + 1225000 + 1842000); // = 8,678,000
+
+    // Exact bucket count for windowNetDelta (no extra padding bucket)
+    assert.equal(seriesA.windowNetDelta, 1225000 + 1842000); // = 3,067,000 (h2 + h3)
+    assert.equal(seriesB.windowNetDelta, 1842000 + 1848000); // = 3,690,000 (h3 + h4)
   });
 
   it('3. Closed daily snapshots are strictly immutable and never overwritten by sync/re-fetch', () => {
@@ -416,5 +424,60 @@ describe('CVD Service & Immutable Daily Snapshot Engine', () => {
     assert.equal(series.asOf, now);
     assert.equal(typeof series.windowNetDelta, 'number');
     assert.equal(Array.isArray(series.points), true);
+  });
+
+  it('12. isLedgerStale flags missing closed days and ensureDailySnapshots performs incremental backfill', async () => {
+    // Stale ledger with only snapshot from Aug 26
+    const threeDaysAgo = Date.UTC(2026, 7, 26, 0, 0, 0);
+    const snapOld = createDailySnapshot({
+      market: 'futures',
+      openTime: threeDaysAgo,
+      dailyDelta: 500000,
+      cumulativeFromAnchor: 2000000,
+      buyVolume: 1000000,
+      sellVolume: 500000,
+      closePrice: 59000
+    });
+    upsertDailySnapshots('futures', [snapOld]);
+
+    const simTimeNow = Date.UTC(2026, 7, 29, 14, 0, 0); // Today is Aug 29. Yesterday was Aug 28.
+    assert.equal(isLedgerStale('futures', simTimeNow), true, 'Ledger must be flagged as stale');
+
+    const aug27Open = Date.UTC(2026, 7, 27, 0, 0, 0);
+    const aug28Open = Date.UTC(2026, 7, 28, 0, 0, 0);
+    const aug27Raw = [aug27Open, '59000', '60000', '58500', '59500', '100', aug27Open + 86400000 - 1, '5950000', 1000, '55', '3272500', '0']; // delta: +595k
+    const aug28Raw = [aug28Open, '59500', '61000', '59000', '60500', '120', aug28Open + 86400000 - 1, '7260000', 1200, '70', '4235000', '0']; // delta: +1210k
+
+    const mockAxios = {
+      get: async () => ({ data: [aug27Raw, aug28Raw] })
+    };
+
+    const synced = await ensureDailySnapshots('BTCUSDT', 'futures', { axiosInstance: mockAxios, now: simTimeNow });
+    assert.equal(synced.length, 3, 'Ledger has 3 snapshots after incremental backfill');
+    assert.equal(synced[1].utcDate, '2026-08-27');
+    assert.equal(synced[2].utcDate, '2026-08-28');
+    assert.equal(isLedgerStale('futures', simTimeNow), false, 'Ledger is fresh after backfill');
+  });
+
+  it('13. targetCount cleanly slices display points and sums exact bucket count into windowNetDelta', () => {
+    // 5 candles
+    const t0 = Date.UTC(2026, 7, 28, 10, 0, 0);
+    const klines = [0, 1, 2, 3, 4].map(i => {
+      const t = t0 + i * 3600000;
+      return [t, '60000', '60100', '59900', '60050', '100', t + 3600000 - 1, '6005000', 1000, '60', '3603000', '0']; // delta: +1,201,000 per candle
+    });
+
+    const series = buildCvdSeries({
+      market: 'futures',
+      interval: '1h',
+      timeframe: '24H',
+      rawKlines: klines,
+      dailySnapshots: [],
+      targetCount: 3, // request only the last 3 candles
+      now: t0 + 5 * 3600000
+    });
+
+    assert.equal(series.points.length, 3, 'Output points must have exactly 3 candles');
+    assert.equal(series.windowNetDelta, 3 * 1201000, 'windowNetDelta must strictly sum the 3 display candles');
   });
 });

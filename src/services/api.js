@@ -4,8 +4,10 @@ import {
   CVD_ANCHOR_TIMESTAMP,
   buildCvdSeries,
   syncDailySnapshots,
+  ensureDailySnapshots,
   getDailySnapshots,
   getBinanceKlinesUrl,
+  getUtcMidnight,
   extractCvdNetDelta
 } from './cvdService.js';
 
@@ -153,35 +155,48 @@ export const getDailyCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
 
 /**
  * Get stable CVD series with fixed UTC anchor (2020-01-01) and separate windowNetDelta.
- * Replaces rolling rebase with immutable historical baseline.
+ * Aligns continuous accumulation from the UTC midnight boundary of the earliest display candle,
+ * then cleanly slices the exact targetCount (24 for 24H, 42 for 7D, 30 for 30D).
  */
-export const getStableCvdSeries = async (symbol = 'BTCUSDT', timeframe = '24H', market = 'futures') => {
+export const getStableCvdSeries = async (symbol = 'BTCUSDT', timeframe = '24H', market = 'futures', options = {}) => {
   try {
     const marketKey = market === 'spot' ? 'spot' : 'futures';
     const baseUrl = getBinanceKlinesUrl(marketKey);
+    const now = options.now || Date.now();
 
     let interval = '1h';
-    let limit = 25;
+    let displayCount = 24;
+    let intervalMs = 3600000;
+
     if (timeframe === '7D') {
       interval = '4h';
-      limit = 43;
+      displayCount = 42;
+      intervalMs = 4 * 3600000;
     } else if (timeframe === '30D') {
       interval = '1d';
-      limit = 31;
+      displayCount = 30;
+      intervalMs = 86400000;
     }
 
+    // 1. Incremental sync ensures ledger has all closed UTC days up to yesterday
+    const dailySnapshots = await ensureDailySnapshots(symbol, marketKey, { axiosInstance: axios, now, force: options.force });
+
+    // 2. Align fetch with the start of the earliest day in the display window (midnight boundary)
+    const earliestWindowTime = now - (displayCount * intervalMs);
+    const boundaryUtcDay = getUtcMidnight(earliestWindowTime);
+
+    // 3. Fetch all klines from boundaryUtcDay to now
     const res = await axios.get(baseUrl, {
-      params: { symbol, interval, limit },
+      params: {
+        symbol,
+        interval,
+        startTime: boundaryUtcDay,
+        limit: 1000
+      },
       timeout: 10000
     });
 
     const rawKlines = Array.isArray(res.data) ? res.data : [];
-
-    // Ensure snapshot store has recent closed snapshots
-    let dailySnapshots = getDailySnapshots(marketKey);
-    if (dailySnapshots.length === 0) {
-      dailySnapshots = await syncDailySnapshots(symbol, marketKey, { axiosInstance: axios });
-    }
 
     const series = buildCvdSeries({
       market: marketKey,
@@ -189,7 +204,8 @@ export const getStableCvdSeries = async (symbol = 'BTCUSDT', timeframe = '24H', 
       timeframe,
       rawKlines,
       dailySnapshots,
-      now: Date.now()
+      targetCount: displayCount,
+      now
     });
 
     return series;

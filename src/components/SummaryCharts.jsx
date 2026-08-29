@@ -61,10 +61,11 @@ const commonOptions = {
 
 /** 1. Chart Lịch sử Giá vs CVD (7d/30d CVD Divergence) */
 export function CvdChart({ cvdData }) {
-  if (!cvdData || cvdData.length === 0) return null;
+  const points = Array.isArray(cvdData) ? cvdData : (Array.isArray(cvdData?.points) ? cvdData.points : []);
+  if (points.length === 0) return null;
   
-  const step = Math.max(1, Math.floor(cvdData.length / 50));
-  const sampled = cvdData.filter((_, i) => i % step === 0 || i === cvdData.length - 1);
+  const step = Math.max(1, Math.floor(points.length / 50));
+  const sampled = points.filter((_, i) => i % step === 0 || i === points.length - 1);
 
   const data = {
     labels: sampled.map(d => {
