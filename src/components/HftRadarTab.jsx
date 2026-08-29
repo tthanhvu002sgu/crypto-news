@@ -45,26 +45,43 @@ const cvdZeroLinePlugin = {
     if (!scales || !chartArea) return;
     const isLight = opts?.isLight ?? false;
 
-    // Spot và Futures dùng chung một scale tiền tệ, nên chỉ có một mốc 0.
-    const yZero = scales.y?.display ? scales.y.getPixelForValue(0) : null;
+    const yFutures = scales.y?.display ? scales.y.getPixelForValue(0) : null;
+    const ySpot = scales.y1?.display ? scales.y1.getPixelForValue(0) : null;
 
     ctx.save();
 
-    if (yZero != null && Number.isFinite(yZero) && yZero >= chartArea.top && yZero <= chartArea.bottom) {
+    if (yFutures != null && Number.isFinite(yFutures) && yFutures >= chartArea.top && yFutures <= chartArea.bottom) {
       ctx.strokeStyle = isLight ? 'rgba(30, 41, 59, 0.65)' : 'rgba(241, 245, 249, 0.45)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
-      ctx.moveTo(chartArea.left, yZero);
-      ctx.lineTo(chartArea.right, yZero);
+      ctx.moveTo(chartArea.left, yFutures);
+      ctx.lineTo(chartArea.right, yFutures);
       ctx.stroke();
 
-      // Nhãn "0" tại mép trái của trục Y dùng chung
+      // Nhãn mốc 0 của Futures tại mép trái
       ctx.fillStyle = isLight ? 'rgba(30, 41, 59, 0.9)' : 'rgba(241, 245, 249, 0.85)';
       ctx.font = '600 9px monospace';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText('0', chartArea.left + 4, yZero - 2);
+      ctx.fillText('0 F', chartArea.left + 4, yFutures - 2);
+    }
+
+    if (ySpot != null && Number.isFinite(ySpot) && ySpot >= chartArea.top && ySpot <= chartArea.bottom) {
+      const isCoincident = yFutures != null && Math.abs(yFutures - ySpot) <= 4;
+      if (!isCoincident) {
+        ctx.strokeStyle = isLight ? 'rgba(16, 185, 129, 0.6)' : 'rgba(52, 211, 153, 0.5)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, ySpot);
+        ctx.lineTo(chartArea.right, ySpot);
+        ctx.stroke();
+
+        ctx.fillStyle = isLight ? 'rgba(16, 185, 129, 0.9)' : 'rgba(52, 211, 153, 0.85)';
+        ctx.textAlign = 'right';
+        ctx.fillText('0 S', chartArea.right - 4, ySpot - 2);
+      }
     }
 
     ctx.restore();
@@ -501,7 +518,7 @@ function CVDPanel({
         ...base.scales,
         y: {
           ...base.scales.y,
-          display: futuresList.length > 0 || spotList.length > 0,
+          display: futuresList.length > 0,
           beginAtZero: true,
           grid: {
             ...base.scales.y.grid,
@@ -524,7 +541,7 @@ function CVDPanel({
               if (context.tick && context.tick.value === 0) {
                 return isLight ? '#0f172a' : '#f8fafc';
               }
-              return isLight ? '#475569' : '#cbd5e1';
+              return '#a78bfa';
             },
             font: (context) => {
               if (context.tick && context.tick.value === 0) {
@@ -536,8 +553,31 @@ function CVDPanel({
           },
           title: {
             display: true,
-            text: 'CVD RÒNG · SPOT + FUTURES',
-            color: isLight ? '#64748b' : '#94a3b8',
+            text: 'CVD RÒNG FUTURES',
+            color: '#a78bfa',
+            font: { family: 'Be Vietnam Pro, Roboto Mono', size: 9, weight: '600' }
+          }
+        },
+        y1: {
+          ...base.scales.y,
+          position: 'right',
+          display: spotList.length > 0,
+          beginAtZero: true,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            ...base.scales.y.ticks,
+            color: (context) => context.tick?.value === 0
+              ? (isLight ? '#0f172a' : '#f8fafc')
+              : '#34d399',
+            font: (context) => context.tick?.value === 0
+              ? { family: 'Be Vietnam Pro, Roboto Mono', size: 10, weight: '700' }
+              : { family: 'Be Vietnam Pro, Roboto Mono', size: 10 },
+            callback: (val) => fmtCvdUsd(val)
+          },
+          title: {
+            display: true,
+            text: 'CVD RÒNG SPOT',
+            color: '#34d399',
             font: { family: 'Be Vietnam Pro, Roboto Mono', size: 9, weight: '600' }
           }
         }
@@ -567,14 +607,14 @@ function CVDPanel({
     });
 
     const isLight = theme === 'light';
-    const mkDataset = (label, list, borderColor, backgroundColor) => ({
+    const mkDataset = (label, list, borderColor, backgroundColor, yAxisID) => ({
       label,
       data: list.map(item => cvdTf === '1H'
         ? (item.cvd ?? 0)
         : (item.cumulativeWithinWindow ?? 0)),
       borderColor,
       backgroundColor,
-      yAxisID: 'y',
+      yAxisID,
       borderWidth: 2,
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -586,11 +626,11 @@ function CVDPanel({
       labels,
       datasets: [
         {
-          ...mkDataset('FUTURES', futuresList, '#a78bfa', isLight ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.12)'),
+          ...mkDataset('FUTURES', futuresList, '#a78bfa', isLight ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.12)', 'y'),
           fill: false,
         },
         {
-          ...mkDataset('SPOT', spotList, '#34d399', isLight ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)'),
+          ...mkDataset('SPOT', spotList, '#34d399', isLight ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)', 'y1'),
           fill: false,
         },
       ].filter(ds => ds.data.length > 0)
