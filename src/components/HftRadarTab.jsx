@@ -180,7 +180,22 @@ function useSessionDelta(sessionCvd, list) {
   return (sessionCvd || 0) - ref.current.base;
 }
 
-// Per-market CVD series (chart points + cumulative buy/sell volume).
+function normalizeHistoryPayload(payload) {
+  if (!payload) return { points: [], windowNetDelta: 0 };
+  if (Array.isArray(payload)) {
+    const sumDelta = payload.reduce((sum, p) => sum + (Number(p.delta) || 0), 0);
+    return { points: payload, windowNetDelta: sumDelta };
+  }
+  if (Array.isArray(payload.points)) {
+    const netDelta = typeof payload.windowNetDelta === 'number'
+      ? payload.windowNetDelta
+      : payload.points.reduce((sum, p) => sum + (Number(p.delta) || 0), 0);
+    return { points: payload.points, windowNetDelta: netDelta };
+  }
+  return { points: [], windowNetDelta: 0 };
+}
+
+// Per-market CVD series (chart points + cumulative buy/sell volume + windowNetDelta).
 function useMarketCvdSeries({
   tf, completedHourStart, completedHourCvd, stream,
   fallbackSessionCvd, fallbackBuyVolume, fallbackSellVolume,
@@ -190,26 +205,43 @@ function useMarketCvdSeries({
   const buyVolume = stream?.buyVolume ?? fallbackBuyVolume;
   const sellVolume = stream?.sellVolume ?? fallbackSellVolume;
 
-  const delta24 = useSessionDelta(sessionCvd, hist24);
-  const delta7 = useSessionDelta(sessionCvd, hist7);
-  const delta30 = useSessionDelta(sessionCvd, hist30);
+  const rawHistory = tf === '24H' ? hist24 : tf === '7D' ? hist7 : hist30;
+  const normHistory = useMemo(() => normalizeHistoryPayload(rawHistory), [rawHistory]);
+  const historyPoints = normHistory.points;
+
+  const delta24 = useSessionDelta(sessionCvd, hist24?.points || hist24);
+  const delta7 = useSessionDelta(sessionCvd, hist7?.points || hist7);
+  const delta30 = useSessionDelta(sessionCvd, hist30?.points || hist30);
 
   const activeCompleted = completedHourCvd?.startTime === completedHourStart
     ? completedHourCvd
     : null;
   const list1h = useMemo(() => activeCompleted?.points ?? [], [activeCompleted]);
 
-  const history = tf === '24H' ? hist24 : tf === '7D' ? hist7 : hist30;
   const delta = tf === '24H' ? delta24 : tf === '7D' ? delta7 : tf === '30D' ? delta30 : 0;
 
   const chartList = useMemo(() => {
     if (tf === '1H') return list1h;
-    if (!history || history.length === 0) return [];
-    const list = [...history];
+    if (!historyPoints || historyPoints.length === 0) return [];
+    const list = [...historyPoints];
     const last = list[list.length - 1];
-    list[list.length - 1] = { ...last, cvd: last.cvd + delta, price: livePrice || last.price };
+    const lastCum = last.cumulativeFromAnchor ?? last.cvd ?? 0;
+    list[list.length - 1] = {
+      ...last,
+      cumulativeFromAnchor: lastCum + delta,
+      cvd: lastCum + delta,
+      delta: (last.delta || 0) + delta,
+      price: livePrice || last.price
+    };
     return list;
-  }, [tf, list1h, history, delta, livePrice]);
+  }, [tf, list1h, historyPoints, delta, livePrice]);
+
+  const netDelta = useMemo(() => {
+    if (tf === '1H') {
+      return activeCompleted ? (activeCompleted.windowNetDelta ?? activeCompleted.cvd ?? 0) : 0;
+    }
+    return normHistory.windowNetDelta + delta;
+  }, [tf, activeCompleted, normHistory.windowNetDelta, delta]);
 
   const displayVol = useMemo(() => {
     if (tf === '1H') {
@@ -217,21 +249,21 @@ function useMarketCvdSeries({
         ? { buy: activeCompleted.buyVol, sell: activeCompleted.sellVol }
         : { buy: 0, sell: 0 };
     }
-    if (!history || history.length === 0) {
+    if (!historyPoints || historyPoints.length === 0) {
       return { buy: buyVolume || 0, sell: sellVolume || 0 };
     }
     let buySum = 0;
     let sellSum = 0;
-    for (let i = 0; i < history.length; i++) {
-      buySum += (history[i].buyVol || 0);
-      sellSum += (history[i].sellVol || 0);
+    for (let i = 0; i < historyPoints.length; i++) {
+      buySum += (historyPoints[i].buyVol || 0);
+      sellSum += (historyPoints[i].sellVol || 0);
     }
     buySum += buyVolume || 0;
     sellSum += sellVolume || 0;
     return { buy: buySum, sell: sellSum };
-  }, [tf, activeCompleted, buyVolume, sellVolume, history]);
+  }, [tf, activeCompleted, buyVolume, sellVolume, historyPoints]);
 
-  return { chartList, displayVol };
+  return { chartList, displayVol, netDelta };
 }
 
 const clusterVolNodes = (nodes, gap) => {
@@ -423,8 +455,8 @@ function CVDPanel({
   const futuresList = futuresSeries.chartList;
   const spotList = spotSeries.chartList;
 
-  const latestCvdF = futuresList.length > 0 ? futuresList[futuresList.length - 1].cvd : null;
-  const latestCvdS = spotList.length > 0 ? spotList[spotList.length - 1].cvd : null;
+  const latestCvdF = futuresSeries.netDelta;
+  const latestCvdS = spotSeries.netDelta;
 
   // ── Crosshair sync từ AdvancedChart ──
   const [syncIdx, setSyncIdx] = useState(null);
@@ -474,8 +506,10 @@ function CVDPanel({
             label: (ctx) => {
               const source = ctx.dataset.label === 'FUTURES' ? futuresList : spotList;
               const item = source[ctx.dataIndex];
-              const btcStr = item?.price ? ` (BTC: $${Number(item.price).toLocaleString()})` : '';
-              return ` ${ctx.dataset.label}: ${fmtCvdUsd(ctx.parsed.y)}${btcStr}`;
+              const btcStr = item?.price ? ` · BTC: $${Number(item.price).toLocaleString()}` : '';
+              const deltaStr = item?.delta != null ? ` (Delta: ${fmtCvdUsd(item.delta)})` : '';
+              const statusStr = item?.isClosed === false ? ' [Live]' : ' [Closed]';
+              return ` ${ctx.dataset.label}: ${fmtCvdUsd(ctx.parsed.y)}${deltaStr}${statusStr}${btcStr}`;
             }
           }
         }
@@ -567,7 +601,7 @@ function CVDPanel({
     const isLight = theme === 'light';
     const mkDataset = (label, list, borderColor, backgroundColor, yAxisID) => ({
       label,
-      data: list.map(item => item.cvd),
+      data: list.map(item => item.cumulativeFromAnchor ?? item.cvd),
       borderColor,
       backgroundColor,
       yAxisID,
@@ -637,6 +671,19 @@ function CVDPanel({
               title="Binance Spot aggTrade — Thị trường Cơ sở (Spot Direct)"
             >
               BIN-S PROXY
+            </span>
+            <span
+              className="hft-badge badge-api font-mono"
+              style={{
+                cursor: 'help',
+                backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                color: '#38bdf8',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                fontWeight: 600
+              }}
+              title="Neo mốc cố định UTC Anchor (2020-01-01) · Snapshot ngày đóng bất biến v1 · Net Delta độc lập"
+            >
+              UTC ANCHOR 2020
             </span>
             <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
               {cvdStatus === 'connected' ? '⚡ LIVE' : 'WS OFF'}

@@ -5,6 +5,8 @@
  * Chuẩn hóa Data Contract đồng nhất với worker GitHub Actions.
  */
 
+import { extractCvdNetDelta } from './cvdService.js';
+
 // ─── HELPER FORMATTERS ────────────────────────────────────────────────────────
 const toFiniteNumber = (value) => {
   if (value == null) return null;
@@ -161,8 +163,8 @@ export function validateExportReadiness(data, biasData, etfHoldings, etfHistory,
     warnings.push('Thiếu chỉ số thị trường quốc tế DXY hoặc VIX.');
   }
 
-  const hasSpotCvd = Array.isArray(data?.cvdHistory24hSpot) && data.cvdHistory24hSpot.length > 0 && !data?.cvdHistory24hSpot?.isFallback;
-  const hasFutCvd = Array.isArray(data?.cvdHistory24h) && data.cvdHistory24h.length > 0 && !data?.cvdHistory24h?.isFallback;
+  const hasSpotCvd = !data?.cvdHistory24hSpot?.isFallback && extractCvdNetDelta(data?.cvdHistory24hSpot) != null;
+  const hasFutCvd = !data?.cvdHistory24h?.isFallback && extractCvdNetDelta(data?.cvdHistory24h) != null;
   if (!hasSpotCvd || !hasFutCvd) {
     warnings.push('Thiếu dữ liệu dòng lệnh Spot CVD hoặc Futures CVD 24h.');
   }
@@ -242,12 +244,12 @@ export function buildGoogleSheetPayload(data, biasData, etfHoldings, etfHistory,
   const globalLs = toFiniteNumber(data?.longShortRatio ?? latestLs);
   const topLs = toFiniteNumber(data?.topTraderLsRatio);
 
-  const spotCvd24 = toFiniteNumber(data?.cvdHistory24hSpot?.[data.cvdHistory24hSpot.length - 1]?.cvd);
-  const futCvd24 = toFiniteNumber(data?.cvdHistory24h?.[data.cvdHistory24h.length - 1]?.cvd);
-  const spotCvd7d = toFiniteNumber(data?.cvdHistory7dSpot?.[data.cvdHistory7dSpot.length - 1]?.cvd);
-  const futCvd7d = toFiniteNumber(data?.cvdHistory7d?.[data.cvdHistory7d.length - 1]?.cvd);
-  const spotCvd30d = toFiniteNumber(data?.cvdHistory30dSpot?.[data.cvdHistory30dSpot.length - 1]?.cvd);
-  const futCvd30d = toFiniteNumber(data?.cvdHistory30d?.[data.cvdHistory30d.length - 1]?.cvd);
+  const spotCvd24 = extractCvdNetDelta(data?.cvdHistory24hSpot);
+  const futCvd24 = extractCvdNetDelta(data?.cvdHistory24h);
+  const spotCvd7d = extractCvdNetDelta(data?.cvdHistory7dSpot);
+  const futCvd7d = extractCvdNetDelta(data?.cvdHistory7d);
+  const spotCvd30d = extractCvdNetDelta(data?.cvdHistory30dSpot);
+  const futCvd30d = extractCvdNetDelta(data?.cvdHistory30d);
 
   let cvdDivergenceStatus = 'Chưa có phân kỳ rõ ràng';
   let cvdDivergenceDesc = 'Cả Spot và Futures cùng chiều biến động';

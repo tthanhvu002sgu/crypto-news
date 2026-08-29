@@ -31,6 +31,8 @@
  *    - Retail Long/Short Ratio (1%)
  */
 
+import { extractCvdNetDelta } from './cvdService.js';
+
 const MAX_SCORING_WEIGHT = 0.95;
 
 export function toFiniteNumber(value) {
@@ -808,9 +810,9 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
   }
 
   // 4B. Spot CVD (24h, 7d, 30d) (3%)
-  const spot24 = !isItemFallback(data.cvdHistory24hSpot) ? toFiniteNumber(data.cvdHistory24hSpot?.[data.cvdHistory24hSpot.length - 1]?.cvd) : null;
-  const spot7d = toFiniteNumber(data.cvdHistory7dSpot?.[data.cvdHistory7dSpot.length - 1]?.cvd);
-  const spot30d = toFiniteNumber(data.cvdHistory30dSpot?.[data.cvdHistory30dSpot.length - 1]?.cvd);
+  const spot24 = !isItemFallback(data.cvdHistory24hSpot) ? extractCvdNetDelta(data.cvdHistory24hSpot) : null;
+  const spot7d = extractCvdNetDelta(data.cvdHistory7dSpot);
+  const spot30d = extractCvdNetDelta(data.cvdHistory30dSpot);
   let spotCvdSignal = 0;
   
   if (spot24 != null && btcVolume != null && btcVolume > 0) {
@@ -839,9 +841,9 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
   }
 
   // 4C. Futures CVD (24h, 7d, 30d) (2%)
-  const fut24 = !isItemFallback(data.cvdHistory24h) ? toFiniteNumber(data.cvdHistory24h?.[data.cvdHistory24h.length - 1]?.cvd) : null;
-  const fut7d = toFiniteNumber(data.cvdHistory7d?.[data.cvdHistory7d.length - 1]?.cvd);
-  const fut30d = toFiniteNumber(data.cvdHistory30d?.[data.cvdHistory30d.length - 1]?.cvd);
+  const fut24 = !isItemFallback(data.cvdHistory24h) ? extractCvdNetDelta(data.cvdHistory24h) : null;
+  const fut7d = extractCvdNetDelta(data.cvdHistory7d);
+  const fut30d = extractCvdNetDelta(data.cvdHistory30d);
   
   if (fut24 != null && btcVolume != null && btcVolume > 0) {
     let futCvdStatus = 'No data';

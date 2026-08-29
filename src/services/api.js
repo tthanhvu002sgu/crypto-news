@@ -1,5 +1,13 @@
 import axios from 'axios';
 import staticFlowHistory from '../data/etfFlowHistoryStatic.json' with { type: 'json' };
+import {
+  CVD_ANCHOR_TIMESTAMP,
+  buildCvdSeries,
+  syncDailySnapshots,
+  getDailySnapshots,
+  getBinanceKlinesUrl,
+  extractCvdNetDelta
+} from './cvdService.js';
 
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -143,85 +151,74 @@ export const getDailyCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
   }
 };
 
-/** Get CVD historical data (7d/30d) based on klines */
-export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limit = 42, market = 'futures') => {
+/**
+ * Get stable CVD series with fixed UTC anchor (2020-01-01) and separate windowNetDelta.
+ * Replaces rolling rebase with immutable historical baseline.
+ */
+export const getStableCvdSeries = async (symbol = 'BTCUSDT', timeframe = '24H', market = 'futures') => {
   try {
-    const baseUrl = market === 'spot'
-      ? 'https://api.binance.com/api/v3/klines'
-      : 'https://fapi.binance.com/fapi/v1/klines';
+    const marketKey = market === 'spot' ? 'spot' : 'futures';
+    const baseUrl = getBinanceKlinesUrl(marketKey);
+
+    let interval = '1h';
+    let limit = 25;
+    if (timeframe === '7D') {
+      interval = '4h';
+      limit = 43;
+    } else if (timeframe === '30D') {
+      interval = '1d';
+      limit = 31;
+    }
 
     const res = await axios.get(baseUrl, {
       params: { symbol, interval, limit },
+      timeout: 10000
     });
-    
-    let cumulativeCvd = 0;
-    return res.data.map(k => {
-      // k[0]: open time, k[4]: close price, k[7]: quote asset volume, k[10]: taker buy quote asset volume
-      const openTime = k[0];
-      const closePrice = parseFloat(k[4]);
-      const quoteVol = parseFloat(k[7]);
-      const takerBuyVol = parseFloat(k[10]);
-      const takerSellVol = quoteVol - takerBuyVol;
-      const delta = takerBuyVol - takerSellVol;
-      cumulativeCvd += delta;
-      
-      return {
-        time: openTime,
-        cvd: Math.round(cumulativeCvd),
-        price: closePrice,
-        delta: Math.round(delta),
-        buyVol: Math.round(takerBuyVol),
-        sellVol: Math.round(takerSellVol),
-      };
+
+    const rawKlines = Array.isArray(res.data) ? res.data : [];
+
+    // Ensure snapshot store has recent closed snapshots
+    let dailySnapshots = getDailySnapshots(marketKey);
+    if (dailySnapshots.length === 0) {
+      dailySnapshots = await syncDailySnapshots(symbol, marketKey, { axiosInstance: axios });
+    }
+
+    const series = buildCvdSeries({
+      market: marketKey,
+      interval,
+      timeframe,
+      rawKlines,
+      dailySnapshots,
+      now: Date.now()
     });
+
+    return series;
   } catch (e) {
-    console.error(`[API] Historical CVD (${interval}, ${limit}, ${market}):`, e.message);
-    return [];
+    console.error(`[API] Stable CVD Series (${timeframe}, ${market}):`, e.message);
+    return {
+      market,
+      interval: timeframe === '30D' ? '1d' : timeframe === '7D' ? '4h' : '1h',
+      timeframe,
+      anchorTime: CVD_ANCHOR_TIMESTAMP,
+      points: [],
+      windowNetDelta: 0,
+      asOf: Date.now(),
+      hasProvisionalPoint: false
+    };
   }
 };
 
+/** Get CVD historical data (24h/7d/30d) based on stable anchor engine */
+export const getHistoricalCVD = async (symbol = 'BTCUSDT', interval = '4h', limit = 42, market = 'futures') => {
+  const timeframe = interval === '1d' ? '30D' : interval === '4h' ? '7D' : '24H';
+  return getStableCvdSeries(symbol, timeframe, market);
+};
+
 /**
- * Get intraday CVD chart data — same baseline as 1H LIVE mode.
- * Fetches 1H klines from LOCAL MIDNIGHT → now, accumulates CVD from 0.
- * Each point = one hourly candle, so the 24H chart matches the live WebSocket view.
+ * Get intraday CVD chart data — uses stable anchor series for 24H.
  */
 export const getIntradayCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
-  try {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0); // Local midnight (same as getDailyCVD)
-    const startTime = startOfDay.getTime();
-
-    const baseUrl = market === 'spot'
-      ? 'https://api.binance.com/api/v3/klines'
-      : 'https://fapi.binance.com/fapi/v1/klines';
-
-    const res = await axios.get(baseUrl, {
-      params: { symbol, interval: '1h', startTime, limit: 25 }, // max 25 = covers full day
-    });
-
-    let cumulativeCvd = 0;
-    return res.data.map(k => {
-      const openTime = k[0];
-      const closePrice = parseFloat(k[4]);
-      const quoteVol = parseFloat(k[7]);
-      const takerBuyVol = parseFloat(k[10]);
-      const takerSellVol = quoteVol - takerBuyVol;
-      const delta = takerBuyVol - takerSellVol;
-      cumulativeCvd += delta;
-
-      return {
-        time: openTime,
-        cvd: Math.round(cumulativeCvd),
-        price: closePrice,
-        delta: Math.round(delta),
-        buyVol: Math.round(takerBuyVol),
-        sellVol: Math.round(takerSellVol),
-      };
-    });
-  } catch (e) {
-    console.error(`[API] Intraday CVD (${market}):`, e.message);
-    return [];
-  }
+  return getStableCvdSeries(symbol, '24H', market);
 };
 
 
@@ -1423,6 +1420,7 @@ export const getCompletedHourCVD = async (symbol = 'BTCUSDT', market = 'futures'
       endTime,
       points,
       cvd: Math.round(cvd),
+      windowNetDelta: Math.round(cvd),
       buyVol: Math.round(buyVol),
       sellVol: Math.round(sellVol),
       isComplete: res.data.length === 60,

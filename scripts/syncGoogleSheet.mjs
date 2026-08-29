@@ -126,12 +126,12 @@ async function fetchCvdData() {
     ]);
 
     return {
-      cvdHistory24hSpot: spot24.status === 'fulfilled' && Array.isArray(spot24.value) ? spot24.value : [],
-      cvdHistory24h: fut24.status === 'fulfilled' && Array.isArray(fut24.value) ? fut24.value : [],
-      cvdHistory7dSpot: spot7d.status === 'fulfilled' && Array.isArray(spot7d.value) ? spot7d.value : [],
-      cvdHistory7d: fut7d.status === 'fulfilled' && Array.isArray(fut7d.value) ? fut7d.value : [],
-      cvdHistory30dSpot: spot30d.status === 'fulfilled' && Array.isArray(spot30d.value) ? spot30d.value : [],
-      cvdHistory30d: fut30d.status === 'fulfilled' && Array.isArray(fut30d.value) ? fut30d.value : []
+      cvdHistory24hSpot: spot24.status === 'fulfilled' && spot24.value ? spot24.value : null,
+      cvdHistory24h: fut24.status === 'fulfilled' && fut24.value ? fut24.value : null,
+      cvdHistory7dSpot: spot7d.status === 'fulfilled' && spot7d.value ? spot7d.value : null,
+      cvdHistory7d: fut7d.status === 'fulfilled' && fut7d.value ? fut7d.value : null,
+      cvdHistory30dSpot: spot30d.status === 'fulfilled' && spot30d.value ? spot30d.value : null,
+      cvdHistory30d: fut30d.status === 'fulfilled' && fut30d.value ? fut30d.value : null
     };
   } catch (err) {
     console.warn('[Sync] Lỗi fetch CVD:', err.message);

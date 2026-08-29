@@ -104,10 +104,9 @@ export const METRIC_METADATA = {
     formula: 'Z-Score = (SSR - SMA200) / Standard_Deviation'
   },
   cvd: {
-    api: 'Binance WebSocket (btcusdt@aggTrade)',
-    def: 'Chênh lệch tích lũy giữa volume lệnh Mua chủ động (Taker Buy) và lệnh Bán chủ động (Taker Sell) từ thời điểm mở trang.',
-    formula: 'CVD = Σ(Taker Buy Vol) - Σ(Taker Sell Vol)',
-    sessionOnly: true
+    api: 'Binance REST Kline + WebSocket (Futures & Spot)',
+    def: 'Cumulative Volume Delta (CVD) với mốc neo cố định UTC Anchor (2020-01-01) cho biểu đồ lịch sử bất biến, và Net Delta độc lập cho từng khung thời gian (24H/7D/30D).',
+    formula: 'CVD = Σ(Taker Buy Vol) - Σ(Taker Sell Vol) từ mốc UTC Anchor 2020',
   },
   whaleWalls: {
     api: 'Binance Futures API (REST - 1000 levels)',

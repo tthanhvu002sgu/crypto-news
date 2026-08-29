@@ -459,22 +459,24 @@ function AppContent() {
     // Preload CVD history from localStorage cache for immediate display
     const readCache = (key) => {
       try {
-        const raw = localStorage.getItem(`cache_${key}`);
+        const raw = localStorage.getItem(`cache_${key}`) || localStorage.getItem(key);
         if (raw) {
-          const { val } = JSON.parse(raw);
-          return Array.isArray(val) && val.length > 0 ? val : [];
+          const parsed = JSON.parse(raw);
+          const val = parsed?.val !== undefined ? parsed.val : parsed;
+          if (Array.isArray(val) && val.length > 0) return val;
+          if (val && Array.isArray(val.points) && val.points.length > 0) return val;
         }
       } catch {}
-      return [];
+      return null;
     };
     return {
       ...INIT,
-      cvdHistory24h: readCache('cvdHistory24h_v3'),
-      cvdHistory7d:  readCache('cvdHistory7d_v2'),
-      cvdHistory30d: readCache('cvdHistory30d_v2'),
-      cvdHistory24hSpot: readCache('cvdHistory24h_spot_v1'),
-      cvdHistory7dSpot:  readCache('cvdHistory7d_spot_v1'),
-      cvdHistory30dSpot: readCache('cvdHistory30d_spot_v1'),
+      cvdHistory24h: readCache('hft_cvd_series_24h_futures_v4'),
+      cvdHistory7d:  readCache('hft_cvd_series_7d_futures_v4'),
+      cvdHistory30d: readCache('hft_cvd_series_30d_futures_v4'),
+      cvdHistory24hSpot: readCache('hft_cvd_series_24h_spot_v4'),
+      cvdHistory7dSpot:  readCache('hft_cvd_series_7d_spot_v4'),
+      cvdHistory30dSpot: readCache('hft_cvd_series_30d_spot_v4'),
     };
   });
   const [activeTab, setActiveTab] = useState(() => {
@@ -779,10 +781,10 @@ function AppContent() {
         push('sp500', fetchCached('sp500Quote', () => getFREDStockQuote('SP500', apiKeys.fred), CACHE_TTL.sp500, addLog, 'S&P 500 Index (Yahoo Finance)', force));
         push('vix', fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS', apiKeys.fred), CACHE_TTL.vix, addLog, 'VIX Volatility Index (Yahoo Finance)', force));
         push('qqq', fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100', apiKeys.fred), CACHE_TTL.qqq, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force));
-        push('cvd24h', fetchCached('cvdHistory24h_v3', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'futures'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Futures', force));
-        push('cvd24hSpot', fetchCached('cvdHistory24h_spot_v1', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'spot'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Spot', force));
-        push('cvd7d', fetchCached('cvdHistory7d_v2', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'futures'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Futures', force));
-        push('cvd7dSpot', fetchCached('cvdHistory7d_spot_v1', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'spot'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Spot', force));
+        push('cvd24h', fetchCached('hft_cvd_series_24h_futures_v4', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'futures'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Futures', force));
+        push('cvd24hSpot', fetchCached('hft_cvd_series_24h_spot_v4', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'spot'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Spot', force));
+        push('cvd7d', fetchCached('hft_cvd_series_7d_futures_v4', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'futures'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Futures', force));
+        push('cvd7dSpot', fetchCached('hft_cvd_series_7d_spot_v4', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'spot'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Spot', force));
       }
 
       if (wantCold) {
@@ -795,8 +797,8 @@ function AppContent() {
         push('etfHistory', fetchCached(`etfFlowHistory_${etfCacheKey}`, () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force));
         push('cot', fetchCached(`cmeCot_${cmeCotCacheKey}`, () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force));
         push('fng', fetchCached('fearAndGreed', () => getFearAndGreed(), CACHE_TTL.fng, addLog, 'Chỉ số Fear & Greed (alternative.me)', force));
-        push('cvd30d', fetchCached('cvdHistory30d_v2', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Futures', force));
-        push('cvd30dSpot', fetchCached('cvdHistory30d_spot_v1', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Spot', force));
+        push('cvd30d', fetchCached('hft_cvd_series_30d_futures_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Futures', force));
+        push('cvd30dSpot', fetchCached('hft_cvd_series_30d_spot_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Spot', force));
         push('dailyKlines', fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), CACHE_TTL.dailyKlines, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force));
       }
 
@@ -891,12 +893,12 @@ function AppContent() {
         netLiquidity: netLiquidity ?? prev.netLiquidity,
         cotData: cotData ?? prev.cotData,
         fngData: fngData ?? prev.fngData,
-        cvdHistory24h: cvdHistory24h?.length > 0 ? cvdHistory24h : prev.cvdHistory24h,
-        cvdHistory7d: cvdHistory7d?.length > 0 ? cvdHistory7d : prev.cvdHistory7d,
-        cvdHistory30d: cvdHistory30d?.length > 0 ? cvdHistory30d : prev.cvdHistory30d,
-        cvdHistory24hSpot: cvdHistory24hSpot?.length > 0 ? cvdHistory24hSpot : prev.cvdHistory24hSpot,
-        cvdHistory7dSpot: cvdHistory7dSpot?.length > 0 ? cvdHistory7dSpot : prev.cvdHistory7dSpot,
-        cvdHistory30dSpot: cvdHistory30dSpot?.length > 0 ? cvdHistory30dSpot : prev.cvdHistory30dSpot,
+        cvdHistory24h: (cvdHistory24h?.points?.length > 0 || cvdHistory24h?.length > 0) ? cvdHistory24h : prev.cvdHistory24h,
+        cvdHistory7d: (cvdHistory7d?.points?.length > 0 || cvdHistory7d?.length > 0) ? cvdHistory7d : prev.cvdHistory7d,
+        cvdHistory30d: (cvdHistory30d?.points?.length > 0 || cvdHistory30d?.length > 0) ? cvdHistory30d : prev.cvdHistory30d,
+        cvdHistory24hSpot: (cvdHistory24hSpot?.points?.length > 0 || cvdHistory24hSpot?.length > 0) ? cvdHistory24hSpot : prev.cvdHistory24hSpot,
+        cvdHistory7dSpot: (cvdHistory7dSpot?.points?.length > 0 || cvdHistory7dSpot?.length > 0) ? cvdHistory7dSpot : prev.cvdHistory7dSpot,
+        cvdHistory30dSpot: (cvdHistory30dSpot?.points?.length > 0 || cvdHistory30dSpot?.length > 0) ? cvdHistory30dSpot : prev.cvdHistory30dSpot,
         btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
       }));
 
@@ -1029,8 +1031,9 @@ function AppContent() {
     const priceMap = {};
     
     // 1. Populate from community data (30d)
-    if (data.cvdHistory30d && data.cvdHistory30d.length > 0) {
-      data.cvdHistory30d.forEach(h => {
+    const points30d = data.cvdHistory30d?.points || (Array.isArray(data.cvdHistory30d) ? data.cvdHistory30d : null);
+    if (points30d && points30d.length > 0) {
+      points30d.forEach(h => {
         const d = new Date(h.time);
         const day = String(d.getDate()).padStart(2, '0');
         const month = String(d.getMonth() + 1).padStart(2, '0');
