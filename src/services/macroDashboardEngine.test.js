@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   calculateMacroDashboard,
   macroDashboardInternals,
+  CHART_RANGES,
+  chartBarsForRange,
 } from './macroDashboardEngine.js';
 
 const candles = (length, priceAt, overrides = {}) => Array.from({ length }, (_, index) => {
@@ -74,3 +76,33 @@ test('result exposes W0, W-1 and the developing-candle state', () => {
   assert.equal(result.previous.price, 79800);
   assert.equal(result.previous.isClosed, true);
 });
+
+test('CHART_RANGES contains 6M, 1Y, 3Y, 5Y, ALL and calculates correct bar count', () => {
+  assert.deepEqual(CHART_RANGES, ['6M', '1Y', '3Y', '5Y', 'ALL']);
+
+  // ALL returns Infinity
+  assert.equal(chartBarsForRange('ALL', 'W'), Infinity);
+  assert.equal(chartBarsForRange('ALL', 'D'), Infinity);
+  assert.equal(chartBarsForRange('ALL', 'M'), Infinity);
+
+  // 6M (months)
+  assert.equal(chartBarsForRange('6M', 'W'), 26);
+  assert.equal(chartBarsForRange('6M', 'D'), 183);
+  assert.equal(chartBarsForRange('6M', 'M'), 6);
+
+  // 1Y
+  assert.equal(chartBarsForRange('1Y', 'W'), 52);
+  assert.equal(chartBarsForRange('1Y', 'D'), 365);
+  assert.equal(chartBarsForRange('1Y', 'M'), 12);
+
+  // 3Y
+  assert.equal(chartBarsForRange('3Y', 'W'), 156);
+  assert.equal(chartBarsForRange('3Y', 'D'), 1095);
+  assert.equal(chartBarsForRange('3Y', 'M'), 36);
+
+  // 5Y
+  assert.equal(chartBarsForRange('5Y', 'W'), 260);
+  assert.equal(chartBarsForRange('5Y', 'D'), 1825);
+  assert.equal(chartBarsForRange('5Y', 'M'), 60);
+});
+

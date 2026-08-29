@@ -39,6 +39,25 @@ export const MACRO_DASHBOARD_DEFAULTS = Object.freeze({
   minTick: 0.01,
 });
 
+export const CHART_RANGES = Object.freeze(['6M', '1Y', '3Y', '5Y', 'ALL']);
+
+export const chartBarsForRange = (range, timeframe = 'W') => {
+  const normalizedRange = String(range || 'ALL').toUpperCase();
+  if (normalizedRange === 'ALL') return Infinity;
+
+  if (normalizedRange.endsWith('M')) {
+    const months = Number.parseInt(normalizedRange, 10);
+    if (!Number.isFinite(months) || months <= 0) return Infinity;
+    const barsPerMonth = timeframe === 'D' ? 30.5 : timeframe === 'M' ? 1 : 52 / 12;
+    return Math.round(months * barsPerMonth);
+  }
+
+  const years = Number.parseInt(normalizedRange, 10);
+  if (!Number.isFinite(years) || years <= 0) return Infinity;
+  const barsPerYear = timeframe === 'D' ? 365 : timeframe === 'M' ? 12 : 52;
+  return years * barsPerYear;
+};
+
 const finite = (value, fallback = null) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;

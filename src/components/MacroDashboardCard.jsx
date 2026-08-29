@@ -2,19 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import { Activity, ChevronDown, ChevronUp, RefreshCw, Settings2 } from 'lucide-react';
 import { getBTCMacroKlines } from '../services/api';
-import { calculateMacroDashboard, MACRO_DASHBOARD_DEFAULTS } from '../services/macroDashboardEngine';
+import {
+  calculateMacroDashboard,
+  MACRO_DASHBOARD_DEFAULTS,
+  CHART_RANGES,
+  chartBarsForRange,
+} from '../services/macroDashboardEngine';
 import ModuleMenu from './ModuleMenu';
 
 const SETTINGS_KEY = 'macro-dashboard-v2-settings';
 const HISTORY_LIMIT = 10000;
-const CHART_RANGES = ['3Y', '5Y', 'ALL'];
-
-const chartBarsForRange = (range, timeframe) => {
-  if (range === 'ALL') return Infinity;
-  const years = Number.parseInt(range, 10);
-  const barsPerYear = timeframe === 'D' ? 365 : timeframe === 'M' ? 12 : 52;
-  return years * barsPerYear;
-};
 
 const zoneColors = {
   GIFT: '#00e676',
