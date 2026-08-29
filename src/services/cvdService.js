@@ -16,6 +16,11 @@ export const CVD_ANCHOR_TIMESTAMP = 1577836800000; // 2020-01-01 00:00:00 UTC
 export const SNAPSHOT_STORE_VERSION = 1;
 export const SNAPSHOT_STORAGE_KEY = 'hft_cvd_daily_snapshots_v1';
 
+// A full ledger backfill is shared by the 24H/7D/30D consumers. Without this
+// single-flight guard, opening the dashboard with an empty/stale store starts
+// three identical multi-page Binance downloads for each market.
+const snapshotSyncInFlight = new Map();
+
 // ─── TIME & DATE UTILS ────────────────────────────────────────────────────────
 
 /**
@@ -405,7 +410,19 @@ export function isLedgerStale(market = 'futures', now = Date.now()) {
 export async function ensureDailySnapshots(symbol = 'BTCUSDT', market = 'futures', { axiosInstance = axios, now = Date.now(), force = false } = {}) {
   let snapshots = getDailySnapshots(market);
   if (force || isLedgerStale(market, now)) {
-    snapshots = await syncDailySnapshots(symbol, market, { axiosInstance, now });
+    const syncKey = `${market}:${symbol}`;
+    let syncPromise = snapshotSyncInFlight.get(syncKey);
+
+    if (!syncPromise) {
+      syncPromise = syncDailySnapshots(symbol, market, { axiosInstance, now }).finally(() => {
+        if (snapshotSyncInFlight.get(syncKey) === syncPromise) {
+          snapshotSyncInFlight.delete(syncKey);
+        }
+      });
+      snapshotSyncInFlight.set(syncKey, syncPromise);
+    }
+
+    snapshots = await syncPromise;
   }
   return snapshots;
 }

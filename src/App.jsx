@@ -722,32 +722,6 @@ function AppContent() {
       let tgaVal = null;
       let rrpVal = null;
 
-      if (wantCold) {
-        addLog('Đang đồng bộ chỉ số vĩ mô từ FRED...', 'system');
-        const macroResults = await Promise.allSettled([
-          fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Lãi suất Fed', force),
-          fetchCached('cpiYoYCalculatedV2', () => getFREDMetric('CPIAUCSL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'CPI Inflation YoY', force),
-          fetchCached('unrate', () => getFREDMetric('UNRATE', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Tỷ lệ thất nghiệp', force),
-          fetchCached('m2Supply', () => getFREDMetric('M2SL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'M2 Money Supply', force),
-          fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'High Yield Spread', force),
-          fetchCached('walcl', () => getFREDMetric('WALCL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Fed Assets', force),
-          fetchCached('tga', () => getFREDMetric('WDTGAL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'TGA Treasury Account', force),
-          fetchCached('rrp', () => getFREDMetric('RRPONTSYD', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Reverse Repo', force),
-        ]);
-        fedFundsRateVal = settled(macroResults[0]);
-        cpiVal = settled(macroResults[1]);
-        if (cpiVal !== null && !isPlausibleCpiYoY(cpiVal)) {
-          addLog(`⚠ CPI YoY bị từ chối do sai đơn vị hoặc ngoài phạm vi hợp lý: ${cpiVal}`, 'warning');
-          cpiVal = null;
-        }
-        unrateVal = settled(macroResults[2]);
-        m2SupplyVal = settled(macroResults[3]);
-        highYieldVal = settled(macroResults[4]);
-        walclVal = settled(macroResults[5]);
-        tgaVal = settled(macroResults[6]);
-        rrpVal = settled(macroResults[7]);
-      }
-
       if (wantHot || wantWarm || wantCold) {
         addLog('Đang đồng bộ dữ liệu thị trường / phái sinh / context...', 'system');
       }
@@ -758,6 +732,20 @@ function AppContent() {
         keys.push(key);
         tasks.push(promise);
       };
+
+      // Start FRED together with every other source. Previously the full sync
+      // waited for this whole group before even opening the market requests.
+      if (wantCold) {
+        addLog('Đang đồng bộ chỉ số vĩ mô từ FRED...', 'system');
+        push('fedFundsRate', fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Lãi suất Fed', force));
+        push('cpi', fetchCached('cpiYoYCalculatedV2', () => getFREDMetric('CPIAUCSL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'CPI Inflation YoY', force));
+        push('unrate', fetchCached('unrate', () => getFREDMetric('UNRATE', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Tỷ lệ thất nghiệp', force));
+        push('m2Supply', fetchCached('m2Supply', () => getFREDMetric('M2SL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'M2 Money Supply', force));
+        push('highYield', fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'High Yield Spread', force));
+        push('walcl', fetchCached('walcl', () => getFREDMetric('WALCL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Fed Assets', force));
+        push('tga', fetchCached('tga', () => getFREDMetric('WDTGAL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'TGA Treasury Account', force));
+        push('rrp', fetchCached('rrp', () => getFREDMetric('RRPONTSYD', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Reverse Repo', force));
+      }
 
       if (wantHot) {
         // Short TTL — WS drives live price; REST is charts + offline fallback
@@ -804,6 +792,21 @@ function AppContent() {
 
       const results = tasks.length > 0 ? await Promise.allSettled(tasks) : [];
       const byKey = Object.fromEntries(keys.map((k, i) => [k, results[i]]));
+
+      if (wantCold) {
+        fedFundsRateVal = settled(byKey.fedFundsRate);
+        cpiVal = settled(byKey.cpi);
+        if (cpiVal !== null && !isPlausibleCpiYoY(cpiVal)) {
+          addLog(`⚠ CPI YoY bị từ chối do sai đơn vị hoặc ngoài phạm vi hợp lý: ${cpiVal}`, 'warning');
+          cpiVal = null;
+        }
+        unrateVal = settled(byKey.unrate);
+        m2SupplyVal = settled(byKey.m2Supply);
+        highYieldVal = settled(byKey.highYield);
+        walclVal = settled(byKey.walcl);
+        tgaVal = settled(byKey.tga);
+        rrpVal = settled(byKey.rrp);
+      }
 
       const btc = wantHot ? settled(byKey.btc) : null;
       const ethTicker = wantHot ? settled(byKey.ethTicker) : null;

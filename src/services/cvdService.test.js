@@ -480,4 +480,37 @@ describe('CVD Service & Immutable Daily Snapshot Engine', () => {
     assert.equal(series.points.length, 3, 'Output points must have exactly 3 candles');
     assert.equal(series.windowNetDelta, 3 * 1201000, 'windowNetDelta must strictly sum the 3 display candles');
   });
+
+  it('14. concurrent timeframe consumers share one daily-ledger backfill request', async () => {
+    const dayOpen = Date.UTC(2026, 7, 28, 0, 0, 0);
+    const now = Date.UTC(2026, 7, 29, 12, 0, 0);
+    const rawDay = [
+      dayOpen, '60000', '61000', '59000', '60500', '1000',
+      dayOpen + 86400000 - 1, '60500000', 10000, '600', '36300000', '0'
+    ];
+    let requestCount = 0;
+    let releaseRequest;
+    const requestGate = new Promise(resolve => { releaseRequest = resolve; });
+    const mockAxios = {
+      get: async () => {
+        requestCount += 1;
+        await requestGate;
+        return { data: [rawDay] };
+      }
+    };
+
+    const consumers = [
+      ensureDailySnapshots('BTCUSDT', 'futures', { axiosInstance: mockAxios, now }),
+      ensureDailySnapshots('BTCUSDT', 'futures', { axiosInstance: mockAxios, now }),
+      ensureDailySnapshots('BTCUSDT', 'futures', { axiosInstance: mockAxios, now })
+    ];
+
+    assert.equal(requestCount, 1);
+    releaseRequest();
+    const results = await Promise.all(consumers);
+    assert.equal(requestCount, 1);
+    assert.equal(results[0].length, 1);
+    assert.deepEqual(results[1], results[0]);
+    assert.deepEqual(results[2], results[0]);
+  });
 });
