@@ -115,8 +115,27 @@ export function CvdChart({ cvdData }) {
         type: 'linear',
         display: true,
         position: 'right',
-        ticks: { color: '#f59e0b', font: { family: 'monospace', size: 10 } },
-        grid: { drawOnChartArea: false }
+        ticks: {
+          color: (context) => {
+            if (context.tick && context.tick.value === 0) return '#ffffff';
+            return '#f59e0b';
+          },
+          font: (context) => {
+            if (context.tick && context.tick.value === 0) return { family: 'monospace', size: 10, weight: 'bold' };
+            return { family: 'monospace', size: 10 };
+          }
+        },
+        grid: {
+          drawOnChartArea: true,
+          color: (context) => {
+            if (context.tick && context.tick.value === 0) return 'rgba(245, 158, 11, 0.45)';
+            return 'transparent';
+          },
+          lineWidth: (context) => {
+            if (context.tick && context.tick.value === 0) return 1.5;
+            return 0;
+          }
+        }
       }
     }
   };

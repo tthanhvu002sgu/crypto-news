@@ -36,6 +36,62 @@ const cvdSyncPlugin = {
   }
 };
 
+// Plugin vẽ mốc 0 (Zero Baseline) đậm nét, nổi bật trên biểu đồ CVD & ORDER FLOW
+const cvdZeroLinePlugin = {
+  id: 'cvdZeroLine',
+  beforeDatasetsDraw(chart, args, opts) {
+    const { ctx, chartArea, scales } = chart;
+    if (!scales || !chartArea) return;
+    const isLight = opts?.isLight ?? false;
+
+    // Lấy tọa độ Y của mốc 0 từ scale FUTURES (y) và SPOT (y1)
+    const yFutures = scales.y?.display ? scales.y.getPixelForValue(0) : null;
+    const ySpot = scales.y1?.display ? scales.y1.getPixelForValue(0) : null;
+
+    ctx.save();
+
+    // 1. Vẽ mốc 0 chính (FUTURES - scale y) nếu nằm trong vùng hiển thị của biểu đồ
+    if (yFutures != null && Number.isFinite(yFutures) && yFutures >= chartArea.top && yFutures <= chartArea.bottom) {
+      ctx.strokeStyle = isLight ? 'rgba(30, 41, 59, 0.65)' : 'rgba(241, 245, 249, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, yFutures);
+      ctx.lineTo(chartArea.right, yFutures);
+      ctx.stroke();
+
+      // Nhãn "0" nhỏ gọn tinh tế tại mép trái cạnh trục Y Futures
+      ctx.fillStyle = isLight ? 'rgba(30, 41, 59, 0.9)' : 'rgba(241, 245, 249, 0.85)';
+      ctx.font = '600 9px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('0', chartArea.left + 4, yFutures - 2);
+    }
+
+    // 2. Nếu SPOT (scale y1) có mốc 0 riêng biệt và lệch so với FUTURES (> 4px)
+    if (ySpot != null && Number.isFinite(ySpot) && ySpot >= chartArea.top && ySpot <= chartArea.bottom) {
+      const isCoincident = yFutures != null && Math.abs(yFutures - ySpot) <= 4;
+      if (!isCoincident) {
+        ctx.strokeStyle = isLight ? 'rgba(16, 185, 129, 0.6)' : 'rgba(52, 211, 153, 0.5)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, ySpot);
+        ctx.lineTo(chartArea.right, ySpot);
+        ctx.stroke();
+
+        ctx.fillStyle = isLight ? 'rgba(16, 185, 129, 0.9)' : 'rgba(52, 211, 153, 0.85)';
+        ctx.font = '600 9px monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('0 (S)', chartArea.right - 4, ySpot - 2);
+      }
+    }
+
+    ctx.restore();
+  }
+};
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -402,12 +458,14 @@ function CVDPanel({
   // Fixed 1H data comes from the prior completed hourly bucket.
   const chartOpts = useMemo(() => {
     const base = getChartOptsBase(theme);
+    const isLight = theme === 'light';
     return {
       ...base,
       interaction: { mode: 'index', intersect: false },
       plugins: {
         ...base.plugins,
         cvdSync: { index: syncIdx },
+        cvdZeroLine: { isLight },
         tooltip: {
           ...base.plugins.tooltip,
           mode: 'index',
@@ -427,9 +485,35 @@ function CVDPanel({
         y: {
           ...base.scales.y,
           display: futuresList.length > 0,
+          grid: {
+            ...base.scales.y.grid,
+            color: (context) => {
+              if (context.tick && context.tick.value === 0) {
+                return isLight ? 'rgba(30, 41, 59, 0.65)' : 'rgba(241, 245, 249, 0.45)';
+              }
+              return isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)';
+            },
+            lineWidth: (context) => {
+              if (context.tick && context.tick.value === 0) {
+                return 1.5;
+              }
+              return 1;
+            }
+          },
           ticks: {
             ...base.scales.y.ticks,
-            color: '#a78bfa',
+            color: (context) => {
+              if (context.tick && context.tick.value === 0) {
+                return isLight ? '#0f172a' : '#f8fafc';
+              }
+              return '#a78bfa';
+            },
+            font: (context) => {
+              if (context.tick && context.tick.value === 0) {
+                return { family: 'Be Vietnam Pro, Roboto Mono', size: 10, weight: '700' };
+              }
+              return { family: 'Be Vietnam Pro, Roboto Mono', size: 10 };
+            },
             callback: (val) => fmtCvdUsd(val)
           }
         },
@@ -440,7 +524,18 @@ function CVDPanel({
           grid: { drawOnChartArea: false },
           ticks: {
             ...base.scales.y.ticks,
-            color: '#34d399',
+            color: (context) => {
+              if (context.tick && context.tick.value === 0) {
+                return isLight ? '#0f172a' : '#f8fafc';
+              }
+              return '#34d399';
+            },
+            font: (context) => {
+              if (context.tick && context.tick.value === 0) {
+                return { family: 'Be Vietnam Pro, Roboto Mono', size: 10, weight: '700' };
+              }
+              return { family: 'Be Vietnam Pro, Roboto Mono', size: 10 };
+            },
             callback: (val) => fmtCvdUsd(val)
           }
         }
@@ -586,7 +681,7 @@ function CVDPanel({
       {/* CVD Line Chart (FUTURES vs SPOT) */}
       <div className="cvd-chart-container" style={{ height: '180px', width: '100%', marginBottom: '16px', position: 'relative' }}>
         {(futuresList.length > 1 || spotList.length > 1) ? (
-          <Line data={chartData} options={chartOpts} plugins={[cvdSyncPlugin]} />
+          <Line data={chartData} options={chartOpts} plugins={[cvdSyncPlugin, cvdZeroLinePlugin]} />
         ) : (
           <div className="hft-empty font-mono" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-slate-400)', fontSize: '0.75rem' }}>
             {cvdTf === '1H' ? 'Đang tải dữ liệu CVD của giờ đã chốt...' : 'Đang tải dữ liệu biểu đồ CVD...'}
