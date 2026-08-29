@@ -76,8 +76,8 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Thay đổi chính:** Vẽ SVG sparkline tối đa 30 snapshot provenance thực, đường neutral zero, area fill, điểm cuối, delta và mốc thời gian; thêm empty state không backfill khi chưa đủ 2 điểm; hoàn thiện responsive desktop/mobile và aria-label mô tả xu hướng.
 - **Files / areas chạm:** `src/components/MarketBiasCard.jsx`, `src/App.css`, `README.md`
 - **Ảnh hưởng README:** §1 / §3
-- **Verify:** `npm run build` pass; `npm run test:bias` pass 19/19; targeted ESLint pass; browser smoke-test desktop 1440px và mobile 390px xác nhận không overflow, đúng một chart/4 pillar và không phát sinh console error từ feature.
-- **Notes / nợ kỹ thuật:** Build vẫn cảnh báo bundle trên 500 kB và browser vẫn ghi nhận nested button ở sidebar cùng timeout API; đây là lỗi tồn tại sẵn, ngoài phạm vi feature.
+- **Verify:** `npm run build` pass; `npm run test:bias` pass 19/19; `git diff --check` pass; browser smoke-test desktop 1440px và mobile 390px xác nhận không overflow, đúng một chart/4 pillar và không phát sinh console error từ feature.
+- **Notes / nợ kỹ thuật:** Targeted ESLint bị treo trên 60 giây mà không xuất kết quả nên đã dừng; build vẫn cảnh báo bundle trên 500 kB và browser vẫn ghi nhận nested button ở sidebar cùng timeout API — đều không phát sinh từ feature này.
 
 ### [2026-08-29] Khôi Phục Dual Y-Axis CVD Theo Market `(FAST)`
 - **Mode / Type / Action / Lane:** FEATURE / BUGFIX / EXECUTE / FAST

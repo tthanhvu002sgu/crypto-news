@@ -5,17 +5,98 @@ import { getBiasSnapshots, recordBiasSnapshot } from '../services/biasSnapshotSt
 import ModuleMenu from './ModuleMenu';
 import {
   ChevronDown, ChevronUp, AlertTriangle, Activity, Gauge, Filter, X,
-  Clock, Database, Zap, HelpCircle, History
+  Clock, Database, Zap, HelpCircle, History, TrendingUp, TrendingDown
 } from 'lucide-react';
 
 const fmt = (n, decimals = 0) => n != null ? Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : '---';
 const fmtB = (n) => n != null ? `$${(n / 1e9).toFixed(1)}B` : '---';
 
+function BiasSparkline({ snapshots, color }) {
+  const validSnapshots = snapshots
+    .filter((snapshot) => Number.isFinite(Number(snapshot?.biasScore)))
+    .slice(-30);
+
+  if (validSnapshots.length < 2) {
+    return (
+      <div className="bias-sparkline-empty" role="status">
+        <span className="bias-sparkline-empty-line" />
+        <span>Đang tích lũy lịch sử realtime · {validSnapshots.length}/2 điểm</span>
+      </div>
+    );
+  }
+
+  const width = 260;
+  const height = 66;
+  const xPadding = 4;
+  const yPadding = 7;
+  const scores = validSnapshots.map((snapshot) => Math.max(-100, Math.min(100, Number(snapshot.biasScore))));
+  const minScore = Math.min(...scores, 0);
+  const maxScore = Math.max(...scores, 0);
+  const scoreRange = Math.max(20, maxScore - minScore);
+  const chartMin = Math.max(-100, minScore - scoreRange * 0.18);
+  const chartMax = Math.min(100, maxScore + scoreRange * 0.18);
+  const chartRange = Math.max(1, chartMax - chartMin);
+  const points = scores.map((score, index) => {
+    const x = xPadding + (index / (scores.length - 1)) * (width - xPadding * 2);
+    const y = yPadding + ((chartMax - score) / chartRange) * (height - yPadding * 2);
+    return { x, y, score };
+  });
+  const polyline = points.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const area = `${points[0].x.toFixed(1)},${height - yPadding} ${polyline} ${points[points.length - 1].x.toFixed(1)},${height - yPadding}`;
+  const zeroY = yPadding + ((chartMax - 0) / chartRange) * (height - yPadding * 2);
+  const firstScore = scores[0];
+  const lastScore = scores[scores.length - 1];
+  const delta = lastScore - firstScore;
+  const gradientId = `bias-sparkline-fill-${delta >= 0 ? 'up' : 'down'}`;
+  const firstSnapshot = validSnapshots[0];
+  const lastSnapshot = validSnapshots[validSnapshots.length - 1];
+  const directionLabel = delta > 0 ? 'Tăng' : delta < 0 ? 'Giảm' : 'Không đổi';
+
+  return (
+    <div className="bias-sparkline-block">
+      <div className="bias-sparkline-meta">
+        <span className="bias-sparkline-label">XU HƯỚNG SNAPSHOT GẦN NHẤT</span>
+        <span className={`bias-sparkline-delta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : 'is-flat'}`}>
+          {delta > 0 ? <TrendingUp size={12} /> : delta < 0 ? <TrendingDown size={12} /> : null}
+          {delta >= 0 ? '+' : ''}{delta.toFixed(0)} điểm
+        </span>
+      </div>
+
+      <svg
+        className="bias-sparkline-chart"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`${directionLabel} ${Math.abs(delta).toFixed(0)} điểm qua ${validSnapshots.length} snapshot realtime`}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.24" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {zeroY >= yPadding && zeroY <= height - yPadding && (
+          <line className="bias-sparkline-zero" x1="0" y1={zeroY} x2={width} y2={zeroY} />
+        )}
+        <polygon points={area} fill={`url(#${gradientId})`} />
+        <polyline className="bias-sparkline-path" points={polyline} style={{ stroke: color }} />
+        <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="3.2" fill={color} />
+      </svg>
+
+      <div className="bias-sparkline-axis">
+        <span>{firstSnapshot.dateStr} {firstSnapshot.timeStr}</span>
+        <span>{validSnapshots.length} điểm thực</span>
+        <span>{lastSnapshot.dateStr} {lastSnapshot.timeStr}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function MarketBiasCard({ data, etfHistory, btcDisplay, moduleId = 'dash_bias' }) {
   const [expanded, setExpanded] = useState(false);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [activePillarFilter, setActivePillarFilter] = useState(null); // null | 'microstructure' | 'onChain' | 'institutional' | 'newsRisk'
-  const [snapshots, setSnapshots] = useState(() => getBiasSnapshots(15));
+  const [snapshots, setSnapshots] = useState(() => getBiasSnapshots(30));
 
   const livePrice = btcDisplay?.price ?? data?.btc?.price;
   const liveChange = btcDisplay?.change ?? data?.btc?.change ?? 0;
@@ -36,7 +117,7 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, moduleId 
         regimeTrend: bias.regime?.trend,
       });
       if (snap) {
-        setSnapshots(getBiasSnapshots(15));
+        setSnapshots(getBiasSnapshots(30));
       }
     }
   }, [livePrice, liveChange, bias?.score, bias?.confidence, bias?.confirmation?.state, bias?.freshness?.oldestDataStr, bias?.regime?.trend]);
@@ -239,6 +320,8 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, moduleId 
             </div>
             <span className="bias-score-scale-denom text-slate-400">/ 100</span>
           </div>
+
+          <BiasSparkline snapshots={snapshots} color={bias.color} />
 
           <div className="bias-benchmark-meta-footer">
             <span className="meta-item">
