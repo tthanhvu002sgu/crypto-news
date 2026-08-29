@@ -15,6 +15,7 @@ import {
 } from '../services/moveTracker';
 import { describeMoveEvent } from '../services/moveTrackerCore';
 import { subscribeCrosshair } from '../services/crosshairSync';
+import { withWindowCumulative } from '../services/cvdService';
 
 // Plugin vẽ đường dọc highlight trên chart CVD theo crosshair của AdvancedChart
 const cvdSyncPlugin = {
@@ -183,14 +184,16 @@ function useSessionDelta(sessionCvd, list) {
 function normalizeHistoryPayload(payload) {
   if (!payload) return { points: [], windowNetDelta: 0 };
   if (Array.isArray(payload)) {
-    const sumDelta = payload.reduce((sum, p) => sum + (Number(p.delta) || 0), 0);
-    return { points: payload, windowNetDelta: sumDelta };
+    const points = withWindowCumulative(payload);
+    const windowNetDelta = points.at(-1)?.cumulativeWithinWindow ?? 0;
+    return { points, windowNetDelta };
   }
   if (Array.isArray(payload.points)) {
+    const points = withWindowCumulative(payload.points);
     const netDelta = typeof payload.windowNetDelta === 'number'
       ? payload.windowNetDelta
-      : payload.points.reduce((sum, p) => sum + (Number(p.delta) || 0), 0);
-    return { points: payload.points, windowNetDelta: netDelta };
+      : (points.at(-1)?.cumulativeWithinWindow ?? 0);
+    return { points, windowNetDelta: netDelta };
   }
   return { points: [], windowNetDelta: 0 };
 }
@@ -225,11 +228,13 @@ function useMarketCvdSeries({
     if (!historyPoints || historyPoints.length === 0) return [];
     const list = [...historyPoints];
     const last = list[list.length - 1];
-    const lastCum = last.cumulativeFromAnchor ?? last.cvd ?? 0;
+    const lastAnchorCum = last.cumulativeFromAnchor ?? last.cvd ?? 0;
+    const lastWindowCum = last.cumulativeWithinWindow ?? 0;
     list[list.length - 1] = {
       ...last,
-      cumulativeFromAnchor: lastCum + delta,
-      cvd: lastCum + delta,
+      cumulativeFromAnchor: lastAnchorCum + delta,
+      cumulativeWithinWindow: lastWindowCum + delta,
+      cvd: lastAnchorCum + delta,
       delta: (last.delta || 0) + delta,
       price: livePrice || last.price
     };
@@ -519,6 +524,7 @@ function CVDPanel({
         y: {
           ...base.scales.y,
           display: futuresList.length > 0,
+          beginAtZero: true,
           grid: {
             ...base.scales.y.grid,
             color: (context) => {
@@ -555,6 +561,7 @@ function CVDPanel({
           ...base.scales.y,
           position: 'right',
           display: spotList.length > 0,
+          beginAtZero: true,
           grid: { drawOnChartArea: false },
           ticks: {
             ...base.scales.y.ticks,
@@ -601,7 +608,9 @@ function CVDPanel({
     const isLight = theme === 'light';
     const mkDataset = (label, list, borderColor, backgroundColor, yAxisID) => ({
       label,
-      data: list.map(item => item.cumulativeFromAnchor ?? item.cvd),
+      data: list.map(item => cvdTf === '1H'
+        ? (item.cvd ?? 0)
+        : (item.cumulativeWithinWindow ?? 0)),
       borderColor,
       backgroundColor,
       yAxisID,

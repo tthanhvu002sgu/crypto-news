@@ -4,9 +4,10 @@
  * Solves the rolling rebase problem by anchoring cumulative CVD to a fixed UTC timestamp:
  * CVD_ANCHOR_UTC = 2020-01-01T00:00:00.000Z (1577836800000).
  * 
- * Separates two distinct concepts:
- * 1. cumulativeFromAnchor: Immutable historical baseline for chart rendering.
+ * Separates three distinct concepts:
+ * 1. cumulativeFromAnchor: Immutable historical baseline for storage and audit continuity.
  * 2. windowNetDelta: Net buy/sell delta within a specific window (24H/7D/30D) for Hero, Bias Engine & Sheets.
+ * 3. cumulativeWithinWindow: Running window delta rebased to zero for chart rendering.
  */
 
 import axios from 'axios';
@@ -438,7 +439,7 @@ export async function ensureDailySnapshots(symbol = 'BTCUSDT', market = 'futures
  *   interval,
  *   timeframe,
  *   anchorTime: CVD_ANCHOR_TIMESTAMP,
- *   points: [{ time, timestamp, delta, cumulativeFromAnchor, cvd, buyVol, sellVol, price, isClosed }],
+ *   points: [{ time, timestamp, delta, cumulativeFromAnchor, cumulativeWithinWindow, cvd, buyVol, sellVol, price, isClosed }],
  *   windowNetDelta,
  *   asOf,
  *   hasProvisionalPoint
@@ -498,12 +499,14 @@ export function buildCvdSeries({
   });
 
   // Slice exactly the requested target display count if specified (e.g. 24 for 24H, 42 for 7D, 30 for 30D)
-  const points = (targetCount && targetCount > 0 && targetCount < allPoints.length)
+  const visiblePoints = (targetCount && targetCount > 0 && targetCount < allPoints.length)
     ? allPoints.slice(-targetCount)
     : allPoints;
 
-  // windowNetDelta strictly sums the delta of the displayed window points
-  const windowNetDelta = points.reduce((sum, p) => sum + (p.delta || 0), 0);
+  // The chart projection uses the selected window as its zero reference, while
+  // cumulativeFromAnchor remains untouched for persistence and auditability.
+  const points = withWindowCumulative(visiblePoints);
+  const windowNetDelta = points.at(-1)?.cumulativeWithinWindow ?? 0;
 
   return {
     market,
@@ -515,6 +518,23 @@ export function buildCvdSeries({
     asOf: now,
     hasProvisionalPoint: points.some(p => !p.isClosed)
   };
+}
+
+/**
+ * Adds a zero-rebased running CVD to a list without mutating the source points.
+ * The final cumulativeWithinWindow value always equals the sum of point deltas,
+ * which is the same value shown by the timeframe Hero card.
+ */
+export function withWindowCumulative(points = []) {
+  let runningWindowDelta = 0;
+
+  return points.map(point => {
+    runningWindowDelta += Number(point?.delta) || 0;
+    return {
+      ...point,
+      cumulativeWithinWindow: Math.round(runningWindowDelta)
+    };
+  });
 }
 
 // ─── SAFE CVD VALUE EXTRACTOR ─────────────────────────────────────────────────

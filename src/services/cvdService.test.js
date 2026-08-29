@@ -19,6 +19,7 @@ import {
   isLedgerStale,
   ensureDailySnapshots,
   buildCvdSeries,
+  withWindowCumulative,
   extractCvdNetDelta
 } from './cvdService.js';
 
@@ -512,5 +513,40 @@ describe('CVD Service & Immutable Daily Snapshot Engine', () => {
     assert.equal(results[0].length, 1);
     assert.deepEqual(results[1], results[0]);
     assert.deepEqual(results[2], results[0]);
+  });
+
+  it('15. chart cumulative is rebased to the selected window and ends at the Hero net delta', () => {
+    const source = [
+      { time: 1, delta: 300, cumulativeFromAnchor: -10_000 },
+      { time: 2, delta: -500, cumulativeFromAnchor: -10_500 },
+      { time: 3, delta: 100, cumulativeFromAnchor: -10_400 },
+    ];
+
+    const projected = withWindowCumulative(source);
+
+    assert.deepEqual(
+      projected.map(point => point.cumulativeWithinWindow),
+      [300, -200, -100]
+    );
+    assert.equal(projected.at(-1).cumulativeWithinWindow, -100);
+    assert.equal(projected.at(-1).cumulativeFromAnchor, -10_400);
+    assert.equal(source[0].cumulativeWithinWindow, undefined, 'source points stay immutable');
+
+    const series = buildCvdSeries({
+      market: 'spot',
+      interval: '1d',
+      timeframe: '30D',
+      rawKlines: [
+        { openTime: 1, delta: 200, takerBuyVol: 600, takerSellVol: 400, close: 60_000, isClosed: true },
+        { openTime: 2, delta: 300, takerBuyVol: 700, takerSellVol: 400, close: 61_000, isClosed: true },
+      ],
+      dailySnapshots: [{ openTime: -86_400_000, cumulativeFromAnchor: -50_000 }],
+      now: 3
+    });
+
+    assert.deepEqual(series.points.map(point => point.cumulativeWithinWindow), [200, 500]);
+    assert.equal(series.windowNetDelta, 500);
+    assert.equal(series.points.at(-1).cumulativeWithinWindow, series.windowNetDelta);
+    assert.equal(series.points.at(-1).cumulativeFromAnchor, -49_500);
   });
 });

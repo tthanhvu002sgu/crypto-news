@@ -9,7 +9,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
-  - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta đa khung (`1H`, `24H`, `7D`, `30D`) với **Mốc Neo Cố Định UTC Anchor (`2020-01-01T00:00:00.000Z`)** và **Sổ Cái Snapshot Ngày Đóng Bất Biến v1 (`hft_cvd_daily_snapshots_v1`)**. Biểu đồ hiển thị giá trị tích lũy ổn định theo thời gian (`cumulativeFromAnchor`), trong khi các thẻ tóm tắt (Hero), Market Bias Engine, Google Sheets sync và AI Market Decision Lab tiêu thụ độc lập biến `windowNetDelta` (tổng delta ròng riêng biệt của từng khung thời gian), loại bỏ triệt để hiện tượng đổi dấu hoặc dịch chuyển baseline khi cửa sổ thời gian trượt. Tích hợp phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
+  - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta đa khung (`1H`, `24H`, `7D`, `30D`) với **Mốc Neo Cố Định UTC Anchor (`2020-01-01T00:00:00.000Z`)** và **Sổ Cái Snapshot Ngày Đóng Bất Biến v1 (`hft_cvd_daily_snapshots_v1`)**. Biểu đồ rebase riêng từng cửa sổ về mốc 0 bằng `cumulativeWithinWindow`, nên điểm cuối và dấu trên hai trục Y Spot/Futures luôn khớp số `windowNetDelta` ở thẻ Hero; `cumulativeFromAnchor` vẫn được bảo toàn cho lưu trữ/audit và chống trôi dữ liệu. Market Bias Engine, Google Sheets sync và AI Market Decision Lab tiếp tục tiêu thụ độc lập `windowNetDelta`. Tích hợp phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến bằng Robust Z-Score & Taker Delta). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
@@ -40,7 +40,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Lưu trữ cục bộ & Persistence Multi-layer:**
   - **0ms Synchronous Hydration:** `localStorage` giữ settings và preview MOVE TRACKER gần nhất (`hft_move_preview_v2`) cùng theme/module visibility.
   - **Immutable Daily CVD Snapshot Ledger (`hft_cvd_daily_snapshots_v1`):** Lưu trữ sổ cái snapshot ngày đóng UTC bất biến của Spot và Futures từ mốc neo cố định `CVD_ANCHOR_UTC = '2020-01-01T00:00:00.000Z'`. Đảm bảo nến đang chạy được đánh dấu `isClosed: false` và chỉ khóa vào sổ cái một lần duy nhất khi kết thúc ngày UTC, loại bỏ hoàn toàn hiện tượng look-ahead và trôi dạt baseline.
-  - **Versioned CVD Series Cache (`hft_cvd_series_*_v4`):** Cache đa khung thời gian 24h/7d/30d với Data Contract 2 tầng chuẩn hóa: `cumulativeFromAnchor` dành riêng cho vẽ biểu đồ liên tục, và `windowNetDelta` dành cho các bộ tính toán chỉ báo và xuất dữ liệu.
+  - **Versioned CVD Series Cache (`hft_cvd_series_*_v4`):** Cache đa khung thời gian 24h/7d/30d với Data Contract 3 lớp: `cumulativeFromAnchor` cho lưu trữ/audit bất biến, `cumulativeWithinWindow` cho biểu đồ rebase theo khung, và `windowNetDelta` cho Hero/các bộ tính toán chỉ báo/xuất dữ liệu.
   - **IndexedDB Research Storage:** `MoveTrackerResearch` (store `events`) lưu event schema v2 trong 90 ngày; migration một lần từ `hft_move_history_v1` và legacy `CryptoSignalLog/MOVE_REPORT`, có dedupe theo stable event ID.
 
 ## 3. Các thành phần chính (Components)
@@ -53,7 +53,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
-- `src/services/cvdService.js` — Động cơ CVD trung tâm quản lý mốc neo cố định UTC Anchor (2020-01-01), sổ cái snapshot ngày đóng bất biến (`hft_cvd_daily_snapshots_v1`), cơ chế tự động backfill từ Binance, và bộ phân tách Data Contract (`cumulativeFromAnchor` vs `windowNetDelta`).
+- `src/services/cvdService.js` — Động cơ CVD trung tâm quản lý mốc neo cố định UTC Anchor (2020-01-01), sổ cái snapshot ngày đóng bất biến (`hft_cvd_daily_snapshots_v1`), cơ chế tự động backfill từ Binance, và Data Contract 3 lớp (`cumulativeFromAnchor`, `cumulativeWithinWindow`, `windowNetDelta`).
 - `src/services/cvdService.test.js` — Bộ 11 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
 - `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias trực tiếp bằng `biasEngine.js` và gửi webhook.
 - `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
@@ -69,6 +69,14 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-29] Đồng Bộ Trục Y CVD Spot/Futures Với Net Delta Theo Cửa Sổ `(FAST)`
+- **Mode / Type / Action / Lane:** FEATURE / BUGFIX / EXECUTE / FAST
+- **Tóm tắt:** Sửa lỗi chart 24H/7D/30D vẽ giá trị tích lũy từ anchor 2020 trong khi Hero hiển thị net delta của cửa sổ, khiến dấu và trị số trên hai trục Y không khớp số tổng Spot/Futures.
+- **Thay đổi chính:** Thêm projection `cumulativeWithinWindow` rebase từ 0, buộc điểm cuối chart bằng `windowNetDelta`, cập nhật live candle trên cùng hệ quy chiếu, cho hai scale luôn chứa mốc 0 và hỗ trợ cache v4 cũ bằng normalize lúc render; thêm regression test bảo toàn đồng thời projection theo cửa sổ và giá trị anchor audit.
+- **Files / areas chạm:** `src/services/cvdService.js`, `src/services/cvdService.test.js`, `src/components/HftRadarTab.jsx`, `README.md`
+- **Ảnh hưởng README:** §1 / §2 / §3
+- **Verify:** Toàn bộ 71 test scanner/move/macro/sheets/bias/CVD pass (CVD 15/15), `npm run build` pass; smoke-test local 7D và 30D xác nhận điểm cuối/trục Y khớp Hero ở cả Futures và Spot. Targeted ESLint không phát sinh lỗi mới nhưng vẫn fail bởi 12 lỗi tồn đọng ngoài diff trong cùng các file.
 
 ### [2026-08-29] Khắc Phục Triệt Để Sai Lệch Baseline CVD Với Mốc Neo Cố Định UTC Anchor (2020-01-01), Immutable Daily Snapshot Ledger & Data Contract Hai Tầng (cumulativeFromAnchor vs windowNetDelta) `(BUGFIX FULL)`
 - **Lane / Mode:** BUGFIX FULL & DATA INTEGRITY
