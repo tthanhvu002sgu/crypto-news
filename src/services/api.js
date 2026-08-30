@@ -119,7 +119,7 @@ export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', req
 export const getDailyCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
   try {
     const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0); // Local midnight
+    startOfDay.setUTCHours(0, 0, 0, 0);
     const startTime = startOfDay.getTime();
     
     const baseUrl = market === 'spot'
@@ -291,13 +291,16 @@ export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market =
       : 'https://fapi.binance.com/fapi/v1/klines';
 
     let interval = '1m';
-    let limit = 60;
+    let intervalMs = 60 * 1000;
+    let expectedBuckets = 60;
     let startTime;
     let endTime;
+    const now = Date.now();
 
     if (timeframe === '1H') {
       interval = '1m';
-      limit = 60;
+      intervalMs = 60 * 1000;
+      expectedBuckets = 60;
       // Align 1H footprint with the CVD card's prior, completed clock hour.
       const currentHour = new Date();
       currentHour.setMinutes(0, 0, 0);
@@ -305,26 +308,51 @@ export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market =
       startTime = endTime - (60 * 60 * 1000);
     } else if (timeframe === '24H') {
       interval = '1m';
-      limit = 1000;
+      intervalMs = 60 * 1000;
+      expectedBuckets = 1440;
+      endTime = Math.floor(now / intervalMs) * intervalMs;
+      startTime = endTime - (expectedBuckets * intervalMs);
     } else if (timeframe === '7D') {
       interval = '1h';
-      limit = 168; // 7 * 24 = 168 hours
+      intervalMs = 60 * 60 * 1000;
+      expectedBuckets = 168;
+      endTime = Math.floor(now / intervalMs) * intervalMs;
+      startTime = endTime - (expectedBuckets * intervalMs);
     } else if (timeframe === '30D') {
       interval = '4h';
-      limit = 180; // 30 * 6 = 180 candles
+      intervalMs = 4 * 60 * 60 * 1000;
+      expectedBuckets = 180;
+      endTime = Math.floor(now / intervalMs) * intervalMs;
+      startTime = endTime - (expectedBuckets * intervalMs);
     }
 
-    const res = await axios.get(baseUrl, {
-      params: {
-        symbol,
-        interval,
-        limit,
-        ...(startTime != null ? { startTime, endTime: endTime - 1 } : {}),
-      },
-    });
+    const rows = [];
+    let cursor = startTime;
+    while (cursor < endTime && rows.length < expectedBuckets) {
+      const remaining = expectedBuckets - rows.length;
+      const res = await axios.get(baseUrl, {
+        params: {
+          symbol,
+          interval,
+          limit: Math.min(1000, remaining),
+          startTime: cursor,
+          endTime: endTime - 1,
+        },
+      });
+      const batch = Array.isArray(res.data) ? res.data : [];
+      if (batch.length === 0) break;
+      rows.push(...batch);
+      const nextCursor = Number(batch.at(-1)?.[0]) + intervalMs;
+      if (!Number.isFinite(nextCursor) || nextCursor <= cursor) break;
+      cursor = nextCursor;
+    }
+
+    const uniqueRows = Array.from(new Map(rows.map((row) => [Number(row[0]), row])).values())
+      .sort((left, right) => Number(left[0]) - Number(right[0]))
+      .slice(-expectedBuckets);
 
     const nodeMap = new Map();
-    res.data.forEach(k => {
+    uniqueRows.forEach(k => {
       const high = parseFloat(k[2]);
       const low = parseFloat(k[3]);
       const close = parseFloat(k[4]);
@@ -344,10 +372,24 @@ export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market =
       node.sell += takerSellVol;
     });
 
-    return Array.from(nodeMap.entries()).map(([p, v]) => ({ price: p, ...v }));
+    return {
+      nodes: Array.from(nodeMap.entries()).map(([p, v]) => ({ price: p, ...v })),
+      coverage: {
+        timeframe,
+        interval,
+        expectedBuckets,
+        receivedBuckets: uniqueRows.length,
+        coveragePct: expectedBuckets > 0 ? Math.min(100, (uniqueRows.length / expectedBuckets) * 100) : 0,
+        startTime,
+        endTime,
+        asOf: now,
+        isComplete: uniqueRows.length === expectedBuckets,
+        method: 'kline-estimated-volume-by-price',
+      },
+    };
   } catch (e) {
     console.error(`[API] Footprint Nodes (${market}, ${timeframe}):`, e.message);
-    return [];
+    return { nodes: [], coverage: { timeframe, expectedBuckets: 0, receivedBuckets: 0, coveragePct: 0, asOf: Date.now(), isComplete: false, method: 'kline-estimated-volume-by-price' } };
   }
 };
 

@@ -16,6 +16,7 @@ import {
 import { describeMoveEvent } from '../services/moveTrackerCore';
 import { subscribeCrosshair } from '../services/crosshairSync';
 import { withWindowCumulative } from '../services/cvdService';
+import { classifyFuturesPositioning, classifySpotFutures, computeFlowMetrics } from '../services/orderFlowMetrics';
 
 // Plugin vẽ đường dọc highlight trên chart CVD theo crosshair của AdvancedChart
 const cvdSyncPlugin = {
@@ -126,6 +127,16 @@ const formatHourRange = (startTime) => {
 };
 
 const fmtPrice = (n) => n ? `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '---';
+const fmtSignedPct = (n, digits = 2) => Number.isFinite(Number(n))
+  ? `${Number(n) > 0 ? '+' : ''}${Number(n).toFixed(digits)}%`
+  : '---';
+const fmtAge = (timestamp) => {
+  if (!Number.isFinite(Number(timestamp))) return 'chưa rõ';
+  const seconds = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
+  if (seconds < 60) return `${seconds}s trước`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m trước`;
+  return `${Math.floor(seconds / 3600)}h trước`;
+};
 
 // Helper to get Chart Options based on current Theme
 const getChartOptsBase = (theme) => {
@@ -177,20 +188,20 @@ function useSessionDelta(sessionCvd, list) {
 }
 
 function normalizeHistoryPayload(payload) {
-  if (!payload) return { points: [], windowNetDelta: 0 };
+  if (!payload) return { points: [], windowNetDelta: 0, asOf: null };
   if (Array.isArray(payload)) {
     const points = withWindowCumulative(payload);
     const windowNetDelta = points.at(-1)?.cumulativeWithinWindow ?? 0;
-    return { points, windowNetDelta };
+    return { points, windowNetDelta, asOf: points.at(-1)?.time ?? null };
   }
   if (Array.isArray(payload.points)) {
     const points = withWindowCumulative(payload.points);
     const netDelta = typeof payload.windowNetDelta === 'number'
       ? payload.windowNetDelta
       : (points.at(-1)?.cumulativeWithinWindow ?? 0);
-    return { points, windowNetDelta: netDelta };
+    return { points, windowNetDelta: netDelta, asOf: payload.asOf ?? points.at(-1)?.time ?? null };
   }
-  return { points: [], windowNetDelta: 0 };
+  return { points: [], windowNetDelta: 0, asOf: null };
 }
 
 // Per-market CVD series (chart points + cumulative buy/sell volume + windowNetDelta).
@@ -202,6 +213,8 @@ function useMarketCvdSeries({
   const sessionCvd = stream?.sessionCvd ?? fallbackSessionCvd;
   const buyVolume = stream?.buyVolume ?? fallbackBuyVolume;
   const sellVolume = stream?.sellVolume ?? fallbackSellVolume;
+  const sessionBuyVolume = stream?.sessionBuyVolume ?? buyVolume;
+  const sessionSellVolume = stream?.sessionSellVolume ?? sellVolume;
 
   const rawHistory = tf === '24H' ? hist24 : tf === '7D' ? hist7 : hist30;
   const normHistory = useMemo(() => normalizeHistoryPayload(rawHistory), [rawHistory]);
@@ -210,6 +223,12 @@ function useMarketCvdSeries({
   const delta24 = useSessionDelta(sessionCvd, hist24?.points || hist24);
   const delta7 = useSessionDelta(sessionCvd, hist7?.points || hist7);
   const delta30 = useSessionDelta(sessionCvd, hist30?.points || hist30);
+  const buyDelta24 = useSessionDelta(sessionBuyVolume, hist24?.points || hist24);
+  const buyDelta7 = useSessionDelta(sessionBuyVolume, hist7?.points || hist7);
+  const buyDelta30 = useSessionDelta(sessionBuyVolume, hist30?.points || hist30);
+  const sellDelta24 = useSessionDelta(sessionSellVolume, hist24?.points || hist24);
+  const sellDelta7 = useSessionDelta(sessionSellVolume, hist7?.points || hist7);
+  const sellDelta30 = useSessionDelta(sessionSellVolume, hist30?.points || hist30);
 
   const activeCompleted = completedHourCvd?.startTime === completedHourStart
     ? completedHourCvd
@@ -217,6 +236,8 @@ function useMarketCvdSeries({
   const list1h = useMemo(() => activeCompleted?.points ?? [], [activeCompleted]);
 
   const delta = tf === '24H' ? delta24 : tf === '7D' ? delta7 : tf === '30D' ? delta30 : 0;
+  const buyIncrement = tf === '24H' ? buyDelta24 : tf === '7D' ? buyDelta7 : tf === '30D' ? buyDelta30 : 0;
+  const sellIncrement = tf === '24H' ? sellDelta24 : tf === '7D' ? sellDelta7 : tf === '30D' ? sellDelta30 : 0;
 
   const chartList = useMemo(() => {
     if (tf === '1H') return list1h;
@@ -231,10 +252,12 @@ function useMarketCvdSeries({
       cumulativeWithinWindow: lastWindowCum + delta,
       cvd: lastAnchorCum + delta,
       delta: (last.delta || 0) + delta,
+      buyVol: (last.buyVol || 0) + buyIncrement,
+      sellVol: (last.sellVol || 0) + sellIncrement,
       price: livePrice || last.price
     };
     return list;
-  }, [tf, list1h, historyPoints, delta, livePrice]);
+  }, [tf, list1h, historyPoints, delta, buyIncrement, sellIncrement, livePrice]);
 
   const netDelta = useMemo(() => {
     if (tf === '1H') {
@@ -258,12 +281,26 @@ function useMarketCvdSeries({
       buySum += (historyPoints[i].buyVol || 0);
       sellSum += (historyPoints[i].sellVol || 0);
     }
-    buySum += buyVolume || 0;
-    sellSum += sellVolume || 0;
+    // Only append volume observed after this history payload was refreshed.
+    // The previous implementation added the full daily stream baseline and
+    // double-counted candles already present in historyPoints.
+    buySum += buyIncrement;
+    sellSum += sellIncrement;
     return { buy: buySum, sell: sellSum };
-  }, [tf, activeCompleted, buyVolume, sellVolume, historyPoints]);
+  }, [tf, activeCompleted, buyVolume, sellVolume, historyPoints, buyIncrement, sellIncrement]);
 
-  return { chartList, displayVol, netDelta };
+  const expectedBuckets = tf === '1H' ? 60 : tf === '24H' ? 24 : tf === '7D' ? 42 : 30;
+  const receivedBuckets = tf === '1H'
+    ? Math.max(0, (activeCompleted?.points?.length ?? 1) - 1)
+    : historyPoints.length;
+  return {
+    chartList,
+    displayVol,
+    netDelta,
+    asOf: tf === '1H' ? activeCompleted?.endTime ?? null : normHistory.asOf,
+    coverage: expectedBuckets > 0 ? Math.min(100, (receivedBuckets / expectedBuckets) * 100) : 0,
+    isComplete: receivedBuckets >= expectedBuckets,
+  };
 }
 
 const clusterVolNodes = (nodes, gap) => {
@@ -286,7 +323,7 @@ const clusterVolNodes = (nodes, gap) => {
   return Array.from(map.values()).sort((a, b) => b.price - a.price);
 };
 
-function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf }) {
+function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, coverage }) {
   if (!nodes || nodes.length === 0) {
     return (
       <div className="hft-empty font-mono" style={{ padding: '16px', textOverflow: 'ellipsis', overflow: 'hidden', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.65rem', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
@@ -300,9 +337,9 @@ function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf }) {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
-        <span>CỤM FOOTPRINT NODES ({marketLabel} - {cvdTf})</span>
+        <span>EST. VOLUME-BY-PRICE ({marketLabel} · {cvdTf})</span>
         <span style={{ color: accentColor, fontWeight: 600 }}>
-          TỔNG VOL ({cvdTf}): {fmtUsd(totalClusterVol)}
+          {coverage ? `${coverage.receivedBuckets}/${coverage.expectedBuckets} bucket · ` : ''}{fmtUsd(totalClusterVol)}
         </span>
       </div>
       <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', padding: '4px' }}>
@@ -360,7 +397,7 @@ function CVDPanel({
   futuresStream, spotStream,
   cvdHistory24h, cvdHistory7d, cvdHistory30d,
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
-  cvdStatus, livePrice, theme, volNodes = []
+  cvdStatus, livePrice, theme, volNodes = [], openInterest, oiHistory = [], fundingRate
 }) {
   const [cvdTf, setCvdTf] = useState('1H');
   const [completedHourStart, setCompletedHourStart] = useState(getLastCompletedHourStart);
@@ -430,23 +467,23 @@ function CVDPanel({
   useEffect(() => {
     let isCancelled = false;
     const fetchTfNodes = async () => {
-      const [futuresNodes, spotNodes] = await Promise.all([
+      const [futuresResult, spotResult] = await Promise.all([
         getFootprintNodesForTimeframe('BTCUSDT', 'futures', cvdTf),
         getFootprintNodesForTimeframe('BTCUSDT', 'spot', cvdTf),
       ]);
       if (!isCancelled) {
-        setTfNodeMap({ FUTURES: futuresNodes, SPOT: spotNodes });
+        setTfNodeMap({ FUTURES: futuresResult, SPOT: spotResult });
       }
     };
     fetchTfNodes();
     return () => { isCancelled = true; };
   }, [cvdTf]);
 
-  const futuresVolNodes = (tfNodeMap?.FUTURES && tfNodeMap.FUTURES.length > 0)
-    ? tfNodeMap.FUTURES
+  const futuresVolNodes = (tfNodeMap?.FUTURES?.nodes?.length > 0)
+    ? tfNodeMap.FUTURES.nodes
     : (futuresStream?.volNodes ?? volNodes);
-  const spotVolNodes = (tfNodeMap?.SPOT && tfNodeMap.SPOT.length > 0)
-    ? tfNodeMap.SPOT
+  const spotVolNodes = (tfNodeMap?.SPOT?.nodes?.length > 0)
+    ? tfNodeMap.SPOT.nodes
     : (spotStream?.volNodes ?? volNodes);
 
   const clusteredFuturesNodes = useMemo(() => clusterVolNodes(futuresVolNodes, nodeGap), [futuresVolNodes, nodeGap]);
@@ -457,6 +494,38 @@ function CVDPanel({
 
   const latestCvdF = futuresSeries.netDelta;
   const latestCvdS = spotSeries.netDelta;
+
+  const futuresMetrics = useMemo(() => computeFlowMetrics({
+    points: futuresList,
+    buyVolume: futuresSeries.displayVol.buy,
+    sellVolume: futuresSeries.displayVol.sell,
+    netDelta: latestCvdF,
+  }), [futuresList, futuresSeries.displayVol.buy, futuresSeries.displayVol.sell, latestCvdF]);
+  const spotMetrics = useMemo(() => computeFlowMetrics({
+    points: spotList,
+    buyVolume: spotSeries.displayVol.buy,
+    sellVolume: spotSeries.displayVol.sell,
+    netDelta: latestCvdS,
+  }), [spotList, spotSeries.displayVol.buy, spotSeries.displayVol.sell, latestCvdS]);
+  const flowVerdict = useMemo(() => classifySpotFutures(spotMetrics, futuresMetrics), [spotMetrics, futuresMetrics]);
+
+  const futuresPriceChangePct = useMemo(() => {
+    const first = Number(futuresList.find((point) => Number(point?.price) > 0)?.price);
+    const last = Number([...futuresList].reverse().find((point) => Number(point?.price) > 0)?.price);
+    return first > 0 && last > 0 ? ((last - first) / first) * 100 : null;
+  }, [futuresList]);
+  const oiChangePct = useMemo(() => {
+    if (!Array.isArray(oiHistory) || oiHistory.length < 2) return null;
+    const first = Number(oiHistory[0]?.sumOpenInterest);
+    const last = Number(oiHistory.at(-1)?.sumOpenInterest);
+    return first > 0 && last > 0 ? ((last - first) / first) * 100 : null;
+  }, [oiHistory]);
+  const futuresPositioning = useMemo(() => classifyFuturesPositioning({
+    priceChangePct: futuresPriceChangePct,
+    oiChangePct,
+    flowDirection: futuresMetrics.direction,
+    fundingRate,
+  }), [futuresPriceChangePct, oiChangePct, futuresMetrics.direction, fundingRate]);
 
   // ── Crosshair sync từ AdvancedChart ──
   const [syncIdx, setSyncIdx] = useState(null);
@@ -646,6 +715,11 @@ function CVDPanel({
     { key: 'SPOT', accent: '#34d399', venueLabel: 'Spot (Cơ sở)', series: spotSeries },
   ];
 
+  const flowCards = [
+    { key: 'SPOT', accent: '#34d399', series: spotSeries, metrics: spotMetrics, netDelta: latestCvdS },
+    { key: 'FUTURES', accent: '#a78bfa', series: futuresSeries, metrics: futuresMetrics, netDelta: latestCvdF },
+  ];
+
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
@@ -716,6 +790,56 @@ function CVDPanel({
           <ModuleMenu moduleId="hft_cvd" />
         </div>
       </div>
+      <section className={`flow-verdict flow-tone-${flowVerdict.tone}`} aria-label="Kết luận dòng lệnh Spot và Futures">
+        <div className="flow-verdict-main">
+          <span className="flow-kicker font-mono">MARKET FLOW VERDICT · BINANCE BTCUSDT</span>
+          <strong>{flowVerdict.title}</strong>
+          <span>{flowVerdict.detail}</span>
+        </div>
+        <div className="flow-verdict-confidence font-mono">
+          <span>CONFIDENCE</span>
+          <strong>{flowVerdict.confidence}%</strong>
+        </div>
+      </section>
+
+      <div className="flow-pressure-grid">
+        {flowCards.map(({ key, accent, series, metrics, netDelta }) => (
+          <article className={`flow-pressure-card is-${metrics.direction}`} key={key} style={{ '--flow-accent': accent }}>
+            <div className="flow-pressure-head font-mono">
+              <span>{key} AGGRESSIVE FLOW</span>
+              <span className={`flow-direction is-${metrics.direction}`}>{metrics.direction.toUpperCase()}</span>
+            </div>
+            <div className="flow-pressure-score font-mono">
+              <strong>{metrics.strengthScore ?? '—'}</strong><span>/100</span>
+              <small>{fmtCvdUsd(netDelta)}</small>
+            </div>
+            <dl className="flow-pressure-metrics font-mono">
+              <div><dt>DELTA / VOL</dt><dd>{fmtSignedPct(metrics.deltaRatioPct)}</dd></div>
+              <div><dt>Z-SCORE</dt><dd>{metrics.zScore == null ? 'đang tích lũy' : `${metrics.zScore > 0 ? '+' : ''}${metrics.zScore.toFixed(2)}σ`}</dd></div>
+              <div><dt>MOMENTUM</dt><dd>{metrics.momentum.toUpperCase()}</dd></div>
+            </dl>
+            <div className="flow-data-health font-mono">
+              <span className={series.isComplete ? 'is-complete' : 'is-incomplete'}>{series.coverage.toFixed(0)}% COVERAGE</span>
+              <span>{fmtAge(series.asOf)}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <section className={`futures-positioning flow-tone-${futuresPositioning.tone}`}>
+        <div>
+          <span className="flow-kicker font-mono">FUTURES POSITIONING · OI CONTEXT 24H</span>
+          <strong>{futuresPositioning.label}</strong>
+          <p>{futuresPositioning.detail}</p>
+        </div>
+        <dl className="futures-positioning-stats font-mono">
+          <div><dt>PRICE</dt><dd>{fmtSignedPct(futuresPriceChangePct)}</dd></div>
+          <div><dt>ΔOI</dt><dd>{fmtSignedPct(oiChangePct)}</dd></div>
+          <div><dt>OI</dt><dd>{openInterest ? `${(Number(openInterest) / 1000).toFixed(1)}K BTC` : '---'}</dd></div>
+          <div><dt>FUNDING</dt><dd>{Number.isFinite(Number(fundingRate)) ? `${(Number(fundingRate) * 100).toFixed(4)}%` : '---'}</dd></div>
+        </dl>
+      </section>
+
       <div className="cvd-hero" style={{ paddingBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '10px 28px' }}>
         <div className="cvd-value-wrap">
           <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian trên Binance Futures (Phái sinh)">
@@ -799,7 +923,7 @@ function CVDPanel({
       {/* Node Gap Config */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Footprint Volume (mặc định $100). Dữ liệu Footprint Node được đồng bộ theo khung thời gian ${cvdTf} từ sàn Binance (cả Futures & Spot).`}>FOOTPRINT GAP ({cvdTf})</span>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Estimated Volume-by-Price (mặc định $100). Dữ liệu được ước lượng từ taker volume của Binance klines theo khung ${cvdTf}.`}>EST. VOLUME-BY-PRICE GAP ({cvdTf})</span>
           <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${nodeGap}</span>
         </div>
         <input
@@ -820,9 +944,9 @@ function CVDPanel({
       </div>
 
       {/* Nodes Tables — song song FUTURES & SPOT để so sánh dòng tiền hai thị trường */}
-      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} />
+      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.FUTURES?.coverage} />
       <div style={{ height: '12px' }} />
-      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} />
+      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.SPOT?.coverage} />
 
     </div>
   );
@@ -1915,6 +2039,9 @@ export default function HftRadarTab({
             livePrice={livePrice}
             volNodes={volNodes}
             theme={theme}
+            openInterest={data?.openInterest}
+            oiHistory={data?.oiHistory}
+            fundingRate={fundingRate ?? data?.fundingRate}
           />
         )}
 

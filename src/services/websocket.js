@@ -283,20 +283,27 @@ export function useCVDStream() {
   // Futures State
   const [cvdFutures, setCvdFutures] = useState(0);
   const [sessionFutures, setSessionFutures] = useState(0);
+  const [sessionBuyFutures, setSessionBuyFutures] = useState(0);
+  const [sessionSellFutures, setSessionSellFutures] = useState(0);
   const [buyVolFutures, setBuyVolFutures] = useState(0);
   const [sellVolFutures, setSellVolFutures] = useState(0);
 
   // Spot State
   const [cvdSpot, setCvdSpot] = useState(0);
   const [sessionSpot, setSessionSpot] = useState(0);
+  const [sessionBuySpot, setSessionBuySpot] = useState(0);
+  const [sessionSellSpot, setSessionSellSpot] = useState(0);
   const [buyVolSpot, setBuyVolSpot] = useState(0);
   const [sellVolSpot, setSellVolSpot] = useState(0);
 
-  const [cvdStatus, setCvdStatus] = useState('connecting');
+  const [cvdStatusFutures, setCvdStatusFutures] = useState('connecting');
+  const [cvdStatusSpot, setCvdStatusSpot] = useState('connecting');
 
   // Refs for Futures
   const cvdRefFutures = useRef(0);
   const sessionRefFutures = useRef(0);
+  const sessionBuyRefFutures = useRef(0);
+  const sessionSellRefFutures = useRef(0);
   const buyRefFutures = useRef(0);
   const sellRefFutures = useRef(0);
   const historyRefFutures = useRef((() => {
@@ -308,6 +315,8 @@ export function useCVDStream() {
   // Refs for Spot
   const cvdRefSpot = useRef(0);
   const sessionRefSpot = useRef(0);
+  const sessionBuyRefSpot = useRef(0);
+  const sessionSellRefSpot = useRef(0);
   const buyRefSpot = useRef(0);
   const sellRefSpot = useRef(0);
   const historyRefSpot = useRef((() => {
@@ -419,13 +428,11 @@ export function useCVDStream() {
       if (today !== todayRef.current) {
         todayRef.current = today;
         cvdRefFutures.current = 0;
-        sessionRefFutures.current = 0;
         buyRefFutures.current = 0;
         sellRefFutures.current = 0;
         historyRefFutures.current = [];
 
         cvdRefSpot.current = 0;
-        sessionRefSpot.current = 0;
         buyRefSpot.current = 0;
         sellRefSpot.current = 0;
         historyRefSpot.current = [];
@@ -473,11 +480,13 @@ export function useCVDStream() {
         if (data.m) {
           cvdRefFutures.current -= usdtVol;
           sessionRefFutures.current -= usdtVol;
+          sessionSellRefFutures.current += usdtVol;
           sellRefFutures.current += usdtVol;
           node.sell += usdtVol;
         } else {
           cvdRefFutures.current += usdtVol;
           sessionRefFutures.current += usdtVol;
+          sessionBuyRefFutures.current += usdtVol;
           buyRefFutures.current += usdtVol;
           node.buy += usdtVol;
         }
@@ -512,7 +521,7 @@ export function useCVDStream() {
 
         triggerThrottle();
       },
-      setCvdStatus,
+      setCvdStatusFutures,
       mountedRef
     );
 
@@ -548,11 +557,13 @@ export function useCVDStream() {
         if (data.m) {
           cvdRefSpot.current -= usdtVol;
           sessionRefSpot.current -= usdtVol;
+          sessionSellRefSpot.current += usdtVol;
           sellRefSpot.current += usdtVol;
           node.sell += usdtVol;
         } else {
           cvdRefSpot.current += usdtVol;
           sessionRefSpot.current += usdtVol;
+          sessionBuyRefSpot.current += usdtVol;
           buyRefSpot.current += usdtVol;
           node.buy += usdtVol;
         }
@@ -575,7 +586,7 @@ export function useCVDStream() {
 
         triggerThrottle();
       },
-      null,
+      setCvdStatusSpot,
       mountedRef
     );
 
@@ -585,6 +596,8 @@ export function useCVDStream() {
           if (mountedRef.current) {
             setCvdFutures(cvdRefFutures.current);
             setSessionFutures(sessionRefFutures.current);
+            setSessionBuyFutures(sessionBuyRefFutures.current);
+            setSessionSellFutures(sessionSellRefFutures.current);
             setBuyVolFutures(buyRefFutures.current);
             setSellVolFutures(sellRefFutures.current);
             setCvdHistoryFutures([...historyRefFutures.current]);
@@ -594,6 +607,8 @@ export function useCVDStream() {
 
             setCvdSpot(cvdRefSpot.current);
             setSessionSpot(sessionRefSpot.current);
+            setSessionBuySpot(sessionBuyRefSpot.current);
+            setSessionSellSpot(sessionSellRefSpot.current);
             setBuyVolSpot(buyRefSpot.current);
             setSellVolSpot(sellRefSpot.current);
             setCvdHistorySpot([...historyRefSpot.current]);
@@ -647,6 +662,8 @@ export function useCVDStream() {
     futures: {
       cvd: cvdFutures,
       sessionCvd: sessionFutures,
+      sessionBuyVolume: sessionBuyFutures,
+      sessionSellVolume: sessionSellFutures,
       buyVolume: buyVolFutures,
       sellVolume: sellVolFutures,
       cvdHistory: cvdHistoryFutures,
@@ -657,6 +674,8 @@ export function useCVDStream() {
     spot: {
       cvd: cvdSpot,
       sessionCvd: sessionSpot,
+      sessionBuyVolume: sessionBuySpot,
+      sessionSellVolume: sessionSellSpot,
       buyVolume: buyVolSpot,
       sellVolume: sellVolSpot,
       cvdHistory: cvdHistorySpot,
@@ -664,7 +683,10 @@ export function useCVDStream() {
     },
 
     whaleTrades,
-    cvdStatus,
+    cvdStatus: cvdStatusFutures === 'connected' && cvdStatusSpot === 'connected'
+      ? 'connected'
+      : (cvdStatusFutures === 'disconnected' || cvdStatusSpot === 'disconnected') ? 'disconnected' : 'connecting',
+    cvdStatusByMarket: { futures: cvdStatusFutures, spot: cvdStatusSpot },
     volNodes: volNodesFutures,
   };
 }

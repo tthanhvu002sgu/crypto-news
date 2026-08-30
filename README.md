@@ -54,7 +54,9 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ### Dịch vụ / Utils (Services & Helpers)
 - `src/services/cvdService.js` — Động cơ CVD trung tâm quản lý mốc neo cố định UTC Anchor (2020-01-01), sổ cái snapshot ngày đóng bất biến (`hft_cvd_daily_snapshots_v1`), cơ chế tự động backfill từ Binance, và Data Contract 3 lớp (`cumulativeFromAnchor`, `cumulativeWithinWindow`, `windowNetDelta`).
-- `src/services/cvdService.test.js` — Bộ 11 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
+- `src/services/cvdService.test.js` — Bộ 15 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
+- `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
+- `src/services/orderFlowMetrics.test.js` — Unit tests cho normalized flow và phân loại trạng thái vị thế Futures.
 - `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias trực tiếp bằng `biasEngine.js` và gửi webhook.
 - `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
 - `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
@@ -69,6 +71,16 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-30] Chuẩn Hóa Buy/Sell Pressure Cho CVD & Order Flow `(FEATURE + DATA FIX)`
+
+- **Tóm tắt:** Nâng module từ màn hình CVD tuyệt đối thành lớp đo aggressive buy/sell pressure có chuẩn hóa, kiểm tra chất lượng dữ liệu và diễn giải Spot–Futures theo bối cảnh Futures positioning.
+- **Độ chính xác dữ liệu:** Loại bỏ double-count Buy/Sell Volume khi ghép snapshot lịch sử với WebSocket; đồng bộ baseline ngày theo UTC; theo dõi trạng thái kết nối độc lập Spot/Futures và chỉ báo LIVE khi cả hai stream cùng hoạt động.
+- **Estimated Volume-by-Price:** Đổi tên Footprint candle-proxy để phản ánh đúng phương pháp; khung 24H phân trang đủ 1.440 nến 1 phút thay vì giới hạn 1.000 phút, đồng thời xuất coverage, bucket count, as-of và trạng thái complete.
+- **Normalized Flow:** Bổ sung `Delta / Total Volume`, rolling bucket z-score, momentum/velocity và directional score 0–100 cho từng thị trường.
+- **Decision Layer:** Thêm Market Flow Verdict cho ma trận Spot–Futures và Futures Positioning kết hợp Price, CVD, ΔOI 24H cùng Funding để phân biệt long mới, short covering, short mới, long liquidation và absorption.
+- **UI:** Thiết kế hai pressure card song song trên desktop, xếp dọc trên mobile; bổ sung confidence, coverage và freshness nhưng giữ nguyên chart CVD, Volume Ratio và bảng volume theo vùng giá.
+- **Verify:** Production build pass; 15 CVD regression tests và 4 order-flow metric tests pass; browser smoke-test xác nhận 24H trả đủ `1440/1440` bucket cho cả Futures/Spot và layout responsive hoạt động ở viewport 390px.
 
 ### [2026-08-29] Bổ Sung Sparkline Realtime Theo Mô Hình Score-First Cho Market Bias `(FAST)`
 - **Mode / Type / Action / Lane:** FEATURE / FEATURE / EXECUTE / FAST
