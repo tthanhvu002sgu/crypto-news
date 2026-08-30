@@ -9,7 +9,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
-  - **CVD & Order Flow:** Theo dõi Cumulative Volume Delta đa khung (`1H`, `24H`, `7D`, `30D`) với **Mốc Neo Cố Định UTC Anchor (`2020-01-01T00:00:00.000Z`)** và **Sổ Cái Snapshot Ngày Đóng Bất Biến v1 (`hft_cvd_daily_snapshots_v1`)**. Biểu đồ rebase riêng từng cửa sổ về mốc 0 bằng `cumulativeWithinWindow`; trục Y trái màu tím dành riêng cho Futures và trục Y phải màu xanh dành riêng cho Spot, đồng thời điểm cuối từng đường khớp `windowNetDelta` ở thẻ Hero tương ứng. `cumulativeFromAnchor` vẫn được bảo toàn cho lưu trữ/audit và chống trôi dữ liệu. Market Bias Engine, Google Sheets sync và AI Market Decision Lab tiếp tục tiêu thụ độc lập `windowNetDelta`. Tích hợp phân cụm Footprint Volume (nhóm lệnh theo Gap giá).
+  - **CVD & Order Flow:** Có thể chuyển giữa Binance benchmark và nguồn **Aggregated Multi-Exchange** gồm 4 Spot stream / 3 Futures stream từ Binance, Bybit, OKX và Coinbase. Mọi trade được chuẩn hóa về aggressor buy/sell và USD-equivalent, dedupe bằng stable event key, lưu bucket CVD + raw-trade footprint 30 ngày trong IndexedDB, tự backfill khoảng trống sau reconnect và công khai coverage/health theo sàn. Divergence detector tự động chỉ dùng pivot đã xác nhận trên `5m`, `15m`, `1h` để tránh look-ahead. Chế độ Binance cũ vẫn giữ CVD đa khung (`1H`, `24H`, `7D`, `30D`) với UTC Anchor và immutable daily snapshot ledger.
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến bằng Robust Z-Score & Taker Delta). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
@@ -27,7 +27,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Quản lý trạng thái:** React Hooks + Context (`ModuleVisibilityContext`, tooltip settings).
 - **Nguồn dữ liệu:**
   - **REST API:** Binance, FairEconomy/ForexFactory (weekly calendar), CoinGecko, FRED, CoinMetrics, ETF/COT scrapers, news RSS, Yahoo/FRED equities.
-  - **WebSocket:** Binance multi-ticker + `markPrice` + `aggTrade` (CVD / footprint / whale / move tracker).
+  - **WebSocket:** Binance multi-ticker + `markPrice`; order-flow raw trades từ Binance Spot/USD-M, Bybit Spot/Linear, OKX Spot/Swap và Coinbase Advanced Trade.
 - **Đồng bộ REST theo tầng (tiered sync):**
   - **HOT** mỗi 5 phút — Binance REST (ticker/klines/L-S/funding/OI), TTL cache 2–5 phút.
   - **WARM** mỗi 15 phút — global mcap, stablecoin, news, equities/yields, CVD 24h/7d, Economic Calendar.
@@ -42,6 +42,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **Immutable Daily CVD Snapshot Ledger (`hft_cvd_daily_snapshots_v1`):** Lưu trữ sổ cái snapshot ngày đóng UTC bất biến của Spot và Futures từ mốc neo cố định `CVD_ANCHOR_UTC = '2020-01-01T00:00:00.000Z'`. Đảm bảo nến đang chạy được đánh dấu `isClosed: false` và chỉ khóa vào sổ cái một lần duy nhất khi kết thúc ngày UTC, loại bỏ hoàn toàn hiện tượng look-ahead và trôi dạt baseline.
   - **Versioned CVD Series Cache (`hft_cvd_series_*_v4`):** Cache đa khung thời gian 24h/7d/30d với Data Contract 3 lớp: `cumulativeFromAnchor` cho lưu trữ/audit bất biến, `cumulativeWithinWindow` cho biểu đồ rebase theo khung, và `windowNetDelta` cho Hero/các bộ tính toán chỉ báo/xuất dữ liệu.
   - **IndexedDB Research Storage:** `MoveTrackerResearch` (store `events`) lưu event schema v2 trong 90 ngày; migration một lần từ `hft_move_history_v1` và legacy `CryptoSignalLog/MOVE_REPORT`, có dedupe theo stable event ID.
+  - **IndexedDB Aggregated Order Flow:** `AggregatedOrderFlow` lưu atomically `cvdBuckets`, `footprintBins`, `checkpoints`, `divergences`; retention 30 ngày, checkpoint theo từng stream và phục hồi overlap live/backfill theo cơ chế exactly-once trong phiên.
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
@@ -49,7 +50,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC theo mô hình score-first, có sparkline tối đa 30 snapshot realtime chống look-ahead, thanh Gauge Spectrum, 4 bento card trụ cột, thanh tóm tắt 3 tầng Regime và drawer bẻ nhỏ 14+ tín hiệu định lượng.
-- `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel` (tích hợp UTC Anchor, phân tách Net Delta và dual Y-axis: Futures trái / Spot phải), `WhaleTradesPanel`, `AdvancedChart` (tích hợp Bubble Anomaly Robust Z-Score), `TargetLiquidityPanel`, `OrderBookPanel`.
+- `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel` (source toggle Binance/Multi, venue health/contribution, raw footprint, divergence feed và dual Y-axis), `WhaleTradesPanel`, `AdvancedChart`, `TargetLiquidityPanel`, `OrderBookPanel`.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
@@ -57,6 +58,10 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `src/services/cvdService.test.js` — Bộ 15 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
 - `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
 - `src/services/orderFlowMetrics.test.js` — Unit tests cho normalized flow và phân loại trạng thái vị thế Futures.
+- `src/services/orderFlow/normalizedTrade.js` + `adapters/*` — Data contract trade thống nhất và parser đúng aggressor-side/contract size cho Binance, Bybit, OKX, Coinbase.
+- `src/services/orderFlow/tradeStreamEngine.js` — Điều phối 7 WebSocket stream, buffer trong lúc backfill, dedupe overlap, checkpoint, persistence và snapshot tổng hợp Spot/Futures.
+- `src/services/orderFlow/orderFlowAggregator.js` + `divergenceDetector.js` — CVD/footprint/contribution theo venue và divergence price–CVD/cross-market trên bucket đóng `5m/15m/1h`.
+- `src/services/orderFlow/orderFlowStore.js` + `tradeGapRecovery.js` — IndexedDB transaction đa store, retention 30 ngày và REST gap recovery có trạng thái bounded/degraded minh bạch.
 - `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias trực tiếp bằng `biasEngine.js` và gửi webhook.
 - `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
 - `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
@@ -71,6 +76,20 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-30] Aggregated Multi-Exchange CVD, Raw-Trade Footprint, Gap Backfill & Divergence Detector `(FULL)`
+
+- **Mode / Type / Action / Lane:** FEATURE / FEATURE / EXECUTE / FULL
+- **Tóm tắt:** Bổ sung nguồn order flow thực thi đa sàn cho BTC, tổng hợp độc lập Spot và Futures, giữ nguồn Binance benchmark để đối chiếu và không fallback âm thầm khi dữ liệu multi-exchange chưa đủ.
+- **Data pipeline:** Chuẩn hóa trade từ Binance, Bybit, OKX và Coinbase về cùng schema USD-equivalent; xử lý đúng maker/taker semantics và OKX contract size; dedupe bằng `venue:market:instrument:tradeId` trước khi cập nhật CVD/footprint.
+- **Reconnect recovery:** Mỗi stream có checkpoint riêng; live trades được buffer trong lúc REST backfill, sau đó merge theo thời gian và exact-once dedupe. Giới hạn lịch sử phía sàn được phản ánh thành `DEGRADED`/coverage thay vì giả báo complete.
+- **Persistence:** IndexedDB `AggregatedOrderFlow` ghi atomically buckets, footprint bins, checkpoints và divergence; tự prune dữ liệu quá 30 ngày và giữ dirty state nếu flush thất bại.
+- **Decision layer:** Detector price–CVD và Spot–Futures divergence chạy trên bucket đóng `5m`, `15m`, `1h`, chỉ phát event sau right-pivot confirmation và coverage tối thiểu 70%.
+- **UI:** Thêm source toggle `MULTI/BINANCE`, health strip 7 stream, volume contribution từng sàn, raw-trade footprint, confirmed divergence feed, coverage/freshness và trạng thái warming/degraded rõ ràng.
+- **Files / areas chạm:** `src/services/orderFlow/*`, `src/components/HftRadarTab.jsx`, `src/App.css`, `package.json`, `README.md`.
+- **Ảnh hưởng README:** §1 / §2 / §3 / §4 / §5
+- **Verify:** `npm test` pass 87/87; `npm run build` pass; `git diff --check` pass. Browser smoke-test chuyển được sang Cascade/HFT; bước snapshot chi tiết bị nghẽn bởi vòng timeout polling OrderBook/Whale API đã tồn tại, không ghi nhận lỗi runtime từ pipeline order-flow mới.
+- **Notes / nợ kỹ thuật:** Collector hiện chạy trong browser khi module được mount; backfill dài hơn giới hạn REST của từng venue được đánh dấu degraded. Thu thập 24/7 và historical replay sâu cần backend collector riêng.
 
 ### [2026-08-30] Chuẩn Hóa Buy/Sell Pressure Cho CVD & Order Flow `(FEATURE + DATA FIX)`
 
@@ -466,6 +485,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 ## 5. Các Task chưa làm (Pending/TODO Tasks)
 - [ ] Code-split bundle JS (>500kB warning sau build)
 - [ ] (Tuỳ chọn) Pause/giảm poll HFT orderbook khi tab ẩn (`document.visibilityState`)
+- [ ] Tách multi-exchange raw-trade collector sang backend 24/7 để backfill sâu hơn giới hạn REST và chia sẻ ledger giữa thiết bị.
 
 ---
 *Ghi chú: Mọi update từ nay về sau bắt buộc phải ghi log lại vào file này.*

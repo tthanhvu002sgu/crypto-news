@@ -17,6 +17,7 @@ import { describeMoveEvent } from '../services/moveTrackerCore';
 import { subscribeCrosshair } from '../services/crosshairSync';
 import { withWindowCumulative } from '../services/cvdService';
 import { classifyFuturesPositioning, classifySpotFutures, computeFlowMetrics } from '../services/orderFlowMetrics';
+import { useAggregatedOrderFlow } from '../services/orderFlow/useAggregatedOrderFlow';
 
 // Plugin vẽ đường dọc highlight trên chart CVD theo crosshair của AdvancedChart
 const cvdSyncPlugin = {
@@ -323,7 +324,7 @@ const clusterVolNodes = (nodes, gap) => {
   return Array.from(map.values()).sort((a, b) => b.price - a.price);
 };
 
-function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, coverage }) {
+function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, coverage, raw = false }) {
   if (!nodes || nodes.length === 0) {
     return (
       <div className="hft-empty font-mono" style={{ padding: '16px', textOverflow: 'ellipsis', overflow: 'hidden', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.65rem', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
@@ -337,7 +338,7 @@ function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, cov
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
-        <span>EST. VOLUME-BY-PRICE ({marketLabel} · {cvdTf})</span>
+        <span>{raw ? 'RAW-TRADE FOOTPRINT' : 'EST. VOLUME-BY-PRICE'} ({marketLabel} · {cvdTf})</span>
         <span style={{ color: accentColor, fontWeight: 600 }}>
           {coverage ? `${coverage.receivedBuckets}/${coverage.expectedBuckets} bucket · ` : ''}{fmtUsd(totalClusterVol)}
         </span>
@@ -346,10 +347,10 @@ function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, cov
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.65rem' }}>
           <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-950)', zIndex: 10 }}>
             <tr>
-              <th title={`Vùng giá (Node) gộp các mức giá dựa trên cấu hình GAP $${nodeGap}. Dữ liệu tích lũy realtime từ Binance ${marketLabel}.`} style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ ({marketLabel})</th>
-              <th title={`Volume Mua Chủ Động (Market Buy) trên Binance ${marketLabel} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
-              <th title={`Volume Bán Chủ Động (Market Sell) trên Binance ${marketLabel} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
-              <th title="Độ chênh lệch (Buy Vol - Sell Vol) tích lũy realtime. Dương (Xanh) = Hấp thụ mua mạnh (Support Node). Âm (Đỏ) = Áp lực bán mạnh (Resistance Node)." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
+              <th title={`Vùng giá gộp theo GAP $${nodeGap}. ${raw ? 'Tổng hợp từ raw trades đa sàn.' : `Ước lượng từ Binance ${marketLabel}.`}`} style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>VÙNG GIÁ ({marketLabel})</th>
+              <th title={`Volume mua chủ động ${raw ? 'đa sàn' : `trên Binance ${marketLabel}`} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>BUY VOL</th>
+              <th title={`Volume bán chủ động ${raw ? 'đa sàn' : `trên Binance ${marketLabel}`} tích lũy realtime.`} style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>SELL VOL</th>
+              <th title="Buy Vol - Sell Vol. Dương là mất cân bằng lệnh mua chủ động; âm là mất cân bằng lệnh bán chủ động, không tự động đồng nghĩa support/resistance." style={{ padding: '8px', color: 'var(--text-slate-400)', fontWeight: 600, borderBottom: '1px solid var(--border-panel)', cursor: 'help' }}>DELTA</th>
             </tr>
           </thead>
           <tbody>
@@ -400,6 +401,7 @@ function CVDPanel({
   cvdStatus, livePrice, theme, volNodes = [], openInterest, oiHistory = [], fundingRate
 }) {
   const [cvdTf, setCvdTf] = useState('1H');
+  const [flowSource, setFlowSource] = useState(() => localStorage.getItem('hft_order_flow_source') === 'BINANCE' ? 'BINANCE' : 'AGGREGATED');
   const [completedHourStart, setCompletedHourStart] = useState(getLastCompletedHourStart);
   const [completedHourCvdMap, setCompletedHourCvdMap] = useState({ FUTURES: null, SPOT: null });
   const [nodeGap, setNodeGap] = useState(() => {
@@ -434,7 +436,7 @@ function CVDPanel({
     return () => { isCancelled = true; };
   }, [completedHourStart]);
 
-  const futuresSeries = useMarketCvdSeries({
+  const binanceFuturesSeries = useMarketCvdSeries({
     tf: cvdTf,
     completedHourStart,
     completedHourCvd: completedHourCvdMap.FUTURES,
@@ -448,7 +450,7 @@ function CVDPanel({
     livePrice,
   });
 
-  const spotSeries = useMarketCvdSeries({
+  const binanceSpotSeries = useMarketCvdSeries({
     tf: cvdTf,
     completedHourStart,
     completedHourCvd: completedHourCvdMap.SPOT,
@@ -461,6 +463,11 @@ function CVDPanel({
     hist30: cvdHistory30dSpot,
     livePrice,
   });
+
+  const aggregateSnapshot = useAggregatedOrderFlow(cvdTf, nodeGap);
+  const isAggregated = flowSource === 'AGGREGATED';
+  const futuresSeries = isAggregated ? aggregateSnapshot.futures : binanceFuturesSeries;
+  const spotSeries = isAggregated ? aggregateSnapshot.spot : binanceSpotSeries;
 
   const [tfNodeMap, setTfNodeMap] = useState(null);
 
@@ -479,12 +486,14 @@ function CVDPanel({
     return () => { isCancelled = true; };
   }, [cvdTf]);
 
-  const futuresVolNodes = (tfNodeMap?.FUTURES?.nodes?.length > 0)
+  const binanceFuturesNodes = (tfNodeMap?.FUTURES?.nodes?.length > 0)
     ? tfNodeMap.FUTURES.nodes
     : (futuresStream?.volNodes ?? volNodes);
-  const spotVolNodes = (tfNodeMap?.SPOT?.nodes?.length > 0)
+  const binanceSpotNodes = (tfNodeMap?.SPOT?.nodes?.length > 0)
     ? tfNodeMap.SPOT.nodes
     : (spotStream?.volNodes ?? volNodes);
+  const futuresVolNodes = isAggregated ? aggregateSnapshot.futuresNodes : binanceFuturesNodes;
+  const spotVolNodes = isAggregated ? aggregateSnapshot.spotNodes : binanceSpotNodes;
 
   const clusteredFuturesNodes = useMemo(() => clusterVolNodes(futuresVolNodes, nodeGap), [futuresVolNodes, nodeGap]);
   const clusteredSpotNodes = useMemo(() => clusterVolNodes(spotVolNodes, nodeGap), [spotVolNodes, nodeGap]);
@@ -707,8 +716,15 @@ function CVDPanel({
   }, [futuresList, spotList, cvdTf, theme]);
 
   const rangeLabel = cvdTf === '1H'
-    ? formatHourRange(completedHourStart)
+    ? (isAggregated ? '60 PHÚT QUA' : formatHourRange(completedHourStart))
     : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA';
+  const aggregateHealth = aggregateSnapshot.health;
+  const aggregateLiveStreams = aggregateHealth.venues.filter((venue) => venue.status === 'live').length;
+  const aggregateActiveStreams = aggregateHealth.venues.filter((venue) => venue.status === 'live' || venue.status === 'degraded').length;
+  const aggregateStatus = aggregateLiveStreams === aggregateHealth.venues.length
+    ? 'live'
+    : aggregateActiveStreams > 0 ? 'degraded' : 'warming';
+  const sourceLabel = isAggregated ? 'MULTI-EXCHANGE' : 'BINANCE';
 
   const gaugeMarkets = [
     { key: 'FUTURES', accent: '#a78bfa', venueLabel: 'Futures (Phái sinh)', series: futuresSeries },
@@ -730,6 +746,13 @@ function CVDPanel({
             </h3>
           </Tooltip>
           <div className="hft-panel-badges" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            {isAggregated ? <>
+              <span className="hft-badge badge-api font-mono" title="Binance, Bybit, OKX và Coinbase; 4 stream Spot và 3 stream Futures">4 VENUES · 7 STREAMS</span>
+              <span className="hft-badge badge-api font-mono" title="CVD và footprint được tính từ từng giao dịch khớp lệnh, chuẩn hóa về USD-equivalent">RAW TRADE</span>
+              <span className={`hft-badge font-mono ${aggregateStatus === 'live' ? 'badge-live' : 'badge-off'}`}>
+                {aggregateStatus === 'live' ? '⚡ LIVE' : aggregateStatus === 'degraded' ? `DEGRADED ${aggregateActiveStreams}/7` : 'WARMING'}
+              </span>
+            </> : <>
             <span
               className="hft-badge badge-api font-mono"
               style={{
@@ -772,9 +795,24 @@ function CVDPanel({
             <span className={`hft-badge font-mono ${cvdStatus === 'connected' ? 'badge-live' : 'badge-off'}`}>
               {cvdStatus === 'connected' ? '⚡ LIVE' : 'WS OFF'}
             </span>
+            </>}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="etf-timeframe-toggle flow-source-toggle font-mono" aria-label="Nguồn dữ liệu order flow">
+            {['AGGREGATED', 'BINANCE'].map(source => (
+              <button
+                key={source}
+                onClick={() => {
+                  setFlowSource(source);
+                  localStorage.setItem('hft_order_flow_source', source);
+                }}
+                className={`toggle-btn ${flowSource === source ? 'active' : ''}`}
+              >
+                {source === 'AGGREGATED' ? 'MULTI' : 'BINANCE'}
+              </button>
+            ))}
+          </div>
           {/* Timeframe Selector */}
           <div className="etf-timeframe-toggle font-mono">
             {['1H', '24H', '7D', '30D'].map(t => (
@@ -792,7 +830,7 @@ function CVDPanel({
       </div>
       <section className={`flow-verdict flow-tone-${flowVerdict.tone}`} aria-label="Kết luận dòng lệnh Spot và Futures">
         <div className="flow-verdict-main">
-          <span className="flow-kicker font-mono">MARKET FLOW VERDICT · BINANCE BTCUSDT</span>
+          <span className="flow-kicker font-mono">MARKET FLOW VERDICT · {isAggregated ? 'AGGREGATED 4 SPOT / 3 FUTURES' : 'BINANCE BTCUSDT'}</span>
           <strong>{flowVerdict.title}</strong>
           <span>{flowVerdict.detail}</span>
         </div>
@@ -826,6 +864,34 @@ function CVDPanel({
         ))}
       </div>
 
+      {isAggregated && (
+        <>
+          <section className="venue-health-strip" aria-label="Trạng thái stream theo sàn">
+            {aggregateHealth.venues.map((venue) => (
+              <div className={`venue-health-item is-${venue.status}`} key={venue.key} title={venue.gap || `Trade cuối: ${fmtAge(venue.lastTradeAt)}`}>
+                <span className="font-mono">{venue.venue.toUpperCase()} · {venue.market === 'futures' ? 'FUT' : 'SPOT'}</span>
+                <strong className="font-mono">{venue.status.toUpperCase()}</strong>
+              </div>
+            ))}
+          </section>
+          <section className="venue-contribution-grid" aria-label="Đóng góp volume từng sàn">
+            {[['SPOT', aggregateSnapshot.spotContribution], ['FUTURES', aggregateSnapshot.futuresContribution]].map(([market, rows]) => (
+              <div className="venue-contribution-card" key={market}>
+                <span className="flow-kicker font-mono">{market} VENUE CONTRIBUTION</span>
+                {(rows.length ? rows : [{ venue: 'waiting', sharePct: 0, delta: 0 }]).map((row) => (
+                  <div className="venue-contribution-row font-mono" key={`${market}-${row.venue}`}>
+                    <span>{row.venue.toUpperCase()}</span>
+                    <div><i style={{ width: `${row.sharePct}%` }} /></div>
+                    <strong>{row.sharePct.toFixed(1)}%</strong>
+                    <em className={row.delta >= 0 ? 'text-emerald' : 'text-rose'}>{fmtCvdUsd(row.delta)}</em>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </section>
+        </>
+      )}
+
       <section className={`futures-positioning flow-tone-${futuresPositioning.tone}`}>
         <div>
           <span className="flow-kicker font-mono">FUTURES POSITIONING · OI CONTEXT 24H</span>
@@ -840,9 +906,24 @@ function CVDPanel({
         </dl>
       </section>
 
+      {isAggregated && (
+        <section className="divergence-feed" aria-label="Divergence đã xác nhận">
+          <div className="divergence-feed-head">
+            <span className="flow-kicker font-mono">CONFIRMED DIVERGENCE · 5M / 15M / 1H</span>
+            <span className="font-mono">NO LOOKAHEAD</span>
+          </div>
+          {aggregateSnapshot.divergences.length ? aggregateSnapshot.divergences.slice(0, 6).map((event) => (
+            <article className={`divergence-event is-${event.type.includes('bullish') || event.type.includes('spot_buy') ? 'bullish' : 'bearish'}`} key={event.id}>
+              <div><strong className="font-mono">{event.timeframe.toUpperCase()} · {event.market.toUpperCase()}</strong><span>{event.evidence}</span></div>
+              <div className="font-mono"><strong>{event.confidence}%</strong><span>{fmtAge(event.confirmedAt)}</span></div>
+            </article>
+          )) : <div className="hft-empty font-mono">Chưa có divergence đã xác nhận với coverage đủ 70%.</div>}
+        </section>
+      )}
+
       <div className="cvd-hero" style={{ paddingBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '10px 28px' }}>
         <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian trên Binance Futures (Phái sinh)">
+          <span className="cvd-label font-mono" title={`CVD ròng Futures từ ${sourceLabel}`}>
             {`CVD RÒNG FUTURES (${rangeLabel})`}
           </span>
           <span className={`cvd-value font-mono ${(latestCvdF ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
@@ -850,7 +931,7 @@ function CVDPanel({
           </span>
         </div>
         <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title="CVD ròng tích lũy trong khung thời gian trên Binance Spot (Cơ sở)">
+          <span className="cvd-label font-mono" title={`CVD ròng Spot từ ${sourceLabel}`}>
             {`CVD RÒNG SPOT (${rangeLabel})`}
           </span>
           <span className={`cvd-value font-mono ${(latestCvdS ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
@@ -902,10 +983,10 @@ function CVDPanel({
         const bpct = totalVol > 0 ? (series.displayVol.buy / totalVol * 100) : 50;
         const spct = 100 - bpct;
         return (
-          <div className="vol-gauge-container" key={key} style={{ marginBottom: '10px' }} title={`Tỷ lệ Buy/Sell Volume ròng tích lũy trong khung ${cvdTf} từ Binance ${venueLabel}`}>
+          <div className="vol-gauge-container" key={key} style={{ marginBottom: '10px' }} title={`Tỷ lệ Buy/Sell Volume trong khung ${cvdTf} từ ${sourceLabel} ${venueLabel}`}>
             <div className="vol-gauge-labels font-mono">
               <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {bpct.toFixed(1)}%</span>
-              <span className="font-mono" style={{ cursor: 'help', color: accent, fontWeight: 600 }} title={`Volume Ratio đo tỷ lệ Mua/Bán ròng trong khung thời gian ${cvdTf} của thị trường Binance ${key}`}>VOLUME RATIO ({key} - {cvdTf})</span>
+              <span className="font-mono" style={{ cursor: 'help', color: accent, fontWeight: 600 }} title={`Volume Ratio đo tỷ lệ Mua/Bán trong khung ${cvdTf} của ${sourceLabel} ${key}`}>VOLUME RATIO ({key} - {cvdTf})</span>
               <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {spct.toFixed(1)}%</span>
             </div>
             <div className="vol-gauge-bar">
@@ -923,7 +1004,7 @@ function CVDPanel({
       {/* Node Gap Config */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp Estimated Volume-by-Price (mặc định $100). Dữ liệu được ước lượng từ taker volume của Binance klines theo khung ${cvdTf}.`}>EST. VOLUME-BY-PRICE GAP ({cvdTf})</span>
+          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, cursor: 'help' }} title={`Khoảng giá gộp footprint, mặc định $100. ${isAggregated ? 'Dữ liệu từ raw trades đa sàn.' : 'Dữ liệu ước lượng từ Binance klines.'}`}>{isAggregated ? 'RAW-TRADE FOOTPRINT' : 'EST. VOLUME-BY-PRICE'} GAP ({cvdTf})</span>
           <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>${nodeGap}</span>
         </div>
         <input
@@ -944,9 +1025,9 @@ function CVDPanel({
       </div>
 
       {/* Nodes Tables — song song FUTURES & SPOT để so sánh dòng tiền hai thị trường */}
-      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.FUTURES?.coverage} />
+      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={isAggregated ? null : tfNodeMap?.FUTURES?.coverage} raw={isAggregated} />
       <div style={{ height: '12px' }} />
-      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.SPOT?.coverage} />
+      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={isAggregated ? null : tfNodeMap?.SPOT?.coverage} raw={isAggregated} />
 
     </div>
   );
