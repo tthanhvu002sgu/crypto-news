@@ -10,7 +10,6 @@ import {
   getFearAndGreed, getHistoricalCVD,
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
-import { useAggregatedOrderFlow } from './services/orderFlow/useAggregatedOrderFlow';
 import { fetchCached } from './utils/cache';
 import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
@@ -588,7 +587,7 @@ function AppContent() {
       setIsSyncingSheet(true);
       addLog('Đang kiểm tra và chuẩn bị dữ liệu xuất Google Sheet...', 'info');
 
-      const biasData = calculateMarketBias(biasInputData, etfHistory);
+      const biasData = calculateMarketBias(data, etfHistory);
       
       const validation = validateExportReadiness(data, biasData, etfHoldings, etfHistory, {
         livePrice,
@@ -672,12 +671,6 @@ function AppContent() {
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
   const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, futures, spot, whaleTrades, cvdStatus, volNodes } = useCVDStream();
-  const aggregatedOrderFlow = useAggregatedOrderFlow('24H', 100);
-  const biasInputData = useMemo(() => ({
-    ...data,
-    aggregatedOrderFlow: aggregatedOrderFlow.bias,
-  }), [data, aggregatedOrderFlow.bias]);
-
 
   const addLog = useCallback((msg, type = 'info') => {
     const entry = { time: new Date().toLocaleTimeString('vi-VN'), msg, type };
@@ -1712,7 +1705,7 @@ function AppContent() {
             {/* ══ DASHBOARD TAB — Keep-Alive State ════════════════════════════ */}
             <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
               <DashboardTab
-                data={biasInputData}
+                data={data}
                 theme={theme}
                 newsSliderRef={newsSliderRef}
                 btcChartData={btcChartData}
