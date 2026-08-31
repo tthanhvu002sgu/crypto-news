@@ -72,6 +72,13 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-08-31] Chuẩn Hóa Metrics & Points Cho Khung 1H Khi Chuyển Timeframe CVD `(BUGFIX)`
+- **Mode / Type / Action / Lane:** BUGFIX / BUGFIX / EXECUTE / FAST
+- **Tóm tắt:** Bổ sung đầy đủ các trường `delta`, `buyVol`, `sellVol`, và `cumulativeWithinWindow` cho từng nến 1 phút trong `getCompletedHourCVD` (API Binance klines). Giúp `computeFlowMetrics` tính toán chính xác Rolling Z-Score, Momentum, Delta/Volume Ratio và Flow Strength Score ngay khi chuyển sang khung 1H của giờ đã chốt, đồng bộ nhất quán với các khung 24H, 7D, 30D.
+- **Files / areas chạm:** `src/services/api.js`, `README.md`.
+- **Ảnh hưởng README:** §4
+- **Verify:** `npm test` pass toàn bộ (74/74 unit tests); `npm run build` hoàn tất không lỗi.
+
 ### [2026-08-31] Refactor: Chuyển CVD & Order Flow Về Nguồn Chuẩn Binance Benchmark Duy Nhất `(FULL)`
 - **Mode / Type / Action / Lane:** FEATURE / REFACTOR / EXECUTE / FULL
 - **Tóm tắt:** Loại bỏ toàn bộ code thu thập đa sàn (Multi-Exchange / Bybit / OKX / Coinbase WebSocket streams và IndexedDB multi-store) theo yêu cầu tối giản và tập trung vào workflow người dùng mở tab định kỳ. Giữ lại toàn bộ hệ thống tính toán Flow Metrics chuẩn hóa, Market Flow Verdict và Futures Positioning dựa trên nguồn chuẩn Binance Benchmark Proxy với UTC Anchor (2020-01-01).

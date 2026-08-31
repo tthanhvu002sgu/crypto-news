@@ -1456,20 +1456,34 @@ export const getCompletedHourCVD = async (symbol = 'BTCUSDT', market = 'futures'
     let cvd = 0;
     let buyVol = 0;
     let sellVol = 0;
-    const points = [{ time: startTime, timestamp: startTime, cvd: 0, price: null }];
+    const points = [{
+      time: startTime,
+      timestamp: startTime,
+      cvd: 0,
+      cumulativeWithinWindow: 0,
+      price: res.data.length > 0 ? parseFloat(res.data[0][1]) : null,
+      delta: 0,
+      buyVol: 0,
+      sellVol: 0,
+    }];
 
     res.data.forEach(k => {
       const quoteVol = parseFloat(k[7]);
       const takerBuyVol = parseFloat(k[10]);
       const takerSellVol = quoteVol - takerBuyVol;
+      const pointDelta = takerBuyVol - takerSellVol;
       buyVol += takerBuyVol;
       sellVol += takerSellVol;
-      cvd += takerBuyVol - takerSellVol;
+      cvd += pointDelta;
       points.push({
         time: k[6] + 1,
         timestamp: k[6] + 1,
         cvd: Math.round(cvd),
+        cumulativeWithinWindow: Math.round(cvd),
         price: parseFloat(k[4]),
+        delta: Math.round(pointDelta),
+        buyVol: Math.round(takerBuyVol),
+        sellVol: Math.round(takerSellVol),
       });
     });
 
