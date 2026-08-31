@@ -217,7 +217,7 @@ function useMarketCvdSeries({
   const sessionBuyVolume = stream?.sessionBuyVolume ?? buyVolume;
   const sessionSellVolume = stream?.sessionSellVolume ?? sellVolume;
 
-  const rawHistory = tf === '24H' ? hist24 : tf === '7D' ? hist7 : hist30;
+  const rawHistory = tf === '24H' ? hist24 : tf === '7D' ? hist7 : tf === '30D' ? hist30 : null;
   const normHistory = useMemo(() => normalizeHistoryPayload(rawHistory), [rawHistory]);
   const historyPoints = normHistory.points;
 
@@ -262,10 +262,14 @@ function useMarketCvdSeries({
 
   const netDelta = useMemo(() => {
     if (tf === '1H') {
-      return activeCompleted ? (activeCompleted.windowNetDelta ?? activeCompleted.cvd ?? 0) : 0;
+      if (activeCompleted) {
+        return activeCompleted.windowNetDelta ?? activeCompleted.cvd ?? 0;
+      }
+      const lastCandle = (hist24?.points || hist24 || []).at?.(-1);
+      return (lastCandle?.delta ?? 0) + delta24;
     }
     return normHistory.windowNetDelta + delta;
-  }, [tf, activeCompleted, normHistory.windowNetDelta, delta]);
+  }, [tf, activeCompleted, normHistory.windowNetDelta, delta, hist24, delta24]);
 
   const displayVol = useMemo(() => {
     if (tf === '1H') {
@@ -428,8 +432,8 @@ function CVDPanel({
     ]).then(([futuresResult, spotResult]) => {
       if (!isCancelled) {
         setCompletedHourCvdMap({
-          FUTURES: futuresResult?.isComplete ? futuresResult : null,
-          SPOT: spotResult?.isComplete ? spotResult : null,
+          FUTURES: (futuresResult?.points?.length > 0) ? futuresResult : null,
+          SPOT: (spotResult?.points?.length > 0) ? spotResult : null,
         });
       }
     });
@@ -466,8 +470,12 @@ function CVDPanel({
 
   const aggregateSnapshot = useAggregatedOrderFlow(cvdTf, nodeGap);
   const isAggregated = flowSource === 'AGGREGATED';
-  const futuresSeries = isAggregated ? aggregateSnapshot.futures : binanceFuturesSeries;
-  const spotSeries = isAggregated ? aggregateSnapshot.spot : binanceSpotSeries;
+  const isFuturesAggregated = isAggregated && (cvdTf === '1H' || aggregateSnapshot.futures.coverage >= 70);
+  const isSpotAggregated = isAggregated && (cvdTf === '1H' || aggregateSnapshot.spot.coverage >= 70);
+  const futuresSeries = isFuturesAggregated ? aggregateSnapshot.futures : binanceFuturesSeries;
+  const spotSeries = isSpotAggregated ? aggregateSnapshot.spot : binanceSpotSeries;
+  const futuresSourceLabel = isFuturesAggregated ? 'MULTI-EXCHANGE' : 'BINANCE';
+  const spotSourceLabel = isSpotAggregated ? 'MULTI-EXCHANGE' : 'BINANCE';
 
   const [tfNodeMap, setTfNodeMap] = useState(null);
 
@@ -492,8 +500,8 @@ function CVDPanel({
   const binanceSpotNodes = (tfNodeMap?.SPOT?.nodes?.length > 0)
     ? tfNodeMap.SPOT.nodes
     : (spotStream?.volNodes ?? volNodes);
-  const futuresVolNodes = isAggregated ? aggregateSnapshot.futuresNodes : binanceFuturesNodes;
-  const spotVolNodes = isAggregated ? aggregateSnapshot.spotNodes : binanceSpotNodes;
+  const futuresVolNodes = isFuturesAggregated ? aggregateSnapshot.futuresNodes : binanceFuturesNodes;
+  const spotVolNodes = isSpotAggregated ? aggregateSnapshot.spotNodes : binanceSpotNodes;
 
   const clusteredFuturesNodes = useMemo(() => clusterVolNodes(futuresVolNodes, nodeGap), [futuresVolNodes, nodeGap]);
   const clusteredSpotNodes = useMemo(() => clusterVolNodes(spotVolNodes, nodeGap), [spotVolNodes, nodeGap]);
@@ -716,7 +724,7 @@ function CVDPanel({
   }, [futuresList, spotList, cvdTf, theme]);
 
   const rangeLabel = cvdTf === '1H'
-    ? (isAggregated ? '60 PHÚT QUA' : formatHourRange(completedHourStart))
+    ? (isFuturesAggregated ? '60 PHÚT QUA' : formatHourRange(completedHourStart))
     : cvdTf === '24H' ? '24 GIỜ QUA' : cvdTf === '7D' ? '7 NGÀY QUA' : '30 NGÀY QUA';
   const aggregateHealth = aggregateSnapshot.health;
   const aggregateLiveStreams = aggregateHealth.venues.filter((venue) => venue.status === 'live').length;
@@ -748,7 +756,9 @@ function CVDPanel({
           <div className="hft-panel-badges" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             {isAggregated ? <>
               <span className="hft-badge badge-api font-mono" title="Binance, Bybit, OKX và Coinbase; 4 stream Spot và 3 stream Futures">4 VENUES · 7 STREAMS</span>
-              <span className="hft-badge badge-api font-mono" title="CVD và footprint được tính từ từng giao dịch khớp lệnh, chuẩn hóa về USD-equivalent">RAW TRADE</span>
+              <span className="hft-badge badge-api font-mono" title="CVD và footprint được tính từ từng giao dịch khớp lệnh, chuẩn hóa về USD-equivalent">
+                {isFuturesAggregated && isSpotAggregated ? 'RAW TRADE' : 'BENCHMARK HYBRID'}
+              </span>
               <span className={`hft-badge font-mono ${aggregateStatus === 'live' ? 'badge-live' : 'badge-off'}`}>
                 {aggregateStatus === 'live' ? '⚡ LIVE' : aggregateStatus === 'degraded' ? `DEGRADED ${aggregateActiveStreams}/7` : 'WARMING'}
               </span>
@@ -830,7 +840,7 @@ function CVDPanel({
       </div>
       <section className={`flow-verdict flow-tone-${flowVerdict.tone}`} aria-label="Kết luận dòng lệnh Spot và Futures">
         <div className="flow-verdict-main">
-          <span className="flow-kicker font-mono">MARKET FLOW VERDICT · {isAggregated ? 'AGGREGATED 4 SPOT / 3 FUTURES' : 'BINANCE BTCUSDT'}</span>
+          <span className="flow-kicker font-mono">MARKET FLOW VERDICT · {isAggregated ? (isFuturesAggregated && isSpotAggregated ? 'AGGREGATED 4 SPOT / 3 FUTURES' : 'BENCHMARK HYBRID (MULTI WARMING)') : 'BINANCE BTCUSDT'}</span>
           <strong>{flowVerdict.title}</strong>
           <span>{flowVerdict.detail}</span>
         </div>
@@ -923,7 +933,7 @@ function CVDPanel({
 
       <div className="cvd-hero" style={{ paddingBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '10px 28px' }}>
         <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title={`CVD ròng Futures từ ${sourceLabel}`}>
+          <span className="cvd-label font-mono" title={`CVD ròng Futures từ ${futuresSourceLabel}`}>
             {`CVD RÒNG FUTURES (${rangeLabel})`}
           </span>
           <span className={`cvd-value font-mono ${(latestCvdF ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
@@ -931,7 +941,7 @@ function CVDPanel({
           </span>
         </div>
         <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title={`CVD ròng Spot từ ${sourceLabel}`}>
+          <span className="cvd-label font-mono" title={`CVD ròng Spot từ ${spotSourceLabel}`}>
             {`CVD RÒNG SPOT (${rangeLabel})`}
           </span>
           <span className={`cvd-value font-mono ${(latestCvdS ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
@@ -982,11 +992,12 @@ function CVDPanel({
         const totalVol = series.displayVol.buy + series.displayVol.sell;
         const bpct = totalVol > 0 ? (series.displayVol.buy / totalVol * 100) : 50;
         const spct = 100 - bpct;
+        const marketSource = key === 'FUTURES' ? futuresSourceLabel : spotSourceLabel;
         return (
-          <div className="vol-gauge-container" key={key} style={{ marginBottom: '10px' }} title={`Tỷ lệ Buy/Sell Volume trong khung ${cvdTf} từ ${sourceLabel} ${venueLabel}`}>
+          <div className="vol-gauge-container" key={key} style={{ marginBottom: '10px' }} title={`Tỷ lệ Buy/Sell Volume trong khung ${cvdTf} từ ${marketSource} ${venueLabel}`}>
             <div className="vol-gauge-labels font-mono">
               <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {bpct.toFixed(1)}%</span>
-              <span className="font-mono" style={{ cursor: 'help', color: accent, fontWeight: 600 }} title={`Volume Ratio đo tỷ lệ Mua/Bán trong khung ${cvdTf} của ${sourceLabel} ${key}`}>VOLUME RATIO ({key} - {cvdTf})</span>
+              <span className="font-mono" style={{ cursor: 'help', color: accent, fontWeight: 600 }} title={`Volume Ratio đo tỷ lệ Mua/Bán trong khung ${cvdTf} của ${marketSource} ${key}`}>VOLUME RATIO ({key} - {cvdTf})</span>
               <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {spct.toFixed(1)}%</span>
             </div>
             <div className="vol-gauge-bar">
@@ -1025,9 +1036,9 @@ function CVDPanel({
       </div>
 
       {/* Nodes Tables — song song FUTURES & SPOT để so sánh dòng tiền hai thị trường */}
-      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={isAggregated ? null : tfNodeMap?.FUTURES?.coverage} raw={isAggregated} />
+      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={isFuturesAggregated ? null : tfNodeMap?.FUTURES?.coverage} raw={isFuturesAggregated} />
       <div style={{ height: '12px' }} />
-      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={isAggregated ? null : tfNodeMap?.SPOT?.coverage} raw={isAggregated} />
+      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={isSpotAggregated ? null : tfNodeMap?.SPOT?.coverage} raw={isSpotAggregated} />
 
     </div>
   );

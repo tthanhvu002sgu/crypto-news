@@ -77,6 +77,17 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-08-31] Sửa Lỗi CVD Ròng Spot/Futures Không Đổi Khi Chuyển Timeframe `(BUGFIX)`
+- **Mode / Type / Action / Lane:** FEATURE / BUGFIX / EXECUTE / FAST
+- **Tóm tắt:** Sửa lỗi giá trị CVD ròng của Spot và Futures bị cố định một số liệu giống hệt nhau khi người dùng chuyển đổi các khung thời gian 1H, 24H, 7D, 30D trên tab CVD & ORDER FLOW.
+- **Root Cause & Fix:**
+  - *Aggregated Multi-Exchange mode:* Do dữ liệu raw trades đa sàn chỉ tích lũy trong phiên duyệt web hiện tại (chưa đủ 24h/7d/30d), các khung lớn tính ra tổng delta giống hệt nhau. Giải pháp: Ở chế độ Aggregated, khung 1H sử dụng Multi-Exchange realtime; các khung 24H/7D/30D chỉ dùng Multi-Exchange khi `coverage >= 70%`, ngược lại fallback mượt mà sang Binance benchmark series tương ứng để đảm bảo số liệu chính xác theo từng khung.
+  - *Binance mode:* Sửa lỗi gán nhầm fallback `rawHistory` của khung 1H thành `hist30`, và bổ sung fallback an toàn cho nến 1H khi `getCompletedHourCVD` đang nạp.
+  - *Giao diện & Labels:* Đồng bộ nhãn nguồn dữ liệu (`MULTI-EXCHANGE` vs `BINANCE`), huy hiệu `BENCHMARK HYBRID`, tooltip và Volume Ratio theo đúng nguồn dữ liệu đang kích hoạt cho từng khung.
+- **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`.
+- **Ảnh hưởng README:** §4
+- **Verify:** `npm test` pass toàn bộ (87/87 tests); `npm run build` pass không lỗi.
+
 ### [2026-08-31] Đưa Aggregated Order Flow Vào Market Bias Engine `(FEATURE)`
 
 - **Tóm tắt:** Nối CVD raw-trade đa sàn vào hai tín hiệu Spot (3%) và Futures (2%) của Market Bias Engine, không đổi cơ cấu trọng số 4 pillar.
