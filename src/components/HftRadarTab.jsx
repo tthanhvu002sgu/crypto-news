@@ -23,17 +23,20 @@ const cvdSyncPlugin = {
   afterDatasetsDraw(chart, args, opts) {
     if (opts == null || opts.index == null || opts.index < 0) return;
     const { ctx, chartArea, scales } = chart;
-    const x = scales.x.getPixelForValue(opts.index);
-    if (!isFinite(x) || x < chartArea.left || x > chartArea.right) return;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(253, 224, 71, 0.75)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(x, chartArea.top);
-    ctx.lineTo(x, chartArea.bottom);
-    ctx.stroke();
-    ctx.restore();
+    if (!ctx || !scales || !scales.x || !chartArea) return;
+    try {
+      const x = typeof scales.x.getPixelForValue === 'function' ? scales.x.getPixelForValue(opts.index) : null;
+      if (x == null || !Number.isFinite(x) || x < chartArea.left || x > chartArea.right) return;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.75)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+      ctx.restore();
+    } catch {}
   }
 };
 
@@ -42,49 +45,55 @@ const cvdZeroLinePlugin = {
   id: 'cvdZeroLine',
   beforeDatasetsDraw(chart, args, opts) {
     const { ctx, chartArea, scales } = chart;
-    if (!scales || !chartArea) return;
+    if (!ctx || !scales || !chartArea) return;
     const isLight = opts?.isLight ?? false;
 
-    const yFutures = scales.y?.display ? scales.y.getPixelForValue(0) : null;
-    const ySpot = scales.y1?.display ? scales.y1.getPixelForValue(0) : null;
+    try {
+      const yFutures = scales.y?.display && typeof scales.y.getPixelForValue === 'function'
+        ? scales.y.getPixelForValue(0)
+        : null;
+      const ySpot = scales.y1?.display && typeof scales.y1.getPixelForValue === 'function'
+        ? scales.y1.getPixelForValue(0)
+        : null;
 
-    ctx.save();
+      ctx.save();
 
-    if (yFutures != null && Number.isFinite(yFutures) && yFutures >= chartArea.top && yFutures <= chartArea.bottom) {
-      ctx.strokeStyle = isLight ? 'rgba(30, 41, 59, 0.65)' : 'rgba(241, 245, 249, 0.45)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 4]);
-      ctx.beginPath();
-      ctx.moveTo(chartArea.left, yFutures);
-      ctx.lineTo(chartArea.right, yFutures);
-      ctx.stroke();
-
-      // Nhãn mốc 0 của Futures tại mép trái
-      ctx.fillStyle = isLight ? 'rgba(30, 41, 59, 0.9)' : 'rgba(241, 245, 249, 0.85)';
-      ctx.font = '600 9px monospace';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('0 F', chartArea.left + 4, yFutures - 2);
-    }
-
-    if (ySpot != null && Number.isFinite(ySpot) && ySpot >= chartArea.top && ySpot <= chartArea.bottom) {
-      const isCoincident = yFutures != null && Math.abs(yFutures - ySpot) <= 4;
-      if (!isCoincident) {
-        ctx.strokeStyle = isLight ? 'rgba(16, 185, 129, 0.6)' : 'rgba(52, 211, 153, 0.5)';
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([3, 3]);
+      if (yFutures != null && Number.isFinite(yFutures) && yFutures >= chartArea.top && yFutures <= chartArea.bottom) {
+        ctx.strokeStyle = isLight ? 'rgba(30, 41, 59, 0.65)' : 'rgba(241, 245, 249, 0.45)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
         ctx.beginPath();
-        ctx.moveTo(chartArea.left, ySpot);
-        ctx.lineTo(chartArea.right, ySpot);
+        ctx.moveTo(chartArea.left, yFutures);
+        ctx.lineTo(chartArea.right, yFutures);
         ctx.stroke();
 
-        ctx.fillStyle = isLight ? 'rgba(16, 185, 129, 0.9)' : 'rgba(52, 211, 153, 0.85)';
-        ctx.textAlign = 'right';
-        ctx.fillText('0 S', chartArea.right - 4, ySpot - 2);
+        // Nhãn mốc 0 của Futures tại mép trái
+        ctx.fillStyle = isLight ? 'rgba(30, 41, 59, 0.9)' : 'rgba(241, 245, 249, 0.85)';
+        ctx.font = '600 9px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('0 F', chartArea.left + 4, yFutures - 2);
       }
-    }
 
-    ctx.restore();
+      if (ySpot != null && Number.isFinite(ySpot) && ySpot >= chartArea.top && ySpot <= chartArea.bottom) {
+        const isCoincident = yFutures != null && Math.abs(yFutures - ySpot) <= 4;
+        if (!isCoincident) {
+          ctx.strokeStyle = isLight ? 'rgba(16, 185, 129, 0.6)' : 'rgba(52, 211, 153, 0.5)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(chartArea.left, ySpot);
+          ctx.lineTo(chartArea.right, ySpot);
+          ctx.stroke();
+
+          ctx.fillStyle = isLight ? 'rgba(16, 185, 129, 0.9)' : 'rgba(52, 211, 153, 0.85)';
+          ctx.textAlign = 'right';
+          ctx.fillText('0 S', chartArea.right - 4, ySpot - 2);
+        }
+      }
+
+      ctx.restore();
+    } catch {}
   }
 };
 
@@ -239,10 +248,11 @@ function useMarketCvdSeries({
   const sellIncrement = tf === '24H' ? sellDelta24 : tf === '7D' ? sellDelta7 : tf === '30D' ? sellDelta30 : 0;
 
   const chartList = useMemo(() => {
-    if (tf === '1H') return list1h;
+    if (tf === '1H') return list1h || [];
     if (!historyPoints || historyPoints.length === 0) return [];
     const list = [...historyPoints];
     const last = list[list.length - 1];
+    if (!last) return list;
     const lastAnchorCum = last.cumulativeFromAnchor ?? last.cvd ?? 0;
     const lastWindowCum = last.cumulativeWithinWindow ?? 0;
     list[list.length - 1] = {
@@ -266,8 +276,8 @@ function useMarketCvdSeries({
       const lastCandle = (hist24?.points || hist24 || []).at?.(-1);
       return (lastCandle?.delta ?? 0) + delta24;
     }
-    return normHistory.windowNetDelta + delta;
-  }, [tf, activeCompleted, normHistory.windowNetDelta, delta, hist24, delta24]);
+    return (Number(normHistory?.windowNetDelta) || 0) + (Number(delta) || 0);
+  }, [tf, activeCompleted, normHistory?.windowNetDelta, delta, hist24, delta24]);
 
   const displayVol = useMemo(() => {
     if (tf === '1H') {
@@ -307,27 +317,30 @@ function useMarketCvdSeries({
 }
 
 const clusterVolNodes = (nodes, gap) => {
-  if (!nodes || nodes.length === 0) return [];
+  if (!nodes || !Array.isArray(nodes) || nodes.length === 0) return [];
   if (!gap || gap <= 1) return nodes;
 
   const map = new Map();
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
-    const binPrice = Math.floor(n.price / gap) * gap;
+    if (!n || n.price == null) continue;
+    const priceNum = Number(n.price);
+    if (!Number.isFinite(priceNum)) continue;
+    const binPrice = Math.floor(priceNum / gap) * gap;
     let entry = map.get(binPrice);
     if (!entry) {
       entry = { price: binPrice, priceHigh: binPrice + gap - 1, buy: 0, sell: 0 };
       map.set(binPrice, entry);
     }
-    entry.buy += n.buy;
-    entry.sell += n.sell;
+    entry.buy += Number(n.buy) || 0;
+    entry.sell += Number(n.sell) || 0;
   }
 
   return Array.from(map.values()).sort((a, b) => b.price - a.price);
 };
 
 function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, coverage, raw = false }) {
-  if (!nodes || nodes.length === 0) {
+  if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
     return (
       <div className="hft-empty font-mono" style={{ padding: '16px', textOverflow: 'ellipsis', overflow: 'hidden', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.65rem', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
         ⚡ Đang tích lũy dữ liệu Footprint Nodes realtime cho thị trường {marketLabel}...
@@ -335,14 +348,15 @@ function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, cov
     );
   }
 
-  const totalClusterVol = nodes.reduce((acc, n) => acc + n.buy + n.sell, 0);
+  const totalClusterVol = nodes.reduce((acc, n) => acc + (Number(n?.buy) || 0) + (Number(n?.sell) || 0), 0);
+  const maxSingleVol = Math.max(1, ...nodes.map(cn => Math.max(Number(cn?.buy) || 0, Number(cn?.sell) || 0)));
 
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
         <span>{raw ? 'RAW-TRADE FOOTPRINT' : 'EST. VOLUME-BY-PRICE'} ({marketLabel} · {cvdTf})</span>
         <span style={{ color: accentColor, fontWeight: 600 }}>
-          {coverage ? `${coverage.receivedBuckets}/${coverage.expectedBuckets} bucket · ` : ''}{fmtUsd(totalClusterVol)}
+          {coverage ? `${coverage.receivedBuckets ?? 0}/${coverage.expectedBuckets ?? 0} bucket · ` : ''}{fmtUsd(totalClusterVol)}
         </span>
       </div>
       <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', padding: '4px' }}>
@@ -356,27 +370,28 @@ function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, cov
             </tr>
           </thead>
           <tbody>
-            {nodes.map(n => {
-              const delta = n.buy - n.sell;
-              const total = n.buy + n.sell;
+            {nodes.map((n, idx) => {
+              const buy = Number(n?.buy) || 0;
+              const sell = Number(n?.sell) || 0;
+              const delta = buy - sell;
+              const total = buy + sell;
               if (total === 0) return null;
 
-              const maxSingleVol = Math.max(...nodes.map(cn => Math.max(cn.buy, cn.sell)));
-              const buyWidth = Math.min(100, (n.buy / maxSingleVol) * 100);
-              const sellWidth = Math.min(100, (n.sell / maxSingleVol) * 100);
+              const buyWidth = Math.min(100, (buy / maxSingleVol) * 100);
+              const sellWidth = Math.min(100, (sell / maxSingleVol) * 100);
 
               return (
-                <tr key={n.price} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                <tr key={n?.price ?? idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                   <td className="font-mono" style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-200)' }}>
-                    {n.price} <span style={{ color: 'var(--text-slate-500)', margin: '0 4px' }}>~</span> {n.priceHigh}
+                    {n?.price} <span style={{ color: 'var(--text-slate-500)', margin: '0 4px' }}>~</span> {n?.priceHigh}
                   </td>
                   <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
                     <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${buyWidth}%`, background: 'rgba(16, 185, 129, 0.15)', borderRadius: '2px', zIndex: 1 }} />
-                    <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-emerald-400)' }}>{fmtUsd(n.buy)}</span>
+                    <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-emerald-400)' }}>{fmtUsd(buy)}</span>
                   </td>
                   <td className="font-mono" style={{ padding: '8px', position: 'relative' }}>
                     <div style={{ position: 'absolute', top: '4px', bottom: '4px', right: '8px', width: `${sellWidth}%`, background: 'rgba(244, 63, 94, 0.15)', borderRadius: '2px', zIndex: 1 }} />
-                    <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-rose-400)' }}>{fmtUsd(n.sell)}</span>
+                    <span style={{ position: 'relative', zIndex: 2, color: 'var(--color-rose-400)' }}>{fmtUsd(sell)}</span>
                   </td>
                   <td className={`font-mono ${delta > 0 ? 'text-emerald' : 'text-rose'}`} style={{ padding: '8px', fontWeight: 600 }}>
                     <div style={{ background: delta > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)', display: 'inline-block', padding: '2px 6px', borderRadius: '4px' }}>
@@ -576,12 +591,12 @@ function CVDPanel({
           intersect: false,
           callbacks: {
             label: (ctx) => {
-              const source = ctx.dataset.label === 'FUTURES' ? futuresList : spotList;
-              const item = source[ctx.dataIndex];
+              const source = ctx.dataset?.label === 'FUTURES' ? futuresList : spotList;
+              const item = source?.[ctx.dataIndex];
               const btcStr = item?.price ? ` · BTC: $${Number(item.price).toLocaleString()}` : '';
               const deltaStr = item?.delta != null ? ` (Delta: ${fmtCvdUsd(item.delta)})` : '';
               const statusStr = item?.isClosed === false ? ' [Live]' : ' [Closed]';
-              return ` ${ctx.dataset.label}: ${fmtCvdUsd(ctx.parsed.y)}${deltaStr}${statusStr}${btcStr}`;
+              return ` ${ctx.dataset?.label || ''}: ${fmtCvdUsd(ctx.parsed?.y ?? 0)}${deltaStr}${statusStr}${btcStr}`;
             }
           }
         }
@@ -590,7 +605,7 @@ function CVDPanel({
         ...base.scales,
         y: {
           ...base.scales.y,
-          display: futuresList.length > 0,
+          display: true,
           beginAtZero: true,
           grid: {
             ...base.scales.y.grid,
@@ -633,7 +648,7 @@ function CVDPanel({
         y1: {
           ...base.scales.y,
           position: 'right',
-          display: spotList.length > 0,
+          display: true,
           beginAtZero: true,
           grid: { drawOnChartArea: false },
           ticks: {
@@ -793,47 +808,47 @@ function CVDPanel({
           <ModuleMenu moduleId="hft_cvd" />
         </div>
       </div>
-      <section className={`flow-verdict flow-tone-${flowVerdict.tone}`} aria-label="Kết luận dòng lệnh Spot và Futures">
+      <section className={`flow-verdict flow-tone-${flowVerdict?.tone || 'neutral'}`} aria-label="Kết luận dòng lệnh Spot và Futures">
         <div className="flow-verdict-main">
           <span className="flow-kicker font-mono">MARKET FLOW VERDICT · BINANCE BTCUSDT</span>
-          <strong>{flowVerdict.title}</strong>
-          <span>{flowVerdict.detail}</span>
+          <strong>{flowVerdict?.title || 'Dòng lệnh cân bằng'}</strong>
+          <span>{flowVerdict?.detail || 'Chưa có bên nào kiểm soát rõ ràng.'}</span>
         </div>
         <div className="flow-verdict-confidence font-mono">
           <span>CONFIDENCE</span>
-          <strong>{flowVerdict.confidence}%</strong>
+          <strong>{flowVerdict?.confidence ?? 50}%</strong>
         </div>
       </section>
 
       <div className="flow-pressure-grid">
         {flowCards.map(({ key, accent, series, metrics, netDelta }) => (
-          <article className={`flow-pressure-card is-${metrics.direction}`} key={key} style={{ '--flow-accent': accent }}>
+          <article className={`flow-pressure-card is-${metrics?.direction || 'neutral'}`} key={key} style={{ '--flow-accent': accent }}>
             <div className="flow-pressure-head font-mono">
               <span>{key} AGGRESSIVE FLOW</span>
-              <span className={`flow-direction is-${metrics.direction}`}>{metrics.direction.toUpperCase()}</span>
+              <span className={`flow-direction is-${metrics?.direction || 'neutral'}`}>{(metrics?.direction || 'neutral').toUpperCase()}</span>
             </div>
             <div className="flow-pressure-score font-mono">
-              <strong>{metrics.strengthScore ?? '—'}</strong><span>/100</span>
+              <strong>{metrics?.strengthScore ?? '—'}</strong><span>/100</span>
               <small>{fmtCvdUsd(netDelta)}</small>
             </div>
             <dl className="flow-pressure-metrics font-mono">
-              <div><dt>DELTA / VOL</dt><dd>{fmtSignedPct(metrics.deltaRatioPct)}</dd></div>
-              <div><dt>Z-SCORE</dt><dd>{metrics.zScore == null ? 'đang tích lũy' : `${metrics.zScore > 0 ? '+' : ''}${metrics.zScore.toFixed(2)}σ`}</dd></div>
-              <div><dt>MOMENTUM</dt><dd>{metrics.momentum.toUpperCase()}</dd></div>
+              <div><dt>DELTA / VOL</dt><dd>{fmtSignedPct(metrics?.deltaRatioPct)}</dd></div>
+              <div><dt>Z-SCORE</dt><dd>{metrics?.zScore == null ? 'đang tích lũy' : `${metrics.zScore > 0 ? '+' : ''}${metrics.zScore.toFixed(2)}σ`}</dd></div>
+              <div><dt>MOMENTUM</dt><dd>{(metrics?.momentum || 'stable').toUpperCase()}</dd></div>
             </dl>
             <div className="flow-data-health font-mono">
-              <span className={series.isComplete ? 'is-complete' : 'is-incomplete'}>{series.coverage.toFixed(0)}% COVERAGE</span>
-              <span>{fmtAge(series.asOf)}</span>
+              <span className={series?.isComplete ? 'is-complete' : 'is-incomplete'}>{(Number(series?.coverage) || 0).toFixed(0)}% COVERAGE</span>
+              <span>{fmtAge(series?.asOf)}</span>
             </div>
           </article>
         ))}
       </div>
 
-      <section className={`futures-positioning flow-tone-${futuresPositioning.tone}`}>
+      <section className={`futures-positioning flow-tone-${futuresPositioning?.tone || 'neutral'}`}>
         <div>
           <span className="flow-kicker font-mono">FUTURES POSITIONING · OI CONTEXT 24H</span>
-          <strong>{futuresPositioning.label}</strong>
-          <p>{futuresPositioning.detail}</p>
+          <strong>{futuresPositioning?.label || 'Chưa đủ dữ liệu định vị'}</strong>
+          <p>{futuresPositioning?.detail || 'Cần Price, CVD và lịch sử OI đồng thời.'}</p>
         </div>
         <dl className="futures-positioning-stats font-mono">
           <div><dt>PRICE</dt><dd>{fmtSignedPct(futuresPriceChangePct)}</dd></div>
@@ -873,9 +888,9 @@ function CVDPanel({
         )}
 
         {/* Chip hiển thị CVD 2 thị trường tại điểm crosshair của AdvancedChart */}
-        {syncIdx != null && syncSourceRef.current[syncIdx] ? (() => {
+        {syncIdx != null && syncSourceRef.current?.[syncIdx] ? (() => {
           const item = syncSourceRef.current[syncIdx];
-          const d = item.time != null ? new Date(item.time) : null;
+          const d = item?.time != null ? new Date(item.time) : null;
           const timeLabel = d && !isNaN(d.getTime())
             ? (cvdTf === '24H'
               ? `${String(d.getHours()).padStart(2, '0')}:00`
@@ -901,8 +916,10 @@ function CVDPanel({
 
       {/* Volume Gauges (song song 2 thị trường để đối chiếu) */}
       {gaugeMarkets.map(({ key, accent, venueLabel, series }) => {
-        const totalVol = series.displayVol.buy + series.displayVol.sell;
-        const bpct = totalVol > 0 ? (series.displayVol.buy / totalVol * 100) : 50;
+        const buy = Number(series?.displayVol?.buy) || 0;
+        const sell = Number(series?.displayVol?.sell) || 0;
+        const totalVol = buy + sell;
+        const bpct = totalVol > 0 ? (buy / totalVol * 100) : 50;
         const spct = 100 - bpct;
         return (
           <div className="vol-gauge-container" key={key} style={{ marginBottom: '10px' }} title={`Tỷ lệ Buy/Sell Volume trong khung ${cvdTf} từ BINANCE ${venueLabel}`}>
@@ -916,8 +933,8 @@ function CVDPanel({
               <div className="vol-gauge-sell" style={{ width: `${spct}%` }} />
             </div>
             <div className="vol-gauge-values font-mono">
-              <span>{fmtUsd(series.displayVol.buy)}</span>
-              <span>{fmtUsd(series.displayVol.sell)}</span>
+              <span>{fmtUsd(buy)}</span>
+              <span>{fmtUsd(sell)}</span>
             </div>
           </div>
         );

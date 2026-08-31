@@ -72,6 +72,17 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-08-31] Khắc Phục Triệt Để Lỗi Crash Khi Chuyển Timeframe CVD & Order Flow `(BUGFIX)`
+- **Mode / Type / Action / Lane:** BUGFIX / BUGFIX / EXECUTE / FAST
+- **Tóm tắt:** Bổ sung cơ chế phòng vệ chống crash toàn diện (Crash-Proof Guardrails) khi người dùng bấm chuyển đổi qua lại giữa các khung thời gian 1H, 24H, 7D, 30D trên tab CVD & ORDER FLOW.
+- **Root Cause & Fix:**
+  - *Chart.js Plugins & Scales:* Bọc an toàn `cvdSyncPlugin` và `cvdZeroLinePlugin` với `try/catch` và kiểm tra `getPixelForValue` khả dụng; cố định hiển thị `display: true` cho 2 trục Y (Futures bên trái, Spot bên phải) để Chart.js không bị lỗi thiếu scale khi re-render datasets.
+  - *Footprint & Volume-by-Price:* Phòng vệ `clusterVolNodes` và `FootprintSection` chống `Math.max` trên mảng rỗng hoặc node thiếu thuộc tính buy/sell.
+  - *Flow Cards & Verdict:* Áp dụng optional chaining (`metrics?.direction`, `(Number(series?.coverage) || 0)`, `flowVerdict?.tone`, `futuresPositioning?.tone`) ngăn chặn hoàn toàn lỗi truy cập thuộc tính trên đối tượng chưa khởi tạo xong trong tích tắc chuyển khung.
+- **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `src/services/api.js`, `README.md`.
+- **Ảnh hưởng README:** §4
+- **Verify:** `npm test` pass toàn bộ (74/74 unit tests); `npm run build` pass trong 4.25s.
+
 ### [2026-08-31] Chuẩn Hóa Metrics & Points Cho Khung 1H Khi Chuyển Timeframe CVD `(BUGFIX)`
 - **Mode / Type / Action / Lane:** BUGFIX / BUGFIX / EXECUTE / FAST
 - **Tóm tắt:** Bổ sung đầy đủ các trường `delta`, `buyVol`, `sellVol`, và `cumulativeWithinWindow` cho từng nến 1 phút trong `getCompletedHourCVD` (API Binance klines). Giúp `computeFlowMetrics` tính toán chính xác Rolling Z-Score, Momentum, Delta/Volume Ratio và Flow Strength Score ngay khi chuyển sang khung 1H của giờ đã chốt, đồng bộ nhất quán với các khung 24H, 7D, 30D.
