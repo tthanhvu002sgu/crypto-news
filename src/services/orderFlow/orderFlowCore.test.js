@@ -82,6 +82,29 @@ test('persistence flush does not clear a bucket dirtied again while the transact
   assert.equal(engine.dirtyBuckets.size, 1);
 });
 
+test('bias snapshot only marks a multi-exchange CVD window ready after coverage, active streams and freshness pass', () => {
+  const engine = new TradeStreamEngine({ store: { persist: async () => {} }, webSocketFactory: () => null });
+  const end = Math.floor(Date.now() / 60_000) * 60_000;
+  for (const market of ['spot', 'futures']) {
+    for (let index = 0; index < 1008; index += 1) {
+      const timestamp = end - ((1007 - index) * 60_000);
+      engine.bucketMap.set(`${market}:${timestamp}`, {
+        id: `${market}:${timestamp}`, market, timestamp,
+        buyVol: 100, sellVol: 0, delta: 100, totalVol: 100, tradeCount: 1,
+        open: 100, high: 100, low: 100, close: 100, venues: {}, updatedAt: timestamp,
+      });
+    }
+  }
+  for (const [key, health] of engine.health.entries()) {
+    engine.health.set(key, { ...health, status: 'live', coverage: 100 });
+  }
+  const snapshot = engine.getBiasSnapshot();
+  assert.equal(snapshot.spot['24H'].isBiasReady, true);
+  assert.equal(snapshot.futures['24H'].isBiasReady, true);
+  assert.equal(snapshot.isReady, true);
+  assert.equal(snapshot.spot['7D'].isBiasReady, false);
+});
+
 test('Binance gap recovery paginates beyond the first 1000 trades', async () => {
   const originalFetch = globalThis.fetch;
   const requestedFromIds = [];

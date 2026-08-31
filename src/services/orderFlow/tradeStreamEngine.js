@@ -225,6 +225,40 @@ export class TradeStreamEngine {
     return { total: rows.length, live, active, coverage, status: live === rows.length ? 'live' : active > 0 ? 'degraded' : 'warming' };
   }
 
+  getBiasSnapshot(bucketRows = [...this.bucketMap.values()]) {
+    const health = { spot: this.marketHealth('spot'), futures: this.marketHealth('futures') };
+    const now = Date.now();
+    const recentSince = now - 5 * 60_000;
+    const latestTradeAt = { spot: 0, futures: 0 };
+    for (const row of bucketRows) {
+      if (row.timestamp >= recentSince) {
+        latestTradeAt[row.market] = Math.max(latestTradeAt[row.market] || 0, row.updatedAt || row.timestamp);
+      }
+    }
+    const markets = {};
+    for (const market of ['spot', 'futures']) {
+      markets[market] = {};
+      const fresh = latestTradeAt[market] > 0 && now - latestTradeAt[market] <= 5 * 60_000;
+      for (const timeframe of ['24H', '7D', '30D']) {
+        const series = buildAggregateSeries(bucketRows, market, timeframe);
+        markets[market][timeframe] = {
+          ...series,
+          dataAsOf: latestTradeAt[market] || null,
+          isBiasReady: health[market].active > 0 && series.coverage >= 70 && fresh,
+        };
+      }
+    }
+    return {
+      source: 'MULTI_EXCHANGE_RAW_TRADE',
+      spot: markets.spot,
+      futures: markets.futures,
+      health,
+      divergences: [...this.divergences.values()].sort((a, b) => b.confirmedAt - a.confirmedAt).slice(0, 20),
+      isReady: markets.spot['24H'].isBiasReady && markets.futures['24H'].isBiasReady,
+      updatedAt: Date.now(),
+    };
+  }
+
   getSnapshot(timeframe = '24H', gap = 100) {
     const bucketRows = [...this.bucketMap.values()];
     const footprintRows = [...this.footprintMap.values()];
@@ -238,6 +272,7 @@ export class TradeStreamEngine {
       futuresContribution: summarizeVenueContribution(futures),
       health: { spot: this.marketHealth('spot'), futures: this.marketHealth('futures'), venues: [...this.health.values()] },
       divergences: [...this.divergences.values()].sort((a, b) => b.confirmedAt - a.confirmedAt).slice(0, 20),
+      bias: this.getBiasSnapshot(bucketRows),
       updatedAt: Date.now(),
     };
   }

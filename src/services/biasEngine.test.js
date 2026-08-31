@@ -144,6 +144,49 @@ describe('biasEngine unit tests', () => {
     assert.ok(frDumpSig.status.includes('Downtrend'));
   });
 
+  it('uses coverage-gated multi-exchange raw CVD in place of Binance CVD and surfaces confirmed divergence', () => {
+    const data = {
+      btc: { price: 90000, volume: 1000000000 },
+      cvdHistory24hSpot: [{ cvd: -500000000 }],
+      cvdHistory24h: [{ cvd: 500000000 }],
+      aggregatedOrderFlow: {
+        isReady: true,
+        spot: {
+          '24H': { isBiasReady: true, windowNetDelta: 80000000 },
+          '7D': { isBiasReady: false },
+          '30D': { isBiasReady: false },
+        },
+        futures: {
+          '24H': { isBiasReady: true, windowNetDelta: -50000000 },
+          '7D': { isBiasReady: false },
+          '30D': { isBiasReady: false },
+        },
+        divergences: [{ market: 'spot', type: 'bullish_divergence', coverage: 85 }],
+      },
+    };
+    const bias = calculateMarketBias(data);
+    const spotSignal = bias.signals.find((signal) => signal.name.startsWith('Spot CVD'));
+    const futuresSignal = bias.signals.find((signal) => signal.name.startsWith('Futures CVD'));
+    assert.ok(spotSignal.status.includes('MULTI-EXCHANGE RAW'));
+    assert.ok(spotSignal.score > 0, 'aggregated positive Spot CVD must replace negative Binance CVD');
+    assert.ok(spotSignal.status.includes('Bullish divergence'));
+    assert.ok(futuresSignal.status.includes('MULTI-EXCHANGE RAW'));
+  });
+
+  it('retains Binance CVD when multi-exchange coverage gate is not ready', () => {
+    const bias = calculateMarketBias({
+      btc: { price: 90000, volume: 1000000000 },
+      cvdHistory24hSpot: [{ cvd: -80000000 }],
+      aggregatedOrderFlow: {
+        isReady: false,
+        spot: { '24H': { isBiasReady: false, windowNetDelta: 80000000 } },
+      },
+    });
+    const spotSignal = bias.signals.find((signal) => signal.name.startsWith('Spot CVD'));
+    assert.ok(spotSignal.status.includes('BINANCE'));
+    assert.ok(spotSignal.score < 0);
+  });
+
   it('dampens risk score when High Impact calendar event occurs within 24h', () => {
     const futureTime = new Date(Date.now() + 6 * 3600 * 1000).toISOString(); // In 6 hours
     const dataWithEvent = {
@@ -316,4 +359,3 @@ describe('biasEngine unit tests', () => {
     });
   });
 });
-

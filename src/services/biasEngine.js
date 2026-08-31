@@ -23,8 +23,8 @@
  * 
  * 4. Market Microstructure & BTC Trend Regime (15%):
  *    - BTC Trend & Price Regime (MA50/MA200, 30D/90D Momentum, Realized Vol) (3%)
- *    - Spot CVD 24h/7d/30d (3%)
- *    - Futures CVD 24h/7d/30d (2%)
+ *    - Spot CVD 24h/7d/30d (3%) — Multi-Exchange raw-trade when coverage is sufficient, Binance otherwise
+ *    - Futures CVD 24h/7d/30d (2%) — Multi-Exchange raw-trade when coverage is sufficient, Binance otherwise
  *    - Funding Rate Confluence (Cross-checked with Spot CVD) (2%)
  *    - Open Interest Surge & Leverage Action (2%)
  *    - Fear & Greed Index (2%)
@@ -413,6 +413,18 @@ function isItemFallback(item) {
     return item.isFallback === true || item.status === 'FALLBACK' || item.status === 'UNAVAILABLE';
   }
   return false;
+}
+
+function getReadyAggregateSeries(data, market, timeframe) {
+  const series = data?.aggregatedOrderFlow?.[market]?.[timeframe];
+  return series?.isBiasReady === true ? series : null;
+}
+
+function divergenceAdjustment(divergence, market) {
+  if (!divergence || divergence.market !== market) return 0;
+  if (divergence.type === 'bullish_divergence') return 0.12;
+  if (divergence.type === 'bearish_divergence') return -0.12;
+  return 0;
 }
 
 export function calculateMarketBias(data, etfHistory = [], options = {}) {
@@ -810,9 +822,18 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
   }
 
   // 4B. Spot CVD (24h, 7d, 30d) (3%)
-  const spot24 = !isItemFallback(data.cvdHistory24hSpot) ? extractCvdNetDelta(data.cvdHistory24hSpot) : null;
-  const spot7d = extractCvdNetDelta(data.cvdHistory7dSpot);
-  const spot30d = extractCvdNetDelta(data.cvdHistory30dSpot);
+  // Multi-exchange raw trades replace the matching Binance window only after its coverage/freshness gate passes.
+  const aggregateSpot24 = getReadyAggregateSeries(data, 'spot', '24H');
+  const aggregateSpot7d = getReadyAggregateSeries(data, 'spot', '7D');
+  const aggregateSpot30d = getReadyAggregateSeries(data, 'spot', '30D');
+  const spot24 = extractCvdNetDelta(aggregateSpot24) ?? (!isItemFallback(data.cvdHistory24hSpot) ? extractCvdNetDelta(data.cvdHistory24hSpot) : null);
+  const spot7d = extractCvdNetDelta(aggregateSpot7d) ?? extractCvdNetDelta(data.cvdHistory7dSpot);
+  const spot30d = extractCvdNetDelta(aggregateSpot30d) ?? extractCvdNetDelta(data.cvdHistory30dSpot);
+  const spotCvdSource = aggregateSpot24 ? 'MULTI-EXCHANGE RAW' : 'BINANCE';
+  const aggregateDivergences = data?.aggregatedOrderFlow?.isReady
+    ? (data.aggregatedOrderFlow.divergences || []).filter((event) => event?.coverage >= 70)
+    : [];
+  const spotDivergence = aggregateDivergences.find((event) => event.market === 'spot');
   let spotCvdSignal = 0;
   
   if (spot24 != null && btcVolume != null && btcVolume > 0) {
@@ -827,6 +848,7 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
       if (spot30d > 0 && spot24 > 0) baseScore += 0.1;
       else if (spot30d < 0 && spot24 < 0) baseScore -= 0.1;
     }
+    baseScore += divergenceAdjustment(spotDivergence, 'spot');
     spotCvdSignal = clamp(baseScore);
     
     if (spotCvdSignal > 0.6) spotCvdStatus = 'Spot Gom Hàng Mạnh (+)';
@@ -834,6 +856,8 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
     else if (spotCvdSignal > -0.2) spotCvdStatus = 'Spot Đi Ngang';
     else if (spotCvdSignal > -0.6) spotCvdStatus = 'Spot Bán Ưu Thế';
     else spotCvdStatus = 'Spot Xả Mạnh (-)';
+    spotCvdStatus += ` · ${spotCvdSource}`;
+    if (spotDivergence) spotCvdStatus += ` · ${spotDivergence.type === 'bullish_divergence' ? 'Bullish divergence xác nhận' : 'Bearish divergence xác nhận'}`;
 
     microScoreSum += spotCvdSignal * 0.03;
     availableWeight += 0.03;
@@ -841,9 +865,14 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
   }
 
   // 4C. Futures CVD (24h, 7d, 30d) (2%)
-  const fut24 = !isItemFallback(data.cvdHistory24h) ? extractCvdNetDelta(data.cvdHistory24h) : null;
-  const fut7d = extractCvdNetDelta(data.cvdHistory7d);
-  const fut30d = extractCvdNetDelta(data.cvdHistory30d);
+  const aggregateFut24 = getReadyAggregateSeries(data, 'futures', '24H');
+  const aggregateFut7d = getReadyAggregateSeries(data, 'futures', '7D');
+  const aggregateFut30d = getReadyAggregateSeries(data, 'futures', '30D');
+  const fut24 = extractCvdNetDelta(aggregateFut24) ?? (!isItemFallback(data.cvdHistory24h) ? extractCvdNetDelta(data.cvdHistory24h) : null);
+  const fut7d = extractCvdNetDelta(aggregateFut7d) ?? extractCvdNetDelta(data.cvdHistory7d);
+  const fut30d = extractCvdNetDelta(aggregateFut30d) ?? extractCvdNetDelta(data.cvdHistory30d);
+  const futCvdSource = aggregateFut24 ? 'MULTI-EXCHANGE RAW' : 'BINANCE';
+  const futDivergence = aggregateDivergences.find((event) => event.market === 'futures');
   
   if (fut24 != null && btcVolume != null && btcVolume > 0) {
     let futCvdStatus = 'No data';
@@ -857,6 +886,7 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
       if (fut30d > 0 && fut24 > 0) baseScore += 0.1;
       else if (fut30d < 0 && fut24 < 0) baseScore -= 0.1;
     }
+    baseScore += divergenceAdjustment(futDivergence, 'futures');
     const futCvdSignal = clamp(baseScore);
     
     if (futCvdSignal > 0.6) futCvdStatus = 'Futures Long Chủ Đạo';
@@ -864,10 +894,23 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
     else if (futCvdSignal > -0.2) futCvdStatus = 'Futures Cân Bằng';
     else if (futCvdSignal > -0.6) futCvdStatus = 'Futures Nghiêng Short';
     else futCvdStatus = 'Futures Short Chủ Đạo';
+    futCvdStatus += ` · ${futCvdSource}`;
+    if (futDivergence) futCvdStatus += ` · ${futDivergence.type === 'bullish_divergence' ? 'Bullish divergence xác nhận' : 'Bearish divergence xác nhận'}`;
 
     microScoreSum += futCvdSignal * 0.02;
     availableWeight += 0.02;
     signals.push({ name: 'Futures CVD (24h/7d/30d)', weight: '2%', score: futCvdSignal * 2, status: futCvdStatus, pillar: 'microstructure' });
+  }
+
+  const spotFuturesDivergence = aggregateDivergences.find((event) => event.market === 'cross');
+  if (spotFuturesDivergence) {
+    signals.push({
+      name: 'Multi-Exchange Spot/Futures Divergence',
+      weight: 'Context',
+      score: 0,
+      status: `${spotFuturesDivergence.timeframe?.toUpperCase() || '—'} · ${spotFuturesDivergence.evidence}`,
+      pillar: 'microstructure',
+    });
   }
 
   // 4D. Funding Rate & Leverage Confluence (2%)
@@ -1088,4 +1131,3 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
     },
   };
 }
-

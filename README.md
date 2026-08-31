@@ -5,7 +5,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 **Các tính năng cốt lõi:**
 - **Lịch Kinh Tế Vĩ Mô 7 Ngày (7-Day Economic Calendar):** Hiển thị lịch sự kiện vĩ mô toàn cầu (CPI, FOMC, NFP, GDP, PMI...) dưới dạng bento grid 7 ô vuông tương ứng 7 ngày trong tuần (cố định 1 hàng trên PC, cuộn ngang trên Mobile). Tích hợp Modal phân tích chuyên sâu **tác động của từng sự kiện đến thanh khoản Bitcoin & Crypto** với dữ liệu thời gian thực và curated fallback.
-- **Market Bias Engine (Công Thức Bias Total & 3-Layer Regime):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Dòng tiền Định chế (40%)*, *On-Chain Fundamentals & Network (25%)*, *Vĩ mô & Thanh khoản Toàn cầu (20%)*, *Vi cấu trúc & BTC Trend Regime (15%)*. Giao diện ưu tiên score và trạng thái hiện tại, kèm sparkline tối đa 30 snapshot realtime cùng delta để cung cấp ngữ cảnh hướng biến động mà không lấn át chỉ số chính; khi chưa đủ dữ liệu, hệ thống hiển thị trạng thái tích lũy thay vì backfill giả. Loại bỏ tính trùng lặp MVRV, đưa DXY, US 10Y Yield, Net Liquidity, High-Yield Spread và 1.000 nến Daily BTC vào tính điểm thực tế. Đồng thời bóc tách 3 tầng nhận định trực quan: `Valuation Bias` (Định giá), `Trend Bias` (Cấu trúc xu hướng), `Tactical Bias` (Chiến thuật/Đòn bẩy ngắn hạn).
+- **Market Bias Engine (Công Thức Bias Total & 3-Layer Regime):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Dòng tiền Định chế (40%)*, *On-Chain Fundamentals & Network (25%)*, *Vĩ mô & Thanh khoản Toàn cầu (20%)*, *Vi cấu trúc & BTC Trend Regime (15%)*. Spot/Futures CVD trong pillar vi cấu trúc tự chuyển sang **Aggregated Multi-Exchange raw-trade** khi coverage ≥70%, stream còn hoạt động và dữ liệu mới ≤5 phút; nếu không đạt, giữ Binance CVD. Divergence đã xác nhận chỉ điều chỉnh nhẹ tín hiệu CVD, không thay đổi tổng trọng số pillar. Giao diện ưu tiên score và trạng thái hiện tại, kèm sparkline tối đa 30 snapshot realtime cùng delta để cung cấp ngữ cảnh hướng biến động mà không lấn át chỉ số chính.
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
@@ -46,7 +46,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
-- `App.jsx`: Component gốc quản lý Routing/Tabs (Dashboard, HFT Radar, Cascade, AI Market Decision Lab) và WebSocket manager, tích hợp nút SYNC SHEET và modal cài đặt API/Webhook.
+- `App.jsx`: Component gốc quản lý Routing/Tabs, WebSocket manager và bridge snapshot Aggregated Order Flow vào Browser Market Bias Engine, tích hợp nút SYNC SHEET và modal cài đặt API/Webhook.
 - `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC theo mô hình score-first, có sparkline tối đa 30 snapshot realtime chống look-ahead, thanh Gauge Spectrum, 4 bento card trụ cột, thanh tóm tắt 3 tầng Regime và drawer bẻ nhỏ 14+ tín hiệu định lượng.
@@ -59,13 +59,13 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
 - `src/services/orderFlowMetrics.test.js` — Unit tests cho normalized flow và phân loại trạng thái vị thế Futures.
 - `src/services/orderFlow/normalizedTrade.js` + `adapters/*` — Data contract trade thống nhất và parser đúng aggressor-side/contract size cho Binance, Bybit, OKX, Coinbase.
-- `src/services/orderFlow/tradeStreamEngine.js` — Điều phối 7 WebSocket stream, buffer trong lúc backfill, dedupe overlap, checkpoint, persistence và snapshot tổng hợp Spot/Futures.
+- `src/services/orderFlow/tradeStreamEngine.js` — Điều phối 7 WebSocket stream, buffer trong lúc backfill, dedupe overlap, checkpoint, persistence, snapshot tổng hợp Spot/Futures và bias snapshot theo 24H/7D/30D có quality gate.
 - `src/services/orderFlow/orderFlowAggregator.js` + `divergenceDetector.js` — CVD/footprint/contribution theo venue và divergence price–CVD/cross-market trên bucket đóng `5m/15m/1h`.
 - `src/services/orderFlow/orderFlowStore.js` + `tradeGapRecovery.js` — IndexedDB transaction đa store, retention 30 ngày và REST gap recovery có trạng thái bounded/degraded minh bạch.
 - `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias trực tiếp bằng `biasEngine.js` và gửi webhook.
 - `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
 - `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
-- `src/services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100) và 3-layer regime (Valuation, Trend, Tactical) dựa trên 4 trụ cột định lượng chuẩn hóa (tiêu thụ `windowNetDelta`).
+- `src/services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100), ưu tiên Multi-Exchange raw CVD khi quality gate đạt, fallback Binance rõ ràng, và dùng divergence đã xác nhận để điều chỉnh CVD trong 3-layer regime.
 - `src/services/biasEngine.test.js` — Bộ unit test tự động cho toàn bộ logic định lượng, parsing VIX an toàn, MVRV deduplication và trend calculation.
 - `.github/workflows/sync-sheets.yml` — Workflow GitHub Actions chạy định kỳ 3 phiên theo cron.
 - `services/moveTracker.js` — Điều phối champion detector, shadow flow research, trigger/end/outcome lifecycle và context OI/Funding/OBI.
@@ -76,6 +76,14 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-08-31] Đưa Aggregated Order Flow Vào Market Bias Engine `(FEATURE)`
+
+- **Tóm tắt:** Nối CVD raw-trade đa sàn vào hai tín hiệu Spot (3%) và Futures (2%) của Market Bias Engine, không đổi cơ cấu trọng số 4 pillar.
+- **Quality gate:** Mỗi khung 24H/7D/30D chỉ dùng Multi-Exchange khi coverage ≥70%, có stream active và freshness ≤5 phút; nếu không đạt thì fallback rõ ràng sang Binance CVD tương ứng.
+- **Divergence:** Price–CVD divergence đã xác nhận điều chỉnh nhỏ tín hiệu CVD cùng thị trường; Spot–Futures divergence được xuất như context, không tự tạo thêm trọng số.
+- **Verify:** `npm run test:bias` pass 21/21; `npm run test:orderflow` pass 17/17; production build và `git diff --check` pass.
+- **Files / areas chạm:** `src/App.jsx`, `src/services/biasEngine.js`, `src/services/biasEngine.test.js`, `src/services/orderFlow/tradeStreamEngine.js`, `README.md`.
 
 ### [2026-08-30] Aggregated Multi-Exchange CVD, Raw-Trade Footprint, Gap Backfill & Divergence Detector `(FULL)`
 
