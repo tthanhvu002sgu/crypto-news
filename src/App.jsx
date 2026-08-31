@@ -1365,7 +1365,7 @@ function AppContent() {
             {/* ── Sidebar Accordion Group 1: Derivatives & Market Sentiment ── */}
             {!isModuleHidden('sidebar_derivatives') && (
               <div className="sidebar-accordion">
-                <button className="sidebar-accordion-header" onClick={() => toggleAccordion('derivatives')}>
+                <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('derivatives')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('derivatives')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <LiveDot /> PHÁI SINH & TÂM LÝ (DERIVATIVES)
                   </span>
@@ -1373,7 +1373,7 @@ function AppContent() {
                     <ModuleMenu moduleId="sidebar_derivatives" />
                     {accordionOpen.derivatives ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </span>
-                </button>
+                </div>
                 {accordionOpen.derivatives && (
                   <div className="sidebar-accordion-body">
                     <div className="metrics-grid">
@@ -1452,7 +1452,7 @@ function AppContent() {
             {/* ── Sidebar Accordion Group 2: US Macro Economics ── */}
             {!isModuleHidden('sidebar_macro') && (
               <div className="sidebar-accordion">
-                <button className="sidebar-accordion-header" onClick={() => toggleAccordion('macro')}>
+                <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('macro')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('macro')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <LiveDot /> VĨ MÔ KINH TẾ MỸ (MACRO)
                   </span>
@@ -1460,7 +1460,7 @@ function AppContent() {
                     <ModuleMenu moduleId="sidebar_macro" />
                     {accordionOpen.macro ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </span>
-                </button>
+                </div>
                 {accordionOpen.macro && (
                   <div className="sidebar-accordion-body">
                     <div className="metrics-grid">
@@ -1489,7 +1489,7 @@ function AppContent() {
             {/* ── Sidebar Accordion Group 3: BTC Network & On-chain ── */}
             {!isModuleHidden('sidebar_onchain') && (
               <div className="sidebar-accordion">
-                <button className="sidebar-accordion-header" onClick={() => toggleAccordion('onchain')}>
+                <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('onchain')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('onchain')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <LiveDot /> BTC NETWORK & ON-CHAIN
                   </span>
@@ -1497,7 +1497,7 @@ function AppContent() {
                     <ModuleMenu moduleId="sidebar_onchain" />
                     {accordionOpen.onchain ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </span>
-                </button>
+                </div>
                 {accordionOpen.onchain && (
                   <div className="sidebar-accordion-body">
                     <div className="metrics-grid">

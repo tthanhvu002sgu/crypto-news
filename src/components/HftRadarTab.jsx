@@ -16,6 +16,7 @@ import {
 import { describeMoveEvent } from '../services/moveTrackerCore';
 import { subscribeCrosshair } from '../services/crosshairSync';
 import { classifyFuturesPositioning, classifySpotFutures, computeFlowMetrics } from '../services/orderFlowMetrics';
+import { withWindowCumulative } from '../services/cvdService';
 
 // Plugin vẽ đường dọc highlight trên chart CVD theo crosshair của AdvancedChart
 const cvdSyncPlugin = {
@@ -381,7 +382,7 @@ function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, cov
               const sellWidth = Math.min(100, (sell / maxSingleVol) * 100);
 
               return (
-                <tr key={n?.price ?? idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                <tr key={`${marketLabel}-${n?.price ?? 'node'}-${idx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                   <td className="font-mono" style={{ padding: '8px', textAlign: 'left', color: 'var(--text-slate-200)' }}>
                     {n?.price} <span style={{ color: 'var(--text-slate-500)', margin: '0 4px' }}>~</span> {n?.priceHigh}
                   </td>
