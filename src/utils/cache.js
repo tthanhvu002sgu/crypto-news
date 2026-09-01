@@ -27,9 +27,20 @@ export function isCacheFresh(cacheKey, expiryMs) {
 }
 
 /** Read only the value (ignores expiry). Useful for hydrate-from-cache. */
-export function readCacheValue(cacheKey) {
-  const entry = readCacheEntry(cacheKey);
-  return entry ? entry.val : null;
+export function readCacheValue(cacheKey, fallback = null) {
+  try {
+    const entry = readCacheEntry(cacheKey);
+    if (entry && entry.val !== undefined && entry.val !== null) return entry.val;
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const val = parsed?.val !== undefined ? parsed.val : parsed;
+        if (val !== null && val !== undefined) return val;
+      }
+    }
+  } catch {}
+  return fallback;
 }
 
 /**

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
+import { readCacheValue } from '../utils/cache';
 import ModuleMenu from './ModuleMenu';
 
 const IMPACT_BADGES = {
@@ -9,8 +10,16 @@ const IMPACT_BADGES = {
 };
 
 export default function EconomicCalendarPanel({ theme }) {
-  const [calendarData, setCalendarData] = useState({ weekDays: [], allEvents: [] });
-  const [loading, setLoading] = useState(true);
+  const [calendarData, setCalendarData] = useState(() => {
+    const cached = readCacheValue('weekly_economic_calendar_v1');
+    return cached && Array.isArray(cached.weekDays) && cached.weekDays.length > 0
+      ? cached
+      : { weekDays: [], allEvents: [] };
+  });
+  const [loading, setLoading] = useState(() => {
+    const cached = readCacheValue('weekly_economic_calendar_v1');
+    return !(cached && Array.isArray(cached.weekDays) && cached.weekDays.length > 0);
+  });
   const [filter, setFilter] = useState('ALL'); // 'ALL' | 'HIGH' | 'USD' | 'CRYPTO'
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [refreshing, setRefreshing] = useState(false);

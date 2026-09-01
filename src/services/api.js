@@ -1,5 +1,6 @@
 import axios from 'axios';
 import staticFlowHistory from '../data/etfFlowHistoryStatic.json' with { type: 'json' };
+import { fetchCached } from '../utils/cache.js';
 import {
   CVD_ANCHOR_TIMESTAMP,
   buildCvdSeries,
@@ -65,54 +66,56 @@ export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 
  * Binance caps one kline request at 1,000 rows, so requests are paged backwards.
  * The final row may be the currently-forming D/W/M candle, matching TradingView W0.
  */
-export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', requestedLimit = 10000) => {
+export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', requestedLimit = 10000, force = false) => {
   const intervalMap = { D: '1d', W: '1w', M: '1M' };
   const interval = intervalMap[timeframe] || '1w';
-  // Keep enough headroom to retrieve the complete BTCUSDT daily history. The
-  // loop still stops as soon as Binance returns its first partial page.
   const targetLimit = Math.max(2, Math.min(Math.trunc(requestedLimit), 10000));
-  const rows = [];
-  let endTime;
+  const cacheKey = `btcMacroKlines_${symbol}_${interval}_${targetLimit}`;
 
-  try {
-    while (rows.length < targetLimit) {
-      const batchLimit = Math.min(1000, targetLimit - rows.length);
-      const params = { symbol, interval, limit: batchLimit };
-      if (endTime != null) params.endTime = endTime;
+  return fetchCached(cacheKey, async () => {
+    const rows = [];
+    let endTime;
 
-      const response = await axios.get('https://api.binance.com/api/v3/klines', { params });
-      const batch = Array.isArray(response.data) ? response.data : [];
-      if (batch.length === 0) break;
-      rows.unshift(...batch);
+    try {
+      while (rows.length < targetLimit) {
+        const batchLimit = Math.min(1000, targetLimit - rows.length);
+        const params = { symbol, interval, limit: batchLimit };
+        if (endTime != null) params.endTime = endTime;
 
-      const earliestOpenTime = Number(batch[0]?.[0]);
-      if (!Number.isFinite(earliestOpenTime) || batch.length < batchLimit) break;
-      const nextEndTime = earliestOpenTime - 1;
-      if (endTime != null && nextEndTime >= endTime) break;
-      endTime = nextEndTime;
+        const response = await axios.get('https://api.binance.com/api/v3/klines', { params, timeout: 8000 });
+        const batch = Array.isArray(response.data) ? response.data : [];
+        if (batch.length === 0) break;
+        rows.unshift(...batch);
+
+        const earliestOpenTime = Number(batch[0]?.[0]);
+        if (!Number.isFinite(earliestOpenTime) || batch.length < batchLimit) break;
+        const nextEndTime = earliestOpenTime - 1;
+        if (endTime != null && nextEndTime >= endTime) break;
+        endTime = nextEndTime;
+      }
+
+      const now = Date.now();
+      const uniqueRows = Array.from(new Map(rows.map((row) => [Number(row[0]), row])).values())
+        .sort((left, right) => Number(left[0]) - Number(right[0]))
+        .slice(-targetLimit);
+
+      return uniqueRows.map((row) => ({
+        time: new Date(Number(row[0])),
+        open: parseFloat(row[1]),
+        high: parseFloat(row[2]),
+        low: parseFloat(row[3]),
+        close: parseFloat(row[4]),
+        volume: parseFloat(row[5]),
+        closeTime: Number(row[6]),
+        quoteVolume: parseFloat(row[7]),
+        takerBuyQuoteVolume: parseFloat(row[10]),
+        isClosed: Number(row[6]) < now,
+      }));
+    } catch (error) {
+      console.error(`[API] Macro Dashboard klines (${symbol}, ${interval}):`, error.message);
+      return [];
     }
-
-    const now = Date.now();
-    const uniqueRows = Array.from(new Map(rows.map((row) => [Number(row[0]), row])).values())
-      .sort((left, right) => Number(left[0]) - Number(right[0]))
-      .slice(-targetLimit);
-
-    return uniqueRows.map((row) => ({
-      time: new Date(Number(row[0])),
-      open: parseFloat(row[1]),
-      high: parseFloat(row[2]),
-      low: parseFloat(row[3]),
-      close: parseFloat(row[4]),
-      volume: parseFloat(row[5]),
-      closeTime: Number(row[6]),
-      quoteVolume: parseFloat(row[7]),
-      takerBuyQuoteVolume: parseFloat(row[10]),
-      isClosed: Number(row[6]) < now,
-    }));
-  } catch (error) {
-    console.error(`[API] Macro Dashboard klines (${symbol}, ${interval}):`, error.message);
-    return [];
-  }
+  }, 60 * 60 * 1000, null, null, force);
 };
 
 /** Get CVD from the start of the local day using 5m klines */
@@ -284,113 +287,116 @@ export const getHistoricalFootprintNodes = async (symbol = 'BTCUSDT', market = '
  * Fetch and aggregate Footprint Nodes for specific timeframes: 1H, 24H, 7D, 30D.
  * Dynamically computes price bin clusters matching the user's selected timeframe.
  */
-export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market = 'futures', timeframe = '24H') => {
-  try {
-    const baseUrl = market === 'spot'
-      ? 'https://api.binance.com/api/v3/klines'
-      : 'https://fapi.binance.com/fapi/v1/klines';
+export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market = 'futures', timeframe = '24H', force = false) => {
+  const cacheKey = `footprintNodes_${symbol}_${market}_${timeframe}`;
+  return fetchCached(cacheKey, async () => {
+    try {
+      const baseUrl = market === 'spot'
+        ? 'https://api.binance.com/api/v3/klines'
+        : 'https://fapi.binance.com/fapi/v1/klines';
 
-    let interval = '1m';
-    let intervalMs = 60 * 1000;
-    let expectedBuckets = 60;
-    let startTime;
-    let endTime;
-    const now = Date.now();
+      let interval = '1m';
+      let intervalMs = 60 * 1000;
+      let expectedBuckets = 60;
+      let startTime;
+      let endTime;
+      const now = Date.now();
 
-    if (timeframe === '1H') {
-      interval = '1m';
-      intervalMs = 60 * 1000;
-      expectedBuckets = 60;
-      // Align 1H footprint with the CVD card's prior, completed clock hour.
-      const currentHour = new Date();
-      currentHour.setMinutes(0, 0, 0);
-      endTime = currentHour.getTime();
-      startTime = endTime - (60 * 60 * 1000);
-    } else if (timeframe === '24H') {
-      interval = '1m';
-      intervalMs = 60 * 1000;
-      expectedBuckets = 1440;
-      endTime = Math.floor(now / intervalMs) * intervalMs;
-      startTime = endTime - (expectedBuckets * intervalMs);
-    } else if (timeframe === '7D') {
-      interval = '1h';
-      intervalMs = 60 * 60 * 1000;
-      expectedBuckets = 168;
-      endTime = Math.floor(now / intervalMs) * intervalMs;
-      startTime = endTime - (expectedBuckets * intervalMs);
-    } else if (timeframe === '30D') {
-      interval = '4h';
-      intervalMs = 4 * 60 * 60 * 1000;
-      expectedBuckets = 180;
-      endTime = Math.floor(now / intervalMs) * intervalMs;
-      startTime = endTime - (expectedBuckets * intervalMs);
-    }
-
-    const rows = [];
-    let cursor = startTime;
-    while (cursor < endTime && rows.length < expectedBuckets) {
-      const remaining = expectedBuckets - rows.length;
-      const res = await axios.get(baseUrl, {
-        params: {
-          symbol,
-          interval,
-          limit: Math.min(1000, remaining),
-          startTime: cursor,
-          endTime: endTime - 1,
-        },
-      });
-      const batch = Array.isArray(res.data) ? res.data : [];
-      if (batch.length === 0) break;
-      rows.push(...batch);
-      const nextCursor = Number(batch.at(-1)?.[0]) + intervalMs;
-      if (!Number.isFinite(nextCursor) || nextCursor <= cursor) break;
-      cursor = nextCursor;
-    }
-
-    const uniqueRows = Array.from(new Map(rows.map((row) => [Number(row[0]), row])).values())
-      .sort((left, right) => Number(left[0]) - Number(right[0]))
-      .slice(-expectedBuckets);
-
-    const nodeMap = new Map();
-    uniqueRows.forEach(k => {
-      const high = parseFloat(k[2]);
-      const low = parseFloat(k[3]);
-      const close = parseFloat(k[4]);
-      const quoteVol = parseFloat(k[7]);
-      const takerBuyVol = parseFloat(k[10]);
-      const takerSellVol = Math.max(0, quoteVol - takerBuyVol);
-
-      const price = (high + low + close) / 3;
-      const binPrice = Math.floor(price / 10) * 10;
-
-      let node = nodeMap.get(binPrice);
-      if (!node) {
-        node = { buy: 0, sell: 0 };
-        nodeMap.set(binPrice, node);
+      if (timeframe === '1H') {
+        interval = '1m';
+        intervalMs = 60 * 1000;
+        expectedBuckets = 60;
+        const currentHour = new Date();
+        currentHour.setMinutes(0, 0, 0);
+        endTime = currentHour.getTime();
+        startTime = endTime - (60 * 60 * 1000);
+      } else if (timeframe === '24H') {
+        interval = '1m';
+        intervalMs = 60 * 1000;
+        expectedBuckets = 1440;
+        endTime = Math.floor(now / intervalMs) * intervalMs;
+        startTime = endTime - (expectedBuckets * intervalMs);
+      } else if (timeframe === '7D') {
+        interval = '1h';
+        intervalMs = 60 * 60 * 1000;
+        expectedBuckets = 168;
+        endTime = Math.floor(now / intervalMs) * intervalMs;
+        startTime = endTime - (expectedBuckets * intervalMs);
+      } else if (timeframe === '30D') {
+        interval = '4h';
+        intervalMs = 4 * 60 * 60 * 1000;
+        expectedBuckets = 180;
+        endTime = Math.floor(now / intervalMs) * intervalMs;
+        startTime = endTime - (expectedBuckets * intervalMs);
       }
-      node.buy += takerBuyVol;
-      node.sell += takerSellVol;
-    });
 
-    return {
-      nodes: Array.from(nodeMap.entries()).map(([p, v]) => ({ price: p, ...v })),
-      coverage: {
-        timeframe,
-        interval,
-        expectedBuckets,
-        receivedBuckets: uniqueRows.length,
-        coveragePct: expectedBuckets > 0 ? Math.min(100, (uniqueRows.length / expectedBuckets) * 100) : 0,
-        startTime,
-        endTime,
-        asOf: now,
-        isComplete: uniqueRows.length === expectedBuckets,
-        method: 'kline-estimated-volume-by-price',
-      },
-    };
-  } catch (e) {
-    console.error(`[API] Footprint Nodes (${market}, ${timeframe}):`, e.message);
-    return { nodes: [], coverage: { timeframe, expectedBuckets: 0, receivedBuckets: 0, coveragePct: 0, asOf: Date.now(), isComplete: false, method: 'kline-estimated-volume-by-price' } };
-  }
+      const rows = [];
+      let cursor = startTime;
+      while (cursor < endTime && rows.length < expectedBuckets) {
+        const remaining = expectedBuckets - rows.length;
+        const res = await axios.get(baseUrl, {
+          params: {
+            symbol,
+            interval,
+            limit: Math.min(1000, remaining),
+            startTime: cursor,
+            endTime: endTime - 1,
+          },
+          timeout: 8000,
+        });
+        const batch = Array.isArray(res.data) ? res.data : [];
+        if (batch.length === 0) break;
+        rows.push(...batch);
+        const nextCursor = Number(batch.at(-1)?.[0]) + intervalMs;
+        if (!Number.isFinite(nextCursor) || nextCursor <= cursor) break;
+        cursor = nextCursor;
+      }
+
+      const uniqueRows = Array.from(new Map(rows.map((row) => [Number(row[0]), row])).values())
+        .sort((left, right) => Number(left[0]) - Number(right[0]))
+        .slice(-expectedBuckets);
+
+      const nodeMap = new Map();
+      uniqueRows.forEach(k => {
+        const high = parseFloat(k[2]);
+        const low = parseFloat(k[3]);
+        const close = parseFloat(k[4]);
+        const quoteVol = parseFloat(k[7]);
+        const takerBuyVol = parseFloat(k[10]);
+        const takerSellVol = Math.max(0, quoteVol - takerBuyVol);
+
+        const price = (high + low + close) / 3;
+        const binPrice = Math.floor(price / 10) * 10;
+
+        let node = nodeMap.get(binPrice);
+        if (!node) {
+          node = { buy: 0, sell: 0 };
+          nodeMap.set(binPrice, node);
+        }
+        node.buy += takerBuyVol;
+        node.sell += takerSellVol;
+      });
+
+      return {
+        nodes: Array.from(nodeMap.entries()).map(([p, v]) => ({ price: p, ...v })),
+        coverage: {
+          timeframe,
+          interval,
+          expectedBuckets,
+          receivedBuckets: uniqueRows.length,
+          coveragePct: expectedBuckets > 0 ? Math.min(100, (uniqueRows.length / expectedBuckets) * 100) : 0,
+          startTime,
+          endTime,
+          asOf: now,
+          isComplete: uniqueRows.length === expectedBuckets,
+          method: 'kline-estimated-volume-by-price',
+        },
+      };
+    } catch (e) {
+      console.error(`[API] Footprint Nodes (${market}, ${timeframe}):`, e.message);
+      return { nodes: [], coverage: { timeframe, expectedBuckets: 0, receivedBuckets: 0, coveragePct: 0, asOf: Date.now(), isComplete: false, method: 'kline-estimated-volume-by-price' } };
+    }
+  }, 10 * 60 * 1000, null, null, force);
 };
 
 
@@ -780,12 +786,12 @@ export const getETHOnChainMetrics = async () => {
 export const fetchWithJina = async (url, format = 'text') => {
   try {
     const headers = format === 'json'
-      ? { 'Accept': 'application/json', 'X-Return-Format': 'json', 'x-no-cache': 'true' }
-      : { 'Accept': 'text/plain', 'x-no-cache': 'true' };
+      ? { 'Accept': 'application/json', 'X-Return-Format': 'json' }
+      : { 'Accept': 'text/plain' };
 
     const res = await axios.get(`https://r.jina.ai/${url}`, {
       headers,
-      timeout: 30000,
+      timeout: 8000,
     });
     return res.data || null;
   } catch (e) {
@@ -816,33 +822,33 @@ const cleanNewsSnippet = (str, title = '') => {
 
 export const fetchRealtimeFeed = async () => {
   const now = new Date();
-  let combined = [];
 
   // 1. Fetch economic calendar events from FairEconomy
-  try {
-    const calendarUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
-    let events = null;
+  const fetchCalendar = async () => {
+    const items = [];
     try {
-      const res = await axios.get(`https://corsproxy.io/?${encodeURIComponent(calendarUrl)}`, { timeout: 8000 });
-      events = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-    } catch (err) {
-      const res2 = await axios.get(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(calendarUrl)}`, { timeout: 8000 });
-      events = typeof res2.data === 'string' ? JSON.parse(res2.data) : res2.data;
-    }
+      const calendarUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+      let events = null;
+      try {
+        const res = await axios.get(`https://corsproxy.io/?${encodeURIComponent(calendarUrl)}`, { timeout: 6000 });
+        events = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      } catch {
+        const res2 = await axios.get(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(calendarUrl)}`, { timeout: 6000 });
+        events = typeof res2.data === 'string' ? JSON.parse(res2.data) : res2.data;
+      }
 
-    if (events && Array.isArray(events)) {
+      if (events && Array.isArray(events)) {
         events.forEach(e => {
           if (!e.date) return;
           const eventTime = new Date(e.date);
           const t = eventTime.getTime();
           
-          // Filter: within 24 hours of now + high impact + target countries (USD, EUR, JPY)
           const isNear = Math.abs(now.getTime() - t) <= 24 * 60 * 60 * 1000;
           const isHighImpact = e.impact?.toLowerCase() === 'high';
           const isTargetCountry = ['USD', 'JPY', 'EUR'].includes(e.country?.toUpperCase());
           
           if (isNear && isHighImpact && isTargetCountry) {
-            combined.push({
+            items.push({
               time: eventTime,
               tag: `Calendar (${e.country})`,
               cat: 'macro',
@@ -853,91 +859,113 @@ export const fetchRealtimeFeed = async () => {
           }
         });
       }
-  } catch (e) {
-    console.error('[API] Error fetching economic calendar:', e.message);
-  }
+    } catch (e) {
+      console.warn('[API] Error fetching economic calendar:', e.message);
+    }
+    return items;
+  };
 
   // 2. Fetch geopolitical, war, and interest rate news from Google News search
-  try {
-    const query = encodeURIComponent('war OR conflict OR military OR geopolitics OR "interest rate" OR "lãi suất" OR Fed OR BOJ OR ECB');
-    const googleNewsUrl = `https://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`;
-    const res = await axios.get(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(googleNewsUrl)}`, { timeout: 8000 });
-    
-    if (res.data?.status === 'ok' && Array.isArray(res.data.items)) {
-      res.data.items.forEach(item => {
-        if (!item.pubDate) return;
-        const pubDate = new Date(item.pubDate);
-        
-        // Filter: within the last 24 hours
-        if (now.getTime() - pubDate.getTime() <= 24 * 60 * 60 * 1000) {
-          const rawSnippet = cleanNewsSnippet(item.description || item.content || '', item.title);
-          combined.push({
-            time: pubDate,
-            tag: 'Geopolitics/Macro',
-            cat: 'macro',
-            title: item.title || '',
-            snippet: rawSnippet.length > 20 ? rawSnippet : 'Cập nhật tin tức vĩ mô, tình hình địa chính trị và chính sách tiền tệ ảnh hưởng đến thị trường tài chính.',
-            link: item.link || '',
-          });
-        }
-      });
+  const fetchGeoNews = async () => {
+    const items = [];
+    try {
+      const query = encodeURIComponent('war OR conflict OR military OR geopolitics OR "interest rate" OR "lãi suất" OR Fed OR BOJ OR ECB');
+      const googleNewsUrl = `https://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`;
+      const res = await axios.get(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(googleNewsUrl)}`, { timeout: 6000 });
+      
+      if (res.data?.status === 'ok' && Array.isArray(res.data.items)) {
+        res.data.items.forEach(item => {
+          if (!item.pubDate) return;
+          const pubDate = new Date(item.pubDate);
+          
+          if (now.getTime() - pubDate.getTime() <= 24 * 60 * 60 * 1000) {
+            const rawSnippet = cleanNewsSnippet(item.description || item.content || '', item.title);
+            items.push({
+              time: pubDate,
+              tag: 'Geopolitics/Macro',
+              cat: 'macro',
+              title: item.title || '',
+              snippet: rawSnippet.length > 20 ? rawSnippet : 'Cập nhật tin tức vĩ mô, tình hình địa chính trị và chính sách tiền tệ ảnh hưởng đến thị trường tài chính.',
+              link: item.link || '',
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[API] Error fetching geopolitical news:', e.message);
     }
-  } catch (e) {
-    console.error('[API] Error fetching geopolitical news:', e.message);
-  }
+    return items;
+  };
 
   // 3. Fetch crypto news with rich summaries from CryptoCompare
-  try {
-    const ccRes = await axios.get('https://min-api.cryptocompare.com/data/v2/news/?lang=EN', { timeout: 8000 });
-    if (ccRes.data?.Data && Array.isArray(ccRes.data.Data)) {
-      ccRes.data.Data.slice(0, 20).forEach(item => {
-        if (!item.published_on) return;
-        const pubDate = new Date(item.published_on * 1000);
-        if (now.getTime() - pubDate.getTime() <= 48 * 60 * 60 * 1000) {
-          const rawSnippet = cleanNewsSnippet(item.body || '', item.title);
-          combined.push({
-            time: pubDate,
-            tag: item.source_info?.name ? `Crypto (${item.source_info.name})` : 'Crypto News',
-            cat: 'crypto',
-            title: item.title || '',
-            snippet: rawSnippet || 'Cập nhật diễn biến mới nhất về thị trường Bitcoin và tiền mã hóa từ các nguồn uy tín toàn cầu.',
-            link: item.url || '',
-          });
-        }
-      });
+  const fetchCryptoCompare = async () => {
+    const items = [];
+    try {
+      const ccRes = await axios.get('https://min-api.cryptocompare.com/data/v2/news/?lang=EN', { timeout: 6000 });
+      if (ccRes.data?.Data && Array.isArray(ccRes.data.Data)) {
+        ccRes.data.Data.slice(0, 20).forEach(item => {
+          if (!item.published_on) return;
+          const pubDate = new Date(item.published_on * 1000);
+          if (now.getTime() - pubDate.getTime() <= 48 * 60 * 60 * 1000) {
+            const rawSnippet = cleanNewsSnippet(item.body || '', item.title);
+            items.push({
+              time: pubDate,
+              tag: item.source_info?.name ? `Crypto (${item.source_info.name})` : 'Crypto News',
+              cat: 'crypto',
+              title: item.title || '',
+              snippet: rawSnippet || 'Cập nhật diễn biến mới nhất về thị trường Bitcoin và tiền mã hóa từ các nguồn uy tín toàn cầu.',
+              link: item.url || '',
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[API] Error fetching CryptoCompare news:', e.message);
     }
-  } catch (e) {
-    console.error('[API] Error fetching CryptoCompare news:', e.message);
-  }
+    return items;
+  };
 
   // 4. Fetch specific crypto news from Google News search
-  try {
-    const cryptoQuery = encodeURIComponent('(site:coindesk.com OR site:bloomberg.com/crypto OR site:reuters.com OR site:theblock.co OR site:glassnode.com) AND (bitcoin OR crypto OR cryptocurrency)');
-    const cryptoNewsUrl = `https://news.google.com/rss/search?q=${cryptoQuery}&hl=en-US&gl=US&ceid=US:en&_cb=${now.getTime()}`;
-    const res = await axios.get(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cryptoNewsUrl)}&api_key=`, { timeout: 8000 });
-    
-    if (res.data?.status === 'ok' && Array.isArray(res.data.items)) {
-      res.data.items.forEach(item => {
-        if (!item.pubDate) return;
-        const pubDate = new Date(item.pubDate);
-        
-        // Filter: within the last 48 hours to get enough crypto news
-        if (now.getTime() - pubDate.getTime() <= 48 * 60 * 60 * 1000) {
-          const rawSnippet = cleanNewsSnippet(item.description || item.content || '', item.title);
-          combined.push({
-            time: pubDate,
-            tag: 'Crypto News',
-            cat: 'crypto',
-            title: item.title || '',
-            snippet: rawSnippet.length > 20 ? rawSnippet : 'Phân tích và bình luận chuyên sâu về xu hướng thị trường tiền mã hóa và dòng tiền các tổ chức lớn.',
-            link: item.link || '',
-          });
-        }
-      });
+  const fetchCryptoGoogle = async () => {
+    const items = [];
+    try {
+      const cryptoQuery = encodeURIComponent('(site:coindesk.com OR site:bloomberg.com/crypto OR site:reuters.com OR site:theblock.co OR site:glassnode.com) AND (bitcoin OR crypto OR cryptocurrency)');
+      const cryptoNewsUrl = `https://news.google.com/rss/search?q=${cryptoQuery}&hl=en-US&gl=US&ceid=US:en&_cb=${now.getTime()}`;
+      const res = await axios.get(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cryptoNewsUrl)}&api_key=`, { timeout: 6000 });
+      
+      if (res.data?.status === 'ok' && Array.isArray(res.data.items)) {
+        res.data.items.forEach(item => {
+          if (!item.pubDate) return;
+          const pubDate = new Date(item.pubDate);
+          
+          if (now.getTime() - pubDate.getTime() <= 48 * 60 * 60 * 1000) {
+            const rawSnippet = cleanNewsSnippet(item.description || item.content || '', item.title);
+            items.push({
+              time: pubDate,
+              tag: 'Crypto News',
+              cat: 'crypto',
+              title: item.title || '',
+              snippet: rawSnippet.length > 20 ? rawSnippet : 'Phân tích và bình luận chuyên sâu về xu hướng thị trường tiền mã hóa và dòng tiền các tổ chức lớn.',
+              link: item.link || '',
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[API] Error fetching crypto news:', e.message);
     }
-  } catch (e) {
-    console.error('[API] Error fetching crypto news:', e.message);
-  }
+    return items;
+  };
+
+  // Run all 4 feeds concurrently
+  const results = await Promise.allSettled([
+    fetchCalendar(),
+    fetchGeoNews(),
+    fetchCryptoCompare(),
+    fetchCryptoGoogle(),
+  ]);
+
+  const combined = results.flatMap(r => (r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []));
 
   const seenTitles = new Set();
   const uniqueCombined = [];
@@ -1570,15 +1598,13 @@ export const getYahooStockQuote = async (ticker) => {
     const res = await axios.get(url, {
       params,
       headers: isNode ? { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } : {},
-      timeout: 8000
+      timeout: isLocal ? 3500 : 2500
     });
     const parsed = parseYahooMeta(res.data);
     if (parsed) return parsed;
   } catch (e) {
     if (isLocal) {
-      console.error(`[API] Yahoo dev proxy error for ${ticker}:`, e.message);
-    } else {
-      console.warn(`[API] Yahoo direct failed for ${ticker}, trying proxy... Error:`, e.message);
+      console.warn(`[API] Yahoo dev proxy error for ${ticker}:`, e.message);
     }
   }
 
@@ -1591,7 +1617,7 @@ export const getYahooStockQuote = async (ticker) => {
         'Accept': 'application/json',
         'X-Return-Format': 'json'
       },
-      timeout: 12000
+      timeout: 6000
     });
     const content = res.data?.data?.content;
     if (content) {
@@ -1606,13 +1632,13 @@ export const getYahooStockQuote = async (ticker) => {
       if (parsed) return parsed;
     }
   } catch (jinaError) {
-    console.warn(`[API] Yahoo Jina proxy failed for ${ticker}:`, jinaError.message);
+    // silently failover to allorigins
   }
 
   // 3. Try AllOrigins CORS proxy fallback
   try {
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`${url}?interval=1d&range=1d`)}`;
-    const res = await axios.get(proxyUrl, { timeout: 8000 });
+    const res = await axios.get(proxyUrl, { timeout: 4000 });
     let data = res.data;
     if (typeof data === 'string') {
       try { data = JSON.parse(data); } catch {}

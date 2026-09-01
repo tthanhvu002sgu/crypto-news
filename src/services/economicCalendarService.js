@@ -5,11 +5,12 @@
  */
 
 import axios from 'axios';
+import { readCacheEntry } from '../utils/cache.js';
 
-// Cache in memory for 15 minutes
+// Cache in memory and localStorage for 30 minutes
 let cachedEvents = null;
 let lastFetchTime = 0;
-const CACHE_DURATION_MS = 15 * 60 * 1000;
+const CACHE_DURATION_MS = 30 * 60 * 1000;
 const FOREX_FACTORY_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 function normalizeEventTitle(title = '') {
@@ -291,8 +292,16 @@ function getCuratedWeeklyEvents(weekDays) {
  */
 export async function getWeeklyEconomicCalendar(forceRefresh = false) {
   const now = Date.now();
-  if (!forceRefresh && cachedEvents && now - lastFetchTime < CACHE_DURATION_MS) {
-    return cachedEvents;
+  if (!forceRefresh) {
+    if (cachedEvents && now - lastFetchTime < CACHE_DURATION_MS) {
+      return cachedEvents;
+    }
+    const fromStorage = readCacheEntry('weekly_economic_calendar_v1');
+    if (fromStorage && (now - fromStorage.time < CACHE_DURATION_MS)) {
+      cachedEvents = fromStorage.val;
+      lastFetchTime = fromStorage.time;
+      return cachedEvents;
+    }
   }
 
   const weekDays = getCurrentWeekDays();
@@ -390,5 +399,11 @@ export async function getWeeklyEconomicCalendar(forceRefresh = false) {
 
   cachedEvents = result;
   lastFetchTime = Date.now();
+  try {
+    localStorage.setItem(
+      'cache_weekly_economic_calendar_v1',
+      JSON.stringify({ val: result, time: Date.now() })
+    );
+  } catch {}
   return result;
 }

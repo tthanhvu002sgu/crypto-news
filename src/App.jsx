@@ -10,7 +10,7 @@ import {
   getFearAndGreed, getHistoricalCVD,
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
-import { fetchCached } from './utils/cache';
+import { fetchCached, readCacheValue } from './utils/cache';
 import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import {
@@ -456,27 +456,97 @@ function AppContent() {
     setDraggedTabId(null);
   };
   const [data, setData] = useState(() => {
-    // Preload CVD history from localStorage cache for immediate display
-    const readCache = (key) => {
-      try {
-        const raw = localStorage.getItem(`cache_${key}`) || localStorage.getItem(key);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const val = parsed?.val !== undefined ? parsed.val : parsed;
-          if (Array.isArray(val) && val.length > 0) return val;
-          if (val && Array.isArray(val.points) && val.points.length > 0) return val;
-        }
-      } catch {}
-      return null;
-    };
+    // 0ms Instant Hydration: load all available cached metrics from localStorage
+    const etfCacheKey = getEtfPublicationCacheKey();
+    const cmeCotCacheKey = getCmeCotReleaseCacheKey();
+
+    const btc = readCacheValue('binanceTicker');
+    const klines = readCacheValue('binanceKlines1h', []);
+    const lsHistory = readCacheValue('binanceLs', []);
+    const fundingRate = readCacheValue('binanceFunding');
+    const openInterest = readCacheValue('binanceOi');
+    const oiHistory = readCacheValue('binanceOiHist', []);
+
+    const globalData = readCacheValue('globalCryptoData');
+    const stablecoins = readCacheValue('stablecoinData');
+    const ssrMa = readCacheValue('ssrOscillator_v2');
+    const news = readCacheValue('realtimeFeed', []);
+
+    const fedFundsRateVal = readCacheValue('fedFundsRate');
+    const cpiVal = readCacheValue('cpiYoYCalculatedV2');
+    const unrateVal = readCacheValue('unrate');
+    const m2SupplyVal = readCacheValue('m2Supply');
+    const highYieldVal = readCacheValue('highYield');
+    const walclVal = readCacheValue('walcl');
+    const tgaVal = readCacheValue('tga');
+    const rrpVal = readCacheValue('rrp');
+
+    const tenYearYield = readCacheValue('yield10y');
+    const dxy = readCacheValue('dxyQuote');
+    const sp500 = readCacheValue('sp500Quote');
+    const vix = readCacheValue('vixQuote');
+    const qqq = readCacheValue('qqqQuote');
+    const ethTicker = readCacheValue('ethTicker');
+    const solTicker = readCacheValue('solTicker');
+
+    const onChain = readCacheValue('btcOnChain');
+    const onChainMetrics = readCacheValue('btcOnChainMetrics');
+    const ethOnChainMetrics = readCacheValue('ethOnChainMetrics');
+    const cotData = readCacheValue(`cmeCot_${cmeCotCacheKey}`) || readCacheValue('cmeCot') || BASELINE_CME_COT;
+    const fngData = readCacheValue('fearAndGreed');
+
+    const cvdHistory24h = readCacheValue('hft_cvd_series_24h_futures_v4');
+    const cvdHistory7d = readCacheValue('hft_cvd_series_7d_futures_v4');
+    const cvdHistory30d = readCacheValue('hft_cvd_series_30d_futures_v4');
+    const cvdHistory24hSpot = readCacheValue('hft_cvd_series_24h_spot_v4');
+    const cvdHistory7dSpot = readCacheValue('hft_cvd_series_7d_spot_v4');
+    const cvdHistory30dSpot = readCacheValue('hft_cvd_series_30d_spot_v4');
+    const btcDailyKlinesAll = readCacheValue('btcDailyKlinesAll', []);
+
+    let netLiquidity = null;
+    if (walclVal != null && tgaVal != null && rrpVal != null) {
+      netLiquidity = parseFloat(((walclVal / 1000) - (tgaVal / 1000) - rrpVal).toFixed(2));
+    }
+
     return {
       ...INIT,
-      cvdHistory24h: readCache('hft_cvd_series_24h_futures_v4'),
-      cvdHistory7d:  readCache('hft_cvd_series_7d_futures_v4'),
-      cvdHistory30d: readCache('hft_cvd_series_30d_futures_v4'),
-      cvdHistory24hSpot: readCache('hft_cvd_series_24h_spot_v4'),
-      cvdHistory7dSpot:  readCache('hft_cvd_series_7d_spot_v4'),
-      cvdHistory30dSpot: readCache('hft_cvd_series_30d_spot_v4'),
+      btc: btc ?? null,
+      klines: Array.isArray(klines) ? klines : [],
+      lsHistory: Array.isArray(lsHistory) ? lsHistory : [],
+      fundingRate: fundingRate ?? null,
+      openInterest: openInterest ?? null,
+      oiHistory: Array.isArray(oiHistory) ? oiHistory : [],
+      globalData: globalData ?? null,
+      stablecoins: stablecoins ?? null,
+      ssrMa: ssrMa ?? null,
+      news: Array.isArray(news) ? news : [],
+      onChain: onChain ?? null,
+      onChainMetrics: onChainMetrics ?? null,
+      ethOnChainMetrics: ethOnChainMetrics ?? null,
+      fedFundsRate: fedFundsRateVal ?? null,
+      cpi: isPlausibleCpiYoY(cpiVal) ? cpiVal : null,
+      unrate: unrateVal ?? null,
+      tenYearYield: tenYearYield ?? null,
+      dxy: dxy ?? null,
+      m2Supply: m2SupplyVal ?? null,
+      highYield: highYieldVal ?? null,
+      sp500: sp500 ?? null,
+      vix: vix ?? null,
+      qqq: qqq ?? null,
+      ethTicker: ethTicker ?? null,
+      solTicker: solTicker ?? null,
+      ethPrice: ethTicker?.price ?? null,
+      solPrice: solTicker?.price ?? null,
+      netLiquidity,
+      cotData,
+      fngData: fngData ?? null,
+      cvdHistory24h: cvdHistory24h ?? [],
+      cvdHistory7d: cvdHistory7d ?? [],
+      cvdHistory30d: cvdHistory30d ?? [],
+      cvdHistory24hSpot: cvdHistory24hSpot ?? [],
+      cvdHistory7dSpot: cvdHistory7dSpot ?? [],
+      cvdHistory30dSpot: cvdHistory30dSpot ?? [],
+      btcDailyKlinesAll: Array.isArray(btcDailyKlinesAll) ? btcDailyKlinesAll : [],
     };
   });
   const [activeTab, setActiveTab] = useState(() => {
@@ -497,8 +567,9 @@ function AppContent() {
 
   const [etfHoldings, setEtfHoldings] = useState(() => {
     try {
-      const saved = localStorage.getItem('etf-holdings');
-      return saved ? JSON.parse(saved) : BASELINE_ETF_HOLDINGS;
+      const etfCacheKey = getEtfPublicationCacheKey();
+      const cached = readCacheValue(`etfHoldings_${etfCacheKey}`) || readCacheValue('etf-holdings');
+      return cached || BASELINE_ETF_HOLDINGS;
     } catch {
       return BASELINE_ETF_HOLDINGS;
     }
@@ -512,8 +583,9 @@ function AppContent() {
 
   const [etfHistory, setEtfHistory] = useState(() => {
     try {
-      const saved = localStorage.getItem('etf-flow-history');
-      return saved ? JSON.parse(saved) : BASELINE_ETF_FLOWS;
+      const etfCacheKey = getEtfPublicationCacheKey();
+      const cached = readCacheValue(`etfFlowHistory_${etfCacheKey}`) || readCacheValue('etf-flow-history');
+      return cached || BASELINE_ETF_FLOWS;
     } catch {
       return BASELINE_ETF_FLOWS;
     }
@@ -682,11 +754,11 @@ function AppContent() {
   const tierLockRef = useRef({ hot: false, warm: false, cold: false });
 
   /**
-   * Tiered sync — only requested tiers run.
+   * Progressive Tiered Sync — only requested tiers run.
    * force=true: bypass TTL for every key (manual SYNC / daily 08:00).
-   * HOT  = Binance REST (short TTL; live price still from WS)
-   * WARM = global / news / equities / short CVD history
-   * COLD = FRED macro, on-chain, ETF, COT, F&G, long history
+   * HOT  = Binance REST (short TTL; live price still from WS, updates UI immediately in ~100-200ms)
+   * WARM = global / news / equities / short CVD history (updates UI in ~400-800ms)
+   * COLD = FRED macro, on-chain, ETF, COT, F&G, long history (background update)
    */
   const syncData = useCallback(async (force = false, tiers = ['hot', 'warm', 'cold']) => {
     const activeTiers = tiers.filter((t) => !tierLockRef.current[t]);
@@ -711,211 +783,223 @@ function AppContent() {
 
       const settled = (res) => (res?.status === 'fulfilled' ? res.value : null);
 
-      // ── COLD: FRED macro (slow-moving) ────────────────────────────────────
-      let fedFundsRateVal = null;
-      let cpiVal = null;
-      let unrateVal = null;
-      let m2SupplyVal = null;
-      let highYieldVal = null;
-      let walclVal = null;
-      let tgaVal = null;
-      let rrpVal = null;
+      // ── TIER HOT: Binance Market & Microstructure (High Priority, ~100-200ms) ──
+      const syncHotTier = async () => {
+        if (!wantHot) return;
+        const keys = ['btc', 'ethTicker', 'solTicker', 'klines', 'ls', 'fund', 'oi', 'oiHist'];
+        const tasks = [
+          fetchCached('binanceTicker', () => getBTCTicker24h('BTCUSDT'), CACHE_TTL.binanceTicker, addLog, 'BTC Ticker (Binance)', force),
+          fetchCached('ethTicker', () => getBTCTicker24h('ETHUSDT'), CACHE_TTL.binanceTicker, addLog, 'ETH Ticker (Binance)', force),
+          fetchCached('solTicker', () => getBTCTicker24h('SOLUSDT'), CACHE_TTL.binanceTicker, addLog, 'SOL Ticker (Binance)', force),
+          fetchCached('binanceKlines1h', () => getBTCKlines('BTCUSDT', '1h', 48), CACHE_TTL.binanceKlines, addLog, 'BTC Klines 48h (Binance)', force),
+          fetchCached('binanceLs', () => getLongShortRatio('BTCUSDT', '1h', 24), CACHE_TTL.binanceLs, addLog, 'L/S Ratio 24h (Binance)', force),
+          fetchCached('binanceFunding', () => getFundingRate('BTCUSDT'), CACHE_TTL.binanceFunding, addLog, 'Funding Rate (Binance)', force),
+          fetchCached('binanceOi', () => getOpenInterest('BTCUSDT'), CACHE_TTL.binanceOi, addLog, 'Open Interest (Binance)', force),
+          fetchCached('binanceOiHist', () => getOIHistory('BTCUSDT', '1h', 24), CACHE_TTL.binanceOiHist, addLog, 'OI History 24h (Binance)', force),
+        ];
 
-      if (wantHot || wantWarm || wantCold) {
-        addLog('Đang đồng bộ dữ liệu thị trường / phái sinh / context...', 'system');
-      }
+        const results = await Promise.allSettled(tasks);
+        const byKey = Object.fromEntries(keys.map((k, i) => [k, results[i]]));
 
-      const tasks = [];
-      const keys = [];
-      const push = (key, promise) => {
-        keys.push(key);
-        tasks.push(promise);
+        const btc = settled(byKey.btc);
+        const ethTicker = settled(byKey.ethTicker);
+        const solTicker = settled(byKey.solTicker);
+        const klines = settled(byKey.klines) || [];
+        const lsHistory = settled(byKey.ls) || [];
+        const fundingRate = settled(byKey.fund);
+        const openInterest = settled(byKey.oi);
+        const oiHistory = settled(byKey.oiHist) || [];
+
+        if (btc?.price != null) {
+          updateBrowserChromeImmediate(btc.price, btc.change ?? 0);
+          setIsOnline(true);
+        } else if (klines.length > 0) {
+          setIsOnline(true);
+        }
+
+        setData((prev) => ({
+          ...prev,
+          btc: btc ?? prev.btc,
+          klines: klines.length > 0 ? klines : prev.klines,
+          lsHistory: lsHistory.length > 0 ? lsHistory : prev.lsHistory,
+          fundingRate: fundingRate ?? prev.fundingRate,
+          openInterest: openInterest ?? prev.openInterest,
+          oiHistory: oiHistory.length > 0 ? oiHistory : prev.oiHistory,
+          ethTicker: ethTicker ?? prev.ethTicker,
+          solTicker: solTicker ?? prev.solTicker,
+          ethPrice: ethTicker?.price ?? (liveEthPrice ? { price: liveEthPrice } : prev.ethPrice),
+          solPrice: solTicker?.price ?? (liveSolPrice ? { price: liveSolPrice } : prev.solPrice),
+          logs: [...logsRef.current],
+        }));
       };
 
-      // Start FRED together with every other source. Previously the full sync
-      // waited for this whole group before even opening the market requests.
-      if (wantCold) {
-        addLog('Đang đồng bộ chỉ số vĩ mô từ FRED...', 'system');
-        push('fedFundsRate', fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Lãi suất Fed', force));
-        push('cpi', fetchCached('cpiYoYCalculatedV2', () => getFREDMetric('CPIAUCSL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'CPI Inflation YoY', force));
-        push('unrate', fetchCached('unrate', () => getFREDMetric('UNRATE', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Tỷ lệ thất nghiệp', force));
-        push('m2Supply', fetchCached('m2Supply', () => getFREDMetric('M2SL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'M2 Money Supply', force));
-        push('highYield', fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'High Yield Spread', force));
-        push('walcl', fetchCached('walcl', () => getFREDMetric('WALCL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Fed Assets', force));
-        push('tga', fetchCached('tga', () => getFREDMetric('WDTGAL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'TGA Treasury Account', force));
-        push('rrp', fetchCached('rrp', () => getFREDMetric('RRPONTSYD', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Reverse Repo', force));
-      }
+      // ── TIER WARM: Market Context, Global, Equities & CVD (Medium Priority, ~400-800ms) ──
+      const syncWarmTier = async () => {
+        if (!wantWarm) return;
+        const keys = ['global', 'stable', 'ssrMa', 'news', 'yield10y', 'dxy', 'sp500', 'vix', 'qqq', 'cvd24h', 'cvd24hSpot', 'cvd7d', 'cvd7dSpot'];
+        const tasks = [
+          fetchCached('globalCryptoData', () => getGlobalCryptoData(), CACHE_TTL.globalCrypto, addLog, 'Global Market (CoinGecko)', force),
+          fetchCached('stablecoinData', () => getStablecoinData(), CACHE_TTL.stablecoin, addLog, 'Stablecoins (CoinGecko)', force),
+          fetchCached('ssrOscillator_v2', () => getSsrMovingAverageData(), CACHE_TTL.onChain, addLog, 'SSR Oscillator (DefiLlama + Binance)', force),
+          fetchCached('realtimeFeed', () => fetchRealtimeFeed(), CACHE_TTL.news, addLog, 'News RSS (rss2json)', force),
+          fetchCached('yield10y', () => getFREDMetric('DGS10', apiKeys.fred), CACHE_TTL.yield10y, addLog, 'Yield 10Y (Yahoo Finance)', force),
+          fetchCached('dxyQuote', () => getDXYQuote(), CACHE_TTL.dxy, addLog, 'Chỉ số DXY (Yahoo Finance)', force),
+          fetchCached('sp500Quote', () => getFREDStockQuote('SP500', apiKeys.fred), CACHE_TTL.sp500, addLog, 'S&P 500 Index (Yahoo Finance)', force),
+          fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS', apiKeys.fred), CACHE_TTL.vix, addLog, 'VIX Volatility Index (Yahoo Finance)', force),
+          fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100', apiKeys.fred), CACHE_TTL.qqq, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force),
+          fetchCached('hft_cvd_series_24h_futures_v4', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'futures'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Futures', force),
+          fetchCached('hft_cvd_series_24h_spot_v4', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'spot'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Spot', force),
+          fetchCached('hft_cvd_series_7d_futures_v4', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'futures'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Futures', force),
+          fetchCached('hft_cvd_series_7d_spot_v4', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'spot'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Spot', force),
+        ];
 
-      if (wantHot) {
-        // Short TTL — WS drives live price; REST is charts + offline fallback
-        push('btc', fetchCached('binanceTicker', () => getBTCTicker24h('BTCUSDT'), CACHE_TTL.binanceTicker, addLog, 'BTC Ticker (Binance)', force));
-        push('ethTicker', fetchCached('ethTicker', () => getBTCTicker24h('ETHUSDT'), CACHE_TTL.binanceTicker, addLog, 'ETH Ticker (Binance)', force));
-        push('solTicker', fetchCached('solTicker', () => getBTCTicker24h('SOLUSDT'), CACHE_TTL.binanceTicker, addLog, 'SOL Ticker (Binance)', force));
-        push('klines', fetchCached('binanceKlines1h', () => getBTCKlines('BTCUSDT', '1h', 48), CACHE_TTL.binanceKlines, addLog, 'BTC Klines 48h (Binance)', force));
-        push('ls', fetchCached('binanceLs', () => getLongShortRatio('BTCUSDT', '1h', 24), CACHE_TTL.binanceLs, addLog, 'L/S Ratio 24h (Binance)', force));
-        push('fund', fetchCached('binanceFunding', () => getFundingRate('BTCUSDT'), CACHE_TTL.binanceFunding, addLog, 'Funding Rate (Binance)', force));
-        push('oi', fetchCached('binanceOi', () => getOpenInterest('BTCUSDT'), CACHE_TTL.binanceOi, addLog, 'Open Interest (Binance)', force));
-        push('oiHist', fetchCached('binanceOiHist', () => getOIHistory('BTCUSDT', '1h', 24), CACHE_TTL.binanceOiHist, addLog, 'OI History 24h (Binance)', force));
-      }
+        const results = await Promise.allSettled(tasks);
+        const byKey = Object.fromEntries(keys.map((k, i) => [k, results[i]]));
 
-      if (wantWarm) {
-        push('global', fetchCached('globalCryptoData', () => getGlobalCryptoData(), CACHE_TTL.globalCrypto, addLog, 'Global Market (CoinGecko)', force));
-        push('stable', fetchCached('stablecoinData', () => getStablecoinData(), CACHE_TTL.stablecoin, addLog, 'Stablecoins (CoinGecko)', force));
-        push('ssrMa', fetchCached('ssrOscillator_v2', () => getSsrMovingAverageData(), CACHE_TTL.onChain, addLog, 'SSR Oscillator (DefiLlama + Binance)', force));
-        push('news', fetchCached('realtimeFeed', () => fetchRealtimeFeed(), CACHE_TTL.news, addLog, 'News RSS (rss2json)', force));
-        push('yield10y', fetchCached('yield10y', () => getFREDMetric('DGS10', apiKeys.fred), CACHE_TTL.yield10y, addLog, 'Yield 10Y (Yahoo Finance)', force));
-        push('dxy', fetchCached('dxyQuote', () => getDXYQuote(), CACHE_TTL.dxy, addLog, 'Chỉ số DXY (Yahoo Finance)', force));
-        push('sp500', fetchCached('sp500Quote', () => getFREDStockQuote('SP500', apiKeys.fred), CACHE_TTL.sp500, addLog, 'S&P 500 Index (Yahoo Finance)', force));
-        push('vix', fetchCached('vixQuote', () => getFREDStockQuote('VIXCLS', apiKeys.fred), CACHE_TTL.vix, addLog, 'VIX Volatility Index (Yahoo Finance)', force));
-        push('qqq', fetchCached('qqqQuote', () => getFREDStockQuote('NASDAQ100', apiKeys.fred), CACHE_TTL.qqq, addLog, 'Nasdaq 100 Index (Yahoo Finance)', force));
-        push('cvd24h', fetchCached('hft_cvd_series_24h_futures_v4', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'futures'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Futures', force));
-        push('cvd24hSpot', fetchCached('hft_cvd_series_24h_spot_v4', () => getHistoricalCVD('BTCUSDT', '1h', 24, 'spot'), CACHE_TTL.cvd24h, addLog, 'Lịch sử CVD 24h Spot', force));
-        push('cvd7d', fetchCached('hft_cvd_series_7d_futures_v4', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'futures'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Futures', force));
-        push('cvd7dSpot', fetchCached('hft_cvd_series_7d_spot_v4', () => getHistoricalCVD('BTCUSDT', '4h', 42, 'spot'), CACHE_TTL.cvd7d, addLog, 'Lịch sử CVD 7d Spot', force));
-      }
+        const globalData = settled(byKey.global);
+        const stablecoins = settled(byKey.stable);
+        const ssrMa = settled(byKey.ssrMa);
+        const news = settled(byKey.news) || [];
+        const tenYearYield = settled(byKey.yield10y);
+        const dxy = settled(byKey.dxy);
+        const sp500 = settled(byKey.sp500);
+        const vix = settled(byKey.vix);
+        const qqq = settled(byKey.qqq);
+        const cvdHistory24h = settled(byKey.cvd24h);
+        const cvdHistory24hSpot = settled(byKey.cvd24hSpot);
+        const cvdHistory7d = settled(byKey.cvd7d);
+        const cvdHistory7dSpot = settled(byKey.cvd7dSpot);
 
-      if (wantCold) {
-        push('onChain', fetchCached('btcOnChain', () => getBTCOnChain(), CACHE_TTL.onChain, addLog, 'BTC Network (blockchain.info)', force));
-        push('onChainMetrics', fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), CACHE_TTL.onChain, addLog, 'On-chain Metrics (CoinMetrics)', force));
-        push('ethOnChainMetrics', fetchCached('ethOnChainMetrics', () => getETHOnChainMetrics(), CACHE_TTL.onChain, addLog, 'ETH On-chain Metrics (CoinMetrics)', force));
+        setData((prev) => ({
+          ...prev,
+          globalData: globalData ?? prev.globalData,
+          stablecoins: stablecoins ?? prev.stablecoins,
+          ssrMa: ssrMa ?? prev.ssrMa,
+          news: news.length > 0 ? news : prev.news,
+          tenYearYield: tenYearYield ?? prev.tenYearYield,
+          dxy: dxy ?? prev.dxy,
+          sp500: sp500 ?? prev.sp500,
+          vix: vix ?? prev.vix,
+          qqq: qqq ?? prev.qqq,
+          cvdHistory24h: (cvdHistory24h?.points?.length > 0 || cvdHistory24h?.length > 0) ? cvdHistory24h : prev.cvdHistory24h,
+          cvdHistory24hSpot: (cvdHistory24hSpot?.points?.length > 0 || cvdHistory24hSpot?.length > 0) ? cvdHistory24hSpot : prev.cvdHistory24hSpot,
+          cvdHistory7d: (cvdHistory7d?.points?.length > 0 || cvdHistory7d?.length > 0) ? cvdHistory7d : prev.cvdHistory7d,
+          cvdHistory7dSpot: (cvdHistory7dSpot?.points?.length > 0 || cvdHistory7dSpot?.length > 0) ? cvdHistory7dSpot : prev.cvdHistory7dSpot,
+          logs: [...logsRef.current],
+        }));
+      };
+
+      // ── TIER COLD: FRED Macro, On-chain, ETF, COT, F&G (Background Priority) ──
+      const syncColdTier = async () => {
+        if (!wantCold) return;
+        addLog('Đang đồng bộ chỉ số vĩ mô từ FRED & On-chain...', 'system');
         const etfCacheKey = getEtfPublicationCacheKey();
         const cmeCotCacheKey = getCmeCotReleaseCacheKey();
-        push('etfHoldings', fetchCached(`etfHoldings_${etfCacheKey}`, () => getETFHoldings(), CACHE_TTL.etf, addLog, 'Spot ETF Holdings (Bitbo)', force));
-        push('etfHistory', fetchCached(`etfFlowHistory_${etfCacheKey}`, () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force));
-        push('cot', fetchCached(`cmeCot_${cmeCotCacheKey}`, () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force));
-        push('fng', fetchCached('fearAndGreed', () => getFearAndGreed(), CACHE_TTL.fng, addLog, 'Chỉ số Fear & Greed (alternative.me)', force));
-        push('cvd30d', fetchCached('hft_cvd_series_30d_futures_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Futures', force));
-        push('cvd30dSpot', fetchCached('hft_cvd_series_30d_spot_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Spot', force));
-        push('dailyKlines', fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), CACHE_TTL.dailyKlines, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force));
-      }
 
-      const results = tasks.length > 0 ? await Promise.allSettled(tasks) : [];
-      const byKey = Object.fromEntries(keys.map((k, i) => [k, results[i]]));
+        const keys = [
+          'fedFundsRate', 'cpi', 'unrate', 'm2Supply', 'highYield', 'walcl', 'tga', 'rrp',
+          'onChain', 'onChainMetrics', 'ethOnChainMetrics', 'etfHoldings', 'etfHistory', 'cot', 'fng', 'cvd30d', 'cvd30dSpot', 'dailyKlines'
+        ];
+        const tasks = [
+          fetchCached('fedFundsRate', () => getFREDMetric('FEDFUNDS', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Lãi suất Fed', force),
+          fetchCached('cpiYoYCalculatedV2', () => getFREDMetric('CPIAUCSL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'CPI Inflation YoY', force),
+          fetchCached('unrate', () => getFREDMetric('UNRATE', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Tỷ lệ thất nghiệp', force),
+          fetchCached('m2Supply', () => getFREDMetric('M2SL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'M2 Money Supply', force),
+          fetchCached('highYield', () => getFREDMetric('BAMLH0A0HYM2EY', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'High Yield Spread', force),
+          fetchCached('walcl', () => getFREDMetric('WALCL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Fed Assets', force),
+          fetchCached('tga', () => getFREDMetric('WDTGAL', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'TGA Treasury Account', force),
+          fetchCached('rrp', () => getFREDMetric('RRPONTSYD', apiKeys.fred), CACHE_TTL.macroFred, addLog, 'Reverse Repo', force),
+          fetchCached('btcOnChain', () => getBTCOnChain(), CACHE_TTL.onChain, addLog, 'BTC Network (blockchain.info)', force),
+          fetchCached('btcOnChainMetrics', () => getBTCOnChainMetrics(), CACHE_TTL.onChain, addLog, 'On-chain Metrics (CoinMetrics)', force),
+          fetchCached('ethOnChainMetrics', () => getETHOnChainMetrics(), CACHE_TTL.onChain, addLog, 'ETH On-chain Metrics (CoinMetrics)', force),
+          fetchCached(`etfHoldings_${etfCacheKey}`, () => getETFHoldings(), CACHE_TTL.etf, addLog, 'Spot ETF Holdings (Bitbo)', force),
+          fetchCached(`etfFlowHistory_${etfCacheKey}`, () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force),
+          fetchCached(`cmeCot_${cmeCotCacheKey}`, () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force),
+          fetchCached('fearAndGreed', () => getFearAndGreed(), CACHE_TTL.fng, addLog, 'Chỉ số Fear & Greed (alternative.me)', force),
+          fetchCached('hft_cvd_series_30d_futures_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Futures', force),
+          fetchCached('hft_cvd_series_30d_spot_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Spot', force),
+          fetchCached('btcDailyKlinesAll', () => getBTCKlines('BTCUSDT', '1d', 1000), CACHE_TTL.dailyKlines, addLog, 'Lịch sử giá BTC Daily 1000d (Binance)', force),
+        ];
 
-      if (wantCold) {
-        fedFundsRateVal = settled(byKey.fedFundsRate);
-        cpiVal = settled(byKey.cpi);
+        const results = await Promise.allSettled(tasks);
+        const byKey = Object.fromEntries(keys.map((k, i) => [k, results[i]]));
+
+        let fedFundsRateVal = settled(byKey.fedFundsRate);
+        let cpiVal = settled(byKey.cpi);
         if (cpiVal !== null && !isPlausibleCpiYoY(cpiVal)) {
           addLog(`⚠ CPI YoY bị từ chối do sai đơn vị hoặc ngoài phạm vi hợp lý: ${cpiVal}`, 'warning');
           cpiVal = null;
         }
-        unrateVal = settled(byKey.unrate);
-        m2SupplyVal = settled(byKey.m2Supply);
-        highYieldVal = settled(byKey.highYield);
-        walclVal = settled(byKey.walcl);
-        tgaVal = settled(byKey.tga);
-        rrpVal = settled(byKey.rrp);
-      }
+        let unrateVal = settled(byKey.unrate);
+        let m2SupplyVal = settled(byKey.m2Supply);
+        let highYieldVal = settled(byKey.highYield);
+        let walclVal = settled(byKey.walcl);
+        let tgaVal = settled(byKey.tga);
+        let rrpVal = settled(byKey.rrp);
 
-      const btc = wantHot ? settled(byKey.btc) : null;
-      const ethTicker = wantHot ? settled(byKey.ethTicker) : null;
-      const solTicker = wantHot ? settled(byKey.solTicker) : null;
-      const klines = wantHot ? (settled(byKey.klines) || []) : [];
-      const lsHistory = wantHot ? (settled(byKey.ls) || []) : [];
-      const fundingRate = wantHot ? settled(byKey.fund) : null;
-      const openInterest = wantHot ? settled(byKey.oi) : null;
-      const oiHistory = wantHot ? (settled(byKey.oiHist) || []) : [];
+        const onChain = settled(byKey.onChain);
+        const onChainMetrics = settled(byKey.onChainMetrics);
+        const ethOnChainMetrics = settled(byKey.ethOnChainMetrics);
+        const etfHoldingsVal = settled(byKey.etfHoldings);
+        const etfHistoryVal = settled(byKey.etfHistory);
+        const cotData = settled(byKey.cot);
+        const fngData = settled(byKey.fng);
+        const cvdHistory30d = settled(byKey.cvd30d);
+        const cvdHistory30dSpot = settled(byKey.cvd30dSpot);
+        const btcDailyKlinesAll = settled(byKey.dailyKlines);
 
-      const globalData = wantWarm ? settled(byKey.global) : null;
-      const stablecoins = wantWarm ? settled(byKey.stable) : null;
-      const ssrMa = wantWarm ? settled(byKey.ssrMa) : null;
-      const news = wantWarm ? (settled(byKey.news) || []) : [];
-      const tenYearYield = wantWarm ? settled(byKey.yield10y) : null;
-      const dxy = wantWarm ? settled(byKey.dxy) : null;
-      const sp500 = wantWarm ? settled(byKey.sp500) : null;
-      const vix = wantWarm ? settled(byKey.vix) : null;
-      const qqq = wantWarm ? settled(byKey.qqq) : null;
-      const cvdHistory24h = wantWarm ? settled(byKey.cvd24h) : null;
-      const cvdHistory24hSpot = wantWarm ? settled(byKey.cvd24hSpot) : null;
-      const cvdHistory7d = wantWarm ? settled(byKey.cvd7d) : null;
-      const cvdHistory7dSpot = wantWarm ? settled(byKey.cvd7dSpot) : null;
+        if (etfHoldingsVal) {
+          setEtfHoldings(etfHoldingsVal);
+          localStorage.setItem('etf-holdings', JSON.stringify(etfHoldingsVal));
+        }
+        if (etfHistoryVal) {
+          setEtfHistory(etfHistoryVal);
+          localStorage.setItem('etf-flow-history', JSON.stringify(etfHistoryVal));
+        }
 
-      const onChain = wantCold ? settled(byKey.onChain) : null;
-      const onChainMetrics = wantCold ? settled(byKey.onChainMetrics) : null;
-      const ethOnChainMetrics = wantCold ? settled(byKey.ethOnChainMetrics) : null;
-      const etfHoldingsVal = wantCold ? settled(byKey.etfHoldings) : null;
-      const etfHistoryVal = wantCold ? settled(byKey.etfHistory) : null;
-      const cotData = wantCold ? settled(byKey.cot) : null;
-      const fngData = wantCold ? settled(byKey.fng) : null;
-      const cvdHistory30d = wantCold ? settled(byKey.cvd30d) : null;
-      const cvdHistory30dSpot = wantCold ? settled(byKey.cvd30dSpot) : null;
-      const btcDailyKlinesAll = wantCold ? settled(byKey.dailyKlines) : null;
+        let netLiquidity = null;
+        if (walclVal != null && tgaVal != null && rrpVal != null) {
+          netLiquidity = parseFloat(((walclVal / 1000) - (tgaVal / 1000) - rrpVal).toFixed(2));
+        }
+
+        setData((prev) => ({
+          ...prev,
+          onChain: onChain ?? prev.onChain,
+          onChainMetrics: onChainMetrics ?? prev.onChainMetrics,
+          ethOnChainMetrics: ethOnChainMetrics ?? prev.ethOnChainMetrics,
+          fedFundsRate: fedFundsRateVal ?? prev.fedFundsRate,
+          cpi: cpiVal ?? (isPlausibleCpiYoY(prev.cpi) ? prev.cpi : null),
+          unrate: unrateVal ?? prev.unrate,
+          m2Supply: m2SupplyVal ?? prev.m2Supply,
+          highYield: highYieldVal ?? prev.highYield,
+          netLiquidity: netLiquidity ?? prev.netLiquidity,
+          cotData: cotData ?? prev.cotData,
+          fngData: fngData ?? prev.fngData,
+          cvdHistory30d: (cvdHistory30d?.points?.length > 0 || cvdHistory30d?.length > 0) ? cvdHistory30d : prev.cvdHistory30d,
+          cvdHistory30dSpot: (cvdHistory30dSpot?.points?.length > 0 || cvdHistory30dSpot?.length > 0) ? cvdHistory30dSpot : prev.cvdHistory30dSpot,
+          btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
+          logs: [...logsRef.current],
+        }));
+      };
+
+      // Launch all requested tiers concurrently; each tier updates state immediately when ready!
+      await Promise.allSettled([
+        syncHotTier(),
+        syncWarmTier(),
+        syncColdTier(),
+      ]);
 
       const now = new Date().toLocaleString('vi-VN');
       addLog(`Đồng bộ hoàn tất [${tierLabel}] lúc ${now}`, 'system');
-
-      if (etfHoldingsVal) {
-        setEtfHoldings(etfHoldingsVal);
-        localStorage.setItem('etf-holdings', JSON.stringify(etfHoldingsVal));
-      }
-      if (etfHistoryVal) {
-        setEtfHistory(etfHistoryVal);
-        localStorage.setItem('etf-flow-history', JSON.stringify(etfHistoryVal));
-      }
-
-      let netLiquidity = null;
-      if (walclVal != null && tgaVal != null && rrpVal != null) {
-        netLiquidity = parseFloat(((walclVal / 1000) - (tgaVal / 1000) - rrpVal).toFixed(2));
-      }
-
-      // REST price fallback for favicon when WS not yet connected
-      if (btc?.price != null) {
-        updateBrowserChromeImmediate(btc.price, btc.change ?? 0);
-      }
-
-      setData((prev) => ({
-        btc: btc ?? prev.btc,
-        klines: klines.length > 0 ? klines : prev.klines,
-        lsHistory: lsHistory.length > 0 ? lsHistory : prev.lsHistory,
-        fundingRate: fundingRate ?? prev.fundingRate,
-        openInterest: openInterest ?? prev.openInterest,
-        oiHistory: oiHistory.length > 0 ? oiHistory : prev.oiHistory,
-        globalData: globalData ?? prev.globalData,
-        stablecoins: stablecoins ?? prev.stablecoins,
-        ssrMa: ssrMa ?? prev.ssrMa,
-        news: news.length > 0 ? news : prev.news,
-        logs: [...logsRef.current],
-        onChain: onChain ?? prev.onChain,
-        onChainMetrics: onChainMetrics ?? prev.onChainMetrics,
-        ethOnChainMetrics: ethOnChainMetrics ?? prev.ethOnChainMetrics,
-        fedFundsRate: fedFundsRateVal ?? prev.fedFundsRate,
-        cpi: cpiVal ?? (isPlausibleCpiYoY(prev.cpi) ? prev.cpi : null),
-        unrate: unrateVal ?? prev.unrate,
-        tenYearYield: tenYearYield ?? prev.tenYearYield,
-        dxy: dxy ?? prev.dxy,
-        m2Supply: m2SupplyVal ?? prev.m2Supply,
-        highYield: highYieldVal ?? prev.highYield,
-        sp500: sp500 ?? prev.sp500,
-        vix: vix ?? prev.vix,
-        qqq: qqq ?? prev.qqq,
-        ethTicker: ethTicker ?? prev.ethTicker,
-        solTicker: solTicker ?? prev.solTicker,
-        ethPrice: ethTicker?.price ?? (liveEthPrice ? { price: liveEthPrice } : prev.ethPrice),
-        solPrice: solTicker?.price ?? (liveSolPrice ? { price: liveSolPrice } : prev.solPrice),
-        netLiquidity: netLiquidity ?? prev.netLiquidity,
-        cotData: cotData ?? prev.cotData,
-        fngData: fngData ?? prev.fngData,
-        cvdHistory24h: (cvdHistory24h?.points?.length > 0 || cvdHistory24h?.length > 0) ? cvdHistory24h : prev.cvdHistory24h,
-        cvdHistory7d: (cvdHistory7d?.points?.length > 0 || cvdHistory7d?.length > 0) ? cvdHistory7d : prev.cvdHistory7d,
-        cvdHistory30d: (cvdHistory30d?.points?.length > 0 || cvdHistory30d?.length > 0) ? cvdHistory30d : prev.cvdHistory30d,
-        cvdHistory24hSpot: (cvdHistory24hSpot?.points?.length > 0 || cvdHistory24hSpot?.length > 0) ? cvdHistory24hSpot : prev.cvdHistory24hSpot,
-        cvdHistory7dSpot: (cvdHistory7dSpot?.points?.length > 0 || cvdHistory7dSpot?.length > 0) ? cvdHistory7dSpot : prev.cvdHistory7dSpot,
-        cvdHistory30dSpot: (cvdHistory30dSpot?.points?.length > 0 || cvdHistory30dSpot?.length > 0) ? cvdHistory30dSpot : prev.cvdHistory30dSpot,
-        btcDailyKlinesAll: btcDailyKlinesAll?.length > 0 ? btcDailyKlinesAll : prev.btcDailyKlinesAll,
-      }));
-
       setLastSync(now);
       window.appLastSync = now;
       setLastSyncTime(now);
-      if (wantHot) {
-        setIsOnline(btc != null || klines.length > 0);
-      }
     } catch (err) {
       addLog(`✗ Đồng bộ lỗi: ${err?.message || err}`, 'error');
     } finally {
       releaseLocks();
     }
-  }, [addLog, setLastSyncTime, apiKeys.fred]);
+  }, [addLog, setLastSyncTime, apiKeys.fred, liveEthPrice, liveSolPrice]);
 
   // Daily scheduled sync at 08:00 local. Publication-keyed ETF/CME caches
   // refresh only when their daily/weekly source window advances.

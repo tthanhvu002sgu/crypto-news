@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import { Activity, ChevronDown, ChevronUp, RefreshCw, Settings2 } from 'lucide-react';
 import { getBTCMacroKlines } from '../services/api';
+import { readCacheValue } from '../utils/cache';
 import {
   calculateMacroDashboard,
   MACRO_DASHBOARD_DEFAULTS,
@@ -66,8 +67,20 @@ function SettingSelect({ label, value, options, onChange }) {
 
 export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_macro_valuator' }) {
   const [settings, setSettings] = useState(loadSettings);
-  const [candles, setCandles] = useState([]);
-  const [status, setStatus] = useState('loading');
+  const [candles, setCandles] = useState(() => {
+    const intervalMap = { D: '1d', W: '1w', M: '1M' };
+    const interval = intervalMap[settings.timeframe] || '1w';
+    const targetLimit = Math.max(2, Math.min(Math.trunc(HISTORY_LIMIT), 10000));
+    const cached = readCacheValue(`btcMacroKlines_BTCUSDT_${interval}_${targetLimit}`);
+    return Array.isArray(cached) ? cached : [];
+  });
+  const [status, setStatus] = useState(() => {
+    const intervalMap = { D: '1d', W: '1w', M: '1M' };
+    const interval = intervalMap[settings.timeframe] || '1w';
+    const targetLimit = Math.max(2, Math.min(Math.trunc(HISTORY_LIMIT), 10000));
+    const cached = readCacheValue(`btcMacroKlines_BTCUSDT_${interval}_${targetLimit}`);
+    return Array.isArray(cached) && cached.length > 0 ? 'ready' : 'loading';
+  });
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -84,13 +97,16 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
 
   useEffect(() => {
     let cancelled = false;
-    getBTCMacroKlines('BTCUSDT', settings.timeframe, HISTORY_LIMIT).then((rows) => {
+    getBTCMacroKlines('BTCUSDT', settings.timeframe, HISTORY_LIMIT, reloadKey > 0).then((rows) => {
       if (cancelled) return;
-      setCandles(rows);
-      if (rows.length > 0) setStatus('ready');
-      else {
-        setStatus('error');
-        setError('Không tải được lịch sử Binance Spot.');
+      if (Array.isArray(rows) && rows.length > 0) {
+        setCandles(rows);
+        setStatus('ready');
+      } else {
+        if (candles.length === 0) {
+          setStatus('error');
+          setError('Không tải được lịch sử Binance Spot.');
+        }
       }
     });
     return () => { cancelled = true; };
