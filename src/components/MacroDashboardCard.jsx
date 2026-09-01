@@ -8,6 +8,7 @@ import {
   MACRO_DASHBOARD_DEFAULTS,
   CHART_RANGES,
   chartBarsForRange,
+  normalizeMacroCandles,
 } from '../services/macroDashboardEngine';
 import ModuleMenu from './ModuleMenu';
 
@@ -72,7 +73,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
     const interval = intervalMap[settings.timeframe] || '1w';
     const targetLimit = Math.max(2, Math.min(Math.trunc(HISTORY_LIMIT), 10000));
     const cached = readCacheValue(`btcMacroKlines_BTCUSDT_${interval}_${targetLimit}`);
-    return Array.isArray(cached) ? cached : [];
+    return normalizeMacroCandles(cached);
   });
   const [status, setStatus] = useState(() => {
     const intervalMap = { D: '1d', W: '1w', M: '1M' };
@@ -100,7 +101,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
     getBTCMacroKlines('BTCUSDT', settings.timeframe, HISTORY_LIMIT, reloadKey > 0).then((rows) => {
       if (cancelled) return;
       if (Array.isArray(rows) && rows.length > 0) {
-        setCandles(rows);
+        setCandles(normalizeMacroCandles(rows));
         setStatus('ready');
       } else {
         if (candles.length === 0) {

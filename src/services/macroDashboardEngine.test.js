@@ -5,6 +5,7 @@ import {
   macroDashboardInternals,
   CHART_RANGES,
   chartBarsForRange,
+  normalizeMacroCandles,
 } from './macroDashboardEngine.js';
 
 const candles = (length, priceAt, overrides = {}) => Array.from({ length }, (_, index) => {
@@ -77,6 +78,15 @@ test('result exposes W0, W-1 and the developing-candle state', () => {
   assert.equal(result.previous.isClosed, true);
 });
 
+test('cached candle timestamps are rehydrated as Date objects', () => {
+  const cached = JSON.parse(JSON.stringify(candles(3, (index) => 100 + index)));
+  const normalized = normalizeMacroCandles(cached);
+
+  assert.equal(normalized.length, 3);
+  assert.ok(normalized.every((candle) => candle.time instanceof Date));
+  assert.equal(normalized[0].time.toISOString(), cached[0].time);
+});
+
 test('CHART_RANGES contains 6M, 1Y, 3Y, 5Y, ALL and calculates correct bar count', () => {
   assert.deepEqual(CHART_RANGES, ['6M', '1Y', '3Y', '5Y', 'ALL']);
 
@@ -105,4 +115,3 @@ test('CHART_RANGES contains 6M, 1Y, 3Y, 5Y, ALL and calculates correct bar count
   assert.equal(chartBarsForRange('5Y', 'D'), 1825);
   assert.equal(chartBarsForRange('5Y', 'M'), 60);
 });
-

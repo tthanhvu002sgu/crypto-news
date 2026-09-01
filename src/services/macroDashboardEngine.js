@@ -256,7 +256,7 @@ const pnlZoneAt = (metrics, settings) => {
   return ZONES.FAIR;
 };
 
-const normalizeCandles = (candles) => (Array.isArray(candles) ? candles : [])
+export const normalizeMacroCandles = (candles) => (Array.isArray(candles) ? candles : [])
   .map((candle) => ({
     ...candle,
     time: candle.time instanceof Date ? candle.time : new Date(candle.time),
@@ -277,7 +277,7 @@ const normalizeCandles = (candles) => (Array.isArray(candles) ? candles : [])
 
 export function calculateMacroDashboard(inputCandles, inputSettings = {}) {
   const settings = mergeSettings(inputSettings);
-  const candles = normalizeCandles(inputCandles);
+  const candles = normalizeMacroCandles(inputCandles);
   if (candles.length === 0) return { settings, series: [], current: null, previous: null, alerts: {} };
 
   const closes = candles.map((candle) => candle.close);
