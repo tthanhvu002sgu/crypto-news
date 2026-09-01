@@ -6,6 +6,7 @@ import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
+import { buildProfessionalReportLayout } from '../services/summaryReportLayout';
 import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBACK_FREE_MODELS } from '../services/openrouter';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
@@ -1607,50 +1608,32 @@ ${promptData}
                 return <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{aiSummary}</ReactMarkdown>;
               }
 
-              // Split markdown by headers (##, ###, ####)
-              const chunks = aiSummary.split(/(?=^#{2,4}\s)/m).filter(Boolean);
-              const renderedCharts = new Set();
-              
-              return chunks.map((chunk, index) => {
-                const lowerText = chunk.toLowerCase();
-                let chartToRender = null;
-                
-                // 1. Spot ETF Chart - place strictly under ETF section
-                if (!renderedCharts.has('etf') && (lowerText.includes('etf') || lowerText.includes('spot etf') || lowerText.includes('net flow'))) {
-                  chartToRender = <EtfChart key="etf" etfHistory={etfHistory} />;
-                  renderedCharts.add('etf');
-                }
-                // 2. CME COT Chart - place strictly under CME COT section
-                else if (!renderedCharts.has('cot') && (lowerText.includes('cme') || lowerText.includes('cot') || lowerText.includes('asset manager') || lowerText.includes('quỹ đầu cơ'))) {
-                  chartToRender = <CotChart key="cot" cotData={data.cotData} />;
-                  renderedCharts.add('cot');
-                }
-                // 3. Phái sinh OI & Funding Chart - place strictly under Derivatives section
-                else if (!renderedCharts.has('oi') && (lowerText.includes('phái sinh') || lowerText.includes('open interest') || lowerText.includes('funding rate') || lowerText.includes('derivatives'))) {
-                  chartToRender = <FundingOiChart key="oi" oiHistory={Array.isArray(data.oiHistory) ? data.oiHistory : []} fundingRates={data.fundingRates} />;
-                  renderedCharts.add('oi');
-                }
-                // 4. Lịch sử Giá & CVD Chart - place strictly under CVD / Price section
-                else if (!renderedCharts.has('cvd') && (lowerText.includes('cvd') || lowerText.includes('taker flow') || lowerText.includes('lịch sử giá') || lowerText.includes('historical price'))) {
-                  const cvdSource = reportCvdData?.length > 0 ? reportCvdData : (data.cvdHistory30d?.points || data.cvdHistory30d || data.cvdHistory7d?.points || data.cvdHistory7d || []);
-                  chartToRender = <CvdChart key="cvd" cvdData={cvdSource} />;
-                  renderedCharts.add('cvd');
-                }
-                // 5. On-Chain Valuation Chart - place strictly under On-Chain section
-                else if (!renderedCharts.has('onchain') && (lowerText.includes('on-chain') || lowerText.includes('mvrv') || lowerText.includes('production cost') || lowerText.includes('định giá'))) {
-                  chartToRender = <OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} btcPrice={data.btc?.price} productionCost={data.productionCost} />;
-                  renderedCharts.add('onchain');
-                }
-                // 6. Vĩ mô Macro Liquidity Chart - place strictly under Macro section
-                else if (!renderedCharts.has('macro') && (lowerText.includes('vĩ mô') || lowerText.includes('macro') || lowerText.includes('liquidity') || lowerText.includes('real-rate'))) {
-                  chartToRender = <MacroLiquidityChart key="macro" data={data} />;
-                  renderedCharts.add('macro');
-                }
+              const reportBlocks = buildProfessionalReportLayout(aiSummary);
+              const cvdSource = reportCvdData?.length > 0 ? reportCvdData : (data.cvdHistory30d?.points || data.cvdHistory30d || data.cvdHistory7d?.points || data.cvdHistory7d || []);
+              const oiHistory = Array.isArray(data.oiHistory) ? data.oiHistory : [];
+              const chartComponents = {
+                macro: <MacroLiquidityChart key="macro" data={data} />,
+                etf: Array.isArray(etfHistory) && etfHistory.length > 0 ? <EtfChart key="etf" etfHistory={etfHistory} /> : null,
+                cot: data.cotData ? <CotChart key="cot" cotData={data.cotData} /> : null,
+                onchain: <OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} btcPrice={data.btc?.price} productionCost={data.productionCost} />,
+                oi: oiHistory.length > 0 ? <FundingOiChart key="oi" oiHistory={oiHistory} fundingRates={data.fundingRates} /> : null,
+                cvd: Array.isArray(cvdSource) && cvdSource.length > 0 ? <CvdChart key="cvd" cvdData={cvdSource} /> : null,
+              };
+
+              return reportBlocks.map((block, index) => {
+                const charts = block.charts.map((chartId) => chartComponents[chartId]).filter(Boolean);
 
                 return (
-                  <div key={index} className="summary-chunk" style={{ position: 'relative' }}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{chunk}</ReactMarkdown>
-                    {chartToRender}
+                  <div key={index} className="summary-chunk">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{block.markdown}</ReactMarkdown>
+                    {charts.length > 0 && (
+                      <aside className={`summary-evidence-group ${charts.length > 1 ? 'is-grid' : ''}`} aria-label={isVi ? 'Biểu đồ bằng chứng cho luận điểm trên' : 'Evidence charts for the analysis above'}>
+                        <div className="summary-evidence-label font-mono">
+                          {isVi ? 'BẰNG CHỨNG TRỰC QUAN' : 'VISUAL EVIDENCE'}
+                        </div>
+                        <div className="summary-evidence-charts">{charts}</div>
+                      </aside>
+                    )}
                   </div>
                 );
               });

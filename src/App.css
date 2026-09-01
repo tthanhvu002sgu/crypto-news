@@ -2397,6 +2397,50 @@
   background: var(--gradient-aurora);
   opacity: 0.4;
 }
+
+.summary-chunk {
+  position: relative;
+}
+
+.summary-evidence-group {
+  margin: 0.35rem 0 1.75rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border-panel) 72%, transparent);
+}
+
+.summary-evidence-label {
+  width: max-content;
+  margin-bottom: 0.5rem;
+  color: var(--text-slate-500);
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.summary-evidence-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.summary-evidence-group.is-grid .summary-evidence-charts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.summary-evidence-charts .summary-chart-container {
+  min-width: 0;
+  margin: 0 !important;
+}
+
+.summary-evidence-group.is-grid .summary-chart-container {
+  height: 240px !important;
+}
+
+@media (max-width: 900px) {
+  .summary-evidence-group.is-grid .summary-evidence-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 /* ── Module Visibility & Menu ─────────────────────────────────────────── */
 .module-menu-btn:hover {
   opacity: 1 !important;
