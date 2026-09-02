@@ -738,7 +738,7 @@ function AppContent() {
 
 
   // ── Binance WebSocket — realtime prices + funding rate ──────────────────
-  const { livePrice, liveChange, liveHigh, liveLow, liveVolume, liveFunding, liveEthPrice, liveSolPrice, liveLinkPrice, wsStatus } =
+  const { livePrice, liveChange, liveHigh, liveLow, liveVolume, liveFunding, liveMarkPrice, liveIndexPrice, liveBasisPct, liveEthPrice, liveSolPrice, liveLinkPrice, wsStatus } =
     useBinanceWebSocket();
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
@@ -1833,6 +1833,7 @@ function AppContent() {
                 whaleTrades={whaleTrades} volNodes={volNodes} theme={theme}
                 data={data} fundingRate={fund}
                 liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
+                liveMarkPrice={liveMarkPrice} liveIndexPrice={liveIndexPrice} liveBasisPct={liveBasisPct}
                 liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
               />
             </div>

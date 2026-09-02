@@ -4,6 +4,7 @@ import { Line } from 'react-chartjs-2';
 import { getCompletedHourCVD, getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
+import CapitalFlowPanel from './CapitalFlowPanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import {
@@ -1944,6 +1945,7 @@ function MoveTrackerPanel() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const MemoCVDPanel = React.memo(CVDPanel);
+const MemoCapitalFlowPanel = React.memo(CapitalFlowPanel);
 const MemoTargetLiquidityPanelWrapper = React.memo(TargetLiquidityPanelWrapper);
 const MemoOrderBookPanel = React.memo(OrderBookPanel);
 const MemoAdvancedChartWrapper = React.memo(AdvancedChartWrapper);
@@ -1955,7 +1957,7 @@ export default function HftRadarTab({
   cvdHistory24h, cvdHistory7d, cvdHistory30d,
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
   cvdStatus, livePrice, whaleTrades, theme, volNodes,
-  data, liveVolume, fundingRate,
+  data, liveVolume, fundingRate, liveChange, liveBasisPct,
 }) {
   const { isModuleHidden } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
@@ -2041,6 +2043,18 @@ export default function HftRadarTab({
       </div>
 
       <div className="hft-grid">
+        {!isModuleHidden('hft_capital_flow') && (
+          <MemoCapitalFlowPanel
+            priceChangePct={liveChange ?? data?.btc?.change}
+            cvdHistory24h={cvdHistory24h}
+            futuresStream={futuresStream}
+            oiHistory={data?.oiHistory}
+            openInterest={data?.openInterest}
+            fundingRate={fundingRate ?? data?.fundingRate}
+            basisPct={liveBasisPct}
+          />
+        )}
+
         {!isModuleHidden('hft_cvd') && (
           <MemoCVDPanel
             cvd={cvd}

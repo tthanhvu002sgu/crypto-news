@@ -9,6 +9,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
+  - **Capital Flow In / Out (24H):** Module đầu tiên của tab DATA phân rã trạng thái vốn phái sinh bằng Price + Futures CVD + ΔOI + Funding + Basis. Engine tách `IN / OUT / ROTATION / NEUTRAL / UNKNOWN`, directional bias và mechanism (new position, short covering, long exit, absorption), đồng thời abstain khi thiếu Price/CVD/OI và không diễn giải Funding/Basis như dòng vốn trực tiếp.
   - **CVD & Order Flow (Binance Benchmark):** Giữ CVD đa khung (`1H`, `24H`, `7D`, `30D`) với UTC Anchor cố định (`2020-01-01`) và immutable daily snapshot ledger, loại bỏ hoàn toàn hiện tượng trôi dạt baseline. Tích hợp Flow Pressure Cards chuẩn hóa (Delta/Volume, rolling z-score, momentum), Market Flow Verdict, Futures Positioning (Price–CVD–OI–Funding context), Volume Ratio và Estimated Volume-by-Price Footprint $100 gap.
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến bằng Robust Z-Score & Taker Delta). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
@@ -27,7 +28,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Quản lý trạng thái:** React Hooks + Context (`ModuleVisibilityContext`, tooltip settings).
 - **Nguồn dữ liệu:**
   - **REST API:** Binance, FairEconomy/ForexFactory (weekly calendar), CoinGecko, FRED, CoinMetrics, ETF/COT scrapers, news RSS, Yahoo/FRED equities.
-  - **WebSocket:** Binance multi-ticker + `markPrice` + Binance Spot/USD-M aggTrades cho CVD & Volume realtime.
+  - **WebSocket:** Binance multi-ticker + `markPrice` (Funding, Mark, Index, Basis) + Binance Spot/USD-M aggTrades cho CVD & Volume realtime.
 - **Đồng bộ REST theo tầng (tiered sync):**
   - **HOT** mỗi 5 phút — Binance REST (ticker/klines/L-S/funding/OI), TTL cache 2–5 phút.
   - **WARM** mỗi 15 phút — global mcap, stablecoin, news, equities/yields, CVD 24h/7d, Economic Calendar.
@@ -49,7 +50,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC theo mô hình score-first, có sparkline tối đa 30 snapshot realtime chống look-ahead, thanh Gauge Spectrum, 4 bento card trụ cột, thanh tóm tắt 3 tầng Regime và drawer bẻ nhỏ 14+ tín hiệu định lượng.
-- `HftRadarTab.jsx`: Tab quan trọng nhất chứa `MoveTrackerPanel`, `CVDPanel` (Binance benchmark CVD đa khung `1H/24H/7D/30D`, Normalized Flow Pressure Cards, Volume Ratio, dual Y-axis), `WhaleTradesPanel`, `AdvancedChart`, `TargetLiquidityPanel`, `OrderBookPanel`.
+- `HftRadarTab.jsx`: Tab quan trọng nhất đặt `CapitalFlowPanel` ở vị trí đầu tiên, sau đó là `MoveTrackerPanel`, `CVDPanel` (Binance benchmark CVD đa khung `1H/24H/7D/30D`, Normalized Flow Pressure Cards, Volume Ratio, dual Y-axis), `WhaleTradesPanel`, `AdvancedChart`, `TargetLiquidityPanel`, `OrderBookPanel`.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
@@ -57,6 +58,9 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `src/services/cvdService.test.js` — Bộ 15 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
 - `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
 - `src/services/orderFlowMetrics.test.js` — Unit tests cho normalized flow và phân loại trạng thái vị thế Futures.
+- `src/components/CapitalFlowPanel.jsx` — Module DATA 24H hiển thị flow direction, directional bias, mechanism, metrics đầu vào, data quality và crowding context.
+- `src/services/capitalFlowEngine.js` — Pure decision engine phân loại derivatives exposure `IN/OUT/ROTATION/NEUTRAL/UNKNOWN` từ Price, normalized Futures CVD và ΔOI; Funding/Basis chỉ bổ sung crowding context.
+- `src/services/capitalFlowEngine.test.js` — Regression tests cho bốn ma trận flow lõi, absorption, missing-data abstention và crowding context.
 - `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias trực tiếp bằng `biasEngine.js` và gửi webhook.
 - `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
 - `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
@@ -71,6 +75,14 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-09-02] Thêm Capital Flow In / Out Làm Module Đầu Tiên Của Tab DATA `(FULL)`
+- **Mode / Type / Action / Lane:** FEATURE / FEATURE / EXECUTE / FULL
+- **Tóm tắt:** Thêm module 24H phân rã dòng vốn phái sinh đang mở rộng, co lại hay luân chuyển từ Price + Futures CVD + ΔOI; Funding và Basis chỉ dùng đánh giá crowding. Module không dùng narrative smart money, có missing-data abstention và đứng trước CVD trong tab DATA.
+- **Thay đổi chính:** Thêm pure engine cùng 7 regression tests; mở rộng Binance mark-price stream để trả Mark/Index/Basis realtime; thêm panel responsive, module visibility và data-quality disclosure.
+- **Files / areas chạm:** `src/services/capitalFlowEngine.js`, `src/services/capitalFlowEngine.test.js`, `src/components/CapitalFlowPanel.jsx`, `src/components/HftRadarTab.jsx`, `src/services/websocket.js`, `src/context/ModuleVisibilityContext.jsx`, `src/App.jsx`, `src/App.css`, `package.json`, `README.md`.
+- **Ảnh hưởng README:** §1 / §2 / §3 / §4.
+- **Verify:** `npm test` pass; `npm run build` pass; targeted ESLint cho engine/test/panel mới pass; `git diff --check` pass; browser smoke-test tab DATA xác nhận module đứng đầu và render dữ liệu live. Repo-wide ESLint vẫn fail bởi 42 lỗi tồn đọng ngoài logic module mới trong `App.jsx`, `HftRadarTab.jsx`, `websocket.js` và visibility context.
 
 ### [2026-08-31] Khắc Phục Triệt Để Lỗi Crash Khi Chuyển Timeframe CVD & Order Flow `(BUGFIX)`
 - **Mode / Type / Action / Lane:** BUGFIX / BUGFIX / EXECUTE / FAST

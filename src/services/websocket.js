@@ -145,6 +145,8 @@ export function useBinanceWebSocket() {
   const [liveLow, setLiveLow] = useState(savedTicker?.low ?? null);
   const [liveVolume, setLiveVolume] = useState(savedTicker?.volume ?? null);
   const [liveFunding, setLiveFunding] = useState(savedTicker?.funding ?? null);
+  const [liveMarkPrice, setLiveMarkPrice] = useState(savedTicker?.markPrice ?? null);
+  const [liveIndexPrice, setLiveIndexPrice] = useState(savedTicker?.indexPrice ?? null);
   const [liveEthPrice, setLiveEthPrice] = useState(savedTicker?.eth ?? null);
   const [liveSolPrice, setLiveSolPrice] = useState(savedTicker?.sol ?? null);
   const [liveLinkPrice, setLiveLinkPrice] = useState(savedTicker?.link ?? null);
@@ -159,6 +161,8 @@ export function useBinanceWebSocket() {
     low: savedTicker?.low ?? null,
     volume: savedTicker?.volume ?? null,
     funding: savedTicker?.funding ?? null,
+    markPrice: savedTicker?.markPrice ?? null,
+    indexPrice: savedTicker?.indexPrice ?? null,
     eth: savedTicker?.eth ?? null,
     sol: savedTicker?.sol ?? null,
     link: savedTicker?.link ?? null,
@@ -180,6 +184,8 @@ export function useBinanceWebSocket() {
       if (s.low != null) setLiveLow(s.low);
       if (s.volume != null) setLiveVolume(s.volume);
       if (s.funding != null) setLiveFunding(s.funding);
+      if (s.markPrice != null) setLiveMarkPrice(s.markPrice);
+      if (s.indexPrice != null) setLiveIndexPrice(s.indexPrice);
       if (s.eth != null) setLiveEthPrice(s.eth);
       if (s.sol != null) setLiveSolPrice(s.sol);
       if (s.link != null) setLiveLinkPrice(s.link);
@@ -242,6 +248,8 @@ export function useBinanceWebSocket() {
         }
         if (stream === 'btcusdt@markPrice@1s') {
           snapRef.current.funding = parseFloat(data.r);
+          snapRef.current.markPrice = parseFloat(data.p);
+          snapRef.current.indexPrice = parseFloat(data.i);
           scheduleFlush();
         }
       },
@@ -264,6 +272,11 @@ export function useBinanceWebSocket() {
     liveLow,
     liveVolume,
     liveFunding,
+    liveMarkPrice,
+    liveIndexPrice,
+    liveBasisPct: liveMarkPrice > 0 && liveIndexPrice > 0
+      ? ((liveMarkPrice / liveIndexPrice) - 1) * 100
+      : null,
     liveEthPrice,
     liveSolPrice,
     liveLinkPrice,

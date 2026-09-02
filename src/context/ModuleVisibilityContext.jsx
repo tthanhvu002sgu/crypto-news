@@ -21,6 +21,7 @@ export const MODULES_CONFIG = {
   dash_cme_cot: { id: 'dash_cme_cot', label: 'CME Bitcoin Futures COT', category: 'Dashboard' },
 
   // Data / HFT Radar Tab
+  hft_capital_flow: { id: 'hft_capital_flow', label: 'Capital Flow In / Out (24H)', category: 'Data (HFT)' },
   hft_cvd: { id: 'hft_cvd', label: 'CVD & Order Flow', category: 'Data (HFT)' },
   hft_target_liq: { id: 'hft_target_liq', label: 'Target Liquidity (Whale Walls)', category: 'Data (HFT)' },
   hft_obi: { id: 'hft_obi', label: 'Order Book Imbalance', category: 'Data (HFT)' },
