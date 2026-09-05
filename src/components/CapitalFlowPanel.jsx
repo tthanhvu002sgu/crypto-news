@@ -40,7 +40,14 @@ function sumVolume(points, field) {
   return points.reduce((sum, point) => sum + (finite(point?.[field]) ?? 0), 0);
 }
 
-function useCapitalFlowInputs({ cvdHistory24h, futuresStream, oiHistory, openInterest }) {
+function useCapitalFlowInputs({
+  cvdHistory24h,
+  futuresStream,
+  cvdHistory24hSpot,
+  spotStream,
+  oiHistory,
+  openInterest,
+}) {
   const normalized = useMemo(() => normalizeCvdHistory(cvdHistory24h), [cvdHistory24h]);
   const historyBuy = sumVolume(normalized.points, 'buyVol');
   const historySell = sumVolume(normalized.points, 'sellVol');
@@ -59,6 +66,23 @@ function useCapitalFlowInputs({ cvdHistory24h, futuresStream, oiHistory, openInt
   const totalVolume = buyVolume + sellVolume;
   const cvdRatioPct = totalVolume > 0 ? (netDelta / totalVolume) * 100 : null;
 
+  // Spot 24H volume & delta
+  const normalizedSpot = useMemo(() => normalizeCvdHistory(cvdHistory24hSpot), [cvdHistory24hSpot]);
+  const historyBuySpot = sumVolume(normalizedSpot.points, 'buyVol');
+  const historySellSpot = sumVolume(normalizedSpot.points, 'sellVol');
+  const liveSessionCvdSpot = finite(spotStream?.sessionCvd) ?? 0;
+  const liveSessionBuySpot = finite(spotStream?.sessionBuyVolume) ?? finite(spotStream?.buyVolume) ?? 0;
+  const liveSessionSellSpot = finite(spotStream?.sessionSellVolume) ?? finite(spotStream?.sellVolume) ?? 0;
+  const historyNetSpot = normalizedSpot.windowNetDelta
+    ?? (normalizedSpot.points.at(-1)?.cumulativeWithinWindow)
+    ?? (historyBuySpot - historySellSpot);
+  const hasHistorySpot = normalizedSpot.points.length > 0;
+  const spotNetDelta = hasHistorySpot ? (finite(historyNetSpot) ?? 0) : (spotStream ? liveSessionCvdSpot : null);
+  const buyVolumeSpot = hasHistorySpot ? historyBuySpot : liveSessionBuySpot;
+  const sellVolumeSpot = hasHistorySpot ? historySellSpot : liveSessionSellSpot;
+  const totalVolumeSpot = buyVolumeSpot + sellVolumeSpot;
+  const spotCvdRatioPct = totalVolumeSpot > 0 && spotNetDelta != null ? (spotNetDelta / totalVolumeSpot) * 100 : null;
+
   const validOi = (Array.isArray(oiHistory) ? oiHistory : [])
     .map((point) => ({ value: finite(point?.sumOpenInterest), time: finite(point?.timestamp) }))
     .filter((point) => point.value > 0);
@@ -71,6 +95,8 @@ function useCapitalFlowInputs({ cvdHistory24h, futuresStream, oiHistory, openInt
   return {
     netDelta,
     cvdRatioPct,
+    spotNetDelta,
+    spotCvdRatioPct,
     oiChangePct,
     coveragePct: Math.min(cvdCoverage, oiCoverage),
     cvdAsOf: normalized.asOf,
@@ -90,12 +116,21 @@ export default function CapitalFlowPanel({
   priceChangePct,
   cvdHistory24h,
   futuresStream,
+  cvdHistory24hSpot,
+  spotStream,
   oiHistory,
   openInterest,
   fundingRate,
   basisPct,
 }) {
-  const inputs = useCapitalFlowInputs({ cvdHistory24h, futuresStream, oiHistory, openInterest });
+  const inputs = useCapitalFlowInputs({
+    cvdHistory24h,
+    futuresStream,
+    cvdHistory24hSpot,
+    spotStream,
+    oiHistory,
+    openInterest,
+  });
   const verdict = useMemo(() => classifyCapitalFlow({
     priceChangePct,
     cvdRatioPct: inputs.cvdRatioPct,
@@ -103,7 +138,18 @@ export default function CapitalFlowPanel({
     fundingRate,
     basisPct,
     coveragePct: inputs.coveragePct,
-  }), [priceChangePct, inputs.cvdRatioPct, inputs.oiChangePct, inputs.coveragePct, fundingRate, basisPct]);
+    spotCvdRatioPct: inputs.spotCvdRatioPct,
+    spotNetDelta: inputs.spotNetDelta,
+  }), [
+    priceChangePct,
+    inputs.cvdRatioPct,
+    inputs.oiChangePct,
+    inputs.coveragePct,
+    fundingRate,
+    basisPct,
+    inputs.spotCvdRatioPct,
+    inputs.spotNetDelta,
+  ]);
 
   const qualityClass = verdict.quality.level === 'HIGH'
     ? 'is-high'
@@ -133,6 +179,7 @@ export default function CapitalFlowPanel({
         <div className="capital-flow-taxonomy font-mono">
           <div><span>DIRECTIONAL BIAS</span><strong>{verdict.bias}</strong></div>
           <div><span>MECHANISM</span><strong>{verdict.mechanism.replaceAll('_', ' ')}</strong></div>
+          <div><span>SPOT ALIGNMENT</span><strong>{verdict.spotAlignment?.label ?? '---'}</strong></div>
           <div><span>HORIZON</span><strong>{verdict.horizon}</strong></div>
         </div>
       </div>
@@ -140,6 +187,7 @@ export default function CapitalFlowPanel({
       <dl className="capital-flow-metrics font-mono">
         <div><dt>PRICE 24H</dt><dd>{signedPct(priceChangePct)}</dd></div>
         <div><dt>FUTURES CVD</dt><dd>{compactUsd(inputs.netDelta)}</dd><small>{signedPct(inputs.cvdRatioPct)} / volume</small></div>
+        <div><dt>SPOT CVD</dt><dd>{compactUsd(inputs.spotNetDelta)}</dd><small>{signedPct(inputs.spotCvdRatioPct)} / volume</small></div>
         <div><dt>OPEN INTEREST</dt><dd>{signedPct(inputs.oiChangePct)}</dd><small>{openInterest ? `${(Number(openInterest) / 1000).toFixed(1)}K BTC` : '---'}</small></div>
         <div><dt>FUNDING</dt><dd>{fundingRate == null ? '---' : `${(Number(fundingRate) * 100).toFixed(4)}%`}</dd></div>
         <div><dt>BASIS</dt><dd>{signedPct(basisPct, 4)}</dd></div>
@@ -147,7 +195,7 @@ export default function CapitalFlowPanel({
       </dl>
 
       <div className="capital-flow-notes font-mono">
-        <span>{verdict.quality.detail}</span>
+        <span>{verdict.quality.detail}{verdict.spotAlignment?.detail ? ` · ${verdict.spotAlignment.detail}` : ''}</span>
         <span>OI quyết định exposure mở rộng/co lại; CVD chỉ xác định phía giao dịch chủ động.</span>
       </div>
     </section>

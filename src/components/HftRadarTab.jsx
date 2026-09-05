@@ -2048,6 +2048,8 @@ export default function HftRadarTab({
             priceChangePct={liveChange ?? data?.btc?.change}
             cvdHistory24h={cvdHistory24h}
             futuresStream={futuresStream}
+            cvdHistory24hSpot={cvdHistory24hSpot}
+            spotStream={spotStream}
             oiHistory={data?.oiHistory}
             openInterest={data?.openInterest}
             fundingRate={fundingRate ?? data?.fundingRate}

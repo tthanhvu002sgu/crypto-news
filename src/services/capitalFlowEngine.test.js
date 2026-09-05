@@ -51,3 +51,75 @@ test('uses funding and basis as crowding context, not flow direction', () => {
   assert.equal(result.crowding.state, 'CROWDED_LONGS');
 });
 
+test('identifies spot confluence buy when long bias and spot CVD is positive', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: 1.2,
+    cvdRatioPct: 2.1,
+    oiChangePct: 3.4,
+    spotCvdRatioPct: 1.5,
+    spotNetDelta: 50_000_000,
+  });
+  assert.equal(result.state, 'CAPITAL_IN_LONG_BIAS');
+  assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
+  assert.equal(result.spotAlignment.label, 'Đồng thuận mua');
+  assert.equal(result.spotAlignment.tone, 'bullish');
+});
+
+test('identifies spot divergence sell when long bias but spot CVD is negative', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: 1.2,
+    cvdRatioPct: 2.1,
+    oiChangePct: 3.4,
+    spotCvdRatioPct: -1.5,
+    spotNetDelta: -50_000_000,
+  });
+  assert.equal(result.state, 'CAPITAL_IN_LONG_BIAS');
+  assert.equal(result.spotAlignment.state, 'SPOT_DIVERGENCE');
+  assert.equal(result.spotAlignment.label, 'Phân kỳ bán Spot');
+  assert.equal(result.spotAlignment.tone, 'warning');
+});
+
+test('identifies spot confluence sell when short bias and spot CVD is negative', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: -1.2,
+    cvdRatioPct: -2.1,
+    oiChangePct: 3.4,
+    spotCvdRatioPct: -2.0,
+    spotNetDelta: -60_000_000,
+  });
+  assert.equal(result.state, 'CAPITAL_IN_SHORT_BIAS');
+  assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
+  assert.equal(result.spotAlignment.label, 'Đồng thuận bán');
+  assert.equal(result.spotAlignment.tone, 'bearish');
+});
+
+test('identifies spot divergence buy when short bias but spot CVD is positive', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: -1.2,
+    cvdRatioPct: -2.1,
+    oiChangePct: 3.4,
+    spotCvdRatioPct: 1.8,
+    spotNetDelta: 40_000_000,
+  });
+  assert.equal(result.state, 'CAPITAL_IN_SHORT_BIAS');
+  assert.equal(result.spotAlignment.state, 'SPOT_DIVERGENCE');
+  assert.equal(result.spotAlignment.label, 'Phân kỳ mua Spot');
+  assert.equal(result.spotAlignment.tone, 'warning');
+});
+
+test('gracefully handles missing spot data as unavailable', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: 1.2,
+    cvdRatioPct: 2.1,
+    oiChangePct: 3.4,
+    spotCvdRatioPct: null,
+    spotNetDelta: null,
+  });
+  assert.equal(result.spotAlignment.state, 'UNAVAILABLE');
+  assert.equal(result.spotAlignment.label, 'Spot chưa rõ');
+});

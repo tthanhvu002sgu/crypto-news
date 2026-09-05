@@ -9,7 +9,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
 - **HFT Radar (Phân tích dòng tiền Phái sinh):**
-  - **Capital Flow In / Out (24H):** Module đầu tiên của tab DATA phân rã trạng thái vốn phái sinh bằng Price + Futures CVD + ΔOI + Funding + Basis. Engine tách `IN / OUT / ROTATION / NEUTRAL / UNKNOWN`, directional bias và mechanism (new position, short covering, long exit, absorption), đồng thời abstain khi thiếu Price/CVD/OI và không diễn giải Funding/Basis như dòng vốn trực tiếp.
+  - **Capital Flow In / Out (24H):** Module đầu tiên của tab DATA phân rã trạng thái vốn phái sinh bằng Price + Futures CVD + ΔOI + Funding + Basis, đồng thời bổ sung đối chiếu độc lập **Spot CVD & Spot Alignment** (Confluence / Divergence). Engine tách `IN / OUT / ROTATION / NEUTRAL / UNKNOWN`, directional bias và mechanism (new position, short covering, long exit, absorption), đối chiếu dòng tiền Spot mà không gộp chung vào hợp đồng phái sinh, abstain khi thiếu dữ liệu lõi và không diễn giải Funding/Basis như dòng vốn trực tiếp.
   - **CVD & Order Flow (Binance Benchmark):** Giữ CVD đa khung (`1H`, `24H`, `7D`, `30D`) với UTC Anchor cố định (`2020-01-01`) và immutable daily snapshot ledger, loại bỏ hoàn toàn hiện tượng trôi dạt baseline. Tích hợp Flow Pressure Cards chuẩn hóa (Delta/Volume, rolling z-score, momentum), Market Flow Verdict, Futures Positioning (Price–CVD–OI–Funding context), Volume Ratio và Estimated Volume-by-Price Footprint $100 gap.
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến bằng Robust Z-Score & Taker Delta). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
@@ -58,9 +58,9 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `src/services/cvdService.test.js` — Bộ 15 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
 - `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
 - `src/services/orderFlowMetrics.test.js` — Unit tests cho normalized flow và phân loại trạng thái vị thế Futures.
-- `src/components/CapitalFlowPanel.jsx` — Module DATA 24H hiển thị flow direction, directional bias, mechanism, metrics đầu vào, data quality và crowding context.
-- `src/services/capitalFlowEngine.js` — Pure decision engine phân loại derivatives exposure `IN/OUT/ROTATION/NEUTRAL/UNKNOWN` từ Price, normalized Futures CVD và ΔOI; Funding/Basis chỉ bổ sung crowding context.
-- `src/services/capitalFlowEngine.test.js` — Regression tests cho bốn ma trận flow lõi, absorption, missing-data abstention và crowding context.
+- `src/components/CapitalFlowPanel.jsx` — Module DATA 24H hiển thị flow direction, directional bias, mechanism, đối chiếu Spot Alignment, metrics 7 cột (Price, Futures CVD, Spot CVD, OI, Funding, Basis, Crowding), data quality và crowding context.
+- `src/services/capitalFlowEngine.js` — Pure decision engine phân loại derivatives exposure `IN/OUT/ROTATION/NEUTRAL/UNKNOWN` từ Price, normalized Futures CVD và ΔOI; đánh giá đối chiếu `SPOT_CONFLUENCE / SPOT_DIVERGENCE` từ Spot CVD; Funding/Basis chỉ bổ sung crowding context.
+- `src/services/capitalFlowEngine.test.js` — 12 regression tests cho bốn ma trận flow lõi, absorption, spot confluence/divergence, missing-data abstention và crowding context.
 - `scripts/syncGoogleSheet.mjs` — Script Node.js độc lập cào dữ liệu từ Binance, DefiLlama, Alternative.me, FairEconomy, tính Bias trực tiếp bằng `biasEngine.js` và gửi webhook.
 - `google-apps-script/Code.gs` — Mã nguồn Google Apps Script nhận POST webhook, xóa cũ và ghi đè bảng dữ liệu formatted lên Google Sheet.
 - `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
@@ -75,6 +75,19 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-09-05] Bổ Sung Metric Spot CVD & Đánh Giá Spot Alignment Vào Capital Flow In / Out `(FAST)`
+- **Mode / Type / Action / Lane:** FEATURE / FEATURE / EXECUTE / FAST
+- **Tóm tắt:** Bổ sung metric Spot CVD 24H (Net Delta + %/vol) và đánh giá đối chiếu Spot Alignment (Đồng thuận mua/bán vs Phân kỳ Spot) vào panel CAPITAL FLOW — IN / OUT của tab DATA mà không làm sai lệch mô hình vi cấu trúc đòn bẩy Futures lõi.
+- **Thay đổi chính:**
+  - `capitalFlowEngine.js`: Thêm hàm `spotAlignmentContext` đánh giá tương quan giữa Directional Bias của Futures và dòng tiền Spot CVD (Spot Confluence, Spot Divergence, Spot Lead, Balanced, Unavailable) với deadband chống nhiễu; tích hợp vào kết quả trả về của `classifyCapitalFlow`.
+  - `capitalFlowEngine.test.js`: Bổ sung 5 unit test kiểm thử toàn diện các kịch bản Spot Confluence (Buy/Sell), Spot Divergence (Buy/Sell) và Missing Spot Data (tổng 12 tests pass).
+  - `CapitalFlowPanel.jsx`: Mở rộng `useCapitalFlowInputs` chuẩn hóa dữ liệu Spot 24H từ `cvdHistory24hSpot` và fallback `spotStream`; hiển thị metric `SPOT CVD` trong bảng metrics 24H; thêm badge `SPOT ALIGNMENT` trong khối Taxonomy; cập nhật dòng ghi chú ngữ cảnh Spot.
+  - `HftRadarTab.jsx`: Kết nối truyền `cvdHistory24hSpot` và `spotStream` vào `MemoCapitalFlowPanel`.
+  - `App.css`: Điều chỉnh grid Taxonomy sang layout 2x2 cân đối chiều cao và grid Metrics thành 7 cột trên PC với breakpoint tablet/mobile responsive.
+- **Files / areas chạm:** `src/services/capitalFlowEngine.js`, `src/services/capitalFlowEngine.test.js`, `src/components/CapitalFlowPanel.jsx`, `src/components/HftRadarTab.jsx`, `src/App.css`, `README.md`.
+- **Ảnh hưởng README:** §1 / §3 / §4.
+- **Verify:** `npm run test:capitalflow` pass (12/12); `npm test` pass toàn bộ test suites; `npm run build` pass thành công trong 12.19s; `git diff --check` sạch sẽ.
 
 ### [2026-09-02] Thêm Capital Flow In / Out Làm Module Đầu Tiên Của Tab DATA `(FULL)`
 - **Mode / Type / Action / Lane:** FEATURE / FEATURE / EXECUTE / FULL
