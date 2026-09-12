@@ -7,6 +7,7 @@ import { cleanLatex } from './SummaryTab';
 import { getGenerationConfig } from '../services/aiPrompts';
 import { streamOpenRouterCompletion } from '../services/openrouter';
 import { getOrderBookDepth, getWhaleWalls } from '../services/api';
+import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 
 export default function TradePlanAuditor({
@@ -23,6 +24,9 @@ export default function TradePlanAuditor({
   lastSync,
   moduleId = 'dash_trade_auditor',
 }) {
+  const { isModuleHidden } = useModuleVisibility();
+  if (moduleId && isModuleHidden(moduleId)) return null;
+
   const priceNow =
     typeof data.btc?.price === 'number'
       ? data.btc.price

@@ -330,9 +330,33 @@
 
 .tab-content { flex: 1; overflow-y: auto; padding-right: 2px; }
 
-/* ─── Dashboard ────────────────────────────────────────────────────────────── */
+/* ─── Dashboard / Overview & Regime ────────────────────────────────────────── */
 
 .dashboard-layout { display: flex; flex-direction: column; gap: 16px; }
+
+.overview-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 2px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border-panel);
+}
+.overview-section-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-emerald-400);
+  letter-spacing: 0.08em;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.overview-section-desc {
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+}
 
 /* ─── Macro Dashboard v2 · Pine parity module ─────────────────────────────── */
 .macro-dashboard-card {

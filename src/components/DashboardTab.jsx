@@ -1,10 +1,11 @@
-import { Line, Bar } from 'react-chartjs-2';
 import MarketBiasCard from './MarketBiasCard';
 import MacroDashboardCard from './MacroDashboardCard';
 import PolymarketWhales from './PolymarketWhales';
 import EconomicCalendarPanel from './EconomicCalendarPanel';
+import CascadeTab from './CascadeTab';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+
 const isPlausibleCpiYoY = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && number >= -20 && number <= 50;
@@ -14,14 +15,13 @@ export default function DashboardTab({
   data,
   theme,
   newsSliderRef,
-  btcChartData,
-  getChartOpts,
-  currentLS,
-  lsChartData,
-  oiChartData,
   etfHoldings,
   fmt,
+  fmtB,
   btcDisplay,
+  fund,
+  CASCADE_KEY_MAP,
+  METRIC_METADATA,
   etfHistory,
   aumChangeStats,
   etfChartType,
@@ -35,6 +35,10 @@ export default function DashboardTab({
 }) {
   const { isModuleHidden } = useModuleVisibility();
 
+  const hasSection1 = !isModuleHidden('dash_macro') || !isModuleHidden('dash_calendar') || !isModuleHidden('tab_cascade');
+  const hasSection2 = !isModuleHidden('dash_etf_holdings') || !isModuleHidden('dash_etf_flows') || !isModuleHidden('dash_cme_cot') || !isModuleHidden('dash_macro_valuator');
+  const hasSection3 = (!isModuleHidden('dash_news') && data?.news && data.news.length > 0) || !isModuleHidden('dash_polymarket');
+
   // Helper to safely get macro values
   const getMacroValue = (key, fallback = '---') => {
     if (!data) return fallback;
@@ -47,41 +51,20 @@ export default function DashboardTab({
 
   return (
     <div className="dashboard-layout">
-      {/* Market Bias Engine Card */}
+      {/* ── HERO: Market Bias Engine Card ── */}
       {!isModuleHidden('dash_bias') && (
         <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} moduleId="dash_bias" />
       )}
-      {!isModuleHidden('dash_macro_valuator') && (
-        <MacroDashboardCard livePrice={btcDisplay?.price} theme={theme} moduleId="dash_macro_valuator" />
-      )}
-      {!isModuleHidden('dash_news') && data.news && data.news.length > 0 && (
-        <div className="news-slider-wrapper glass-panel" style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>
-            <ModuleMenu moduleId="dash_news" />
-          </div>
-          <div className="news-slider" ref={newsSliderRef}>
-            {data.news.map((item, idx) => {
-              const catColor = item.cat === 'macro' ? 'var(--color-amber-400)' : 'var(--color-emerald-400)';
-              const catBg = item.cat === 'macro' ? 'rgba(245,158,11,0.08)' : 'rgba(16,185,129,0.08)';
-              const catBorder = item.cat === 'macro' ? 'rgba(245,158,11,0.2)' : 'rgba(16,185,129,0.2)';
-              return (
-                <div key={idx} className="news-slide-item" onDragStart={(e) => e.preventDefault()}>
-                  <div className="news-slide-meta font-mono">
-                    <span className="news-tag" style={{ color: catColor, background: catBg, borderColor: catBorder }}>{item.tag}</span>
-                    <span className="news-time">{item.timeStr}</span>
-                  </div>
-                  <a href={item.link} target="_blank" rel="noreferrer" className="news-link">
-                    <p className="news-slide-title">{item.title}</p>
-                    {item.snippet && <p className="news-slide-snippet">{item.snippet}</p>}
-                  </a>
-                </div>
-              );
-            })}
-          </div>
+
+      {/* ── SECTION 01: VĨ MÔ & THÁC THANH KHOẢN ── */}
+      {hasSection1 && (
+        <div className="overview-section-header font-mono">
+          <span className="overview-section-badge">01 // VĨ MÔ &amp; THÁC THANH KHOẢN</span>
+          <span className="overview-section-desc text-slate-500">Chu kỳ kinh tế, van thanh khoản vĩ mô &amp; lịch sự kiện</span>
         </div>
       )}
 
-      {/* NEW: Macro Pulse Panel */}
+      {/* Macro Pulse Panel */}
       {!isModuleHidden('dash_macro') && (
         <div className="glass-panel" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -209,55 +192,24 @@ export default function DashboardTab({
         <EconomicCalendarPanel theme={theme} />
       )}
 
-      {/* Polymarket Whales Tracker */}
-      <PolymarketWhales moduleId="dash_polymarket" fmt={fmt} />
+      {/* Thác Thanh Khoản — Sơ đồ lưu chuyển */}
+      {!isModuleHidden('tab_cascade') && (
+        <CascadeTab
+          data={data}
+          fmt={fmt}
+          fmtB={fmtB}
+          btcDisplay={btcDisplay}
+          fund={fund}
+          CASCADE_KEY_MAP={CASCADE_KEY_MAP}
+          METRIC_METADATA={METRIC_METADATA}
+        />
+      )}
 
-      {/* L/S Ratio & OI Charts */}
-      {(!isModuleHidden('dash_ls_chart') || !isModuleHidden('dash_oi_chart')) && (
-        <div className="charts-row">
-          {!isModuleHidden('dash_ls_chart') && (
-            <div className="glass-panel chart-panel">
-              <div className="chart-header">
-                <h3 className="chart-title font-mono text-emerald">
-                  <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="chart-badge font-mono">
-                    {currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
-                  </span>
-                  <ModuleMenu moduleId="dash_ls_chart" />
-                </div>
-              </div>
-              <div className="chart-body">
-                {data.lsHistory.length > 0
-                  ? <Line data={lsChartData} options={getChartOpts(theme)} />
-                  : <div className="chart-empty font-mono">Đang tải...</div>
-                }
-              </div>
-            </div>
-          )}
-
-          {!isModuleHidden('dash_oi_chart') && (
-            <div className="glass-panel chart-panel">
-              <div className="chart-header">
-                <h3 className="chart-title font-mono text-amber">
-                  <span className="dot dot-amber" /> OPEN INTEREST — 24H (BTC)
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="chart-badge font-mono">
-                    {data.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
-                  </span>
-                  <ModuleMenu moduleId="dash_oi_chart" />
-                </div>
-              </div>
-              <div className="chart-body">
-                {data.oiHistory.length > 0
-                  ? <Bar data={oiChartData} options={getChartOpts(theme)} />
-                  : <div className="chart-empty font-mono">Đang tải...</div>
-                }
-              </div>
-            </div>
-          )}
+      {/* ── SECTION 02: TỔ CHỨC TRADFI & ĐỊNH GIÁ CHU KỲ ── */}
+      {hasSection2 && (
+        <div className="overview-section-header font-mono">
+          <span className="overview-section-badge">02 // TỔ CHỨC TRADFI &amp; ĐỊNH GIÁ CHU KỲ</span>
+          <span className="overview-section-desc text-slate-500">Dòng vốn Spot ETF, vị thế phái sinh CME COT &amp; mô hình định giá chu kỳ</span>
         </div>
       )}
 
@@ -473,6 +425,50 @@ export default function DashboardTab({
           </div>
         </div>
       )}
+
+      {/* Macro Dashboard Valuator + PnL Matrix */}
+      {!isModuleHidden('dash_macro_valuator') && (
+        <MacroDashboardCard livePrice={btcDisplay?.price} theme={theme} moduleId="dash_macro_valuator" />
+      )}
+
+      {/* ── SECTION 03: TIN TỨC & DỰ BÁO PHI TẬP TRUNG ── */}
+      {hasSection3 && (
+        <div className="overview-section-header font-mono">
+          <span className="overview-section-badge">03 // TIN TỨC &amp; DỰ BÁO PHI TẬP TRUNG</span>
+          <span className="overview-section-desc text-slate-500">Dòng tin tức thị trường &amp; cược thông minh Polymarket</span>
+        </div>
+      )}
+
+      {/* Tin tức vĩ mô */}
+      {!isModuleHidden('dash_news') && data.news && data.news.length > 0 && (
+        <div className="news-slider-wrapper glass-panel" style={{ position: 'relative' }}>
+          <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>
+            <ModuleMenu moduleId="dash_news" />
+          </div>
+          <div className="news-slider" ref={newsSliderRef}>
+            {data.news.map((item, idx) => {
+              const catColor = item.cat === 'macro' ? 'var(--color-amber-400)' : 'var(--color-emerald-400)';
+              const catBg = item.cat === 'macro' ? 'rgba(245,158,11,0.08)' : 'rgba(16,185,129,0.08)';
+              const catBorder = item.cat === 'macro' ? 'rgba(245,158,11,0.2)' : 'rgba(16,185,129,0.2)';
+              return (
+                <div key={idx} className="news-slide-item" onDragStart={(e) => e.preventDefault()}>
+                  <div className="news-slide-meta font-mono">
+                    <span className="news-tag" style={{ color: catColor, background: catBg, borderColor: catBorder }}>{item.tag}</span>
+                    <span className="news-time">{item.timeStr}</span>
+                  </div>
+                  <a href={item.link} target="_blank" rel="noreferrer" className="news-link">
+                    <p className="news-slide-title">{item.title}</p>
+                    {item.snippet && <p className="news-slide-snippet">{item.snippet}</p>}
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Polymarket Whales Tracker */}
+      <PolymarketWhales moduleId="dash_polymarket" fmt={fmt} />
     </div>
   );
 }

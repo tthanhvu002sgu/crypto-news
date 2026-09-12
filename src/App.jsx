@@ -27,6 +27,8 @@ import DashboardTab from './components/DashboardTab';
 import CascadeTab from './components/CascadeTab';
 import TerminalTab from './components/TerminalTab';
 import ScannerTab from './components/ScannerTab';
+import SystemDocsTab from './components/SystemDocsTab';
+import { TAB_REDIRECT_MAP, DEFAULT_TAB_ORDER, normalizeTabId, migrateSavedTabOrder } from './utils/navigation';
 import Tooltip, { METRIC_METADATA, useTooltipSettings } from './components/Tooltip';
 import { ModuleVisibilityProvider, useModuleVisibility, MODULES_CONFIG } from './context/ModuleVisibilityContext';
 import ModuleMenu from './components/ModuleMenu';
@@ -381,15 +383,12 @@ function useDraggableScroll() {
 }
 
 const NAV_TABS_CONFIG = [
-  { id: 'dashboard', icon: <BarChart2 size={13} />, label: 'DASHBOARD' },
-  { id: 'scanner',   icon: <Zap size={13} />,       label: 'SCANNER' },
-  { id: 'hft',       icon: <Crosshair size={13} />, label: 'DATA' },
-  { id: 'cascade',   icon: <Layers size={13} />,    label: 'THÁC THANH KHOẢN', moduleId: 'tab_cascade' },
-  { id: 'summary',   icon: <Sparkles size={13} />,  label: 'AI SUMMARY', moduleId: 'tab_summary' },
-  { id: 'glossary',  icon: <HelpCircle size={13} />, label: 'THUẬT NGỮ', moduleId: 'tab_glossary' },
-  { id: 'terminal',  icon: <Terminal size={13} />,  label: 'TERMINAL LOGS', moduleId: 'tab_terminal' },
+  { id: 'overview',  icon: <BarChart2 size={13} />, label: 'OVERVIEW & REGIME' },
+  { id: 'orderflow', icon: <Crosshair size={13} />, label: 'ORDER FLOW' },
+  { id: 'scanner',   icon: <Zap size={13} />,       label: 'ALTCOIN SCANNER' },
+  { id: 'ailab',     icon: <Sparkles size={13} />,  label: 'AI DECISION LAB' },
+  { id: 'system',    icon: <BookOpen size={13} />,  label: 'SYSTEM & DOCS' },
 ];
-const DEFAULT_TAB_ORDER = ['dashboard', 'scanner', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
 
 function AppContent() {
   const newsSliderRef = useDraggableScroll();
@@ -402,10 +401,7 @@ function AppContent() {
       const saved = localStorage.getItem('app-tab-order');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const merged = [...parsed.filter(id => DEFAULT_TAB_ORDER.includes(id)), ...DEFAULT_TAB_ORDER.filter(id => !parsed.includes(id))];
-          return merged;
-        }
+        return migrateSavedTabOrder(parsed);
       }
     } catch {}
     return DEFAULT_TAB_ORDER;
@@ -551,16 +547,8 @@ function AppContent() {
   });
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
-    const validTabs = ['dashboard', 'scanner', 'data', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
-    return validTabs.includes(hash) ? hash : 'dashboard';
+    return normalizeTabId(hash);
   });
-
-  useEffect(() => {
-    if (activeTab === 'cascade' && isModuleHidden('tab_cascade')) setActiveTab('dashboard');
-    if (activeTab === 'summary' && isModuleHidden('tab_summary')) setActiveTab('dashboard');
-    if (activeTab === 'glossary' && isModuleHidden('tab_glossary')) setActiveTab('dashboard');
-    if (activeTab === 'terminal' && isModuleHidden('tab_terminal')) setActiveTab('dashboard');
-  }, [activeTab, isModuleHidden]);
 
   const [aiSummary, setAiSummary] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -595,15 +583,18 @@ function AppContent() {
   const [etfAumTimeframe, setEtfAumTimeframe] = useState('ALL'); // '30D', '90D', 'ALL'
 
   useEffect(() => {
-    window.location.hash = activeTab;
+    if (window.location.hash.slice(1) !== activeTab) {
+      window.location.hash = activeTab;
+    }
   }, [activeTab]);
 
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      const validTabs = ['dashboard', 'scanner', 'data', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
-      if (validTabs.includes(hash)) {
-        setActiveTab(hash);
+      const normalized = normalizeTabId(hash);
+      setActiveTab(normalized);
+      if (hash !== normalized) {
+        window.location.replace(`#${normalized}`);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -1041,20 +1032,6 @@ function AppContent() {
 
 
   // ── Derived chart data ──────────────────────────────────────────────────────
-  const btcChartData = useMemo(() => ({
-    labels: data.klines.map(k => new Date(k.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
-    datasets: [{
-      data: data.klines.map(k => k.close),
-      borderColor: theme === 'light' ? '#047857' : '#10b981',
-      backgroundColor: theme === 'light' ? 'rgba(4, 120, 87, 0.05)' : 'rgba(16,185,129,0.05)',
-      borderWidth: 1.5,
-      fill: true,
-      tension: 0.3,
-      pointRadius: 0,
-      pointHoverRadius: 4,
-    }],
-  }), [data.klines, theme]);
-
   const lsChartData = useMemo(() => ({
     labels: data.lsHistory.map(r => new Date(r.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })),
     datasets: [
@@ -1391,16 +1368,6 @@ function AppContent() {
               : <React.Fragment><Radio size={10} /> WS OFF</React.Fragment>}
             </div>
           <div className="auto-refresh-badge font-mono" title="HOT 5m · WARM 15m · COLD 60m (TTL cache)">REST ⟳ TIERED</div>
-          <button 
-            className="btn-sync font-mono" 
-            onClick={handleSyncGoogleSheet} 
-            disabled={isSyncingSheet}
-            title="Đồng bộ ngay toàn bộ chỉ số lên Google Sheets"
-            style={{ borderColor: 'rgba(56, 189, 248, 0.4)', color: 'var(--color-sky-400, #38bdf8)' }}
-          >
-            <FileSpreadsheet size={13} className={isSyncingSheet ? 'spinning' : ''} />
-            {isSyncingSheet ? 'SYNC SHEET...' : 'SYNC SHEET'}
-          </button>
           <button className="btn-sync font-mono" onClick={() => syncData(true, ['hot', 'warm', 'cold'])} disabled={isSyncing}>
             <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
             {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
@@ -1786,20 +1753,19 @@ function AppContent() {
 
           <div className="tab-content">
 
-            {/* ══ DASHBOARD TAB — Keep-Alive State ════════════════════════════ */}
-            <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
+            {/* ══ 1. OVERVIEW & REGIME TAB — Keep-Alive State ═══════════════════ */}
+            <div style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>
               <DashboardTab
                 data={data}
                 theme={theme}
                 newsSliderRef={newsSliderRef}
-                btcChartData={btcChartData}
-                getChartOpts={getChartOpts}
-                currentLS={currentLS}
-                lsChartData={lsChartData}
-                oiChartData={oiChartData}
                 etfHoldings={etfHoldings}
                 fmt={fmt}
+                fmtB={fmtB}
                 btcDisplay={btcDisplay}
+                fund={fund}
+                CASCADE_KEY_MAP={CASCADE_KEY_MAP}
+                METRIC_METADATA={METRIC_METADATA}
                 etfHistory={etfHistory}
                 aumChangeStats={aumChangeStats}
                 etfChartType={etfChartType}
@@ -1813,17 +1779,8 @@ function AppContent() {
               />
             </div>
 
-            {/* ══ SCANNER TAB — Keep-Alive State ══════════════════════════════ */}
-            <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
-              <ScannerTab
-                data={data}
-                btcChange24h={btcDisplay?.change}
-                etfHistory={etfHistory}
-              />
-            </div>
-
-            {/* ══ HFT RADAR TAB — Keep-Alive State ════════════════════════════ */}
-            <div style={{ display: activeTab === 'hft' ? 'block' : 'none' }}>
+            {/* ══ 2. ORDER FLOW TAB — Keep-Alive State ═══════════════════════════ */}
+            <div style={{ display: activeTab === 'orderflow' ? 'block' : 'none' }}>
               <HftRadarTab
                 cvd={cvd} sessionCvd={sessionCvd} buyVolume={buyVolume} sellVolume={sellVolume}
                 cvdHistory={cvdHistory} futuresStream={futures} spotStream={spot}
@@ -1835,24 +1792,21 @@ function AppContent() {
                 liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
                 liveMarkPrice={liveMarkPrice} liveIndexPrice={liveIndexPrice} liveBasisPct={liveBasisPct}
                 liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
+                currentLS={currentLS} lsChartData={lsChartData} oiChartData={oiChartData} getChartOpts={getChartOpts}
               />
             </div>
 
-            {/* ══ CASCADE TAB — Keep-Alive State ══════════════════════════════ */}
-            <div style={{ display: activeTab === 'cascade' ? 'block' : 'none' }}>
-              <CascadeTab
+            {/* ══ 3. SCANNER TAB — Keep-Alive State ══════════════════════════════ */}
+            <div style={{ display: activeTab === 'scanner' ? 'block' : 'none' }}>
+              <ScannerTab
                 data={data}
-                fmt={fmt}
-                fmtB={fmtB}
-                btcDisplay={btcDisplay}
-                fund={fund}
-                CASCADE_KEY_MAP={CASCADE_KEY_MAP}
-                METRIC_METADATA={METRIC_METADATA}
+                btcChange24h={btcDisplay?.change}
+                etfHistory={etfHistory}
               />
             </div>
 
-            {/* ══ AI SUMMARY TAB — Keep-Alive State ═══════════════════════════ */}
-            <div style={{ display: activeTab === 'summary' ? 'block' : 'none' }}>
+            {/* ══ 4. AI DECISION LAB TAB — Keep-Alive State ══════════════════════ */}
+            <div style={{ display: activeTab === 'ailab' ? 'block' : 'none' }}>
               <SummaryTab 
                 data={data} 
                 apiKeys={apiKeys} 
@@ -1874,14 +1828,9 @@ function AppContent() {
               />
             </div>
 
-            {/* ══ GLOSSARY TAB — Keep-Alive State ═════════════════════════════ */}
-            <div style={{ display: activeTab === 'glossary' ? 'block' : 'none' }}>
-              <GlossaryTab />
-            </div>
-
-            {/* ══ TERMINAL TAB — Keep-Alive State ═════════════════════════════ */}
-            <div style={{ display: activeTab === 'terminal' ? 'block' : 'none' }}>
-              <TerminalTab
+            {/* ══ 5. SYSTEM & DOCS TAB — Keep-Alive State ════════════════════════ */}
+            <div style={{ display: activeTab === 'system' ? 'block' : 'none' }}>
+              <SystemDocsTab
                 data={data}
                 btcDisplay={btcDisplay}
                 wsStatus={wsStatus}
@@ -1890,6 +1839,25 @@ function AppContent() {
                 fmt={fmt}
                 fngColor={fngColor}
                 theme={theme}
+                apiKeys={apiKeys}
+                setApiKeys={setApiKeys}
+                onSaveApiKeys={() => {
+                  localStorage.setItem('app-api-keys', JSON.stringify(apiKeys));
+                  addLog('Đã lưu cấu hình API Keys thành công. Đang tải lại dữ liệu...', 'ok');
+                  syncData(true, ['hot', 'warm', 'cold']);
+                }}
+                syncData={syncData}
+                isSyncing={isSyncing}
+                handleSyncGoogleSheet={handleSyncGoogleSheet}
+                isSyncingSheet={isSyncingSheet}
+                tabOrder={tabOrder}
+                moveTab={moveTab}
+                resetTabOrder={resetTabOrder}
+                NAV_TABS_CONFIG={NAV_TABS_CONFIG}
+                hiddenModules={hiddenModules}
+                showModule={showModule}
+                showAllModules={showAllModules}
+                MODULES_CONFIG={MODULES_CONFIG}
               />
             </div>
 
@@ -1899,13 +1867,12 @@ function AppContent() {
         {/* ── Mobile Bottom Navigation Bar ──────────────────────────────────── */}
         <nav className="mobile-bottom-nav">
           {[
-            { id: 'dashboard', icon: <BarChart2 size={16} />, label: 'Dashboard' },
+            { id: 'overview',  icon: <BarChart2 size={16} />, label: 'Overview' },
+            { id: 'orderflow', icon: <Crosshair size={16} />, label: 'Order Flow' },
             { id: 'scanner',   icon: <Zap size={16} />,       label: 'Scanner' },
-            { id: 'hft',       icon: <Crosshair size={16} />, label: 'Data HFT' },
-            { id: 'cascade',   icon: <Layers size={16} />,    label: 'Thác TK', moduleId: 'tab_cascade' },
-            { id: 'summary',   icon: <Sparkles size={16} />,  label: 'AI Summary', moduleId: 'tab_summary' },
-            { id: 'glossary',  icon: <HelpCircle size={16} />, label: 'Thuật ngữ', moduleId: 'tab_glossary' },
-          ].filter(t => !t.moduleId || !isModuleHidden(t.moduleId)).map(t => (
+            { id: 'ailab',     icon: <Sparkles size={16} />,  label: 'AI Lab' },
+            { id: 'system',    icon: <BookOpen size={16} />,  label: 'System' },
+          ].map(t => (
             <button
               key={t.id}
               className={`mobile-nav-btn ${activeTab === t.id ? 'active' : ''}`}
@@ -1998,10 +1965,23 @@ function AppContent() {
               </div>
 
               <div className="settings-modal-input-group">
-                <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FileSpreadsheet size={12} style={{ color: '#38bdf8' }} />
-                  GOOGLE SHEETS WEBHOOK URL (SYNC 3 PHIÊN Á/ÂU/MỸ)
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FileSpreadsheet size={12} style={{ color: '#38bdf8' }} />
+                    GOOGLE SHEETS WEBHOOK URL (SYNC 3 PHIÊN Á/ÂU/MỸ)
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-sync font-mono"
+                    onClick={handleSyncGoogleSheet}
+                    disabled={isSyncingSheet}
+                    style={{ height: '24px', padding: '0 8px', fontSize: '0.52rem', borderColor: 'rgba(56, 189, 248, 0.4)', color: 'var(--color-sky-400, #38bdf8)' }}
+                    title="Xuất trực tiếp toàn bộ dữ liệu Terminal sang Google Sheets"
+                  >
+                    <FileSpreadsheet size={11} className={isSyncingSheet ? 'spinning' : ''} />
+                    {isSyncingSheet ? 'ĐANG XUẤT...' : 'XUẤT SHEETS NGAY'}
+                  </button>
+                </div>
                 <input
                   type="text"
                   className="settings-modal-input"

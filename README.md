@@ -4,22 +4,29 @@
 Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ thuật (Technical Analysis), Phân tích vĩ mô (Macroeconomics) và Phân tích dòng tiền tần suất cao (High-Frequency Trading - HFT) cho thị trường Crypto (chủ yếu là BTC, ETH, SOL).
 
 **Các tính năng cốt lõi:**
+- **Kiến Trúc Điều Hướng 5 Phân Hệ Chiến Lược (5 Strategic Workspaces):** Tái cấu trúc toàn bộ ứng dụng từ 7 tab phân mảnh thành 5 không gian làm việc theo luồng tác vụ giao dịch (Task-Centric Flow), bảo tồn 100% keep-alive không re-mount và tương thích ngược URL hash/localStorage:
+  1. `OVERVIEW & REGIME`: Trung tâm vĩ mô, chu kỳ và xu hướng chủ đạo (Market Bias Engine, Macro Pulse, Lịch kinh tế 7 ngày, Thác thanh khoản 4 Tiers, Dòng vốn ETF TradFi, Vị thế CME COT và Macro Valuator).
+  2. `ORDER FLOW`: Bàn làm việc vi cấu trúc phái sinh thời gian thực (Capital Flow In/Out 24H, CVD Benchmark đa khung `1H/24H/7D/30D`, biểu đồ Long/Short Ratio 24H & Open Interest 24H đối chiếu trực tiếp, Move Tracker v2, Depth Orderbook OBI, Liquidity Walls và Whale Trades).
+  3. `ALTCOIN SCANNER`: Sàng lọc & xếp hạng Altcoin khách quan theo 4 Pillars (BUY/SELL).
+  4. `AI DECISION LAB`: Phản biện chiến lược điều hành (AI Report 3 personas, Evidence Summary Charts, Trade Plan Auditor).
+  5. `SYSTEM & DOCS`: Trung tâm vận hành & cẩm nang (Thuật ngữ chuyên sâu, Nhật ký kết nối Crawler, Cài đặt API Keys, Google Sheets Webhook Sync).
 - **Lịch Kinh Tế Vĩ Mô 7 Ngày (7-Day Economic Calendar):** Hiển thị lịch sự kiện vĩ mô toàn cầu (CPI, FOMC, NFP, GDP, PMI...) dưới dạng bento grid 7 ô vuông tương ứng 7 ngày trong tuần (cố định 1 hàng trên PC, cuộn ngang trên Mobile). Tích hợp Modal phân tích chuyên sâu **tác động của từng sự kiện đến thanh khoản Bitcoin & Crypto** với dữ liệu thời gian thực và curated fallback.
 - **Market Bias Engine (Công Thức Bias Total & 3-Layer Regime):** Định lượng chỉ số xu hướng BTC tổng hợp từ 4 trụ cột (-100 đến +100): *Dòng tiền Định chế (40%)*, *On-Chain Fundamentals & Network (25%)*, *Vĩ mô & Thanh khoản Toàn cầu (20%)*, *Vi cấu trúc & BTC Trend Regime (15%)*. Spot/Futures CVD trong pillar vi cấu trúc sử dụng nguồn chuẩn **Binance Benchmark Proxy** có sổ cái bất biến từ 2020. Giao diện ưu tiên score và trạng thái hiện tại, kèm sparkline tối đa 30 snapshot realtime cùng delta để cung cấp ngữ cảnh hướng biến động mà không lấn át chỉ số chính.
+- **Thác Thanh Khoản Vĩ Mô (Cascade Flow — 4 Tiers):** Sơ đồ lưu chuyển dòng tiền từ Thượng nguồn Fed/Net Liquidity/M2 → Van USD & Lãi suất thực → Kênh Hấp thụ Chứng khoán/Credit → Bể chứa Crypto & Altcoins. Được tích hợp trực tiếp vào phân hệ `OVERVIEW & REGIME` (loại bỏ nhãn cũ `[BƯỚC 3]`).
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
-- **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana.
-- **HFT Radar (Phân tích dòng tiền Phái sinh):**
-  - **Capital Flow In / Out (24H):** Module đầu tiên của tab DATA phân rã trạng thái vốn phái sinh bằng Price + Futures CVD + ΔOI + Funding + Basis, đồng thời bổ sung đối chiếu độc lập **Spot CVD & Spot Alignment** (Confluence / Divergence). Engine tách `IN / OUT / ROTATION / NEUTRAL / UNKNOWN`, directional bias và mechanism (new position, short covering, long exit, absorption), đối chiếu dòng tiền Spot mà không gộp chung vào hợp đồng phái sinh, abstain khi thiếu dữ liệu lõi và không diễn giải Funding/Basis như dòng vốn trực tiếp.
+- **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana và đối chiếu vị thế CME Futures COT.
+- **HFT Radar (Phân tích dòng tiền Phái sinh & Vi cấu trúc):**
+  - **Capital Flow In / Out (24H):** Module đầu tiên của tab ORDER FLOW phân rã trạng thái vốn phái sinh bằng Price + Futures CVD + ΔOI + Funding + Basis, đồng thời bổ sung đối chiếu độc lập **Spot CVD & Spot Alignment** (Confluence / Divergence). Engine tách `IN / OUT / ROTATION / NEUTRAL / UNKNOWN`, directional bias và mechanism (new position, short covering, long exit, absorption), đối chiếu dòng tiền Spot mà không gộp chung vào hợp đồng phái sinh, abstain khi thiếu dữ liệu lõi và không diễn giải Funding/Basis như dòng vốn trực tiếp.
   - **CVD & Order Flow (Binance Benchmark):** Giữ CVD đa khung (`1H`, `24H`, `7D`, `30D`) với UTC Anchor cố định (`2020-01-01`) và immutable daily snapshot ledger, loại bỏ hoàn toàn hiện tượng trôi dạt baseline. Tích hợp Flow Pressure Cards chuẩn hóa (Delta/Volume, rolling z-score, momentum), Market Flow Verdict, Futures Positioning (Price–CVD–OI–Funding context), Volume Ratio và Estimated Volume-by-Price Footprint $100 gap.
+  - **Biểu đồ Phái Sinh Intraday Context:** Tích hợp cặp biểu đồ Long/Short Ratio (24H) và Open Interest (24H) trực tiếp bên dưới CVD trong tab ORDER FLOW giúp trader đọc đồng thời áp lực volume và diễn biến đòn bẩy.
   - **Live Whale Trades:** Phát hiện các lệnh Market lớn (trên $100k) theo thời gian thực.
   - **Advanced Price Action:** Biểu đồ TradingView linh hoạt đa khung thời gian (`1m` -> `4h`) tích hợp Volume Profile (POC, VAH, VAL), Limit Walls (Tường thanh khoản), Liquidity Zones (Vùng thanh lý đòn bẩy) và **Anomaly Volume Bubbles** (Đánh dấu khối lượng đột biến bằng Robust Z-Score & Taker Delta). Tường Mua (Limit Buy) bắt buộc nằm dưới giá hiện tại, Tường Bán (Limit Sell) bắt buộc nằm trên giá hiện tại.
   - **Order Book Imbalance (OBI):** Quét độ sâu sổ lệnh (Depth) từ nhiều sàn (Binance, Bybit, OKX, Bitget) để phân tích chênh lệch áp lực Mua/Bán (Bid/Ask Limit Walls).
 - **AI Market Decision Lab:** Tích hợp Gemini để kiểm định giả thuyết vĩ mô/on-chain/flow/phái sinh/HFT, phân biệt quan sát với suy luận, phản biện narrative, chấm chất lượng bằng chứng và tạo playbook quyết định có trigger/invalidation. Hỗ trợ **Tiếng Việt / English** và 3 chế độ: Investment Committee / Skeptical Execution Desk / Socratic Market Mentor.
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%**.
 - **BTC SSR Oscillator (Glassnode Z-Score):** Đo lường sức mua Stablecoin so với Vốn hóa BTC chuẩn hóa bằng Z-Score (vị trí so với đường trung bình SMA 200 ngày và độ lệch chuẩn 2σ theo phương pháp Glassnode Oscillator). Tự động xác định vùng Mua/Bán cực đoan (Z < -2 / Z > +2) và đồng bộ nguồn vốn hóa DefiLlama.
-- **Cascade View:** Bảng theo dõi các chỉ số thanh lý (Liquidations), Long/Short Ratio, Funding Rate, Open Interest đa khung thời gian.
 - **Scanner Shortlist Engine v7 (BUY & SELL):** Hệ thống xếp hạng shortlist khách quan theo 4 Pillars (*Quality 5đ, Relative Strength vs BTC 8đ, Flow CVD/OI 6đ, Market Context 6đ* — Thang 25đ). Bảo tồn quota momentum (30 liquid + 10 gainer + 10 loser), phân tích Price Action thuần nến đóng không lookahead (`4H uptrend · gần range high · volume expansion`), progressive disclosure 5 cột (Coin, Strength, Flow, Quality, Rank Score), accordion mở rộng hiển thị raw metrics, top 3 lý do và cảnh báo vi cấu trúc.
-- **Google Sheets Auto-Sync 3 Phiên (Á - Âu - Mỹ) & AI Prompt Staging:** Tự động tổng hợp và đồng bộ toàn bộ snapshot thị trường (Market Bias, On-Chain, Phái sinh, ETF, Macro Calendar, và Markdown Summary) lên file Google Sheets công khai thông qua Google Apps Script Webhook. Hoạt động tự động 24/7 theo 3 phiên giao dịch chính bằng GitHub Actions (08:00 Á, 14:00 Âu, 20:00 Mỹ) và hỗ trợ nút "SYNC SHEET" kích hoạt trực tiếp từ trình duyệt, giúp các mô hình AI độc lập dễ dàng truy xuất để phân tích định kỳ.
+- **Google Sheets Auto-Sync 3 Phiên (Á - Âu - Mỹ) & AI Prompt Staging:** Tự động tổng hợp và đồng bộ toàn bộ snapshot thị trường (Market Bias, On-Chain, Phái sinh, ETF, Macro Calendar, và Markdown Summary) lên file Google Sheets công khai thông qua Google Apps Script Webhook. Hoạt động tự động 24/7 theo 3 phiên giao dịch chính bằng GitHub Actions (08:00 Á, 14:00 Âu, 20:00 Mỹ) và hỗ trợ nút kích hoạt trực tiếp từ Settings Modal và tab System & Docs.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
 - **Frontend Framework:** React.js (Vite).
@@ -46,14 +53,29 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
-- `App.jsx`: Component gốc quản lý Routing/Tabs, WebSocket manager, tính toán Market Bias, nút SYNC SHEET và modal cài đặt API/Webhook.
-- `DashboardTab.jsx`: Layout chính hiển thị Market Bias Engine, Economic Calendar, Macro Pulse, Polymarket Whales Tracker, L/S & OI charts, ETF Flows.
+- `App.jsx`: Component gốc quản lý Routing 5 tabs chiến lược (`overview`, `orderflow`, `scanner`, `ailab`, `system`), WebSocket manager, tính toán Market Bias, modal cài đặt API/Webhook và quản lý ẩn/hiện module.
+- `DashboardTab.jsx`: Phân hệ `OVERVIEW & REGIME` được cấu trúc thành 3 khối nghiệp vụ rõ ràng:
+  - *Khối 01: Vĩ mô & Thác Thanh Khoản:* Market Bias Engine, Macro Pulse cards, Lịch kinh tế 7 ngày, và Thác thanh khoản 4 Tiers (`CascadeTab`).
+  - *Khối 02: Tổ Chức TradFi & Định Giá Chu Kỳ:* US Spot Bitcoin ETFs (Holdings & Net Flows), CME Futures COT và Macro Valuator PnL Matrix.
+  - *Khối 03: Tin Tức & Dự Báo Phi Tập Trung:* News Feed slider và Polymarket Whale Tracker.
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC theo mô hình score-first, có sparkline tối đa 30 snapshot realtime chống look-ahead, thanh Gauge Spectrum, 4 bento card trụ cột, thanh tóm tắt 3 tầng Regime và drawer bẻ nhỏ 14+ tín hiệu định lượng.
-- `HftRadarTab.jsx`: Tab quan trọng nhất đặt `CapitalFlowPanel` ở vị trí đầu tiên, sau đó là `MoveTrackerPanel`, `CVDPanel` (Binance benchmark CVD đa khung `1H/24H/7D/30D`, Normalized Flow Pressure Cards, Volume Ratio, dual Y-axis), `WhaleTradesPanel`, `AdvancedChart`, `TargetLiquidityPanel`, `OrderBookPanel`.
+- `HftRadarTab.jsx`: Phân hệ `ORDER FLOW` đóng vai trò bàn làm việc vi cấu trúc phái sinh realtime toàn diện:
+  - `CapitalFlowPanel` ở vị trí số 1 (phân rã trạng thái vốn 24H và đối chiếu Spot Alignment).
+  - `MoveTrackerPanel` (nghiên cứu biến động giá realtime và shadow flow).
+  - `CVDPanel` (Binance benchmark CVD đa khung `1H/24H/7D/30D`, Normalized Flow Pressure Cards, Volume Ratio, dual Y-axis).
+  - **Biểu đồ Phái sinh Intraday:** Long/Short Ratio 24H & Open Interest 24H được tích hợp ngay dưới CVD giúp đối chiếu tức thời nhịp hút/xả volume và vị thế hợp đồng.
+  - Khối thanh khoản & lệnh: `WhaleTradesPanel`, `AdvancedChart` (POC, walls, liquidity zones), `TargetLiquidityPanel`, `OrderBookPanel` (OBI đa sàn).
+- `SystemDocsTab.jsx`: Phân hệ `SYSTEM & DOCS` hợp nhất trung tâm tri thức và vận hành hệ thống với sub-navigation 3 tab con:
+  - *Cẩm Nang Thuật Ngữ:* Tra cứu thuật ngữ vĩ mô, phái sinh, on-chain từ `GlossaryTab`.
+  - *Crawler Activity Log:* Theo dõi console logs kết nối API và WebSocket từ `TerminalTab`.
+  - *Cài Đặt & Đồng Bộ:* Quản lý cấu hình API keys, Google Sheets Webhook kèm nút "XUẤT GOOGLE SHEETS NGAY", khôi phục thứ tự tab và bỏ ẩn module.
+- `CascadeTab.jsx`: Sơ đồ Thác Thanh Khoản 4 Tiers (Fed/M2 → USD/VIX → Equity/Credit → Crypto), nhãn sạch không còn tiền tố `[BƯỚC 3]`, tích hợp trong tab Overview.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
+- `src/utils/navigation.js` — Quản lý routing và migration điều hướng: định nghĩa 5 target workspace IDs (`overview`, `orderflow`, `scanner`, `ailab`, `system`), URL hash redirect mapping (`#dashboard` → `#overview`, `#hft` → `#orderflow`, `#cascade` → `#overview`, `#summary` → `#ailab`, `#glossary`/`#terminal` → `#system`), hàm `normalizeTabId` và `migrateSavedTabOrder` bảo đảm backward compatibility cho `localStorage`.
+- `src/config/modulesConfig.js` — Định nghĩa cấu hình 21+ modules theo 5 phân nhóm mới (`Overview & Regime`, `Order Flow`, `AI Decision Lab`, `System & Docs`, `Sidebar`), phục vụ cho cả Node ESM test runner và React Vite runtime.
 - `src/services/cvdService.js` — Động cơ CVD trung tâm quản lý mốc neo cố định UTC Anchor (2020-01-01), sổ cái snapshot ngày đóng bất biến (`hft_cvd_daily_snapshots_v1`), cơ chế tự động backfill từ Binance, và Data Contract 3 lớp (`cumulativeFromAnchor`, `cumulativeWithinWindow`, `windowNetDelta`).
 - `src/services/cvdService.test.js` — Bộ 15 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
 - `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
@@ -75,6 +97,25 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-09-12] Tái Cấu Trúc Giao Diện & Kiến Trúc Thông Tin 5 Phân Hệ Chiến Lược `(FULL)`
+- **Mode / Type / Action / Lane:** REFACTOR / ARCHITECTURE / EXECUTE / FULL
+- **Tóm tắt:** Tái cấu trúc toàn diện hệ thống điều hướng và phân bổ màn hình từ 7 tab phân mảnh thành 5 không gian làm việc chiến lược theo luồng tác vụ giao dịch thực tế (Overview & Regime, Order Flow, Altcoin Scanner, AI Decision Lab, System & Docs). Tích hợp Thác Thanh Khoản vào cụm Vĩ mô, chuyển L/S & OI charts về đúng bàn làm việc Order Flow, gom toàn bộ công cụ phụ trợ vào System & Docs, dọn dẹp nút Header SYNC SHEET, đảm bảo tương thích ngược 100% hash/storage và keep-alive mượt mà không re-mount.
+- **Thay đổi chính & Bugfix hoàn thiện:**
+  - `src/utils/navigation.js`: Xây dựng module quản lý routing tập trung với `TAB_REDIRECT_MAP` (chuyển hướng `#dashboard` → `#overview`, `#hft` → `#orderflow`, `#summary` → `#ailab`, `#cascade` → `#overview`, `#glossary`/`#terminal` → `#system`), `normalizeTabId` (chuẩn hóa chống khoảng trắng, chữ hoa và đa ký tự hash `##`) và `migrateSavedTabOrder` bảo đảm backward compatibility hoàn hảo cho dữ liệu `localStorage('app-tab-order')`.
+  - `src/config/modulesConfig.js` & `src/context/ModuleVisibilityContext.jsx`: Chuẩn hóa danh mục 21+ modules theo 5 phân hệ mới, bổ sung `dash_trade_auditor` và `hft_heatmap` còn thiếu; tách config độc lập cho cả Node ESM test runner và React Vite runtime.
+  - `src/components/CascadeTab.jsx`: Chuẩn hóa tiêu đề thành `THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN DÒNG TIỀN VĨ MÔ`, gỡ bỏ tiền tố lỗi thời `[BƯỚC 3]`.
+  - `src/components/DashboardTab.jsx`: Tái tổ chức tab Overview thành 3 block nghiệp vụ trực quan (`01 // VĨ MÔ & THÁC THANH KHOẢN`, `02 // TỔ CHỨC TRADFI & ĐỊNH GIÁ CHU KỲ`, `03 // TIN TỨC & DỰ BÁO PHI TẬP TRUNG`). Gỡ bỏ dead imports (`Line`, `Bar`) và dead props (`btcChartData`, `getChartOpts`, `currentLS`, `lsChartData`, `oiChartData`); bổ sung điều kiện render section headers để không bị hiển thị tiêu đề mồ côi khi toàn bộ module con bị ẩn.
+  - `src/components/HftRadarTab.jsx`: Đổi tiêu đề chuẩn hóa thành `ORDER FLOW — DERIVATIVES MICROSTRUCTURE`. Nhận thêm các props phái sinh từ `App.jsx` (`currentLS`, `lsChartData`, `oiChartData`, `getChartOpts`) và tích hợp 2 chart Long/Short Ratio 24H & Open Interest 24H trực tiếp bên dưới CVD Benchmark; tự động mở rộng 100% width khi chỉ 1 trong 2 biểu đồ được hiển thị.
+  - `src/components/TradePlanAuditor.jsx`: Tích hợp hook `useModuleVisibility` và điều kiện `isModuleHidden(moduleId)` để menu ẩn/hiện hoạt động chuẩn xác, không còn trơ khi click ẩn.
+  - `src/components/SummaryTab.jsx`: Tách biệt độc lập trạng thái hiển thị giữa `tab_summary` (AI Executive Report) và `dash_trade_auditor` (Trade Plan Auditor), chấm dứt lỗi ẩn AI Report làm biến mất toàn bộ Trade Plan Auditor thành trang trắng; bổ sung inline banner khôi phục khi cả 2 module bị ẩn.
+  - `src/components/SystemDocsTab.jsx`: Tạo mới hub quản trị & tài liệu với sub-navigation 3 tab con (`glossary`, `crawler`, `settings`), tái sử dụng `GlossaryTab` và `TerminalTab`, quản lý trực quan API Keys, Google Sheets Webhook kèm nút "XUẤT GOOGLE SHEETS NGAY", phục hồi nhanh thứ tự tab và bỏ ẩn module; bổ sung banner thông báo thân thiện kèm nút hiện lại khi cẩm nang hoặc crawler log bị ẩn.
+  - `src/App.jsx`: Cập nhật `NAV_TABS_CONFIG` sang 5 tabs chuẩn (loại bỏ fake `moduleId` ở cấp workspace để triệt tiêu nguy cơ vòng lặp vô hạn `useEffect` redirect), tự động migrate `tabOrder` từ localStorage, gỡ bỏ nút `SYNC SHEET` khỏi header để tránh action congestion, bổ sung nút xuất sheets nhanh trong Settings Modal, render 5 keep-alive tab panels và cập nhật Mobile Bottom Nav 5 nút bấm.
+  - `src/App.css`: Bổ sung styles phân vùng editorial terminal `.overview-section-header`, `.overview-section-badge`, `.overview-section-desc`.
+  - `src/services/navigation.test.js`: Viết bộ 11 unit tests tự động kiểm thử toàn diện tính chuẩn xác của canonical tab IDs, URL redirect mapping, hash cleaning, order migration, edge cases chữ hoa/khoảng trắng và module config grouping.
+- **Files / areas chạm:** `src/utils/navigation.js`, `src/config/modulesConfig.js`, `src/services/navigation.test.js`, `src/components/SystemDocsTab.jsx`, `src/components/CascadeTab.jsx`, `src/components/DashboardTab.jsx`, `src/components/HftRadarTab.jsx`, `src/components/SummaryTab.jsx`, `src/components/TradePlanAuditor.jsx`, `src/context/ModuleVisibilityContext.jsx`, `src/App.jsx`, `src/App.css`, `package.json`, `README.md`.
+- **Ảnh hưởng README:** §1 / §3 / §4.
+- **Verify:** `npm test` pass 10/10 test suites (bao gồm 11/11 tests trong test:navigation); `npm run build` hoàn thành trong 3.44s không phát sinh cảnh báo; `git diff --check` sạch sẽ.
 
 ### [2026-09-05] Bổ Sung Metric Spot CVD & Đánh Giá Spot Alignment Vào Capital Flow In / Out `(FAST)`
 - **Mode / Type / Action / Lane:** FEATURE / FEATURE / EXECUTE / FAST

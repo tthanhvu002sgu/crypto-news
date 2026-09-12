@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Line } from 'react-chartjs-2';
+import { Line, Bar } from 'react-chartjs-2';
 
 import { getCompletedHourCVD, getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
@@ -1958,6 +1958,7 @@ export default function HftRadarTab({
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
   cvdStatus, livePrice, whaleTrades, theme, volNodes,
   data, liveVolume, fundingRate, liveChange, liveBasisPct,
+  currentLS, lsChartData, oiChartData, getChartOpts,
 }) {
   const { isModuleHidden } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
@@ -2035,10 +2036,10 @@ export default function HftRadarTab({
     <div className="hft-radar-layout">
       <div className="hft-radar-header glass-panel">
         <h2 className="hft-radar-title font-mono">
-          <span className="hft-icon-lg">🎯</span> DATA — DERIVATIVES ORDER FLOW
+          <span className="hft-icon-lg">🎯</span> ORDER FLOW — DERIVATIVES MICROSTRUCTURE
         </h2>
         <p className="hft-radar-desc font-mono">
-          Phân tích dòng tiền phái sinh theo thời gian thực: CVD, Target Liquidity &amp; Order Book Imbalance
+          Phân tích vi cấu trúc dòng tiền phái sinh theo thời gian thực: CVD Spot vs Futures, L/S Ratio, Open Interest, OBI &amp; Whale Trades
         </p>
       </div>
 
@@ -2080,6 +2081,55 @@ export default function HftRadarTab({
             oiHistory={data?.oiHistory}
             fundingRate={fundingRate ?? data?.fundingRate}
           />
+        )}
+
+        {/* Intraday Derivatives Context: Long/Short Ratio & Open Interest */}
+        {(!isModuleHidden('dash_ls_chart') || !isModuleHidden('dash_oi_chart')) && (
+          <div className="charts-row" style={{ gridColumn: '1 / -1', margin: '4px 0', gridTemplateColumns: (!isModuleHidden('dash_ls_chart') && !isModuleHidden('dash_oi_chart')) ? '1fr 1fr' : '1fr' }}>
+            {!isModuleHidden('dash_ls_chart') && (
+              <div className="glass-panel chart-panel">
+                <div className="chart-header">
+                  <h3 className="chart-title font-mono text-emerald">
+                    <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="chart-badge font-mono">
+                      {currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
+                    </span>
+                    <ModuleMenu moduleId="dash_ls_chart" />
+                  </div>
+                </div>
+                <div className="chart-body" style={{ height: '220px' }}>
+                  {data?.lsHistory?.length > 0 && lsChartData
+                    ? <Line data={lsChartData} options={getChartOpts ? getChartOpts(theme) : {}} />
+                    : <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
+                  }
+                </div>
+              </div>
+            )}
+
+            {!isModuleHidden('dash_oi_chart') && (
+              <div className="glass-panel chart-panel">
+                <div className="chart-header">
+                  <h3 className="chart-title font-mono text-amber">
+                    <span className="dot dot-amber" /> OPEN INTEREST — 24H (BTC)
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="chart-badge font-mono">
+                      {data?.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
+                    </span>
+                    <ModuleMenu moduleId="dash_oi_chart" />
+                  </div>
+                </div>
+                <div className="chart-body" style={{ height: '220px' }}>
+                  {data?.oiHistory?.length > 0 && oiChartData
+                    ? <Bar data={oiChartData} options={getChartOpts ? getChartOpts(theme) : {}} />
+                    : <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
+                  }
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {!isModuleHidden('hft_move_tracker') && (

@@ -31,7 +31,7 @@ export default function CascadeTab({
       <div className="glass-panel panel-section">
         <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
-            [BƯỚC 3] THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN
+            THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN DÒNG TIỀN VĨ MÔ
           </h3>
           <ModuleMenu moduleId="tab_cascade" />
         </div>

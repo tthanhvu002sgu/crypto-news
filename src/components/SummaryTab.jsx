@@ -295,8 +295,9 @@ export default function SummaryTab({
   btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit
 }) {
   const [reportCvdData, setReportCvdData] = useState([]);
-  const { isModuleHidden } = useModuleVisibility();
+  const { isModuleHidden, showModule } = useModuleVisibility();
   const isSummaryHidden = isModuleHidden('tab_summary');
+  const isAuditorHidden = isModuleHidden('dash_trade_auditor');
   const [aiProvider, setAiProvider] = useState(() => {
     return localStorage.getItem('ai-provider') || 'gemini';
   });
@@ -1299,27 +1300,29 @@ ${promptData}
     }
   };
 
-  if (isSummaryHidden) return null;
-
   return (
     <div className="summary-tab-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* ── Separate Trade Plan Auditor Widget ── */}
-      <TradePlanAuditor
-        data={data}
-        cvd={cvd}
-        buyVolume={buyVolume}
-        sellVolume={sellVolume}
-        apiKeys={apiKeys}
-        aiProvider={aiProvider}
-        selectedModel={selectedModel}
-        selectedOpenRouterModel={selectedOpenRouterModel}
-        openrouterModels={openrouterModels}
-        isVi={isVi}
-        lastSync={lastSync}
-      />
+      {!isAuditorHidden && (
+        <TradePlanAuditor
+          data={data}
+          cvd={cvd}
+          buyVolume={buyVolume}
+          sellVolume={sellVolume}
+          apiKeys={apiKeys}
+          aiProvider={aiProvider}
+          selectedModel={selectedModel}
+          selectedOpenRouterModel={selectedOpenRouterModel}
+          openrouterModels={openrouterModels}
+          isVi={isVi}
+          lastSync={lastSync}
+          moduleId="dash_trade_auditor"
+        />
+      )}
 
       {/* ── AI Market Decision Lab Main Panel ── */}
-      <div className="summary-tab glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {!isSummaryHidden && (
+        <div className="summary-tab glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <h3 className="panel-title font-mono text-emerald" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
           <Sparkles size={18} /> AI MARKET DECISION LAB
@@ -1662,6 +1665,34 @@ ${promptData}
         )}
       </div>
     </div>
-  </div>
+  )}
+
+  {/* ── Fallback when both modules are hidden ── */}
+  {isAuditorHidden && isSummaryHidden && (
+    <div className="glass-panel text-slate-500 font-mono" style={{ padding: '40px 20px', textAlign: 'center', borderRadius: '8px' }}>
+      <p style={{ margin: '0 0 12px', fontSize: '0.8rem' }}>
+        {isVi ? 'Tất cả module trong AI Decision Lab hiện đang bị ẩn.' : 'All modules in AI Decision Lab are currently hidden.'}
+      </p>
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+        <button
+          type="button"
+          onClick={() => showModule('tab_summary')}
+          className="text-emerald"
+          style={{ background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem' }}
+        >
+          {isVi ? 'Hiện lại AI Decision Lab' : 'Unhide AI Decision Lab'}
+        </button>
+        <button
+          type="button"
+          onClick={() => showModule('dash_trade_auditor')}
+          className="text-emerald"
+          style={{ background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem' }}
+        >
+          {isVi ? 'Hiện lại Trade Plan Auditor' : 'Unhide Trade Plan Auditor'}
+        </button>
+      </div>
+    </div>
+  )}
+</div>
 );
 }
