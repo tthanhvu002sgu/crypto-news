@@ -53,7 +53,7 @@ describe('Navigation Architecture & Migration Utilities', () => {
   it('migrates legacy 7-tab order to canonical 5-tab order without duplicates', () => {
     const legacyOrder = ['dashboard', 'scanner', 'hft', 'cascade', 'summary', 'glossary', 'terminal'];
     const migrated = migrateSavedTabOrder(legacyOrder);
-    
+
     // Expected: dashboard -> overview, scanner -> scanner, hft -> orderflow,
     // cascade -> overview (duplicate skipped), summary -> ailab,
     // glossary -> system, terminal -> system (duplicate skipped)
@@ -63,7 +63,7 @@ describe('Navigation Architecture & Migration Utilities', () => {
   it('preserves customized ordering of migrated tabs', () => {
     const customUserOrder = ['hft', 'scanner', 'dashboard'];
     const migrated = migrateSavedTabOrder(customUserOrder);
-    
+
     // hft -> orderflow, scanner -> scanner, dashboard -> overview
     // then ailab and system appended
     assert.deepEqual(migrated, ['orderflow', 'scanner', 'overview', 'ailab', 'system']);

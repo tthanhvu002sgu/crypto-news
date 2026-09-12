@@ -4,7 +4,7 @@ export const MODULES_CONFIG = {
   sidebar_derivatives: { id: 'sidebar_derivatives', label: 'Phái Sinh Realtime', category: 'Sidebar' },
   sidebar_macro: { id: 'sidebar_macro', label: 'Dữ Liệu Kinh Tế Mỹ (Hàng Tháng)', category: 'Sidebar' },
   sidebar_onchain: { id: 'sidebar_onchain', label: 'BTC Network (On-chain)', category: 'Sidebar' },
-  
+
   // 1. Overview & Regime
   tab_overview: { id: 'tab_overview', label: 'Tab Overview & Regime', category: 'Overview & Regime' },
   dash_bias: { id: 'dash_bias', label: 'Market Bias Engine (Công Thức Bias Total)', category: 'Overview & Regime' },

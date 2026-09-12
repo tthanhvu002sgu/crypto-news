@@ -44,7 +44,7 @@ export function migrateSavedTabOrder(savedArray) {
   const mapped = savedArray
     .map(id => (typeof id === 'string' ? (TAB_REDIRECT_MAP[id.toLowerCase()] || id.toLowerCase()) : ''))
     .filter(id => DEFAULT_TAB_ORDER.includes(id));
-  
+
   const unique = [...new Set(mapped)];
   return [
     ...unique,
