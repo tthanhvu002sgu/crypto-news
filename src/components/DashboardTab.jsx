@@ -1,3 +1,4 @@
+import { Line, Bar } from 'react-chartjs-2';
 import MarketBiasCard from './MarketBiasCard';
 import MacroDashboardCard from './MacroDashboardCard';
 import PolymarketWhales from './PolymarketWhales';

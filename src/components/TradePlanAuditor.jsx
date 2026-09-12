@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ShieldCheck, Loader2, ArrowUpRight, ArrowDownRight, Zap } from 'lucide-react';
@@ -19,13 +19,11 @@ export default function TradePlanAuditor({
   aiProvider,
   selectedModel,
   selectedOpenRouterModel,
-  openrouterModels,
   isVi,
   lastSync,
   moduleId = 'dash_trade_auditor',
 }) {
   const { isModuleHidden } = useModuleVisibility();
-  if (moduleId && isModuleHidden(moduleId)) return null;
 
   const priceNow =
     typeof data.btc?.price === 'number'
@@ -36,6 +34,8 @@ export default function TradePlanAuditor({
   const [customPrice, setCustomPrice] = useState('');
   const [auditResult, setAuditResult] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
+
+  if (moduleId && isModuleHidden(moduleId)) return null;
 
   const effectivePrice = customPrice ? Number.parseFloat(customPrice) || priceNow : priceNow;
 
