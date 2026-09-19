@@ -25,7 +25,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **AI Market Decision Lab:** Tích hợp Gemini để kiểm định giả thuyết vĩ mô/on-chain/flow/phái sinh/HFT, phân biệt quan sát với suy luận, phản biện narrative, chấm chất lượng bằng chứng và tạo playbook quyết định có trigger/invalidation. Hỗ trợ **Tiếng Việt / English** và 3 chế độ: Investment Committee / Skeptical Execution Desk / Socratic Market Mentor.
 - **BTC Production Cost (range):** Ước tính chi phí khai thác 1 BTC mới dưới dạng **khoảng low → high** quanh baseline energy model (26 J/TH @ $0.05 + 10% opex), biên sai số **−5% / +10%**.
 - **BTC SSR Oscillator (Glassnode Z-Score):** Đo lường sức mua Stablecoin so với Vốn hóa BTC chuẩn hóa bằng Z-Score (vị trí so với đường trung bình SMA 200 ngày và độ lệch chuẩn 2σ theo phương pháp Glassnode Oscillator). Tự động xác định vùng Mua/Bán cực đoan (Z < -2 / Z > +2) và đồng bộ nguồn vốn hóa DefiLlama.
-- **Scanner Shortlist Engine v7 (BUY & SELL):** Hệ thống xếp hạng shortlist khách quan theo 4 Pillars (*Quality 5đ, Relative Strength vs BTC 8đ, Flow CVD/OI 6đ, Market Context 6đ* — Thang 25đ). Bảo tồn quota momentum (30 liquid + 10 gainer + 10 loser), phân tích Price Action thuần nến đóng không lookahead (`4H uptrend · gần range high · volume expansion`), progressive disclosure 5 cột (Coin, Strength, Flow, Quality, Rank Score), accordion mở rộng hiển thị raw metrics, top 3 lý do và cảnh báo vi cấu trúc.
+- **Scanner Shortlist Engine v8 (Lọc Sức Mạnh Trước, Xác Nhận Setup Sau):** Tái cấu trúc triệt để cơ chế xếp hạng theo tổng điểm cũ thành pipeline 5 cửa lọc bắt buộc: `Dữ liệu hợp lệ → Đủ thanh khoản → Đạt sức mạnh → Có setup → Kiểm tra vị trí hiện tại`. Phân tích đa khung thời gian: 1D bối cảnh, 4H xu hướng, 1H xác nhận setup; hỗ trợ 2 chiều LONG/SHORT với 2 mẫu hình kỹ thuật: **Pullback tiếp diễn** (Continuation Pullback) và **Breakout–Retest**. Phân biệt rõ ràng 5 trạng thái (`READY`, `FORMING`, `WATCH`, `EXTENDED`, `DATA_INCOMPLETE`). Đo lường khoảng cách đến vùng kích hoạt và khoảng đệm vô hiệu hóa bằng ATR; tách biệt hoàn toàn 2 metric **Volume co lại** và **Biên độ co hẹp**; hiển thị mức tham chiếu (Trigger Zone, Stop Level, Next Resistance) và R:R trước/sau chi phí; bảo tồn quota momentum (30 liquid + 10 gainer + 10 loser).
 - **Google Sheets Auto-Sync 3 Phiên (Á - Âu - Mỹ) & AI Prompt Staging:** Tự động tổng hợp và đồng bộ toàn bộ snapshot thị trường (Market Bias, On-Chain, Phái sinh, ETF, Macro Calendar, và Markdown Summary) lên file Google Sheets công khai thông qua Google Apps Script Webhook. Hoạt động tự động 24/7 theo 3 phiên giao dịch chính bằng GitHub Actions (08:00 Á, 14:00 Âu, 20:00 Mỹ) và hỗ trợ nút kích hoạt trực tiếp từ Settings Modal và tab System & Docs.
 
 ## 2. Kiến trúc hệ thống (System Architecture)
@@ -47,9 +47,12 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - **Client-side Web Sync:** Cho phép gửi trực tiếp từ browser mà không lo lỗi CORS.
 - **Lưu trữ cục bộ & Persistence Multi-layer:**
   - **0ms Synchronous Hydration:** `localStorage` giữ settings và preview MOVE TRACKER gần nhất (`hft_move_preview_v2`) cùng theme/module visibility.
+  - **Scanner v8 Cache & Concurrency Lock:** Cache độc lập `crypto_scanner_v8_results` và `crypto_scanner_v8_universe` (TTL 5m kết quả, 4h universe), ngăn quét chồng chéo, loại bỏ phản hồi cũ và không đọc kết quả v7.
   - **Immutable Daily CVD Snapshot Ledger (`hft_cvd_daily_snapshots_v1`):** Lưu trữ sổ cái snapshot ngày đóng UTC bất biến của Spot và Futures từ mốc neo cố định `CVD_ANCHOR_UTC = '2020-01-01T00:00:00.000Z'`. Đảm bảo nến đang chạy được đánh dấu `isClosed: false` và chỉ khóa vào sổ cái một lần duy nhất khi kết thúc ngày UTC, loại bỏ hoàn toàn hiện tượng look-ahead và trôi dạt baseline.
   - **Versioned CVD Series Cache (`hft_cvd_series_*_v4`):** Cache đa khung thời gian 24h/7d/30d với Data Contract 3 lớp: `cumulativeFromAnchor` cho lưu trữ/audit bất biến, `cumulativeWithinWindow` cho biểu đồ rebase theo khung, và `windowNetDelta` cho Hero/các bộ tính toán chỉ báo/xuất dữ liệu.
-  - **IndexedDB Research Storage:** `MoveTrackerResearch` (store `events`) lưu event schema v2 trong 90 ngày; migration một lần từ `hft_move_history_v1` và legacy `CryptoSignalLog/MOVE_REPORT`, có dedupe theo stable event ID.
+  - **IndexedDB Research Storage:**
+    - `MoveTrackerResearch` (store `events`): lưu event schema v2 trong 90 ngày; migration từ `hft_move_history_v1` và legacy `CryptoSignalLog`.
+    - `CryptoScannerResearch` (store `scanner_events`): lưu trữ snapshot bất biến tại thời điểm phát hiện của Scanner v8, dedupe theo `coin_direction_setupType_formedAt`, đánh giá forward outcomes (4H/24H return vs BTC, MFE/MAE, R-multiple, resolution WIN/LOSS/AMBIGUOUS/UNRESOLVED).
 
 ## 3. Các thành phần chính (Components)
 ### Giao diện / Bố cục (UI/Layout)
@@ -71,11 +74,17 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - *Crawler Activity Log:* Theo dõi console logs kết nối API và WebSocket từ `TerminalTab`.
   - *Cài Đặt & Đồng Bộ:* Quản lý cấu hình API keys, Google Sheets Webhook kèm nút "XUẤT GOOGLE SHEETS NGAY", khôi phục thứ tự tab và bỏ ẩn module.
 - `CascadeTab.jsx`: Sơ đồ Thác Thanh Khoản 4 Tiers (Fed/M2 → USD/VIX → Equity/Credit → Crypto), nhãn sạch không còn tiền tố `[BƯỚC 3]`, tích hợp trong tab Overview.
+- `ScannerTab.jsx`: Giao diện phân hệ Altcoin Scanner v8 (Lọc Sức Mạnh Trước, Xác Nhận Setup Sau); cấu trúc bảng 5 cột dữ liệu (`Coin · Sức Mạnh · Setup/Trạng Thái · Khoảng Trống/R:R · Dòng Tiền`), bộ filter chip trạng thái (`ALL`, `READY`, `FORMING`, `WATCH`, `EXTENDED`), banner tóm tắt setup hiển thị trực quan các mức tham chiếu (Trigger Zone, Invalidation Stop, Target, Gross/Net R:R sau phí 0.08%), chip hiển thị tách biệt Volume Contraction vs Range Contraction, tag RS Durability và modal phương pháp luận v8.
 - `ModuleMenu.jsx`: Menu điều khiển bật/tắt (ẩn/hiện) các thẻ chức năng (widgets).
 
 ### Dịch vụ / Utils (Services & Helpers)
 - `src/utils/navigation.js` — Quản lý routing và migration điều hướng: định nghĩa 5 target workspace IDs (`overview`, `orderflow`, `scanner`, `ailab`, `system`), URL hash redirect mapping (`#dashboard` → `#overview`, `#hft` → `#orderflow`, `#cascade` → `#overview`, `#summary` → `#ailab`, `#glossary`/`#terminal` → `#system`), hàm `normalizeTabId` và `migrateSavedTabOrder` bảo đảm backward compatibility cho `localStorage`.
 - `src/config/modulesConfig.js` — Định nghĩa cấu hình 21+ modules theo 5 phân nhóm mới (`Overview & Regime`, `Order Flow`, `AI Decision Lab`, `System & Docs`, `Sidebar`), phục vụ cho cả Node ESM test runner và React Vite runtime.
+- `src/services/scannerConfig.js` — Cấu hình phiên bản `v8.0.0`, ngưỡng thanh khoản ($10M spot / $25M futures), quota universe (30 liquid + 10 gainer + 10 loser), 5 trạng thái (`READY`, `FORMING`, `WATCH`, `EXTENDED`, `DATA_INCOMPLETE`), định mức ATR và giả định chi phí trượt giá/phí (0.08%).
+- `src/services/scannerStrength.js` — Bộ kiểm định Cửa 1 (Data Integrity - bắt buộc có BTC benchmark, không thế số 0), Cửa 2 (Liquidity Quality - spread ≤0.15%, klines ≥50), và Cửa 3 (Relative Strength & Trend - RS24H durability ≥3/4 nến 1H, 4H EMA21/EMA55 alignment & slope, RS1H/RS4H/RS24H vs BTC).
+- `src/services/scannerSetups.js` — Bộ tính toán ATR, swing pivot cấu trúc 1H không look-ahead, tách biệt volume contraction và range contraction, nhận diện 2 setup (Continuation Pullback & Breakout-Retest), kiểm định vùng kích hoạt theo ATR, tính Stop buffer và Gross/Net R:R.
+- `src/services/scannerEventStore.js` — Kho lưu trữ IndexedDB `CryptoScannerResearch` (store `scanner_events`), idempotent upsert deduplicated theo `${symbol}_${direction}_${setupType}_${formedAt}`, forward outcome evaluation (4H/24H return vs BTC, MFE, MAE, R-multiple, resolution WIN/LOSS/AMBIGUOUS/UNRESOLVED) và thống kê hiệu suất.
+- `src/services/coinScanner.js` — Điều phối toàn bộ pipeline Scanner v8 qua 5 cửa lọc tuần tự, concurrency lock (`activeScanPromise`), loại bỏ kết quả stale, fetch nến phụ trợ BTC 1H cho durability check, xếp hạng ứng viên theo độ sẵn sàng của setup (READY > FORMING > WATCH > EXTENDED), duy trì export tương thích ngược cho test suites.
 - `src/services/cvdService.js` — Động cơ CVD trung tâm quản lý mốc neo cố định UTC Anchor (2020-01-01), sổ cái snapshot ngày đóng bất biến (`hft_cvd_daily_snapshots_v1`), cơ chế tự động backfill từ Binance, và Data Contract 3 lớp (`cumulativeFromAnchor`, `cumulativeWithinWindow`, `windowNetDelta`).
 - `src/services/cvdService.test.js` — Bộ 15 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
 - `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
@@ -97,6 +106,35 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-09-19] Scanner v8: Lọc Sức Mạnh Trước, Xác Nhận Setup Sau `(FULL)`
+- **Mode / Type / Action / Lane:** REFACTOR / ARCHITECTURE / EXECUTE / FULL
+- **Tóm tắt:** Tái cấu trúc toàn diện Scanner từ cơ chế chấm điểm tổng hợp (Total Score Top 5) sang kiến trúc pipeline 5 cửa lọc bắt buộc: `Dữ liệu hợp lệ → Đủ thanh khoản → Đạt sức mạnh & Xu hướng → Có setup cụ thể → Kiểm tra vị trí & R:R`. Phân tích đa khung thời gian (1D bối cảnh, 4H xu hướng, 1H xác nhận setup); đối xứng 2 chiều LONG/SHORT; 2 setup kỹ thuật (Pullback tiếp diễn và Breakout–Retest); phân biệt các trạng thái (`READY`, `FORMING`, `WATCH`, `EXTENDED`, `INVALIDATED`, `EXPIRED`, `DATA_INCOMPLETE`); đo lường khoảng cách theo ATR; tách bạch volume contraction và range contraction; lưu trữ nghiên cứu IndexedDB với deduplication khóa tự nhiên; giao diện 5 cột Minimalist-UI kèm mức tham chiếu giá, thời điểm xác nhận và R:R sau phí.
+- **Thay đổi chính & Kiến trúc hoàn thiện:**
+  - `src/services/scannerConfig.js`: Định nghĩa toàn bộ schema và hằng số cấu hình phiên bản v8 (`v8.0.0`), ngưỡng thanh khoản ($1B Cap, Spread ≤ 0.15%, VolCV ≤ 1.3, Vol30D ≥ $100M), quota universe (30 liquid, 10 gainers, 10 losers), ngưỡng RS, EMA, ATR tolerance, ngưỡng tối thiểu R:R khả dụng (`minTargetRewardRisk = 2.0`), và giả định chi phí round-trip 0.08%.
+  - `src/services/scannerStrength.js`: Triển khai Cửa 1 (Data Integrity), Cửa 2 (Liquidity Quality), Cửa 3 (Relative Strength & Trend). Bắt buộc có BTC benchmark để so sánh RS (không thế 0); kiểm tra tính bền bỉ của RS24H (`rsDurability` ≥ 3 trong 4 nến 1H gần nhất); kiểm định xu hướng 4H qua EMA21/EMA55 và độ dốc (slope); hỗ trợ nạp `close4h` chuẩn nến đóng 4H; cho phép nến 1H pullback có RS1H âm nếu RS24H và cấu trúc 4H vẫn duy trì vượt trội.
+  - `src/services/scannerSetups.js`:
+    - **[P1-1] Tách giá xác nhận và giá Futures hiện tại:** Setup kiểm tra trực tiếp `evalPrice` (giá Futures mới nhất) so với mức vô hiệu và `maxExtensionAtr` trước khi cấp nhãn `READY`. Nếu nến đóng đã xác nhận nhưng giá Futures chạy xa hoặc xuyên stop trong giờ hiện tại, trạng thái lập tức chuyển thành `EXTENDED` hoặc `INVALIDATED`.
+    - **[P1-2] R:R chuẩn theo giá vào khả dụng & Gate R:R ≥ 2.0:** R:R tính toán trực tiếp từ giá vào khả dụng (`availableEntryPrice = evalPrice` khi đã xác nhận, không dùng trigger cũ). Bắt buộc có cản mục tiêu cấu trúc (`targetLevel != null`) và Gross R:R ≥ 2.0 mới được `READY`; nếu thiếu target hoặc R:R không đạt, setup giữ ở `FORMING` với lý do rõ ràng.
+    - **[P1-3] Cố định ATR và Invalidation Stop chống trôi/hồi sinh:** Invalidation level và ATR được cố định ngay tại thời điểm hình thành (`setupStateRegistry` keyed by symbol, direction, setupType, formedAt, triggerPrice). Setup đã invalidated được bảo lưu trạng thái và không bị dời stop để "hồi sinh" khi biến động tăng.
+    - Nhận diện Swing High/Low cấu trúc bằng confirmed pivots (không look-ahead); tách biệt 2 metric **Volume Contraction** và **Range Contraction**; thẩm định nến xác nhận qua hướng nến, vị trí đóng và triệt tiêu râu nghịch chiều (wick ≤ 45%).
+  - `src/services/coinScanner.js`:
+    - **[P1-1] Đối chiếu giá Futures vs Spot:** Tách biệt `latestFuturesPrice` (lấy từ Binance Futures bookTicker/live 1H candle) dùng để kiểm định trigger/stop/extension của setup phái sinh, và `spotClose` dùng cho đối chiếu Spot flow.
+    - **[P2-4] Đồng bộ mốc quét chung và ghép nến theo timestamp:** Bổ sung hàm `alignSeriesByTimestamp` ghép cặp chính xác từng nến coin và BTC theo `openTime`, loại bỏ hiện tượng lệch kỳ khi quét ngang thời điểm đóng giờ.
+    - Động cơ điều phối chính tích hợp cache độc lập (`crypto_scanner_v8_results`, TTL 5m; `crypto_scanner_v8_universe`, TTL 4h), concurrency lock (`activeScanPromise`), stale request discard, fetch nến phụ trợ BTC 1H song song.
+  - `src/services/scannerEventStore.js`:
+    - **[P2-5] Bảo lưu snapshot phát hiện ban đầu bất biến:** Thiết kế lại `mergeEventWithExisting` với 3 trạng thái rõ ràng, bảo vệ bất biến `initialStatus`, `initialPrice`, `initialTimestamp` và outcome khi refresh.
+    - **[P2-5] Forward outcome hoàn chỉnh & Backfill 24H:** Đảm bảo `return24h` và `relReturn24hVsBtc` chỉ được tính khi có đủ tối thiểu 24 nến tương lai; hàm `updatePendingEventOutcomes` tự động backfill kết quả 24H cho cả lệnh kết thúc sớm (TP/SL) và lệnh chưa đóng; chuẩn hóa tính toán lợi nhuận và outperformance cho cả LONG và SHORT.
+  - `src/components/ScannerTab.jsx` & `src/App.css`:
+    - Bảng chính 5 cột (`Coin · Sức Mạnh · Setup/Trạng Thái · Khoảng Trống/R:R · Dòng Tiền`), bộ filter chip trạng thái (`ALL`, `READY`, `FORMING`, `WATCH`, `EXTENDED`, `INVALIDATED`).
+    - Hiển thị riêng biệt **GIÁ FUTURES HIỆN TẠI**, **Giá xác nhận** và **(Spot đóng: ...)** trong chi tiết setup; thẻ mobile và desktop đồng bộ dùng giá Futures mới nhất.
+    - Badge và chip styling riêng cho trạng thái `INVALIDATED` (`.badge-rose`, `.chip-invalidated`).
+  - `Unit Test Suites`:
+    - 43 unit tests chuyên sâu cho Scanner v8 (`npm run test:scanner` pass 100%).
+    - 112 unit tests toàn dự án (`npm test` pass 100% trên cả 10 suites).
+- **Files / areas chạm:** `src/services/scannerConfig.js`, `src/services/scannerStrength.js`, `src/services/scannerSetups.js`, `src/services/scannerEventStore.js`, `src/services/coinScanner.js`, `src/components/ScannerTab.jsx`, `src/App.css`, test suites, `package.json`, `README.md`.
+- **Ảnh hưởng README:** §1 / §2 / §3 / §4.
+- **Verify:** `npm run test:scanner` pass 43/43 tests; `npm test` pass 10/10 suites (112 tests); `npm run build` hoàn thành trong 4.62s; ESLint đạt 0 lỗi, 0 cảnh báo.
 
 ### [2026-09-12] Tái Cấu Trúc Giao Diện & Kiến Trúc Thông Tin 5 Phân Hệ Chiến Lược `(FULL)`
 - **Mode / Type / Action / Lane:** REFACTOR / ARCHITECTURE / EXECUTE / FULL

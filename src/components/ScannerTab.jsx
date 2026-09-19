@@ -1,19 +1,12 @@
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: modern-minimal · theme: Terminal */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { runFullScan } from '../services/coinScanner';
+import { SETUP_STATES, SETUP_TYPES } from '../services/scannerConfig';
 import {
   RefreshCw, Zap, ExternalLink, TrendingUp, TrendingDown, ShieldCheck,
   Clock, CheckCircle2, ChevronDown, ChevronUp, AlertTriangle, HelpCircle,
-  X, Activity, Gauge, Layers, Check,
+  X, Activity, Check, Crosshair, Target,
 } from 'lucide-react';
-
-const fmtUsd = (n) => {
-  if (n == null) return '---';
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
-};
 
 const fmtCvd = (n) => {
   if (n == null || n === 0) return '---';
@@ -62,7 +55,7 @@ function ScannerMethodologyDrawer({ isOpen, onClose }) {
         <div className="drawer-header">
           <div className="drawer-title-wrap">
             <Zap size={18} className="text-amber-400" />
-            <h3 className="drawer-title">CÁCH SCANNER XẾP HẠNG SHORTLIST</h3>
+            <h3 className="drawer-title">SCANNER V8: LỌC SỨC MẠNH TRƯỚC, XÁC NHẬN SETUP SAU</h3>
           </div>
           <button className="drawer-close-btn" onClick={onClose} aria-label="Đóng">
             <X size={16} />
@@ -71,64 +64,68 @@ function ScannerMethodologyDrawer({ isOpen, onClose }) {
 
         <div className="drawer-content">
           <div className="drawer-section">
-            <h4 className="section-title text-emerald-400">1. ĐỊNH HƯỚNG SẢN PHẨM &amp; PHẠM VI</h4>
+            <h4 className="section-title text-emerald-400">1. ĐỊNH HƯỚNG VÀ 5 CỬA LỌC BẮT BUỘC</h4>
             <p className="section-body">
-              Scanner là công cụ <strong>xếp hạng shortlist</strong> khách quan giúp trader trả lời nhanh 3 câu hỏi:
-              <br />• <em>Coin nào đáng xem?</em> (Top 5 theo chiều Mua hoặc Bán)
-              <br />• <em>Vì sao nó được chọn?</em> (4 Pillars định lượng &amp; Top 3 lý do)
-              <br />• <em>Dữ liệu có đủ tin cậy không?</em> (Quality Gate &amp; Data coverage)
-              <br /><strong>Lưu ý:</strong> Scanner tuyệt đối không đưa điểm vào lệnh (Entry), Cắt lỗ (Stop) hay Mục tiêu (Target).
+              Scanner v8 thay đổi triệt để cơ chế xếp hạng theo tổng điểm cũ. Không một đồng coin nào có thể xuất hiện trong danh sách chỉ vì tổng điểm cao. Hệ thống yêu cầu vượt qua 5 cửa lọc liên hoàn:
+              <br />• <strong>Dữ liệu:</strong> Kiểm tra nến đóng, đồng bộ thời gian, không lookahead, báo thiếu dữ liệu nếu thiếu benchmark.
+              <br />• <strong>Thanh khoản:</strong> Vốn hóa &ge; $1B, Spread &le; 0.15%, VolCV &le; 1.3, Vol 30D &ge; $100M, có Futures.
+              <br />• <strong>Sức mạnh (Strength):</strong> Bắt buộc đạt RS 4H/24H vs BTC, nằm trong nhóm percentile &ge; 70% (LONG) hoặc &le; 30% (SHORT), xu hướng 4H EMA21/55 cùng độ dốc, và RS24H bền vững trong &ge; 3/4 nến 1H gần nhất.
+              <br />• <strong>Setup:</strong> Bắt buộc khớp mẫu hình kỹ thuật rõ ràng (Pullback tiếp diễn hoặc Breakout–Retest).
+              <br />• <strong>Vị trí hiện tại:</strong> Đo khoảng cách ATR đến vùng kích hoạt, không chấp nhận tín hiệu đã chạy quá xa (&gt; 1.5 ATR).
             </p>
           </div>
 
           <div className="drawer-section">
-            <h4 className="section-title text-contrast">2. BỐN TRỤ CỘT ĐỊNH LƯỢNG (4 PILLARS — TỐI ĐA 25 ĐIỂM)</h4>
+            <h4 className="section-title text-contrast">2. HAI MẪU HÌNH NHẬN DIỆN SETUP (1H / 4H)</h4>
             <div className="pillar-explainer-grid">
               <div className="pillar-item">
                 <div className="pillar-head">
-                  <ShieldCheck size={14} className="text-emerald-400" />
-                  <strong>QUALITY (Max 5.0)</strong>
+                  <Crosshair size={14} className="text-emerald-400" />
+                  <strong>PULLBACK TIẾP DIỄN</strong>
                 </div>
-                <p>Thanh khoản 30D (&gt;$300M-$1B), Vốn hóa (&gt;$1B-$2B), Độ ổn định volume (VolCV &le; 0.6), Spread Futures (&le; 0.03%-0.08%) và Data coverage.</p>
+                <p>
+                  Giá điều chỉnh về vùng tham chiếu hỗ trợ (Swing Low pivot đã xác nhận) trong xu hướng tăng. Xác nhận khi nến 1H tăng đóng lấy lại vùng và vượt đỉnh nến trước. Vô hiệu hóa khi phá đáy cấu trúc.
+                </p>
               </div>
 
               <div className="pillar-item">
                 <div className="pillar-head">
-                  <Gauge size={14} className="text-emerald-400" />
-                  <strong>RELATIVE STRENGTH (Max 8.0)</strong>
+                  <Target size={14} className="text-cyan-400" />
+                  <strong>BREAKOUT – RETEST</strong>
                 </div>
-                <p>Hiệu suất tương đối so với BTC (1H/4H/24H RS Percentile trong Universe) và Breakout ATR so với đỉnh/đáy 20 phiên.</p>
-              </div>
-
-              <div className="pillar-item">
-                <div className="pillar-head">
-                  <Activity size={14} className="text-emerald-400" />
-                  <strong>FLOW (Max 6.0)</strong>
-                </div>
-                <p>CVD Futures chuẩn hóa, CVD Spot gom/xả ròng, Gia tốc dòng tiền (CVD Trend Ratio) và Open Interest (OI) đồng thuận biến động giá.</p>
-              </div>
-
-              <div className="pillar-item">
-                <div className="pillar-head">
-                  <Layers size={14} className="text-emerald-400" />
-                  <strong>MARKET CONTEXT (Max 6.0)</strong>
-                </div>
-                <p>Cấu trúc EMA 4H (21/55) &amp; Độ dốc, Xu hướng Daily 1D, Vùng cân bằng RSI (42-68/32-58) và Khung vĩ mô BTC/ETF Inflow. Trừ điểm nếu bị kéo xa EMA21 &gt;8% hoặc crowded.</p>
+                <p>
+                  Giá đóng vượt vùng đỉnh/đáy 20 nến 1H trước đó, sau đó quay lại kiểm tra (retest). Xác nhận khi nến retest đóng giữ vững trên vùng breakout với phản ứng tăng dứt khoát.
+                </p>
               </div>
             </div>
           </div>
 
           <div className="drawer-section">
-            <h4 className="section-title text-amber-400">3. BẢO TỒN UNIVERSE &amp; QUOTA MOMENTUM</h4>
-            <p className="section-body">
-              Hệ thống lọc universe gồm 30 coin thanh khoản cao nhất + 10 coin tăng mạnh nhất + 10 coin giảm mạnh nhất 24H. Cơ chế quota giữ nguyên các đại diện momentum, không bị sort volume cuối đè mất.
-            </p>
+            <h4 className="section-title text-amber-400">3. CÁC TRẠNG THÁI HIỂN THỊ TRÊN GIAO DIỆN</h4>
+            <div className="status-explainer-list">
+              <div className="status-exp-row">
+                <span className="conclusion-badge badge-emerald">READY</span>
+                <span>Đã xác nhận setup, dữ liệu đầy đủ và vị trí hiện tại còn trong tầm &le; 1.5 ATR.</span>
+              </div>
+              <div className="status-exp-row">
+                <span className="conclusion-badge badge-cyan">FORMING</span>
+                <span>Đã đạt sức mạnh, setup đang hình thành nhưng đang chờ kiểm tra lại hoặc thiếu nến xác nhận.</span>
+              </div>
+              <div className="status-exp-row">
+                <span className="conclusion-badge badge-indigo">WATCH</span>
+                <span>Đạt sức mạnh vượt trội nhưng chưa có điểm pullback hoặc breakout hợp lệ để vào form.</span>
+              </div>
+              <div className="status-exp-row">
+                <span className="conclusion-badge badge-amber">EXTENDED</span>
+                <span>Coin mạnh và setup đã kích hoạt nhưng giá đã chạy quá xa vùng kích hoạt (&gt; 1.5 ATR), rủi ro đu đỉnh.</span>
+              </div>
+            </div>
           </div>
 
           <div className="drawer-section">
-            <h4 className="section-title text-slate-400">4. MIỄN TRỪ TRÁCH NHIỆM (DISCLAIMER)</h4>
+            <h4 className="section-title text-slate-400">4. MỨC THAM CHIẾU VÀ TÍNH TOÁN R:R</h4>
             <p className="section-body text-muted">
-              Dữ liệu được tổng hợp từ Binance REST/Futures và CoinGecko/CoinCap. Không có bất kỳ thông tin nào cấu thành lời khuyên đầu tư hay khuyến nghị giao dịch. Trader tự chịu trách nhiệm phân tích chart và quản lý vốn.
+              Mỗi setup hiển thị các mức tham chiếu đo bằng ATR: <strong>Vùng kích hoạt (Trigger Zone), Mức vô hiệu hóa (Stop Invalidation), và Cản tiếp theo (Next Resistance)</strong>. R:R được tính theo giá vào khả dụng (Gross và Net sau phí 0.08%). Bắt buộc có cản mục tiêu cấu trúc hợp lệ và đạt tối thiểu 2.0R mới đủ điều kiện hiển thị trạng thái READY.
             </p>
           </div>
         </div>
@@ -146,26 +143,129 @@ function ScannerRowDetails({ coin }) {
   const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
   const binanceUrl = `https://www.binance.com/en/trade/${coin.baseAsset}_USDT`;
 
+  const setupLabel = coin.setupType === SETUP_TYPES.PULLBACK ? 'Pullback Tiếp Diễn'
+    : coin.setupType === SETUP_TYPES.BREAKOUT_RETEST ? 'Breakout – Retest'
+    : 'Chưa có setup cụ thể (Đang theo dõi)';
+
+  const triggerLow = coin.triggerZone?.low;
+  const triggerHigh = coin.triggerZone?.high;
+
   return (
     <div className="scanner-details-panel">
-      {/* 1. Price Action Context Statement */}
+      {/* 1. Reference Levels & Setup Card */}
+      <div className="details-setup-summary-banner">
+        <div className="setup-banner-head">
+          <div className="setup-title-group">
+            <Crosshair size={14} className="text-cyan-400" />
+            <strong className="setup-type-name">{setupLabel}</strong>
+            <span className={`conclusion-badge badge-${coin.status?.toLowerCase() || 'slate'}`}>
+              {coin.status}
+            </span>
+          </div>
+          {coin.distanceAtr !== null && (
+            <span className="setup-distance-tag">
+              Khoảng cách: <strong>+{coin.distanceAtr} ATR</strong> từ vùng trigger
+            </span>
+          )}
+        </div>
+
+        <div className="setup-levels-grid">
+          <div className="level-box current-price">
+            <span className="level-label">GIÁ FUTURES HIỆN TẠI</span>
+            <span className="level-val text-contrast font-bold">
+              {fmtPrice(coin.latestFuturesPrice || coin.currentPrice || coin.price)}
+            </span>
+            <small className="level-sub">
+              {coin.confirmationPrice
+                ? `Giá xác nhận: ${fmtPrice(coin.confirmationPrice)}`
+                : coin.confirmedAt
+                ? `Xác nhận: ${new Date(coin.confirmedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+                : coin.formedAt
+                ? `Hình thành: ${new Date(coin.formedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+                : 'Đang theo dõi'}
+            </small>
+            {coin.confirmationPrice && coin.confirmedAt && (
+              <small className="level-sub text-muted" style={{ display: 'block', marginTop: '2px' }}>
+                Xác nhận: {new Date(coin.confirmedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+              </small>
+            )}
+            {coin.spotClose && (
+              <small className="level-sub text-muted" style={{ display: 'block', marginTop: '1px' }}>
+                (Spot đóng: {fmtPrice(coin.spotClose)})
+              </small>
+            )}
+          </div>
+
+          <div className="level-box trigger">
+            <span className="level-label">VÙNG KÍCH HOẠT (TRIGGER)</span>
+            <span className="level-val">
+              {triggerLow && triggerHigh
+                ? `${fmtPrice(triggerLow)} - ${fmtPrice(triggerHigh)}`
+                : coin.triggerPrice ? fmtPrice(coin.triggerPrice) : '---'}
+            </span>
+            <small className="level-sub">Vùng swing/breakout tham chiếu</small>
+          </div>
+
+          <div className="level-box invalidation">
+            <span className="level-label">MỨC VÔ HIỆU (STOP LEVEL)</span>
+            <span className="level-val text-rose-400">
+              {coin.invalidationLevel ? fmtPrice(coin.invalidationLevel) : '---'}
+            </span>
+            <small className="level-sub">Phá vỡ cấu trúc (-0.5 ATR buffer)</small>
+          </div>
+
+          <div className="level-box target">
+            <span className="level-label">CẢN TIẾP THEO (TARGET)</span>
+            <span className="level-val text-emerald-400">
+              {coin.targetLevel ? fmtPrice(coin.targetLevel) : 'Chưa có cản swing rõ'}
+            </span>
+            <small className="level-sub">Swing đỉnh/đáy gần nhất</small>
+          </div>
+
+          <div className="level-box rr">
+            <span className="level-label">TỶ LỆ R:R (GROSS / NET)</span>
+            <span className="level-val text-contrast">
+              {coin.rewardRiskRatio ? `${coin.rewardRiskRatio} R` : '---'}
+              {coin.rewardRiskNet && <small className="rr-net"> ({coin.rewardRiskNet} R sau phí)</small>}
+            </span>
+            <small className="level-sub">Giả định phí/slippage 0.08%</small>
+          </div>
+        </div>
+
+        {coin.setupReason && (
+          <p className="setup-rationale-text font-bold">
+            <Check size={12} className="text-emerald-400 inline mr-1" />
+            {coin.setupReason}
+          </p>
+        )}
+      </div>
+
+      {/* 2. Contraction & PA Statement */}
       <div className="details-pa-banner">
         <div className="pa-badge">
           <Activity size={13} className="text-cyan-400" />
-          <span>BỐI CẢNH PRICE ACTION (NẾN ĐÓNG):</span>
+          <span>VI CẤU TRÚC NẾN (PRICE ACTION &amp; CO BIÊN ĐỘ):</span>
         </div>
-        <p className="pa-statement-text font-bold">
-          {coin.paContext?.statement || '4H cấu trúc nến đóng đang phát triển'}
-        </p>
+        <div className="pa-metrics-split">
+          <span className={`pa-metric-chip ${coin.contraction?.volumeContraction ? 'active' : ''}`}>
+            Volume: <strong>{coin.contraction?.volumeContraction ? 'Co lại' : 'Bình thường'}</strong> ({coin.contraction?.volumeRatio}x)
+          </span>
+          <span className={`pa-metric-chip ${coin.contraction?.rangeContraction ? 'active' : ''}`}>
+            Biên độ nến: <strong>{coin.contraction?.rangeContraction ? 'Co hẹp' : 'Bình thường'}</strong> ({coin.contraction?.rangeRatio}x ATR)
+          </span>
+          <span className="pa-statement-text font-bold">
+            {coin.paContext?.statement || '4H cấu trúc nến đóng đang phát triển'}
+          </span>
+        </div>
       </div>
 
+      {/* 3. Reasons and Warnings */}
       <div className="details-grid-two-col">
-        {/* Left: Top 3 Reasons & Warnings */}
         <div className="details-insights-col">
           <div className="insights-block positive-block">
             <div className="insights-header">
               <CheckCircle2 size={14} className="text-emerald-400" />
-              <span className="insights-title">VÌ SAO ĐƯỢC CHỌN (TOP LÝ DO):</span>
+              <span className="insights-title">TIÊU CHUẨN SỨC MẠNH ĐẠT ĐƯỢC:</span>
             </div>
             <ul className="reasons-list">
               {(coin.positiveReasons || []).length > 0 ? (
@@ -184,7 +284,7 @@ function ScannerRowDetails({ coin }) {
           <div className="insights-block warnings-block">
             <div className="insights-header">
               <AlertTriangle size={14} className={(coin.warnings || []).length > 0 ? 'text-amber-400' : 'text-slate-400'} />
-              <span className="insights-title">CẢNH BÁO &amp; YẾU TỐ BẤT LỢI:</span>
+              <span className="insights-title">CẢNH BÁO VI CẤU TRÚC / CROWDING:</span>
             </div>
             {(coin.warnings || []).length > 0 ? (
               <div className="warnings-tags-flex">
@@ -200,115 +300,52 @@ function ScannerRowDetails({ coin }) {
           </div>
         </div>
 
-        {/* Right: 4-Pillar Score Cards */}
         <div className="details-pillars-col">
-          <div className="pillar-cards-grid">
-            <div className="pillar-mini-card">
-              <div className="pillar-card-head">
-                <span className="pillar-label">1. Quality</span>
-                <span className="pillar-pts font-bold">{coin.qualityScore || 0}<small>/5.0</small></span>
-              </div>
-              <div className="pillar-bar-bg">
-                <div className="pillar-bar-fill emerald" style={{ width: `${((coin.qualityScore || 0) / 5) * 100}%` }} />
-              </div>
-              <span className="pillar-sub-state">{coin.qualityState || 'ACCEPTABLE'}</span>
+          <div className="raw-metrics-bento">
+            <div className="raw-metric-item">
+              <span className="m-label">Độ bền RS24H</span>
+              <span className="m-val text-emerald-400 font-bold">
+                {coin.durabilityCount != null ? `${coin.durabilityCount}/${coin.durabilityTotal || 4} nến 1H` : '---'}
+              </span>
             </div>
-
-            <div className="pillar-mini-card">
-              <div className="pillar-card-head">
-                <span className="pillar-label">2. Rel Strength</span>
-                <span className="pillar-pts font-bold">{coin.strengthScore || 0}<small>/8.0</small></span>
-              </div>
-              <div className="pillar-bar-bg">
-                <div className="pillar-bar-fill cyan" style={{ width: `${((coin.strengthScore || 0) / 8) * 100}%` }} />
-              </div>
-              <span className="pillar-sub-state">{coin.strengthState || 'STRONG'}</span>
+            <div className="raw-metric-item">
+              <span className="m-label">RS 4H vs BTC</span>
+              <span className={`m-val ${coin.relativeStrength4h > 0 ? 'text-emerald-400' : coin.relativeStrength4h < 0 ? 'text-rose-400' : ''}`}>
+                {fmtPct(coin.relativeStrength4h)}
+              </span>
             </div>
-
-            <div className="pillar-mini-card">
-              <div className="pillar-card-head">
-                <span className="pillar-label">3. Flow CVD/OI</span>
-                <span className="pillar-pts font-bold">{coin.flowScore || 0}<small>/6.0</small></span>
-              </div>
-              <div className="pillar-bar-bg">
-                <div className="pillar-bar-fill indigo" style={{ width: `${((coin.flowScore || 0) / 6) * 100}%` }} />
-              </div>
-              <span className="pillar-sub-state">{coin.flowState || 'NEUTRAL'}</span>
+            <div className="raw-metric-item">
+              <span className="m-label">RS 24H vs BTC</span>
+              <span className={`m-val ${coin.relativeStrength24h > 0 ? 'text-emerald-400' : coin.relativeStrength24h < 0 ? 'text-rose-400' : ''}`}>
+                {fmtPct(coin.relativeStrength24h)}
+              </span>
             </div>
-
-            <div className="pillar-mini-card">
-              <div className="pillar-card-head">
-                <span className="pillar-label">4. Context / Trend</span>
-                <span className="pillar-pts font-bold">{coin.contextScore || 0}<small>/6.0</small></span>
-              </div>
-              <div className="pillar-bar-bg">
-                <div className="pillar-bar-fill amber" style={{ width: `${((coin.contextScore || 0) / 6) * 100}%` }} />
-              </div>
-              <span className="pillar-sub-state">{coin.trendState || 'UPTREND'}</span>
+            <div className="raw-metric-item">
+              <span className="m-label">RS 1H vs BTC</span>
+              <span className={`m-val ${coin.relativeStrength1h > 0 ? 'text-emerald-400' : coin.relativeStrength1h < 0 ? 'text-rose-400' : ''}`}>
+                {fmtPct(coin.relativeStrength1h)}
+              </span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Raw Metrics Bento Grid */}
-      <div className="details-raw-metrics-wrap">
-        <span className="raw-metrics-label">RAW DECISION METRICS:</span>
-        <div className="raw-metrics-bento">
-          <div className="raw-metric-item">
-            <span className="m-label">Vol 30D</span>
-            <span className="m-val">{fmtUsd(coin.vol30d)}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Market Cap</span>
-            <span className="m-val">{fmtUsd(coin.marketCap)}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Vol CV</span>
-            <span className="m-val">{coin.volCV ?? '---'}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Futures Spread</span>
-            <span className="m-val">{coin.spreadPct != null ? `${coin.spreadPct.toFixed(3)}%` : '---'}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Futures CVD 24H</span>
-            <span className={`m-val ${coin.cvd24h > 0 ? 'text-emerald-400' : coin.cvd24h < 0 ? 'text-rose-400' : ''}`}>
-              {fmtCvd(coin.cvd24h)}
-            </span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Spot CVD 24H</span>
-            <span className={`m-val ${coin.spotCvd24h > 0 ? 'text-emerald-400' : coin.spotCvd24h < 0 ? 'text-rose-400' : ''}`}>
-              {fmtCvd(coin.spotCvd24h)}
-            </span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Taker Buy %</span>
-            <span className="m-val">{coin.takerBuyRatio != null ? `${coin.takerBuyRatio}%` : '---'}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Funding Rate</span>
-            <span className="m-val">{coin.fundingRate != null ? `${coin.fundingRate > 0 ? '+' : ''}${coin.fundingRate.toFixed(4)}%` : '---'}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">Basis %</span>
-            <span className="m-val">{fmtPct(coin.basisPct)}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">RSI (14 4H)</span>
-            <span className="m-val">{coin.rsi14 ?? '---'}</span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">RS 4H vs BTC</span>
-            <span className={`m-val ${coin.relativeStrength4h > 0 ? 'text-emerald-400' : coin.relativeStrength4h < 0 ? 'text-rose-400' : ''}`}>
-              {fmtPct(coin.relativeStrength4h)}
-            </span>
-          </div>
-          <div className="raw-metric-item">
-            <span className="m-label">RS 24H vs BTC</span>
-            <span className={`m-val ${coin.relativeStrength24h > 0 ? 'text-emerald-400' : coin.relativeStrength24h < 0 ? 'text-rose-400' : ''}`}>
-              {fmtPct(coin.relativeStrength24h)}
-            </span>
+            <div className="raw-metric-item">
+              <span className="m-label">ATR 1H</span>
+              <span className="m-val">{coin.atr1h ? `$${coin.atr1h.toFixed(3)}` : '---'}</span>
+            </div>
+            <div className="raw-metric-item">
+              <span className="m-label">Độ dốc EMA21 4H</span>
+              <span className="m-val">{fmtPct(coin.emaSlopePct)}</span>
+            </div>
+            <div className="raw-metric-item">
+              <span className="m-label">Futures CVD 24H</span>
+              <span className={`m-val ${coin.cvd24h > 0 ? 'text-emerald-400' : coin.cvd24h < 0 ? 'text-rose-400' : ''}`}>
+                {fmtCvd(coin.cvd24h)}
+              </span>
+            </div>
+            <div className="raw-metric-item">
+              <span className="m-label">Spot CVD 24H</span>
+              <span className={`m-val ${coin.spotCvd24h > 0 ? 'text-emerald-400' : coin.spotCvd24h < 0 ? 'text-rose-400' : ''}`}>
+                {fmtCvd(coin.spotCvd24h)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -338,12 +375,22 @@ function ScannerRowDetails({ coin }) {
   );
 }
 
-// ── SUBCOMPONENT: 5-COLUMN TABLE ROW ──────────────────────────────────────────
+// ── SUBCOMPONENT: 5-COLUMN TABLE ROW (SCANNER V8) ─────────────────────────────
 function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
   const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
 
-  const isStrengthPositive = coin.strengthScore >= 6.0;
-  const isStrengthModerate = coin.strengthScore >= 3.5;
+  const isLong = direction === 'BUY';
+  const statusBadgeClass = coin.status === SETUP_STATES.READY ? 'badge-emerald'
+    : coin.status === SETUP_STATES.FORMING ? 'badge-cyan'
+    : coin.status === SETUP_STATES.WATCH ? 'badge-indigo'
+    : coin.status === SETUP_STATES.EXTENDED ? 'badge-amber'
+    : coin.status === SETUP_STATES.INVALIDATED ? 'badge-rose'
+    : 'badge-slate';
+
+  const setupName = coin.setupType === SETUP_TYPES.PULLBACK ? 'Pullback Tiếp Diễn'
+    : coin.setupType === SETUP_TYPES.BREAKOUT_RETEST ? 'Breakout–Retest'
+    : 'Theo Dõi Setup';
+
   const isFlowConfirmed = coin.flowState === 'FLOW CONFIRMED';
   const isFlowDivergent = coin.flowState === 'DIVERGENT';
 
@@ -380,7 +427,7 @@ function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
                 <ExternalLink size={11} className="link-ext-icon" />
               </a>
               <div className="coin-price-row">
-                <span className="price-num">{fmtPrice(coin.price)}</span>
+                <span className="price-num" title="Giá Futures hiện tại">{fmtPrice(coin.latestFuturesPrice || coin.currentPrice || coin.price)}</span>
                 <span className={`change-pill ${coin.priceChange24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {fmtPct(coin.priceChange24h)}
                 </span>
@@ -392,21 +439,77 @@ function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
         {/* CỘT 2: STRENGTH */}
         <td className="td-strength">
           <div className="conclusion-badge-wrap">
-            <span className={`conclusion-badge ${isStrengthPositive ? 'badge-emerald' : isStrengthModerate ? 'badge-cyan' : 'badge-slate'}`}>
-              {isStrengthPositive ? 'STRONG' : isStrengthModerate ? 'NEUTRAL' : 'WEAK'}
+            <span className="conclusion-badge badge-emerald">
+              STRONG
             </span>
             <div className="strength-sub-text">
-              <span>RS vs BTC: <strong>Top {100 - Math.round(direction === 'BUY' ? coin.strengthPercentile : (100 - coin.strengthPercentile))}%</strong></span>
+              <span>RS vs BTC: <strong>Top {100 - Math.round(isLong ? coin.strengthPercentile : (100 - coin.strengthPercentile))}%</strong></span>
               <span className="tf-trend-tag">
                 {coin.isDailyUptrend ? '1D ▲' : coin.isDailyUptrend === false ? '1D ▼' : '1D ~'}
               </span>
             </div>
+            <span className="durability-micro-tag">
+              Độ bền 1H: {coin.durabilityCount || 0}/4 nến
+            </span>
           </div>
         </td>
 
-        {/* CỘT 3: FLOW */}
+        {/* CỘT 3: SETUP / TRẠNG THÁI */}
+        <td className="td-setup">
+          <div className="setup-cell-wrap">
+            <div className="setup-badge-row">
+              <span className={`conclusion-badge ${statusBadgeClass}`}>
+                {coin.status}
+              </span>
+              <span className="setup-type-tag">{setupName}</span>
+            </div>
+            <div className="setup-context-sub">
+              {coin.confirmedAt ? (
+                <span className="setup-confirmed-time">
+                  Xác nhận {new Date(coin.confirmedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              ) : coin.formedAt ? (
+                <span className="setup-formed-time">
+                  Tạo {new Date(coin.formedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              ) : null}
+              {coin.distanceAtr !== null ? (
+                <span>Cách trigger: <strong>{coin.distanceAtr} ATR</strong></span>
+              ) : (
+                <span>Đang theo dõi nến 1H</span>
+              )}
+            </div>
+          </div>
+        </td>
+
+        {/* CỘT 4: KHOẢNG TRỐNG / R:R */}
+        <td className="td-rr">
+          <div className="rr-cell-wrap">
+            {coin.rewardRiskRatio ? (
+              <div className="rr-main-block">
+                <span className="rr-numeric font-extrabold text-emerald-400">
+                  {coin.rewardRiskRatio} R
+                </span>
+                {coin.rewardRiskNet && (
+                  <span className="rr-net-sub">
+                    ({coin.rewardRiskNet} R sau phí)
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="rr-na-text text-muted">--- (chưa định target)</span>
+            )}
+            {coin.invalidationLevel && (
+              <div className="invalidation-micro-sub">
+                Dừng: <strong>{fmtPrice(coin.invalidationLevel)}</strong>
+              </div>
+            )}
+          </div>
+        </td>
+
+        {/* CỘT 5: FLOW */}
         <td className="td-flow">
-          <div className="conclusion-badge-wrap">
+          <div className="flow-cell-wrap">
             <span className={`conclusion-badge ${isFlowConfirmed ? 'badge-emerald' : isFlowDivergent ? 'badge-amber' : 'badge-slate'}`}>
               {isFlowConfirmed ? 'FLOW CONFIRMED' : isFlowDivergent ? 'DIVERGENT' : 'NEUTRAL FLOW'}
             </span>
@@ -418,43 +521,6 @@ function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
                 OI 4H: <strong>{coin.oiChange4h != null ? fmtPct(coin.oiChange4h) : '---'}</strong>
               </span>
             </div>
-          </div>
-        </td>
-
-        {/* CỘT 4: QUALITY */}
-        <td className="td-quality">
-          <div className="conclusion-badge-wrap">
-            <span className={`conclusion-badge ${coin.qualityScore >= 4.0 ? 'badge-emerald' : coin.qualityScore >= 3.0 ? 'badge-cyan' : 'badge-amber'}`}>
-              {coin.qualityState || 'ACCEPTABLE'}
-            </span>
-            <div className="quality-sub-text">
-              <span>Spread: <strong>{coin.spreadPct != null ? `${coin.spreadPct.toFixed(2)}%` : '---'}</strong></span>
-              <span>VolCV: <strong>{coin.volCV ?? '---'}</strong></span>
-            </div>
-          </div>
-        </td>
-
-        {/* CỘT 5: RANK SCORE */}
-        <td className="td-score">
-          <div className="score-cell-layout">
-            <div className="score-main-wrap">
-              <span className="score-numeric font-extrabold" style={{ color: coin.statusColor }}>
-                {coin.score}<small className="score-max">/25</small>
-              </span>
-              <span className="status-label-pill" style={{ color: coin.statusColor, borderColor: `${coin.statusColor}40`, backgroundColor: `${coin.statusColor}12` }}>
-                {coin.status}
-              </span>
-            </div>
-            <button
-              className="btn-expand-chevron"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggle();
-              }}
-              aria-label={isExpanded ? 'Thu gọn' : 'Mở rộng chi tiết'}
-            >
-              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
           </div>
         </td>
       </tr>
@@ -474,6 +540,17 @@ function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
 function ScannerMobileCard({ coin, rank, isExpanded, onToggle, direction }) {
   const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
 
+  const statusBadgeClass = coin.status === SETUP_STATES.READY ? 'badge-emerald'
+    : coin.status === SETUP_STATES.FORMING ? 'badge-cyan'
+    : coin.status === SETUP_STATES.WATCH ? 'badge-indigo'
+    : coin.status === SETUP_STATES.EXTENDED ? 'badge-amber'
+    : coin.status === SETUP_STATES.INVALIDATED ? 'badge-rose'
+    : 'badge-slate';
+
+  const setupName = coin.setupType === SETUP_TYPES.PULLBACK ? 'Pullback Tiếp Diễn'
+    : coin.setupType === SETUP_TYPES.BREAKOUT_RETEST ? 'Breakout–Retest'
+    : 'Theo Dõi Setup';
+
   return (
     <div className={`scanner-mobile-card glass-panel rank-${rank} ${isExpanded ? 'is-expanded' : ''}`}>
       <div className="mobile-card-header" onClick={onToggle}>
@@ -489,13 +566,13 @@ function ScannerMobileCard({ coin, rank, isExpanded, onToggle, direction }) {
             >
               {coin.baseAsset}<span className="pair-sub">/USDT</span>
             </a>
-            <span className="price-num">{fmtPrice(coin.price)}</span>
+            <span className="price-num">{fmtPrice(coin.latestFuturesPrice || coin.currentPrice || coin.price)}</span>
           </div>
         </div>
 
         <div className="mobile-card-score-group">
-          <span className="score-numeric font-extrabold" style={{ color: coin.statusColor }}>
-            {coin.score}<small>/25</small>
+          <span className={`conclusion-badge ${statusBadgeClass}`}>
+            {coin.status}
           </span>
           <span className={`change-pill ${coin.priceChange24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             {fmtPct(coin.priceChange24h)}
@@ -507,15 +584,22 @@ function ScannerMobileCard({ coin, rank, isExpanded, onToggle, direction }) {
       </div>
 
       <div className="mobile-conclusions-strip" onClick={onToggle}>
-        <span className={`conclusion-badge ${coin.strengthScore >= 6.0 ? 'badge-emerald' : 'badge-cyan'}`}>
-          {coin.strengthState}
-        </span>
-        <span className={`conclusion-badge ${coin.flowState === 'FLOW CONFIRMED' ? 'badge-emerald' : 'badge-slate'}`}>
-          {coin.flowState}
-        </span>
-        <span className={`conclusion-badge ${coin.qualityScore >= 4.0 ? 'badge-emerald' : 'badge-cyan'}`}>
-          {coin.qualityState}
-        </span>
+        <span className="mobile-setup-tag">{setupName}</span>
+        {coin.confirmedAt && (
+          <span className="mobile-confirmed-tag">
+            Xác nhận {new Date(coin.confirmedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+        {coin.rewardRiskRatio && (
+          <span className="mobile-rr-tag font-bold text-emerald-400">
+            R:R {coin.rewardRiskRatio}R
+          </span>
+        )}
+        {coin.distanceAtr !== null && (
+          <span className="mobile-atr-tag">
+            {coin.distanceAtr} ATR
+          </span>
+        )}
       </div>
 
       {coin.paContext?.statement && (
@@ -539,6 +623,7 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
   const [scanResult, setScanResult] = useState({
     topBuy: [],
     topSell: [],
+    allCandidates: { buy: [], sell: [] },
     scannedCount: 0,
     qualifiedCount: 0,
     errorState: null,
@@ -547,6 +632,7 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
   const [isScanning, setIsScanning] = useState(false);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(300);
   const [activeDirection, setActiveDirection] = useState('BUY'); // 'BUY' | 'SELL'
+  const [activeStatusFilter, setActiveStatusFilter] = useState('ALL'); // 'ALL' | 'READY' | 'FORMING' | 'WATCH' | 'EXTENDED'
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
 
@@ -597,9 +683,27 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const currentCoins = activeDirection === 'BUY'
-    ? (scanResult.topBuy || [])
-    : (scanResult.topSell || []);
+  const rawDirectionCoins = useMemo(() => {
+    return activeDirection === 'BUY'
+      ? (scanResult.allCandidates?.buy?.length ? scanResult.allCandidates.buy : scanResult.topBuy || [])
+      : (scanResult.allCandidates?.sell?.length ? scanResult.allCandidates.sell : scanResult.topSell || []);
+  }, [activeDirection, scanResult.allCandidates, scanResult.topBuy, scanResult.topSell]);
+
+  const filteredCoins = useMemo(() => {
+    if (activeStatusFilter === 'ALL') {
+      // Default: top 5 prioritized results
+      return activeDirection === 'BUY' ? (scanResult.topBuy || []) : (scanResult.topSell || []);
+    }
+    return rawDirectionCoins.filter(coin => coin.status === activeStatusFilter).slice(0, 5);
+  }, [rawDirectionCoins, activeStatusFilter, activeDirection, scanResult.topBuy, scanResult.topSell]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { ALL: rawDirectionCoins.length, READY: 0, FORMING: 0, WATCH: 0, EXTENDED: 0, INVALIDATED: 0 };
+    rawDirectionCoins.forEach(coin => {
+      if (counts[coin.status] !== undefined) counts[coin.status] += 1;
+    });
+    return counts;
+  }, [rawDirectionCoins]);
 
   const toggleRowExpansion = (symbol) => {
     setExpandedSymbol(prev => (prev === symbol ? null : symbol));
@@ -626,9 +730,9 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
       return (
         <div className="scanner-empty-state">
           <AlertTriangle size={36} className="text-amber-400" />
-          <h4 className="empty-heading font-bold">Độ phủ dữ liệu chưa đủ an toàn</h4>
+          <h4 className="empty-heading font-bold">Độ phủ dữ liệu hoặc Benchmark BTC chưa đủ</h4>
           <p className="empty-sub">
-            Chưa đủ số nến 4H / 1D hoặc dữ liệu phái sinh để xếp hạng shortlist khách quan.
+            Thiếu nến 1H/4H/Daily đóng hoặc BTC benchmark để đo lường sức mạnh và setup an toàn.
           </p>
         </div>
       );
@@ -638,10 +742,10 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
       <div className="scanner-empty-state">
         <ShieldCheck size={36} className="text-amber-400" />
         <h4 className="empty-heading font-bold">
-          Không có coin nào đạt Quality Gate cho chiều {activeDirection === 'BUY' ? 'MUA (LONG)' : 'BÁN (SHORT)'} lúc này.
+          Không có coin nào đạt cửa lọc sức mạnh cho chiều {activeDirection === 'BUY' ? 'LONG (MUA)' : 'SHORT (BÁN)'} lúc này.
         </h4>
         <p className="empty-sub">
-          Bộ lọc giữ kỷ luật: Chỉ shortlist khi vượt <strong>Score &ge; 14/25, Directional Edge &ge; 3, MCap &ge; $1B, VolCV &le; 1.3, Spread &le; 0.15%</strong> để bảo vệ vốn.
+          Bộ lọc v8 giữ kỷ luật: Chỉ hiển thị coin nằm trong <strong>Top 30% RS vs BTC, EMA21 &gt; EMA55 có độ dốc, giá đóng 4H trên EMA21, và RS24H bền vững &ge; 3/4 nến 1H</strong> để loại trừ tín hiệu nhiễu.
         </p>
       </div>
     );
@@ -658,11 +762,11 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
             </span>
             <div>
               <div className="scanner-title-with-tag">
-                <h2 className="scanner-title">SCANNER SHORTLIST — 2 CHIỀU (BUY &amp; SELL)</h2>
-                <span className="algo-version-tag">v7</span>
+                <h2 className="scanner-title">SCANNER V8 — LỌC SỨC MẠNH TRƯỚC, XÁC NHẬN SETUP SAU</h2>
+                <span className="algo-version-tag">v8</span>
               </div>
               <p className="scanner-subtitle">
-                Xếp hạng shortlist 4 Pillars: <strong>Quality · RS vs BTC · Flow CVD/OI · Market Context</strong>. Không đưa entry/stop — chỉ gợi ý coin đáng xem để mở chart.
+                Đa khung thời gian: <strong>1D bối cảnh · 4H xu hướng · 1H xác nhận setup</strong>. Hai mẫu hình: Pullback tiếp diễn &amp; Breakout–Retest.
               </p>
             </div>
           </div>
@@ -672,7 +776,7 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
           <button
             className="btn-methodology-drawer"
             onClick={() => setIsMethodologyOpen(true)}
-            title="Xem cách scanner hoạt động"
+            title="Xem cách scanner v8 hoạt động"
           >
             <HelpCircle size={14} className="text-cyan-400" />
             <span>Cách Scanner Hoạt Động</span>
@@ -689,12 +793,12 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
             disabled={isScanning}
           >
             <RefreshCw size={14} className={isScanning ? 'spin' : ''} />
-            <span>{isScanning ? 'Đang Xếp Hạng...' : 'Quét Ngay'}</span>
+            <span>{isScanning ? 'Đang Lọc Setup...' : 'Quét Ngay'}</span>
           </button>
         </div>
       </div>
 
-      {/* ── DUAL DIRECTION TAB SWITCHER & UNIVERSE STATS ───────────────────── */}
+      {/* ── DUAL DIRECTION TAB SWITCHER & STATUS FILTERS ───────────────────── */}
       <div className="scanner-direction-bar">
         <div className="direction-toggle-group">
           <button
@@ -704,7 +808,7 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
             <TrendingUp size={16} />
             <span>TOP LONG (BUY)</span>
             <span className="chip-count buy">
-              {scanResult.topBuy?.length || 0} COIN
+              {scanResult.topBuy?.length || 0}
             </span>
           </button>
 
@@ -715,9 +819,50 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
             <TrendingDown size={16} />
             <span>TOP SHORT (SELL)</span>
             <span className="chip-count sell">
-              {scanResult.topSell?.length || 0} COIN
+              {scanResult.topSell?.length || 0}
             </span>
           </button>
+        </div>
+
+        <div className="status-filter-group">
+          <button
+            className={`filter-chip ${activeStatusFilter === 'ALL' ? 'active' : ''}`}
+            onClick={() => setActiveStatusFilter('ALL')}
+          >
+            Ưu Tiên Top 5
+          </button>
+          <button
+            className={`filter-chip chip-ready ${activeStatusFilter === 'READY' ? 'active' : ''}`}
+            onClick={() => setActiveStatusFilter('READY')}
+          >
+            READY ({statusCounts.READY})
+          </button>
+          <button
+            className={`filter-chip chip-forming ${activeStatusFilter === 'FORMING' ? 'active' : ''}`}
+            onClick={() => setActiveStatusFilter('FORMING')}
+          >
+            FORMING ({statusCounts.FORMING})
+          </button>
+          <button
+            className={`filter-chip chip-watch ${activeStatusFilter === 'WATCH' ? 'active' : ''}`}
+            onClick={() => setActiveStatusFilter('WATCH')}
+          >
+            WATCH ({statusCounts.WATCH})
+          </button>
+          <button
+            className={`filter-chip chip-extended ${activeStatusFilter === 'EXTENDED' ? 'active' : ''}`}
+            onClick={() => setActiveStatusFilter('EXTENDED')}
+          >
+            EXTENDED ({statusCounts.EXTENDED})
+          </button>
+          {statusCounts.INVALIDATED > 0 && (
+            <button
+              className={`filter-chip chip-invalidated ${activeStatusFilter === 'INVALIDATED' ? 'active' : ''}`}
+              onClick={() => setActiveStatusFilter('INVALIDATED')}
+            >
+              INVALIDATED ({statusCounts.INVALIDATED})
+            </button>
+          )}
         </div>
 
         <div className="scanner-universe-info">
@@ -726,7 +871,7 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
           </span>
           <span className="stat-separator">·</span>
           <span className="universe-stat-item">
-            Qua Quality Gate: <strong>{scanResult.qualifiedCount || 0} coin</strong>
+            Quality Gate: <strong>{scanResult.qualifiedCount || 0} coin</strong>
           </span>
           {scanResult.timestamp > 0 && (
             <>
@@ -739,14 +884,14 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
         </div>
       </div>
 
-      {/* ── MAIN SCANNER TABLE (DESKTOP 5-COLUMNS) ─────────────────────────── */}
+      {/* ── MAIN SCANNER TABLE (DESKTOP 5-COLUMNS: Coin · Strength · Setup · R:R · Flow) ── */}
       <div className="scanner-table-wrapper glass-panel hide-on-mobile">
-        {isScanning && currentCoins.length === 0 ? (
+        {isScanning && filteredCoins.length === 0 ? (
           <div className="scanner-skeleton-loader">
             <RefreshCw size={24} className="spin text-amber-400" />
-            <p className="loading-text">Đang đo lường 4 Pillars (Quality, RS vs BTC, Flow CVD, Multi-TF Context)...</p>
+            <p className="loading-text">Đang kiểm tra 5 cửa lọc: Dữ liệu · Thanh khoản · Sức mạnh · Setup · Vị trí giá...</p>
           </div>
-        ) : currentCoins.length === 0 ? (
+        ) : filteredCoins.length === 0 ? (
           renderEmptyOrErrorState()
         ) : (
           <div className="table-responsive-scroll">
@@ -754,14 +899,14 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
               <thead>
                 <tr>
                   <th style={{ width: '22%' }}>COIN</th>
-                  <th style={{ width: '22%' }}>STRENGTH</th>
-                  <th style={{ width: '22%' }}>FLOW</th>
-                  <th style={{ width: '18%' }}>QUALITY</th>
-                  <th style={{ width: '16%' }}>RANK SCORE</th>
+                  <th style={{ width: '20%' }}>STRENGTH</th>
+                  <th style={{ width: '24%' }}>SETUP / TRẠNG THÁI</th>
+                  <th style={{ width: '18%' }}>KHOẢNG TRỐNG / R:R</th>
+                  <th style={{ width: '16%' }}>FLOW</th>
                 </tr>
               </thead>
               <tbody>
-                {currentCoins.map((coin, index) => (
+                {filteredCoins.map((coin, index) => (
                   <ScannerRow
                     key={coin.symbol}
                     coin={coin}
@@ -779,16 +924,16 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
 
       {/* ── MOBILE COMPACT CARDS VIEW ──────────────────────────────────────── */}
       <div className="scanner-mobile-container hide-on-desktop">
-        {isScanning && currentCoins.length === 0 ? (
+        {isScanning && filteredCoins.length === 0 ? (
           <div className="scanner-skeleton-loader glass-panel">
             <RefreshCw size={24} className="spin text-amber-400" />
-            <p className="loading-text">Đang lọc shortlist 4 pillars...</p>
+            <p className="loading-text">Đang lọc setup Scanner v8...</p>
           </div>
-        ) : currentCoins.length === 0 ? (
+        ) : filteredCoins.length === 0 ? (
           <div className="glass-panel">{renderEmptyOrErrorState()}</div>
         ) : (
           <div className="mobile-cards-list">
-            {currentCoins.map((coin, index) => (
+            {filteredCoins.map((coin, index) => (
               <ScannerMobileCard
                 key={coin.symbol}
                 coin={coin}
@@ -810,4 +955,3 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
     </div>
   );
 }
-

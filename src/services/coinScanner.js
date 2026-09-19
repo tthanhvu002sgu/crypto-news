@@ -1,15 +1,41 @@
 import axios from 'axios';
+import {
+  SCANNER_VERSION,
+  CONFIG_VERSION,
+  RESULT_CACHE_TTL,
+  UNIVERSE_CACHE_TTL,
+  RESULT_CACHE_KEY,
+  UNIVERSE_CACHE_KEY,
+  EXCLUDED_SYMBOLS,
+  SETUP_STATES,
+  DIRECTIONS,
+} from './scannerConfig.js';
+import {
+  evaluateDataIntegrity,
+  passesQualityGate,
+  evaluateStrength,
+  calculateRsDurability,
+} from './scannerStrength.js';
+import {
+  calculateATR,
+  evaluateSetups,
+} from './scannerSetups.js';
+import {
+  saveScannerEvents,
+  updatePendingEventOutcomes,
+} from './scannerEventStore.js';
 
-const ALGORITHM_VERSION = 'v7';
-const RESULT_CACHE_TTL = 5 * 60 * 1000;
-const UNIVERSE_CACHE_TTL = 4 * 60 * 60 * 1000;
-const RESULT_CACHE_KEY = `crypto_scanner_${ALGORITHM_VERSION}_results`;
-const UNIVERSE_CACHE_KEY = `crypto_scanner_${ALGORITHM_VERSION}_universe`;
-
-const EXCLUDED_SYMBOLS = new Set([
-  'USDTUSDC', 'BUSDUSDT', 'TUSDUSDT', 'FDUSDUSDT', 'USDCUSDT', 'DAIUSDT',
-  'WBTCUSDT', 'WETHUSDT', 'WEETHUSDT', 'WBETHUSDT', 'BTCUSDT', 'ETHUSDT',
-]);
+export {
+  SCANNER_VERSION,
+  CONFIG_VERSION,
+  RESULT_CACHE_KEY,
+  UNIVERSE_CACHE_KEY,
+  passesQualityGate,
+  evaluateDataIntegrity,
+  evaluateStrength,
+  calculateRsDurability,
+  updatePendingEventOutcomes,
+};
 
 const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const number = (value, fallback = null) => finite(value) ? Number(value) : fallback;
@@ -68,17 +94,7 @@ export function calculateRSI(closes, period = 14) {
   return round(100 - (100 / (1 + avgGain / avgLoss)), 1);
 }
 
-export function calculateATR(klines, period = 14) {
-  if (!Array.isArray(klines) || klines.length <= period) return null;
-  const trueRanges = [];
-  for (let i = 1; i < klines.length; i += 1) {
-    const high = number(klines[i][2], 0);
-    const low = number(klines[i][3], 0);
-    const previousClose = number(klines[i - 1][4], 0);
-    trueRanges.push(Math.max(high - low, Math.abs(high - previousClose), Math.abs(low - previousClose)));
-  }
-  return average(trueRanges.slice(-period));
-}
+export { calculateATR };
 
 function closedKlines(klines, now = Date.now()) {
   return (Array.isArray(klines) ? klines : []).filter(kline => number(kline?.[6], Infinity) <= now);
@@ -228,7 +244,6 @@ async function fetchUniverseMetric(symbol) {
  * - 30 Core Liquidity pairs (top 24h volume)
  * - 10 Top Positive Momentum pairs (top 24h gainers)
  * - 10 Top Negative Momentum pairs (top 24h losers)
- * Deduplicates and preserves all quota candidates without losing momentum coins to final sort.
  */
 export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
   try {
@@ -240,7 +255,6 @@ export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
 
     if (liquidPairs.length === 0) return [];
 
-    // Quotas: 30 Core liquid + 10 Top gainers + 10 Top losers
     const coreLiquid = [...liquidPairs]
       .sort((a, b) => number(b.quoteVolume, 0) - number(a.quoteVolume, 0))
       .slice(0, 30);
@@ -273,7 +287,6 @@ export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
     });
     storageSet(UNIVERSE_CACHE_KEY, { timestamp: Date.now(), metrics: [...cachedMetrics.values()] });
 
-    // Map each candidate while preserving momentum membership
     return candidates.map(item => {
       const metric = cachedMetrics.get(item.symbol);
       if (!metric) return null;
@@ -298,16 +311,55 @@ export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
   }
 }
 
-async function getBenchmarkReturns() {
+/**
+ * Aligns coin klines and BTC klines bar-for-bar by exact openTime timestamp.
+ * Eliminates period mismatch and off-by-one skew when calculating RS or durability across hour boundaries.
+ */
+export function alignSeriesByTimestamp(coinKlines, btcKlines) {
+  if (!Array.isArray(coinKlines) || !Array.isArray(btcKlines)) {
+    return { coinCloses: [], btcCloses: [] };
+  }
+  const btcMap = new Map();
+  btcKlines.forEach(k => {
+    const openTime = number(k[0]);
+    const closePrice = number(k[4]);
+    if (openTime !== null && closePrice !== null) {
+      btcMap.set(openTime, closePrice);
+    }
+  });
+
+  const coinCloses = [];
+  const btcCloses = [];
+
+  coinKlines.forEach(k => {
+    const openTime = number(k[0]);
+    const coinClose = number(k[4]);
+    if (openTime !== null && coinClose !== null && btcMap.has(openTime)) {
+      coinCloses.push(coinClose);
+      btcCloses.push(btcMap.get(openTime));
+    }
+  });
+
+  return { coinCloses, btcCloses };
+}
+
+export async function getBenchmarkReturns(scanTime = Date.now()) {
   try {
     const response = await axios.get('https://api.binance.com/api/v3/klines', {
-      params: { symbol: 'BTCUSDT', interval: '1h', limit: 30 },
+      params: { symbol: 'BTCUSDT', interval: '1h', limit: 60 },
       timeout: 5000,
     });
-    const closes = closedKlines(response.data).map(kline => number(kline[4], 0));
-    return { h1: pctReturn(closes, 1), h4: pctReturn(closes, 4), h24: pctReturn(closes, 24) };
+    const completed = closedKlines(response.data, scanTime);
+    const closes = completed.map(kline => number(kline[4], 0));
+    return {
+      h1: pctReturn(closes, 1),
+      h4: pctReturn(closes, 4),
+      h24: pctReturn(closes, 24),
+      btc1hCloses: closes,
+      btc1hKlines: completed,
+    };
   } catch {
-    return { h1: null, h4: null, h24: null };
+    return { h1: null, h4: null, h24: null, btc1hCloses: [], btc1hKlines: [] };
   }
 }
 
@@ -325,7 +377,6 @@ async function optionalGet(url, config) {
  * Evaluates 4H Structure, Price Position, Breakout Quality, and Volatility State.
  */
 export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema55, emaSlopePct, breakoutAtr, breakdownAtr, atr1h, volumeZ1h) {
-  // 1. Structure 4H
   let structure4h = 'UNCLEAR';
   if (ema21 && ema55) {
     const emaDiffPct = Math.abs(ema21 - ema55) / ema55;
@@ -341,7 +392,6 @@ export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema5
     }
   }
 
-  // 2. Price Position relative to range & EMA
   let pricePosition = 'IN_RANGE';
   const currentPrice = closes1h?.at(-1) || closes4h?.at(-1) || 0;
   const distanceToEmaPct = ema21 > 0 ? ((currentPrice / ema21) - 1) * 100 : 0;
@@ -356,7 +406,6 @@ export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema5
     pricePosition = 'NEAR_RANGE_LOW';
   }
 
-  // 3. Breakout Quality
   let breakoutQuality = 'NONE';
   if (pricePosition === 'BREAKOUT' && Array.isArray(spot1h) && spot1h.length >= 2) {
     const lastCandle = spot1h.at(-1);
@@ -376,7 +425,6 @@ export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema5
     }
   }
 
-  // 4. Volatility State
   let volatilityState = 'NORMAL';
   if (volumeZ1h !== null) {
     if (volumeZ1h >= 1.5) {
@@ -386,7 +434,6 @@ export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema5
     }
   }
 
-  // 5. Generate concise summary statement (Tiếng Việt)
   const structText = structure4h === 'UPTREND' ? '4H uptrend'
     : structure4h === 'DOWNTREND' ? '4H downtrend'
     : structure4h === 'RANGE' ? '4H range đi ngang' : '4H cấu trúc chưa rõ';
@@ -397,7 +444,7 @@ export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema5
     : pricePosition === 'NEAR_RANGE_LOW' ? 'gần range low' : 'dao động trong range';
 
   const volText = volatilityState === 'EXPANSION' ? 'volume mở rộng'
-    : volatilityState === 'COMPRESSION' ? 'biên độ nén chặt' : 'vol bình thường';
+    : volatilityState === 'COMPRESSION' ? 'biên độ co hẹp' : 'vol bình thường';
 
   const statement = `${structText} · ${posText} · ${volText}`;
 
@@ -410,136 +457,6 @@ export function detectPriceActionContext(closes4h, closes1h, spot1h, ema21, ema5
   };
 }
 
-async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark) {
-  try {
-    const [spot4hRaw, spot1hRaw, dailyRaw, futures1hRaw, oiRaw] = await Promise.all([
-      optionalGet('https://api.binance.com/api/v3/klines', {
-        params: { symbol: pair.symbol, interval: '4h', limit: 150 }, timeout: 6000,
-      }),
-      optionalGet('https://api.binance.com/api/v3/klines', {
-        params: { symbol: pair.symbol, interval: '1h', limit: 170 }, timeout: 6000,
-      }),
-      optionalGet('https://api.binance.com/api/v3/klines', {
-        params: { symbol: pair.symbol, interval: '1d', limit: 61 }, timeout: 6000,
-      }),
-      optionalGet('https://fapi.binance.com/fapi/v1/klines', {
-        params: { symbol: pair.symbol, interval: '1h', limit: 50 }, timeout: 6000,
-      }),
-      optionalGet('https://fapi.binance.com/futures/data/openInterestHist', {
-        params: { symbol: pair.symbol, period: '1h', limit: 25 }, timeout: 6000,
-      }),
-    ]);
-
-    const spot4h = closedKlines(spot4hRaw);
-    const spot1h = closedKlines(spot1hRaw);
-    const futures1h = closedKlines(futures1hRaw);
-    if (spot4h.length < 60 || spot1h.length < 48 || futures1h.length < 48) return null;
-
-    const closes4h = spot4h.map(kline => number(kline[4], 0));
-    const closes1h = spot1h.map(kline => number(kline[4], 0));
-    const ema21 = calculateEMA(closes4h, 21);
-    const ema55 = calculateEMA(closes4h, 55);
-    const previousEma21 = calculateEMA(closes4h.slice(0, -3), 21);
-    const emaSlopePct = previousEma21 > 0 ? ((ema21 / previousEma21) - 1) * 100 : null;
-
-    let dailyEma21 = null;
-    let dailyEma55 = null;
-    let isDailyUptrend = null;
-    const daily = closedKlines(dailyRaw);
-    if (daily.length >= 55) {
-      const dailyCloses = daily.map(kline => number(kline[4], 0));
-      dailyEma21 = calculateEMA(dailyCloses, 21);
-      dailyEma55 = calculateEMA(dailyCloses, 55);
-      isDailyUptrend = dailyEma21 > dailyEma55;
-    }
-
-    const spotFlow = calculateKlineFlowStats(spot1h, 24);
-    const futuresFlow = calculateKlineFlowStats(futures1h, 24);
-    const previousFuturesFlow = calculateKlineFlowStats(futures1h, 24, 24);
-    if (!spotFlow || !futuresFlow || !previousFuturesFlow) return null;
-
-    const recentVolume = number(spot1h.at(-1)?.[7], 0);
-    const historicalVolumes = spot1h.slice(-169, -1).map(kline => number(kline[7], 0));
-    const volumeZ1h = zScore(recentVolume, historicalVolumes);
-    const atr1h = calculateATR(spot1h.slice(-40), 14);
-    const previousRange = spot1h.slice(-21, -1);
-    const priorHigh = Math.max(...previousRange.map(kline => number(kline[2], 0)));
-    const priorLow = Math.min(...previousRange.map(kline => number(kline[3], 0)));
-    const currentClose = closes1h.at(-1);
-    const breakoutAtr = atr1h > 0 ? (currentClose - priorHigh) / atr1h : null;
-    const breakdownAtr = atr1h > 0 ? (priorLow - currentClose) / atr1h : null;
-
-    let oiChange4h = null;
-    let oiChange24h = null;
-    if (Array.isArray(oiRaw) && oiRaw.length >= 5) {
-      const values = oiRaw.map(item => number(item.sumOpenInterest)).filter(finite);
-      const latest = values.at(-1);
-      const change = hours => values.length > hours && values.at(-(hours + 1)) > 0
-        ? ((latest / values.at(-(hours + 1))) - 1) * 100
-        : null;
-      oiChange4h = change(4);
-      oiChange24h = change(24);
-    }
-
-    const funding = fundingMap.get(pair.symbol) || {};
-    const book = futuresBookMap.get(pair.symbol);
-    const returns = {
-      h1: pctReturn(closes1h, 1),
-      h4: pctReturn(closes1h, 4),
-      h24: pctReturn(closes1h, 24),
-    };
-    const relativeStrength = {
-      h1: finite(benchmark.h1) ? returns.h1 - benchmark.h1 : null,
-      h4: finite(benchmark.h4) ? returns.h4 - benchmark.h4 : null,
-      h24: finite(benchmark.h24) ? returns.h24 - benchmark.h24 : null,
-    };
-    const availableOptional = [isDailyUptrend, oiChange4h, funding.fundingRate, funding.basisPct]
-      .filter(value => value !== null && value !== undefined).length;
-
-    const paContext = detectPriceActionContext(
-      closes4h, closes1h, spot1h, ema21, ema55, emaSlopePct, breakoutAtr, breakdownAtr, atr1h, volumeZ1h,
-    );
-
-    return {
-      ...pair,
-      currentPrice: currentClose,
-      ema21: round(ema21, 8),
-      ema55: round(ema55, 8),
-      emaSlopePct: round(emaSlopePct, 3),
-      dailyEma21: round(dailyEma21, 8),
-      dailyEma55: round(dailyEma55, 8),
-      isDailyUptrend,
-      rsi14: calculateRSI(closes4h, 14),
-      return1h: round(returns.h1, 3),
-      return4h: round(returns.h4, 3),
-      return24h: round(returns.h24, 3),
-      relativeStrength1h: round(relativeStrength.h1, 3),
-      relativeStrength4h: round(relativeStrength.h4, 3),
-      relativeStrength24h: round(relativeStrength.h24, 3),
-      volumeZ1h: round(volumeZ1h, 2),
-      breakoutAtr: round(breakoutAtr, 2),
-      breakdownAtr: round(breakdownAtr, 2),
-      cvd24h: Math.round(futuresFlow.cvd),
-      futuresCvdRatio24h: round(futuresFlow.cvdRatio * 100, 3),
-      spotCvd24h: Math.round(spotFlow.cvd),
-      spotCvdRatio24h: round(spotFlow.cvdRatio * 100, 3),
-      cvdTrendRatio: round((futuresFlow.cvdRatio - previousFuturesFlow.cvdRatio) * 100, 3),
-      takerBuyRatio: round(futuresFlow.takerBuyRatio, 1),
-      oiChange4h: round(oiChange4h, 2),
-      oiChange24h: round(oiChange24h, 2),
-      hasFutures: true,
-      spreadPct: round(book?.spreadPct, 4),
-      fundingRate: round(funding.fundingRate, 6),
-      basisPct: round(funding.basisPct, 4),
-      dataCoverage: round((5 + availableOptional) / 9, 2),
-      paContext,
-    };
-  } catch (error) {
-    console.warn(`[Scanner] Skipping ${pair.symbol}:`, error.message);
-    return null;
-  }
-}
-
 function addPoint(state, pillar, points, label, type = 'neutral') {
   state[pillar] = (state[pillar] || 0) + points;
   state.tags.push({ label, pts: points, type, pillar });
@@ -547,13 +464,9 @@ function addPoint(state, pillar, points, label, type = 'neutral') {
 }
 
 function directionValue(direction, value) {
-  return direction === 'BUY' ? value : -value;
+  return (direction === 'BUY' || direction === DIRECTIONS.LONG) ? value : -value;
 }
 
-/**
- * Pillar 1: Quality (Max 5.0)
- * Liquidity, spread, volume consistency, and data coverage.
- */
 function scoreQuality(coin, state) {
   if (coin.vol30d >= 1_000_000_000) addPoint(state, 'quality', 1.25, 'Vol 30D > $1B', 'emerald');
   else if (coin.vol30d >= 300_000_000) addPoint(state, 'quality', 0.75, 'Vol 30D > $300M', 'emerald');
@@ -573,13 +486,10 @@ function scoreQuality(coin, state) {
   state.quality = clamp(state.quality, 0, 5.0);
 }
 
-/**
- * Pillar 2: Relative Strength vs BTC (Max 8.0)
- * Multi-horizon relative performance & breakout momentum vs BTC.
- */
 function scoreRelativeStrength(coin, direction, state) {
   const sign = value => directionValue(direction, number(value, 0));
-  const percentile = direction === 'BUY' ? coin.strengthPercentile : 100 - coin.strengthPercentile;
+  const isBuy = direction === 'BUY' || direction === DIRECTIONS.LONG;
+  const percentile = isBuy ? coin.strengthPercentile : 100 - coin.strengthPercentile;
 
   if (percentile >= 85) addPoint(state, 'relativeStrength', 3.0, `RS vs BTC Top ${100 - Math.round(percentile)}%`, 'emerald');
   else if (percentile >= 70) addPoint(state, 'relativeStrength', 2.0, 'RS vs BTC mạnh', 'emerald');
@@ -589,16 +499,15 @@ function scoreRelativeStrength(coin, direction, state) {
   if (sign(coin.relativeStrength24h) > 1.0) addPoint(state, 'relativeStrength', 1.5, 'Outperform BTC 24H', 'emerald');
   if (sign(coin.relativeStrength1h) > 0.2) addPoint(state, 'relativeStrength', 1.0, 'Outperform BTC 1H', 'cyan');
 
-  const breakout = direction === 'BUY' ? coin.breakoutAtr : coin.breakdownAtr;
-  if (breakout >= 0.25) addPoint(state, 'relativeStrength', 1.0, `Breakout ${breakout} ATR`, 'amber');
+  // Breakout is deliberately excluded from strength in v8, but kept if called with explicit legacy flag
+  if (coin._includeLegacyBreakoutScore) {
+    const breakout = isBuy ? coin.breakoutAtr : coin.breakdownAtr;
+    if (breakout >= 0.25) addPoint(state, 'relativeStrength', 1.0, `Breakout ${breakout} ATR`, 'amber');
+  }
 
   state.relativeStrength = clamp(state.relativeStrength, 0, 8.0);
 }
 
-/**
- * Pillar 3: Flow (Max 6.0)
- * Spot/Futures taker flow agreement, CVD acceleration, and OI confirmation.
- */
 function scoreFlow(coin, direction, state) {
   const sign = value => directionValue(direction, number(value, 0));
 
@@ -615,12 +524,9 @@ function scoreFlow(coin, direction, state) {
   state.flow = clamp(state.flow, 0, 6.0);
 }
 
-/**
- * Pillar 4: Market Context & Crowding (Max 6.0)
- * 4H/1D Trend alignment, RSI sweet spot, macro context, and crowding penalties.
- */
 function scoreMarketContext(coin, direction, state, macroContext = {}) {
   const sign = value => directionValue(direction, number(value, 0));
+  const isBuy = direction === 'BUY' || direction === DIRECTIONS.LONG;
 
   const trend4h = coin.ema21 > coin.ema55 ? 1 : -1;
   if (directionValue(direction, trend4h) > 0) addPoint(state, 'marketContext', 1.5, 'EMA 4H cùng chiều', 'emerald');
@@ -630,7 +536,7 @@ function scoreMarketContext(coin, direction, state, macroContext = {}) {
     addPoint(state, 'marketContext', 1.5, 'Daily Trend 1D xác nhận', 'emerald');
   }
 
-  const rsiGood = direction === 'BUY'
+  const rsiGood = isBuy
     ? coin.rsi14 >= 42 && coin.rsi14 <= 68
     : coin.rsi14 >= 32 && coin.rsi14 <= 58;
   if (rsiGood) addPoint(state, 'marketContext', 1.0, `RSI vùng cân bằng (${coin.rsi14})`, 'cyan');
@@ -644,7 +550,6 @@ function scoreMarketContext(coin, direction, state, macroContext = {}) {
     addPoint(state, 'marketContext', 0.75, 'ETF Inflow cùng chiều', 'cyan');
   }
 
-  // Crowding / Extension Penalties
   const funding = sign(coin.fundingRate);
   const basis = sign(coin.basisPct);
   if (funding > 0.04 || basis > 0.25) {
@@ -662,10 +567,10 @@ function scoreMarketContext(coin, direction, state, macroContext = {}) {
   state.marketContext = clamp(state.marketContext, 0, 6.0);
 }
 
-/** Detects potential risks, crowding and data warnings */
 function detectWarnings(coin, direction) {
   const warnings = [];
   const sign = value => directionValue(direction, number(value, 0));
+  const isBuy = direction === 'BUY' || direction === DIRECTIONS.LONG;
 
   if (sign(coin.fundingRate) > 0.04) {
     warnings.push({ code: 'CROWDED_FUNDING', message: `Funding Rate cao (${coin.fundingRate}%), rủi ro crowded trade`, level: 'amber' });
@@ -689,9 +594,9 @@ function detectWarnings(coin, direction) {
     warnings.push({ code: 'PARTIAL_DATA', message: `Độ phủ dữ liệu ${Math.round(coin.dataCoverage * 100)}%`, level: 'neutral' });
   }
 
-  if (direction === 'BUY' && coin.rsi14 > 72) {
+  if (isBuy && coin.rsi14 > 72) {
     warnings.push({ code: 'RSI_OVERBOUGHT', message: `RSI 4H quá mua (${coin.rsi14})`, level: 'amber' });
-  } else if (direction === 'SELL' && coin.rsi14 < 28) {
+  } else if (!isBuy && coin.rsi14 < 28) {
     warnings.push({ code: 'RSI_OVERSOLD', message: `RSI 4H quá bán (${coin.rsi14})`, level: 'amber' });
   }
 
@@ -704,20 +609,20 @@ function detectWarnings(coin, direction) {
 }
 
 export function scoreCoinDirection(coin, direction, macroContext = {}) {
+  const normalizedDirection = (direction === 'BUY' || direction === DIRECTIONS.LONG) ? 'BUY' : 'SELL';
   const state = { quality: 0, relativeStrength: 0, flow: 0, marketContext: 0, tags: [], breakdown: [] };
   scoreQuality(coin, state);
-  scoreRelativeStrength(coin, direction, state);
-  scoreFlow(coin, direction, state);
-  scoreMarketContext(coin, direction, state, macroContext);
+  scoreRelativeStrength(coin, normalizedDirection, state);
+  scoreFlow(coin, normalizedDirection, state);
+  scoreMarketContext(coin, normalizedDirection, state, macroContext);
 
   const totalScore = round(state.quality + state.relativeStrength + state.flow + state.marketContext, 1);
 
-  // States per pillar
   const qualityState = state.quality >= 4.0 ? 'LIQUID' : state.quality >= 3.0 ? 'ACCEPTABLE' : 'BORDERLINE';
   const strengthState = state.relativeStrength >= 6.0 ? 'STRONG' : state.relativeStrength >= 3.5 ? 'NEUTRAL' : 'WEAK';
 
-  const signFuturesFlow = directionValue(direction, number(coin.futuresCvdRatio24h, 0));
-  const signSpotFlow = directionValue(direction, number(coin.spotCvdRatio24h, 0));
+  const signFuturesFlow = directionValue(normalizedDirection, number(coin.futuresCvdRatio24h, 0));
+  const signSpotFlow = directionValue(normalizedDirection, number(coin.spotCvdRatio24h, 0));
   let flowState = 'NEUTRAL';
   if (signFuturesFlow > 1.0 && signSpotFlow > 0.5) flowState = 'FLOW CONFIRMED';
   else if (signFuturesFlow > 0 || signSpotFlow > 0) flowState = 'PARTIAL FLOW';
@@ -725,7 +630,6 @@ export function scoreCoinDirection(coin, direction, macroContext = {}) {
 
   const trendState = coin.paContext?.structure4h || (coin.ema21 > coin.ema55 ? 'UPTREND' : 'DOWNTREND');
 
-  // Status mapping
   let status = 'THEO DÕI THÊM';
   let statusColor = '#94a3b8';
   if (totalScore >= 18.0) {
@@ -736,18 +640,17 @@ export function scoreCoinDirection(coin, direction, macroContext = {}) {
     statusColor = '#0284c7';
   }
 
-  // Top 3 positive reasons sorted by point contribution
   const positiveReasons = [...state.tags]
     .filter(tag => tag.pts > 0)
     .sort((a, b) => b.pts - a.pts)
     .slice(0, 3)
     .map(tag => tag.label);
 
-  const warnings = detectWarnings(coin, direction);
+  const warnings = detectWarnings(coin, normalizedDirection);
 
   return {
     ...coin,
-    direction,
+    direction: normalizedDirection,
     score: totalScore,
     qualityScore: round(state.quality, 1),
     strengthScore: round(state.relativeStrength, 1),
@@ -775,20 +678,6 @@ export function scoreCoinDirection(coin, direction, macroContext = {}) {
 export const scoreCoinBuy = (coin, macroContext = {}) => scoreCoinDirection(coin, 'BUY', macroContext);
 export const scoreCoinSell = (coin, macroContext = {}) => scoreCoinDirection(coin, 'SELL', macroContext);
 
-export function passesQualityGate(coin) {
-  return coin.hasFutures
-    && finite(coin.marketCap) && coin.marketCap >= 1_000_000_000
-    && finite(coin.spreadPct) && coin.spreadPct <= 0.15
-    && finite(coin.volCV) && coin.volCV <= 1.3
-    && coin.vol30d >= 100_000_000
-    && coin.dataCoverage >= 0.65;
-}
-
-function macroSignature(context) {
-  const triState = value => value === true ? '1' : value === false ? '0' : 'u';
-  return `${triState(context.isBtcBullish)}:${triState(context.isEtfInflow)}`;
-}
-
 function assignStrengthPercentiles(coins) {
   const ranked = coins.map(coin => ({
     coin,
@@ -808,10 +697,6 @@ function assignStrengthPercentiles(coins) {
   });
 }
 
-/**
- * Diagnostic utility to evaluate shortlist ranking quality against forward price outcomes.
- * Does not optimize thresholds on the same observed fold.
- */
 export function evaluateShortlistUtility(snapshot, forwardOutcomes = {}) {
   if (!snapshot || !Array.isArray(snapshot.topBuy)) return null;
 
@@ -843,122 +728,492 @@ export function evaluateShortlistUtility(snapshot, forwardOutcomes = {}) {
   };
 }
 
+async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark, scanTime = Date.now()) {
+  try {
+    const [spot4hRaw, spot1hRaw, dailyRaw, futures1hRaw, oiRaw] = await Promise.all([
+      optionalGet('https://api.binance.com/api/v3/klines', {
+        params: { symbol: pair.symbol, interval: '4h', limit: 150 }, timeout: 6000,
+      }),
+      optionalGet('https://api.binance.com/api/v3/klines', {
+        params: { symbol: pair.symbol, interval: '1h', limit: 170 }, timeout: 6000,
+      }),
+      optionalGet('https://api.binance.com/api/v3/klines', {
+        params: { symbol: pair.symbol, interval: '1d', limit: 61 }, timeout: 6000,
+      }),
+      optionalGet('https://fapi.binance.com/fapi/v1/klines', {
+        params: { symbol: pair.symbol, interval: '1h', limit: 50 }, timeout: 6000,
+      }),
+      optionalGet('https://fapi.binance.com/futures/data/openInterestHist', {
+        params: { symbol: pair.symbol, period: '1h', limit: 25 }, timeout: 6000,
+      }),
+    ]);
+
+    const spot4h = closedKlines(spot4hRaw, scanTime);
+    const spot1h = closedKlines(spot1hRaw, scanTime);
+    const futures1h = closedKlines(futures1hRaw, scanTime);
+    if (spot4h.length < 60 || spot1h.length < 48 || futures1h.length < 48) return null;
+
+    const closes4h = spot4h.map(kline => number(kline[4], 0));
+    const closes1h = spot1h.map(kline => number(kline[4], 0));
+    const ema21 = calculateEMA(closes4h, 21);
+    const ema55 = calculateEMA(closes4h, 55);
+    const previousEma21 = calculateEMA(closes4h.slice(0, -3), 21);
+    const emaSlopePct = previousEma21 > 0 ? ((ema21 / previousEma21) - 1) * 100 : null;
+
+    let dailyEma21 = null;
+    let dailyEma55 = null;
+    let isDailyUptrend = null;
+    const daily = closedKlines(dailyRaw, scanTime);
+    if (daily.length >= 55) {
+      const dailyCloses = daily.map(kline => number(kline[4], 0));
+      dailyEma21 = calculateEMA(dailyCloses, 21);
+      dailyEma55 = calculateEMA(dailyCloses, 55);
+      isDailyUptrend = dailyEma21 > dailyEma55;
+    }
+
+    const spotFlow = calculateKlineFlowStats(spot1h, 24);
+    const futuresFlow = calculateKlineFlowStats(futures1h, 24);
+    const previousFuturesFlow = calculateKlineFlowStats(futures1h, 24, 24);
+    if (!spotFlow || !futuresFlow || !previousFuturesFlow) return null;
+
+    const recentVolume = number(spot1h.at(-1)?.[7], 0);
+    const historicalVolumes = spot1h.slice(-169, -1).map(kline => number(kline[7], 0));
+    const volumeZ1h = zScore(recentVolume, historicalVolumes);
+    const atr1h = calculateATR(spot1h.slice(-40), 14);
+    const previousRange = spot1h.slice(-21, -1);
+    const priorHigh = Math.max(...previousRange.map(kline => number(kline[2], 0)));
+    const priorLow = Math.min(...previousRange.map(kline => number(kline[3], 0)));
+    const spotClose = closes1h.at(-1);
+    const breakoutAtr = atr1h > 0 ? (spotClose - priorHigh) / atr1h : null;
+    const breakdownAtr = atr1h > 0 ? (priorLow - spotClose) / atr1h : null;
+
+    let oiChange4h = null;
+    let oiChange24h = null;
+    if (Array.isArray(oiRaw) && oiRaw.length >= 5) {
+      const values = oiRaw.map(item => number(item.sumOpenInterest)).filter(finite);
+      const latest = values.at(-1);
+      const change = hours => values.length > hours && values.at(-(hours + 1)) > 0
+        ? ((latest / values.at(-(hours + 1))) - 1) * 100
+        : null;
+      oiChange4h = change(4);
+      oiChange24h = change(24);
+    }
+
+    const funding = fundingMap.get(pair.symbol) || {};
+    const book = futuresBookMap.get(pair.symbol);
+    const latestRawFutures = Array.isArray(futures1hRaw) && futures1hRaw.length > 0 ? number(futures1hRaw.at(-1)?.[4]) : null;
+    const latestFuturesPrice = book && book.bidPrice > 0 && book.askPrice > 0
+      ? (book.bidPrice + book.askPrice) / 2
+      : (latestRawFutures ?? (futures1h.length > 0 ? number(futures1h.at(-1)?.[4]) : null));
+
+    // Synchronize coin with BTC by matching candle openTime timestamps
+    const { coinCloses: alignedCoin1h, btcCloses: alignedBtc1h } = alignSeriesByTimestamp(
+      spot1h,
+      benchmark?.btc1hKlines || [],
+    );
+
+    const useAligned = alignedCoin1h.length >= 25 && alignedBtc1h.length >= 25;
+    const refCoinCloses = useAligned ? alignedCoin1h : closes1h;
+    const returns = {
+      h1: pctReturn(refCoinCloses, 1),
+      h4: pctReturn(refCoinCloses, 4),
+      h24: pctReturn(refCoinCloses, 24),
+    };
+
+    const btcReturns = useAligned ? {
+      h1: pctReturn(alignedBtc1h, 1),
+      h4: pctReturn(alignedBtc1h, 4),
+      h24: pctReturn(alignedBtc1h, 24),
+    } : {
+      h1: benchmark?.h1 ?? null,
+      h4: benchmark?.h4 ?? null,
+      h24: benchmark?.h24 ?? null,
+    };
+
+    const relativeStrength = {
+      h1: finite(btcReturns.h1) ? returns.h1 - btcReturns.h1 : null,
+      h4: finite(btcReturns.h4) ? returns.h4 - btcReturns.h4 : null,
+      h24: finite(btcReturns.h24) ? returns.h24 - btcReturns.h24 : null,
+    };
+    const availableOptional = [isDailyUptrend, oiChange4h, funding.fundingRate, funding.basisPct]
+      .filter(value => value !== null && value !== undefined).length;
+
+    const paContext = detectPriceActionContext(
+      closes4h, closes1h, spot1h, ema21, ema55, emaSlopePct, breakoutAtr, breakdownAtr, atr1h, volumeZ1h,
+    );
+
+    const currentPrice = latestFuturesPrice ?? spotClose;
+
+    return {
+      ...pair,
+      currentPrice,
+      latestFuturesPrice,
+      spotClose,
+      close4h: closes4h.at(-1),
+      closes4h,
+      ema21: round(ema21, 8),
+      ema55: round(ema55, 8),
+      emaSlopePct: round(emaSlopePct, 3),
+      dailyEma21: round(dailyEma21, 8),
+      dailyEma55: round(dailyEma55, 8),
+      isDailyUptrend,
+      rsi14: calculateRSI(closes4h, 14),
+      return1h: round(returns.h1, 3),
+      return4h: round(returns.h4, 3),
+      return24h: round(returns.h24, 3),
+      relativeStrength1h: round(relativeStrength.h1, 3),
+      relativeStrength4h: round(relativeStrength.h4, 3),
+      relativeStrength24h: round(relativeStrength.h24, 3),
+      volumeZ1h: round(volumeZ1h, 2),
+      breakoutAtr: round(breakoutAtr, 2),
+      breakdownAtr: round(breakdownAtr, 2),
+      cvd24h: Math.round(futuresFlow.cvd),
+      futuresCvdRatio24h: round(futuresFlow.cvdRatio * 100, 3),
+      spotCvd24h: Math.round(spotFlow.cvd),
+      spotCvdRatio24h: round(spotFlow.cvdRatio * 100, 3),
+      cvdTrendRatio: round((futuresFlow.cvdRatio - previousFuturesFlow.cvdRatio) * 100, 3),
+      takerBuyRatio: round(futuresFlow.takerBuyRatio, 1),
+      oiChange4h: round(oiChange4h, 2),
+      oiChange24h: round(oiChange24h, 2),
+      hasFutures: true,
+      spreadPct: round(book?.spreadPct, 4),
+      fundingRate: round(funding.fundingRate, 6),
+      basisPct: round(funding.basisPct, 4),
+      dataCoverage: round((5 + availableOptional) / 9, 2),
+      paContext,
+      spot1hKlines: spot1h,
+      futures1hKlines: futures1h,
+      closes1h,
+      alignedCoin1h: useAligned ? alignedCoin1h : null,
+      alignedBtc1h: useAligned ? alignedBtc1h : null,
+    };
+  } catch (error) {
+    console.warn(`[Scanner] Skipping ${pair.symbol}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Builds candidate record for a specific direction (LONG or SHORT) in Scanner v8.
+ */
+function buildV8Candidate(coin, direction, benchmark, macroContext = {}) {
+  const isLong = direction === DIRECTIONS.LONG || direction === 'BUY';
+  const targetDir = isLong ? DIRECTIONS.LONG : DIRECTIONS.SHORT;
+  const legacyDir = isLong ? 'BUY' : 'SELL';
+
+  // 1. Evaluate Strength (Mandatory Gate) with aligned series
+  const alignedCoinSeries = coin.alignedCoin1h ?? coin.closes1h ?? [];
+  const alignedBtcSeries = coin.alignedBtc1h ?? benchmark?.btc1hCloses ?? [];
+  const strength = evaluateStrength(
+    coin,
+    targetDir,
+    benchmark,
+    alignedCoinSeries,
+    alignedBtcSeries,
+  );
+
+  // 2. Evaluate Setups
+  // Prefer futures 1H klines for trigger/invalidation/ATR when available
+  const setupKlines = (Array.isArray(coin.futures1hKlines) && coin.futures1hKlines.length >= 25)
+    ? coin.futures1hKlines
+    : coin.spot1hKlines;
+
+  const latestFuturesPrice = coin.latestFuturesPrice ?? coin.currentPrice;
+  const setup = evaluateSetups(setupKlines, targetDir, strength, {
+    latestPrice: latestFuturesPrice,
+    symbol: coin.symbol,
+  });
+
+  // 3. Score for display / reference
+  const scoredLegacy = scoreCoinDirection(coin, legacyDir, macroContext);
+
+  // Status mapping
+  const status = setup.status; // READY, FORMING, WATCH, EXTENDED, DATA_INCOMPLETE
+  let statusColor = '#94a3b8';
+  if (status === SETUP_STATES.READY) statusColor = '#10b981';
+  else if (status === SETUP_STATES.FORMING) statusColor = '#06b6d4';
+  else if (status === SETUP_STATES.WATCH) statusColor = '#6366f1';
+  else if (status === SETUP_STATES.EXTENDED) statusColor = '#f59e0b';
+  else if (status === SETUP_STATES.DATA_INCOMPLETE) statusColor = '#94a3b8';
+
+  const setupDetails = setup.details || {};
+
+  return {
+    ...scoredLegacy,
+    ...coin,
+    direction: targetDir,
+    scannerVersion: SCANNER_VERSION,
+    status,
+    statusColor,
+    setupType: setup.setupType,
+    setupReason: setup.reason,
+    setupState: status,
+    confirmationPrice: setupDetails.confirmationPrice ?? null,
+    latestFuturesPrice,
+    currentPrice: latestFuturesPrice,
+    spotClose: coin.spotClose ?? null,
+    triggerPrice: setupDetails.triggerPrice ?? null,
+    triggerZone: setupDetails.triggerZone ?? null,
+    invalidationLevel: setupDetails.invalidationLevel ?? null,
+    targetLevel: setupDetails.targetLevel ?? null,
+    distanceAtr: setupDetails.distanceAtr ?? null,
+    rewardRiskRatio: setupDetails.rewardRiskRatio ?? null,
+    rewardRiskNet: setupDetails.rewardRiskNet ?? null,
+    formedAt: setupDetails.formedAt ?? null,
+    confirmedAt: setupDetails.confirmedAt ?? null,
+    strengthPassed: strength.passed,
+    strengthStatus: strength.status,
+    strengthPercentile: strength.strengthPercentile,
+    is1dAligned: strength.is1dAligned,
+    failedConditions: strength.failedConditions || [],
+    durabilityCount: strength.durabilityCount,
+    durabilityTotal: strength.durabilityTotal,
+    durabilityPassed: strength.durabilityPassed,
+    durabilityValues: strength.durabilityValues,
+    rs1hDescription: strength.rs1hDescription,
+    contraction: setup.contraction ?? null,
+    atr1h: setup.atr1h ?? null,
+    positiveReasons: [
+      ...strength.reasons,
+      ...(setup.reason ? [setup.reason] : []),
+      ...scoredLegacy.positiveReasons,
+    ].slice(0, 4),
+  };
+}
+
+let activeScanPromise = null;
+let latestScanRequestId = 0;
+
 export async function runFullScan(macroContext = {}, forceRefresh = false) {
-  const signature = macroSignature(macroContext);
+  const triState = v => v === true ? '1' : v === false ? '0' : 'u';
+  const signature = `${triState(macroContext.isBtcBullish)}:${triState(macroContext.isEtfInflow)}`;
+
   const cached = storageGet(RESULT_CACHE_KEY);
-  if (!forceRefresh && cached?.algorithmVersion === ALGORITHM_VERSION
+  if (!forceRefresh && cached?.algorithmVersion === SCANNER_VERSION
     && cached?.macroSignature === signature
     && Date.now() - cached.timestamp < RESULT_CACHE_TTL) {
     return cached;
   }
 
-  let errorState = null;
-  let marketCapMap = new Map();
-  let futuresBookMap = new Map();
-  let fundingMap = new Map();
-  let benchmark = { h1: null, h4: null, h24: null };
-
-  try {
-    const fetched = await Promise.all([
-      getMarketCapMap(),
-      getFuturesBookTickers(),
-      getFundingRatesMap(),
-      getBenchmarkReturns(),
-    ]);
-    marketCapMap = fetched[0];
-    futuresBookMap = fetched[1];
-    fundingMap = fetched[2];
-    benchmark = fetched[3];
-  } catch (error) {
-    console.error('[Scanner] Failed fetching auxiliary data:', error);
-    errorState = 'PROVIDER_UNAVAILABLE';
+  if (activeScanPromise && !forceRefresh) {
+    return activeScanPromise;
   }
 
-  const universe = await getTop30dVolumePairs(marketCapMap, 50);
-  if (!universe || universe.length === 0) {
-    if (!errorState) errorState = 'PROVIDER_UNAVAILABLE';
-    const emptyResult = {
-      algorithmVersion: ALGORITHM_VERSION,
+  const requestId = ++latestScanRequestId;
+
+  activeScanPromise = (async () => {
+    let errorState = null;
+    let marketCapMap = new Map();
+    let futuresBookMap = new Map();
+    let fundingMap = new Map();
+    let benchmark = { h1: null, h4: null, h24: null, btc1hCloses: [] };
+
+    const scanTime = Date.now();
+
+    try {
+      const fetched = await Promise.all([
+        getMarketCapMap(),
+        getFuturesBookTickers(),
+        getFundingRatesMap(),
+        getBenchmarkReturns(scanTime),
+      ]);
+      marketCapMap = fetched[0];
+      futuresBookMap = fetched[1];
+      fundingMap = fetched[2];
+      benchmark = fetched[3];
+    } catch (error) {
+      console.error('[Scanner] Failed fetching auxiliary data:', error);
+      errorState = 'PROVIDER_UNAVAILABLE';
+    }
+
+    if (!finite(benchmark.h1) || !finite(benchmark.h4) || !finite(benchmark.h24)) {
+      errorState = 'INSUFFICIENT_COVERAGE';
+    }
+
+    const universe = await getTop30dVolumePairs(marketCapMap, 50);
+    if (!universe || universe.length === 0) {
+      if (!errorState) errorState = 'PROVIDER_UNAVAILABLE';
+      const emptyResult = {
+        algorithmVersion: SCANNER_VERSION,
+        macroSignature: signature,
+        topBuy: [],
+        topSell: [],
+        allCandidates: { buy: [], sell: [] },
+        scannedCount: 0,
+        analyzedCount: 0,
+        qualifiedCount: 0,
+        errorState,
+        timestamp: Date.now(),
+        dataFreshness: {
+          timestamp: Date.now(),
+          oldestSource: 'Binance REST',
+          ageSeconds: 0,
+          coverageAvg: 0,
+        },
+      };
+      return emptyResult;
+    }
+
+    const analyzed = (await mapConcurrent(
+      universe,
+      5,
+      pair => analyzeCoin(pair, futuresBookMap, fundingMap, benchmark, scanTime),
+    )).filter(Boolean);
+
+    if (analyzed.length < universe.length * 0.4) {
+      errorState = 'INSUFFICIENT_COVERAGE';
+    }
+
+    // Gate 2: Quality Gate
+    const qualified = analyzed.filter(passesQualityGate);
+    assignStrengthPercentiles(qualified);
+
+    // Build v8 Candidates for LONG and SHORT
+    const longCandidates = qualified
+      .map(coin => buildV8Candidate(coin, DIRECTIONS.LONG, benchmark, macroContext))
+      .filter(Boolean);
+
+    const shortCandidates = qualified
+      .map(coin => buildV8Candidate(coin, DIRECTIONS.SHORT, benchmark, macroContext))
+      .filter(Boolean);
+
+    // Sorting function prioritizing READY > FORMING > WATCH > EXTENDED
+    const v8Sorter = (a, b) => {
+      const stateOrder = {
+        [SETUP_STATES.READY]: 1,
+        [SETUP_STATES.FORMING]: 2,
+        [SETUP_STATES.WATCH]: 3,
+        [SETUP_STATES.EXTENDED]: 4,
+        [SETUP_STATES.INVALIDATED]: 5,
+        [SETUP_STATES.EXPIRED]: 6,
+        [SETUP_STATES.DATA_INCOMPLETE]: 7,
+      };
+
+      const orderDiff = (stateOrder[a.status] || 99) - (stateOrder[b.status] || 99);
+      if (orderDiff !== 0) return orderDiff;
+
+      // Within READY / FORMING: prefer candidate with defined R:R over undefined
+      const aHasRR = a.rewardRiskRatio !== null;
+      const bHasRR = b.rewardRiskRatio !== null;
+      if (aHasRR && !bHasRR) return -1;
+      if (!aHasRR && bHasRR) return 1;
+
+      // Higher R:R ratio first
+      if (aHasRR && bHasRR && b.rewardRiskRatio !== a.rewardRiskRatio) {
+        return b.rewardRiskRatio - a.rewardRiskRatio;
+      }
+
+      // Proximity in ATR (closest to trigger)
+      if (a.distanceAtr !== null && b.distanceAtr !== null && a.distanceAtr !== b.distanceAtr) {
+        return a.distanceAtr - b.distanceAtr;
+      }
+
+      // Fallback: 30D volume
+      return (b.vol30d || 0) - (a.vol30d || 0);
+    };
+
+    // Filter to candidates that passed Strength (or are in WATCH/FORMING/READY/EXTENDED)
+    // Weak coins are explicitly excluded!
+    const strongLongs = longCandidates.filter(c => c.strengthPassed);
+    const strongShorts = shortCandidates.filter(c => c.strengthPassed);
+
+    const topBuy = strongLongs.sort(v8Sorter).slice(0, 5);
+    const topSell = strongShorts.sort(v8Sorter).slice(0, 5);
+
+    if (!errorState && qualified.length === 0) {
+      errorState = 'NO_CANDIDATES';
+    }
+
+    const avgCoverage = analyzed.length > 0
+      ? round(average(analyzed.map(c => c.dataCoverage || 0)), 2)
+      : 0;
+
+    const result = {
+      algorithmVersion: SCANNER_VERSION,
       macroSignature: signature,
-      topBuy: [],
-      topSell: [],
-      scannedCount: 0,
-      analyzedCount: 0,
-      qualifiedCount: 0,
+      topBuy,
+      topSell,
+      allCandidates: {
+        buy: strongLongs,
+        sell: strongShorts,
+      },
+      scannedCount: universe.length,
+      analyzedCount: analyzed.length,
+      qualifiedCount: qualified.length,
+      rejectedMissingMarketCap: analyzed.filter(coin => !finite(coin.marketCap)).length,
       errorState,
       timestamp: Date.now(),
       dataFreshness: {
         timestamp: Date.now(),
-        oldestSource: 'Binance REST',
+        oldestSource: 'Binance 1H/4H Klines',
         ageSeconds: 0,
-        coverageAvg: 0,
+        coverageAvg: avgCoverage,
       },
     };
-    return emptyResult;
+
+    // Stale request protection
+    if (requestId !== latestScanRequestId) {
+      return result;
+    }
+
+    // Persist to cache and IndexedDB research store
+    storageSet(RESULT_CACHE_KEY, result);
+
+    try {
+      const eventsToSave = [
+        ...topBuy.map(c => ({
+          symbol: c.symbol,
+          direction: DIRECTIONS.LONG,
+          setupType: c.setupType,
+          status: c.status,
+          formedAt: c.formedAt,
+          confirmedAt: c.confirmedAt,
+          triggerPrice: c.triggerPrice,
+          invalidationLevel: c.invalidationLevel,
+          targetLevel: c.targetLevel,
+          distanceAtr: c.distanceAtr,
+          rewardRiskRatio: c.rewardRiskRatio,
+          rewardRiskNet: c.rewardRiskNet,
+          currentPrice: c.currentPrice,
+          confirmationPrice: c.confirmationPrice,
+          strengthPercentile: c.strengthPercentile,
+          relativeStrength4h: c.relativeStrength4h,
+          relativeStrength24h: c.relativeStrength24h,
+          reason: c.setupReason || c.status,
+        })),
+        ...topSell.map(c => ({
+          symbol: c.symbol,
+          direction: DIRECTIONS.SHORT,
+          setupType: c.setupType,
+          status: c.status,
+          formedAt: c.formedAt,
+          confirmedAt: c.confirmedAt,
+          triggerPrice: c.triggerPrice,
+          invalidationLevel: c.invalidationLevel,
+          targetLevel: c.targetLevel,
+          distanceAtr: c.distanceAtr,
+          rewardRiskRatio: c.rewardRiskRatio,
+          rewardRiskNet: c.rewardRiskNet,
+          currentPrice: c.currentPrice,
+          confirmationPrice: c.confirmationPrice,
+          strengthPercentile: c.strengthPercentile,
+          relativeStrength4h: c.relativeStrength4h,
+          relativeStrength24h: c.relativeStrength24h,
+          reason: c.setupReason || c.status,
+        })),
+      ];
+      await saveScannerEvents(eventsToSave);
+      updatePendingEventOutcomes().catch(() => {});
+    } catch {
+      // Event storage is auxiliary research; should never fail scan
+    }
+
+    return result;
+  })();
+
+  try {
+    return await activeScanPromise;
+  } finally {
+    activeScanPromise = null;
   }
-
-  const analyzed = (await mapConcurrent(
-    universe,
-    5,
-    pair => analyzeCoin(pair, futuresBookMap, fundingMap, benchmark),
-  )).filter(Boolean);
-
-  if (analyzed.length < universe.length * 0.4) {
-    errorState = 'INSUFFICIENT_COVERAGE';
-  }
-
-  const qualified = analyzed.filter(passesQualityGate);
-  assignStrengthPercentiles(qualified);
-
-  const scored = qualified.map(coin => {
-    const buy = scoreCoinBuy(coin, macroContext);
-    const sell = scoreCoinSell(coin, macroContext);
-    return {
-      buy: { ...buy, directionalEdge: round(buy.score - sell.score, 1) },
-      sell: { ...sell, directionalEdge: round(sell.score - buy.score, 1) },
-    };
-  });
-
-  const sorter = (a, b) => b.score - a.score
-    || b.directionalEdge - a.directionalEdge
-    || b.vol30d - a.vol30d;
-
-  const topBuy = scored.map(item => item.buy)
-    .filter(coin => coin.score >= 14 && coin.directionalEdge >= 3)
-    .sort(sorter).slice(0, 5);
-
-  const topSell = scored.map(item => item.sell)
-    .filter(coin => coin.score >= 14 && coin.directionalEdge >= 3)
-    .sort(sorter).slice(0, 5);
-
-  if (!errorState && qualified.length === 0) {
-    errorState = 'NO_CANDIDATES';
-  }
-
-  const avgCoverage = analyzed.length > 0
-    ? round(average(analyzed.map(c => c.dataCoverage || 0)), 2)
-    : 0;
-
-  const result = {
-    algorithmVersion: ALGORITHM_VERSION,
-    macroSignature: signature,
-    topBuy,
-    topSell,
-    scannedCount: universe.length,
-    analyzedCount: analyzed.length,
-    qualifiedCount: qualified.length,
-    rejectedMissingMarketCap: analyzed.filter(coin => !finite(coin.marketCap)).length,
-    errorState,
-    timestamp: Date.now(),
-    dataFreshness: {
-      timestamp: Date.now(),
-      oldestSource: 'Binance 4H/Daily Klines',
-      ageSeconds: 0,
-      coverageAvg: avgCoverage,
-    },
-  };
-
-  storageSet(RESULT_CACHE_KEY, result);
-  return result;
 }
-

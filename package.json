@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test:scanner": "node --test src/services/coinScanner.test.js",
+    "test:scanner": "node --test src/services/coinScanner.test.js src/services/scannerStrength.test.js src/services/scannerSetups.test.js src/services/scannerEventStore.test.js",
     "test:move": "node --test src/services/moveTrackerCore.test.js src/services/atrCalculator.test.js src/services/moveEventStore.test.js",
     "test:macro": "node --test src/services/macroDashboardEngine.test.js",
     "test:sheets": "node --test src/services/googleSheetSync.test.js",

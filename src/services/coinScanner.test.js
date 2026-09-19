@@ -7,6 +7,7 @@ import {
   passesQualityGate,
   detectPriceActionContext,
   evaluateShortlistUtility,
+  alignSeriesByTimestamp,
 } from './coinScanner.js';
 
 function kline(quoteVolume, takerBuyQuote) {
@@ -220,6 +221,37 @@ test('evaluateShortlistUtility measures Precision@5 and relative return vs BTC',
   assert.equal(utility.evaluatedCount, 3);
   assert.equal(utility.precisionAt5, 66.7); // 2 out of 3 = 66.7%
   assert.ok(utility.avgRelReturnTop5 > 0);
+});
+
+test('[P2-4] alignSeriesByTimestamp synchronizes coin and BTC klines bar-for-bar by exact openTime', () => {
+  // Coin has candles at timestamps 1000, 2000, 3000, 4000
+  const coinKlines = [
+    [1000, '10', '11', '9', '10.5'],
+    [2000, '11', '12', '10', '11.5'],
+    [3000, '12', '13', '11', '12.5'],
+    [4000, '13', '14', '12', '13.5'],
+  ];
+
+  // BTC has candles at timestamps 2000, 3000, 4000, 5000 (missing 1000, extra 5000)
+  const btcKlines = [
+    [2000, '50000', '50500', '49500', '50200'],
+    [3000, '50200', '50800', '50100', '50600'],
+    [4000, '50600', '51000', '50400', '50900'],
+    [5000, '50900', '51200', '50800', '51100'],
+  ];
+
+  const { coinCloses, btcCloses } = alignSeriesByTimestamp(coinKlines, btcKlines);
+
+  // Must align only the overlapping timestamps (2000, 3000, 4000)
+  assert.equal(coinCloses.length, 3);
+  assert.equal(btcCloses.length, 3);
+
+  assert.deepEqual(coinCloses, [11.5, 12.5, 13.5]);
+  assert.deepEqual(btcCloses, [50200, 50600, 50900]);
+
+  // Graceful empty / invalid handling
+  assert.deepEqual(alignSeriesByTimestamp([], btcKlines), { coinCloses: [], btcCloses: [] });
+  assert.deepEqual(alignSeriesByTimestamp(coinKlines, null), { coinCloses: [], btcCloses: [] });
 });
 
 
