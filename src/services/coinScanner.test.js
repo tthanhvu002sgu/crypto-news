@@ -1,6 +1,8 @@
+import axios from 'axios';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  runFullScan,
   calculateKlineFlowStats,
   scoreCoinBuy,
   scoreCoinSell,
@@ -255,3 +257,32 @@ test('[P2-4] alignSeriesByTimestamp synchronizes coin and BTC klines bar-for-bar
 });
 
 
+
+
+test('runFullScan loads auxiliary data and analyzes a qualified coin without runtime errors', async (t) => {
+  const errors = [];
+  t.mock.method(console, 'error', (...args) => errors.push(args));
+  t.mock.method(axios, 'get', async (url, config = {}) => {
+    if (url.includes('coins/markets')) return {data: [{symbol: 'SOL', market_cap: 2000000000}]};
+    if (url.includes('bookTicker')) return {data: [{symbol: 'SOLUSDT', bidPrice: '100', askPrice: '100.01'}]};
+    if (url.includes('premiumIndex')) return {data: [{symbol: 'SOLUSDT', markPrice: '100', indexPrice: '100', lastFundingRate: '0'}]};
+    if (url.includes('ticker/24hr')) return {data: [{symbol: 'SOLUSDT', quoteVolume: '100000000', lastPrice: '100', priceChangePercent: '1'}]};
+    if (url.includes('openInterestHist')) return {data: []};
+    if (url.includes('klines')) {
+      const interval = config.params.interval;
+      const ms = interval === '1d' ? 86400000 : interval === '4h' ? 14400000 : 3600000;
+      const end = Math.floor(Date.now() / ms) * ms;
+      const count = config.params.limit;
+      return {data: Array.from({length: count}, (_, i) => {
+        const time = end - (count - i) * ms;
+        return [time, '100', '101', '99', '100', '1000000', time+ms-1, '100000000', 100, '500000', '50000000'];
+      })};
+    }
+    throw new Error(`Unexpected endpoint: ${url}`);
+  });
+  const result = await runFullScan({}, true);
+  assert.deepEqual(errors, []);
+  assert.equal(result.errorState, null);
+  assert.equal(result.analyzedCount, 1);
+  assert.equal(result.qualifiedCount, 1);
+});

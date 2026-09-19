@@ -22,6 +22,8 @@ import {
 } from './scannerSetups.js';
 import {
   saveScannerEvents,
+  queryScannerEvents,
+  buildHydratedSetupRegistry,
   updatePendingEventOutcomes,
 } from './scannerEventStore.js';
 
@@ -1025,13 +1027,7 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
       fundingMap = fetched[2];
       benchmark = fetched[3];
       
-      const allEvents = fetched[4];
-      allEvents.forEach(e => {
-        if (e.status === SETUP_STATES.INVALIDATED) {
-           const key = `${e.symbol}_${e.direction}_${e.setupType}_${e.formedAt}_${e.triggerPrice}`;
-           hydratedRegistry.set(key, { invalidationLevel: e.invalidationLevel, isInvalidated: true });
-        }
-      });
+      hydratedRegistry = buildHydratedSetupRegistry(fetched[4]);
     } catch (error) {
       console.error('[Scanner] Failed fetching auxiliary data:', error);
       errorState = 'PROVIDER_UNAVAILABLE';
@@ -1172,7 +1168,7 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
 
     try {
       const eventsToSave = [
-        ...topBuy.map(c => ({
+        ...longCandidates.map(c => ({
           symbol: c.symbol,
           direction: DIRECTIONS.LONG,
           setupType: c.setupType,
@@ -1193,7 +1189,7 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
           relativeStrength24h: c.relativeStrength24h,
           reason: c.setupReason || c.status,
         })),
-        ...topSell.map(c => ({
+        ...shortCandidates.map(c => ({
           symbol: c.symbol,
           direction: DIRECTIONS.SHORT,
           setupType: c.setupType,
@@ -1215,7 +1211,7 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
           reason: c.setupReason || c.status,
         })),
       ];
-      await saveScannerEvents(eventsToSave);
+      await saveScannerEvents(eventsToSave.filter(event => event.formedAt != null));
       updatePendingEventOutcomes().catch(() => {});
     } catch {
       // Event storage is auxiliary research; should never fail scan

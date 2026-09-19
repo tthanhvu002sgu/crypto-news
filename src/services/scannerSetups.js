@@ -300,7 +300,7 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
     const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.LONG}_${SETUP_TYPES.PULLBACK}_${supportLow.time}_${round(triggerPrice, 6)}`;
     const memoryExisting = setupStateRegistry.get(setupKey);
     const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
-    const existing = memoryExisting || hydratedExisting;
+    const existing = hydratedExisting?.isInvalidated ? hydratedExisting : (memoryExisting || hydratedExisting);
 
     let setupAtr = existing?.atr;
     let invalidationLevel = existing?.invalidationLevel;
@@ -430,7 +430,7 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
   const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.SHORT}_${SETUP_TYPES.PULLBACK}_${resistanceHigh.time}_${round(triggerPrice, 6)}`;
   const memoryExisting = setupStateRegistry.get(setupKey);
   const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
-  const existing = memoryExisting || hydratedExisting;
+  const existing = hydratedExisting?.isInvalidated ? hydratedExisting : (memoryExisting || hydratedExisting);
 
   let setupAtr = existing?.atr;
   let invalidationLevel = existing?.invalidationLevel;
@@ -584,7 +584,7 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
     const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.LONG}_${SETUP_TYPES.BREAKOUT_RETEST}_${candles[breakoutIndex].closeTime}_${round(triggerPrice, 6)}`;
     const memoryExisting = setupStateRegistry.get(setupKey);
     const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
-    const existing = memoryExisting || hydratedExisting;
+    const existing = hydratedExisting?.isInvalidated ? hydratedExisting : (memoryExisting || hydratedExisting);
 
     let setupAtr = existing?.atr;
     let invalidationLevel = existing?.invalidationLevel;
@@ -773,7 +773,7 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
   const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.SHORT}_${SETUP_TYPES.BREAKOUT_RETEST}_${candles[breakdownIndex].closeTime}_${round(triggerPrice, 6)}`;
   const memoryExisting = setupStateRegistry.get(setupKey);
   const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
-  const existing = memoryExisting || hydratedExisting;
+  const existing = hydratedExisting?.isInvalidated ? hydratedExisting : (memoryExisting || hydratedExisting);
 
   let setupAtr = existing?.atr;
   let invalidationLevel = existing?.invalidationLevel;

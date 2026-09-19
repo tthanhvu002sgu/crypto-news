@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildHydratedSetupRegistry,
   saveScannerEvent,
   saveScannerEvents,
   queryScannerEvents,
@@ -463,3 +464,83 @@ test('saveScannerEvents deduplicates multiple events with the same id in one bat
 });
 
 
+
+
+test('READY invalidation survives storage, refresh and a fresh setup-engine instance', async () => {
+  const { detectPullbackSetup, __resetSetupStateRegistryForTests } = await import('./scannerSetups.js');
+  __resetSetupStateRegistryForTests();
+  const bars = [];
+  const add = (i, open, high, low, close) => bars.push({openTime: i * 3600000,
+    closeTime: (i + 1) * 3600000 - 1, open, high, low, close, quoteVolume: 7000});
+  for (let i = 0; i < 5; i++) add(i, 105-i, 106-i, 104-i, 104-i);
+  add(5, 101, 102, 98, 100);
+  for (let i = 6; i <= 14; i++) add(i, 99+i-5, 101+i-5, 98+i-5, 100+i-5);
+  add(15, 114, 118, 113, 116);
+  for (let i = 16; i <= 20; i++) add(i, 116-(i-15)*3, 117-(i-15)*3, 113-(i-15)*3, 114-(i-15)*3);
+  add(21, 99.5, 99.8, 98.2, 98.6);
+  add(22, 98.6, 100.5, 98.4, 100.2);
+  const ready = detectPullbackSetup(bars, 'LONG', 2, {symbol: 'TESTUSDT', latestPrice: 100.2});
+  assert.equal(ready.status, 'READY');
+  const event = {...ready, setupType: ready.type, symbol: 'TESTUSDT', currentPrice: 100.2};
+  await saveScannerEvent(event);
+  await saveScannerEvent({...event, status: 'INVALIDATED', currentPrice: 90});
+  let events = await queryScannerEvents();
+  assert.equal(events[0].status, 'READY');
+  assert.equal(events[0].latestStatus, 'INVALIDATED');
+  // A later stale scan must not erase the terminal invalidation flag.
+  await saveScannerEvent(event);
+  events = await queryScannerEvents();
+  assert.equal(events[0].isInvalidated, true);
+  __resetSetupStateRegistryForTests();
+  const restored = detectPullbackSetup(bars, 'LONG', 2, {
+    symbol: 'TESTUSDT', latestPrice: 100.2, hydratedRegistry: buildHydratedSetupRegistry(events),
+  });
+  assert.equal(restored.status, 'INVALIDATED');
+  __resetSetupStateRegistryForTests();
+});
+
+test('outcome fetch overlapping a scan preserves latest state and frozen setup levels', async () => {
+  const event = {symbol: 'TESTUSDT', direction: 'LONG', setupType: 'PULLBACK', market: 'FUTURES',
+    status: 'READY', formedAt: 1000, confirmedAt: 3599999, confirmationPrice: 100,
+    timestamp: 10800000, currentPrice: 102, triggerPrice: 98, invalidationLevel: 95, targetLevel: 110};
+  await saveScannerEvent(event);
+  const calls = [];
+  await updatePendingEventOutcomes({fetchCandles: async (symbol, start, market) => {
+    calls.push({symbol, start, market});
+    if (symbol === 'TESTUSDT') {
+      await saveScannerEvent({...event, status: 'INVALIDATED', timestamp: 14400000,
+        currentPrice: 94, targetLevel: 120, invalidationLevel: 90});
+    }
+    return [{open: 100, high: 111, low: 99, close: 105, closeTime: 7199999}];
+  }});
+  const [saved] = await queryScannerEvents();
+  assert.equal(saved.latestStatus, 'INVALIDATED');
+  assert.equal(saved.latestPrice, 94);
+  assert.equal(saved.isInvalidated, true);
+  assert.equal(saved.targetLevel, 110);
+  assert.equal(saved.invalidationLevel, 95);
+  assert.equal(saved.latestTargetLevel, 120);
+  assert.equal(saved.discoveredAt, 10800000);
+  assert.equal(saved.outcomes.resolution, 'TRIGGERED_WIN');
+  assert.ok(calls.every(call => call.market === 'FUTURES' && call.start === 3599999));
+});
+
+test('missing confirmation price remains null and outcomes use the frozen discovery time', async () => {
+  const event = {symbol: 'TESTUSDT', direction: 'LONG', setupType: 'PULLBACK',
+    status: 'READY', formedAt: 1000, confirmedAt: 3599999, confirmationPrice: null,
+    timestamp: 10800000, currentPrice: 102, invalidationLevel: 95, targetLevel: 110};
+  await saveScannerEvent(event);
+  await saveScannerEvent({...event, timestamp: 14400000, currentPrice: 103});
+  const calls = [];
+  await updatePendingEventOutcomes({fetchCandles: async (symbol, start) => {
+    calls.push({symbol, start});
+    return Array.from({length: 4}, (_, i) => ({open: 102, high: 104, low: 101,
+      close: 103, closeTime: start + (i + 1) * 3600000}));
+  }});
+  const [saved] = await queryScannerEvents();
+  assert.equal(saved.confirmationPrice, null);
+  assert.equal(saved.initialPrice, 102);
+  assert.equal(saved.discoveredAt, 10800000);
+  assert.ok(calls.every(call => call.start === 10800000));
+  assert.equal(saved.outcomes.return4h, 0.98);
+});

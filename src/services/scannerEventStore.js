@@ -93,6 +93,7 @@ export function normalizeEvent(event) {
     direction: event.direction,
     setupType: event.setupType || 'NONE',
     status: event.status || 'WATCH',
+    isInvalidated: event.isInvalidated === true || event.status === SETUP_STATES.INVALIDATED,
     market: event.market || 'SPOT',
     configVersion: event.configVersion || CONFIG_VERSION,
     formedAt,
@@ -128,7 +129,7 @@ export function mergeEventWithExisting(newItem, existing) {
       initialStatus: newItem.status,
       initialPrice: newItem.confirmationPrice ?? newItem.currentPrice,
       initialTimestamp: newItem.timestamp,
-      confirmationPrice: newItem.confirmationPrice ?? newItem.currentPrice,
+      confirmationPrice: newItem.confirmationPrice ?? null,
       latestStatus: newItem.status,
       latestPrice: newItem.currentPrice,
       latestDistanceAtr: newItem.distanceAtr,
@@ -163,7 +164,7 @@ export function mergeEventWithExisting(newItem, existing) {
     initialStatus = existing.initialStatus || SETUP_STATES.READY;
     initialPrice = existing.initialPrice ?? existing.confirmationPrice ?? existing.currentPrice;
     initialTimestamp = existing.initialTimestamp || existing.timestamp;
-    confirmationPrice = existing.confirmationPrice ?? existing.initialPrice ?? existing.currentPrice;
+    confirmationPrice = existing.confirmationPrice ?? null;
     confirmedAt = existing.confirmedAt || newItem.confirmedAt;
     status = SETUP_STATES.READY;
     currentPrice = initialPrice;
@@ -179,7 +180,7 @@ export function mergeEventWithExisting(newItem, existing) {
     initialStatus = SETUP_STATES.READY;
     initialPrice = newItem.confirmationPrice ?? newItem.currentPrice;
     initialTimestamp = newItem.timestamp;
-    confirmationPrice = newItem.confirmationPrice ?? newItem.currentPrice;
+    confirmationPrice = newItem.confirmationPrice ?? null;
     confirmedAt = newItem.confirmedAt || existing.confirmedAt || Date.now();
     status = SETUP_STATES.READY;
     currentPrice = initialPrice;
@@ -235,6 +236,10 @@ export function mergeEventWithExisting(newItem, existing) {
     rewardRiskRatio,
     rewardRiskNet,
     outcomes,
+    discoveredAt: wasReady ? (existing.discoveredAt || existing.timestamp)
+      : isNowReady ? newItem.discoveredAt : (existing.discoveredAt || newItem.discoveredAt),
+    isInvalidated: existing.isInvalidated === true || existing.latestStatus === SETUP_STATES.INVALIDATED
+      || existing.status === SETUP_STATES.INVALIDATED || newItem.isInvalidated === true,
     latestStatus: newItem.status,
     latestPrice: newItem.currentPrice ?? existing.latestPrice ?? existing.currentPrice,
     latestDistanceAtr: newItem.distanceAtr ?? existing.latestDistanceAtr,
@@ -265,7 +270,6 @@ export async function saveScannerEvents(events = []) {
   const uniqueList = Array.from(uniqueMap.values());
   const results = [];
   await transactionRequest('readwrite', (store, tx, resolve, reject) => {
-    let pending = uniqueList.length;
     uniqueList.forEach((item) => {
       const getReq = store.get(item.id);
       getReq.onsuccess = () => {
@@ -273,10 +277,6 @@ export async function saveScannerEvents(events = []) {
         const merged = mergeEventWithExisting(item, existing);
         store.put(cloneForStorage(merged));
         results.push(merged);
-        pending -= 1;
-        if (pending === 0) {
-          resolve(results);
-        }
       };
       getReq.onerror = () => {
         reject(getReq.error);
@@ -284,6 +284,32 @@ export async function saveScannerEvents(events = []) {
     });
   });
   return results;
+}
+
+/** Rebuild durable invalidation locks, including records written by earlier v8 builds. */
+export function buildHydratedSetupRegistry(events = []) {
+  const registry = new Map();
+  for (const event of events) {
+    if (!event.isInvalidated && event.latestStatus !== SETUP_STATES.INVALIDATED
+      && event.status !== SETUP_STATES.INVALIDATED) continue;
+    const key = `${event.symbol}_${event.direction}_${event.setupType}_${event.formedAt}_${event.triggerPrice}`;
+    registry.set(key, { invalidationLevel: event.invalidationLevel, isInvalidated: true });
+  }
+  return registry;
+}
+
+/** Patch only outcomes against the latest stored row; a network fetch may overlap a scan. */
+export async function saveScannerEventOutcome(id, outcomes) {
+  let saved = null;
+  await transactionRequest('readwrite', (store) => {
+    const request = store.get(id);
+    request.onsuccess = () => {
+      if (!request.result) return;
+      saved = { ...request.result, outcomes: cloneForStorage(outcomes), outcomesUpdatedAt: Date.now() };
+      store.put(saved);
+    };
+  });
+  return saved;
 }
 
 /**
@@ -457,7 +483,8 @@ export async function updatePendingEventOutcomes(options = {}) {
   for (const event of candidates) {
     // If confirmationPrice exists, outcome starts consistently from confirmedAt.
     // Otherwise, outcome starts from the discovery timestamp.
-    const start = event.confirmationPrice ? (event.confirmedAt || event.timestamp) : (event.discoveredAt || event.timestamp);
+    const start = event.confirmationPrice && event.confirmedAt
+      ? event.confirmedAt : (event.discoveredAt || event.timestamp);
     try {
       const [subsequentCandles, btcSubsequentCandles] = await Promise.all([
         fetcher(event.symbol, start, event.market),
@@ -466,7 +493,7 @@ export async function updatePendingEventOutcomes(options = {}) {
       if (Array.isArray(subsequentCandles) && subsequentCandles.length > 0) {
         const outcome = evaluateForwardOutcome(event, subsequentCandles, btcSubsequentCandles);
         if (outcome) {
-          const saved = await saveScannerEvent({ ...event, outcomes: outcome });
+          const saved = await saveScannerEventOutcome(event.id, outcome);
           updated.push(saved);
         }
       }
