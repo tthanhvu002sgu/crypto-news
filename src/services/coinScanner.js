@@ -896,7 +896,7 @@ async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark, scanTime
 /**
  * Builds candidate record for a specific direction (LONG or SHORT) in Scanner v8.
  */
-function buildV8Candidate(coin, direction, benchmark, macroContext = {}) {
+function buildV8Candidate(coin, direction, benchmark, macroContext = {}, hydratedRegistry = null) {
   const isLong = direction === DIRECTIONS.LONG || direction === 'BUY';
   const targetDir = isLong ? DIRECTIONS.LONG : DIRECTIONS.SHORT;
   const legacyDir = isLong ? 'BUY' : 'SELL';
@@ -922,6 +922,7 @@ function buildV8Candidate(coin, direction, benchmark, macroContext = {}) {
   const setup = evaluateSetups(setupKlines, targetDir, strength, {
     latestPrice: latestFuturesPrice,
     symbol: coin.symbol,
+    hydratedRegistry,
   });
 
   // 3. Score for display / reference
@@ -1007,6 +1008,7 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
     let futuresBookMap = new Map();
     let fundingMap = new Map();
     let benchmark = { h1: null, h4: null, h24: null, btc1hCloses: [] };
+    let hydratedRegistry = new Map();
 
     const scanTime = Date.now();
 
@@ -1016,11 +1018,20 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
         getFuturesBookTickers(),
         getFundingRatesMap(),
         getBenchmarkReturns(scanTime),
+        queryScannerEvents(),
       ]);
       marketCapMap = fetched[0];
       futuresBookMap = fetched[1];
       fundingMap = fetched[2];
       benchmark = fetched[3];
+      
+      const allEvents = fetched[4];
+      allEvents.forEach(e => {
+        if (e.status === SETUP_STATES.INVALIDATED) {
+           const key = `${e.symbol}_${e.direction}_${e.setupType}_${e.formedAt}_${e.triggerPrice}`;
+           hydratedRegistry.set(key, { invalidationLevel: e.invalidationLevel, isInvalidated: true });
+        }
+      });
     } catch (error) {
       console.error('[Scanner] Failed fetching auxiliary data:', error);
       errorState = 'PROVIDER_UNAVAILABLE';
@@ -1070,11 +1081,11 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
 
     // Build v8 Candidates for LONG and SHORT
     const longCandidates = qualified
-      .map(coin => buildV8Candidate(coin, DIRECTIONS.LONG, benchmark, macroContext))
+      .map(coin => buildV8Candidate(coin, DIRECTIONS.LONG, benchmark, macroContext, hydratedRegistry))
       .filter(Boolean);
 
     const shortCandidates = qualified
-      .map(coin => buildV8Candidate(coin, DIRECTIONS.SHORT, benchmark, macroContext))
+      .map(coin => buildV8Candidate(coin, DIRECTIONS.SHORT, benchmark, macroContext, hydratedRegistry))
       .filter(Boolean);
 
     // Sorting function prioritizing READY > FORMING > WATCH > EXTENDED
@@ -1166,6 +1177,7 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
           direction: DIRECTIONS.LONG,
           setupType: c.setupType,
           status: c.status,
+          market: c.hasFutures ? 'FUTURES' : 'SPOT',
           formedAt: c.formedAt,
           confirmedAt: c.confirmedAt,
           triggerPrice: c.triggerPrice,
@@ -1186,6 +1198,7 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
           direction: DIRECTIONS.SHORT,
           setupType: c.setupType,
           status: c.status,
+          market: c.hasFutures ? 'FUTURES' : 'SPOT',
           formedAt: c.formedAt,
           confirmedAt: c.confirmedAt,
           triggerPrice: c.triggerPrice,

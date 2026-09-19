@@ -93,9 +93,12 @@ export function normalizeEvent(event) {
     direction: event.direction,
     setupType: event.setupType || 'NONE',
     status: event.status || 'WATCH',
+    market: event.market || 'SPOT',
     configVersion: event.configVersion || CONFIG_VERSION,
     formedAt,
     confirmedAt: event.confirmedAt || null,
+    confirmationPrice: event.confirmationPrice ?? null,
+    discoveredAt: event.discoveredAt || event.timestamp || Date.now(),
     timestamp: event.timestamp || Date.now(),
     currentPrice: event.currentPrice ?? null,
     triggerPrice: event.triggerPrice ?? null,
@@ -130,6 +133,9 @@ export function mergeEventWithExisting(newItem, existing) {
       latestPrice: newItem.currentPrice,
       latestDistanceAtr: newItem.distanceAtr,
       latestReason: newItem.reason,
+      latestTriggerPrice: newItem.triggerPrice,
+      latestInvalidationLevel: newItem.invalidationLevel,
+      latestTargetLevel: newItem.targetLevel,
       updatedAt: Date.now(),
     };
   }
@@ -145,6 +151,12 @@ export function mergeEventWithExisting(newItem, existing) {
   let status;
   let currentPrice;
   let timestamp;
+  
+  let triggerPrice;
+  let invalidationLevel;
+  let targetLevel;
+  let rewardRiskRatio;
+  let rewardRiskNet;
 
   if (wasReady) {
     // Was already discovered as READY: preserve original immutable READY snapshot
@@ -156,6 +168,12 @@ export function mergeEventWithExisting(newItem, existing) {
     status = SETUP_STATES.READY;
     currentPrice = initialPrice;
     timestamp = existing.timestamp || initialTimestamp;
+    
+    triggerPrice = existing.triggerPrice;
+    invalidationLevel = existing.invalidationLevel;
+    targetLevel = existing.targetLevel;
+    rewardRiskRatio = existing.rewardRiskRatio;
+    rewardRiskNet = existing.rewardRiskNet;
   } else if (isNowReady) {
     // First transition to READY: anchor immutable snapshot to this confirmation
     initialStatus = SETUP_STATES.READY;
@@ -166,6 +184,12 @@ export function mergeEventWithExisting(newItem, existing) {
     status = SETUP_STATES.READY;
     currentPrice = initialPrice;
     timestamp = newItem.timestamp;
+
+    triggerPrice = newItem.triggerPrice ?? existing.triggerPrice;
+    invalidationLevel = newItem.invalidationLevel ?? existing.invalidationLevel;
+    targetLevel = newItem.targetLevel ?? existing.targetLevel;
+    rewardRiskRatio = newItem.rewardRiskRatio ?? existing.rewardRiskRatio;
+    rewardRiskNet = newItem.rewardRiskNet ?? existing.rewardRiskNet;
   } else {
     // Neither was READY (e.g. FORMING, WATCH)
     initialStatus = existing.initialStatus || newItem.status;
@@ -176,6 +200,12 @@ export function mergeEventWithExisting(newItem, existing) {
     status = newItem.status;
     currentPrice = newItem.currentPrice ?? existing.currentPrice;
     timestamp = existing.timestamp || newItem.timestamp;
+
+    triggerPrice = newItem.triggerPrice ?? existing.triggerPrice;
+    invalidationLevel = newItem.invalidationLevel ?? existing.invalidationLevel;
+    targetLevel = newItem.targetLevel ?? existing.targetLevel;
+    rewardRiskRatio = newItem.rewardRiskRatio ?? existing.rewardRiskRatio;
+    rewardRiskNet = newItem.rewardRiskNet ?? existing.rewardRiskNet;
   }
 
   // Preserve existing outcomes if already evaluated unless newItem has valid updated outcomes
@@ -199,11 +229,19 @@ export function mergeEventWithExisting(newItem, existing) {
     confirmationPrice,
     status,
     currentPrice,
+    triggerPrice,
+    invalidationLevel,
+    targetLevel,
+    rewardRiskRatio,
+    rewardRiskNet,
     outcomes,
     latestStatus: newItem.status,
     latestPrice: newItem.currentPrice ?? existing.latestPrice ?? existing.currentPrice,
     latestDistanceAtr: newItem.distanceAtr ?? existing.latestDistanceAtr,
     latestReason: newItem.reason || existing.latestReason,
+    latestTriggerPrice: newItem.triggerPrice ?? existing.latestTriggerPrice,
+    latestInvalidationLevel: newItem.invalidationLevel ?? existing.latestInvalidationLevel,
+    latestTargetLevel: newItem.targetLevel ?? existing.latestTargetLevel,
     updatedAt: Date.now(),
   };
 }
@@ -386,9 +424,10 @@ export async function updatePendingEventOutcomes(options = {}) {
 
   if (candidates.length === 0) return [];
 
-  const fetcher = options.fetchCandles || (async (symbol, startTime) => {
+  const fetcher = options.fetchCandles || (async (symbol, startTime, market = 'SPOT') => {
     try {
-      const resp = await axios.get('https://api.binance.com/api/v3/klines', {
+      const url = market === 'FUTURES' ? 'https://fapi.binance.com/fapi/v1/klines' : 'https://api.binance.com/api/v3/klines';
+      const resp = await axios.get(url, {
         params: { symbol, interval: '1h', startTime: startTime + 1, limit: 30 },
         timeout: 5000,
       });
@@ -406,20 +445,23 @@ export async function updatePendingEventOutcomes(options = {}) {
   });
 
   const btcCache = new Map();
-  const getBtc = async (start) => {
-    if (!btcCache.has(start)) {
-      btcCache.set(start, fetcher('BTCUSDT', start));
+  const getBtc = async (start, market = 'SPOT') => {
+    const key = `${start}_${market}`;
+    if (!btcCache.has(key)) {
+      btcCache.set(key, fetcher('BTCUSDT', start, market));
     }
-    return btcCache.get(start);
+    return btcCache.get(key);
   };
 
   const updated = [];
   for (const event of candidates) {
-    const start = event.confirmedAt || event.formedAt;
+    // If confirmationPrice exists, outcome starts consistently from confirmedAt.
+    // Otherwise, outcome starts from the discovery timestamp.
+    const start = event.confirmationPrice ? (event.confirmedAt || event.timestamp) : (event.discoveredAt || event.timestamp);
     try {
       const [subsequentCandles, btcSubsequentCandles] = await Promise.all([
-        fetcher(event.symbol, start),
-        getBtc(start),
+        fetcher(event.symbol, start, event.market),
+        getBtc(start, event.market),
       ]);
       if (Array.isArray(subsequentCandles) && subsequentCandles.length > 0) {
         const outcome = evaluateForwardOutcome(event, subsequentCandles, btcSubsequentCandles);

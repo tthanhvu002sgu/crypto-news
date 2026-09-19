@@ -298,17 +298,21 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
     const targetLevel = lastHigh.price;
 
     const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.LONG}_${SETUP_TYPES.PULLBACK}_${supportLow.time}_${round(triggerPrice, 6)}`;
-    const existing = setupStateRegistry.get(setupKey);
+    const memoryExisting = setupStateRegistry.get(setupKey);
+    const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
+    const existing = memoryExisting || hydratedExisting;
 
     let setupAtr = existing?.atr;
     let invalidationLevel = existing?.invalidationLevel;
 
-    if (!existing) {
+    if (!memoryExisting || setupAtr === undefined) {
       const formationCandles = candles.slice(0, Math.max(supportLow.index, lastHigh.index) + 1);
       const formationAtr = calculateCandlesATR(formationCandles, 14);
       setupAtr = options?.anchoredAtr ?? formationAtr ?? atr1h;
-      invalidationLevel = options?.invalidationLevel ?? round(supportLow.price - (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
-      setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false });
+      if (invalidationLevel === undefined) {
+        invalidationLevel = options?.invalidationLevel ?? round(supportLow.price - (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
+      }
+      setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: existing?.isInvalidated || false });
     }
 
     const zoneTolerance = SETUP_CONFIG.zoneToleranceAtr * setupAtr;
@@ -424,17 +428,21 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
   const targetLevel = lastLow.price;
 
   const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.SHORT}_${SETUP_TYPES.PULLBACK}_${resistanceHigh.time}_${round(triggerPrice, 6)}`;
-  const existing = setupStateRegistry.get(setupKey);
+  const memoryExisting = setupStateRegistry.get(setupKey);
+  const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
+  const existing = memoryExisting || hydratedExisting;
 
   let setupAtr = existing?.atr;
   let invalidationLevel = existing?.invalidationLevel;
 
-  if (!existing) {
+  if (!memoryExisting || setupAtr === undefined) {
     const formationCandles = candles.slice(0, Math.max(resistanceHigh.index, lastLow.index) + 1);
     const formationAtr = calculateCandlesATR(formationCandles, 14);
     setupAtr = options?.anchoredAtr ?? formationAtr ?? atr1h;
-    invalidationLevel = options?.invalidationLevel ?? round(resistanceHigh.price + (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
-    setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false });
+    if (invalidationLevel === undefined) {
+      invalidationLevel = options?.invalidationLevel ?? round(resistanceHigh.price + (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
+    }
+    setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: existing?.isInvalidated || false });
   }
 
   const zoneTolerance = SETUP_CONFIG.zoneToleranceAtr * setupAtr;
@@ -574,17 +582,21 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
 
     const triggerPrice = prior20High;
     const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.LONG}_${SETUP_TYPES.BREAKOUT_RETEST}_${candles[breakoutIndex].closeTime}_${round(triggerPrice, 6)}`;
-    const existing = setupStateRegistry.get(setupKey);
+    const memoryExisting = setupStateRegistry.get(setupKey);
+    const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
+    const existing = memoryExisting || hydratedExisting;
 
     let setupAtr = existing?.atr;
     let invalidationLevel = existing?.invalidationLevel;
 
-    if (!existing) {
+    if (!memoryExisting || setupAtr === undefined) {
       const formationCandles = candles.slice(0, breakoutIndex + 1);
       const formationAtr = calculateCandlesATR(formationCandles, 14);
       setupAtr = options?.anchoredAtr ?? formationAtr ?? atr1h;
-      invalidationLevel = options?.invalidationLevel ?? round(prior20High - (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
-      setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false });
+      if (invalidationLevel === undefined) {
+        invalidationLevel = options?.invalidationLevel ?? round(prior20High - (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
+      }
+      setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: existing?.isInvalidated || false });
     }
 
     const zoneTolerance = SETUP_CONFIG.zoneToleranceAtr * setupAtr;
@@ -759,17 +771,21 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
 
   const triggerPrice = prior20Low;
   const setupKey = `${options?.symbol ? `${options.symbol}_` : ''}${DIRECTIONS.SHORT}_${SETUP_TYPES.BREAKOUT_RETEST}_${candles[breakdownIndex].closeTime}_${round(triggerPrice, 6)}`;
-  const existing = setupStateRegistry.get(setupKey);
+  const memoryExisting = setupStateRegistry.get(setupKey);
+  const hydratedExisting = options?.hydratedRegistry?.get(setupKey);
+  const existing = memoryExisting || hydratedExisting;
 
   let setupAtr = existing?.atr;
   let invalidationLevel = existing?.invalidationLevel;
 
-  if (!existing) {
+  if (!memoryExisting || setupAtr === undefined) {
     const formationCandles = candles.slice(0, breakdownIndex + 1);
     const formationAtr = calculateCandlesATR(formationCandles, 14);
     setupAtr = options?.anchoredAtr ?? formationAtr ?? atr1h;
-    invalidationLevel = options?.invalidationLevel ?? round(prior20Low + (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
-    setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false });
+    if (invalidationLevel === undefined) {
+      invalidationLevel = options?.invalidationLevel ?? round(prior20Low + (SETUP_CONFIG.stopBufferAtr * setupAtr), 6);
+    }
+    setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: existing?.isInvalidated || false });
   }
 
   const zoneTolerance = SETUP_CONFIG.zoneToleranceAtr * setupAtr;
