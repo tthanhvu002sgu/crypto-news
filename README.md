@@ -543,6 +543,17 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Files / areas chạm:** `src/components/HftRadarTab.jsx`, `README.md`
 - **Verify:** `npm run build` pass (3.63s); hover 1 điểm hiện tooltip gộp cả hai thị trường, hai trục Y có thang độc lập.
 
+### [2026-09-26] Sửa Lỗi Menu Ẩn/Hiện Module ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS `(FIX)`
+- **Lane / Mode:** FIX & UI POLISH
+- **Tóm tắt:** Sửa lỗi nút ba chấm (`ModuleMenu`) trên panel **ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS** khi click không hiện nút "Ẩn module hiển thị" do bị kẹt và cắt bởi CSS `overflow-x: auto` bên trong toolbar. Tách `ModuleMenu` ra ngoài thanh công cụ cuộn ngang, tăng `z-index` cho dropdown, đồng thời hỗ trợ hiển thị độc lập `TargetLiquidityPanel` nếu người dùng chỉ ẩn biểu đồ AdvancedChart.
+- **Thay đổi chính:**
+  - **Tách Menu khỏi Toolbar Cuộn Ngang (`AdvancedChart.jsx` & `App.css`):** Đưa `<ModuleMenu>` ra ngoài `.advanced-chart-toolbar` vào vùng `.advanced-chart-header-actions`, loại bỏ hoàn toàn hiện tượng dropdown bị clipping hoặc tràn ẩn.
+  - **Tăng Z-Index Dropdown (`ModuleMenu.jsx`):** Nâng `zIndex: 100` cho `.module-dropdown-menu` đảm bảo nổi trên canvas biểu đồ và mọi overlay layers.
+  - **Xử Lý Hiển Thị Độc Lập Target Liquidity (`HftRadarTab.jsx`):** Khi ẩn `hft_heatmap`, component `TargetLiquidityPanel` (nếu chưa ẩn) tự động chuyển sang chế độ độc lập (`isNested={false}`) thay vì bị mất theo `AdvancedChart`.
+  - **Chuẩn Hóa Nhãn Module (`modulesConfig.js`):** Cập nhật nhãn `hft_advanced_chart` và `hft_heatmap` thành *Advanced Price Action: POC, Walls & Liquidations*.
+- **Files / areas chạm:** `src/components/AdvancedChart.jsx`, `src/components/HftRadarTab.jsx`, `src/components/ModuleMenu.jsx`, `src/config/modulesConfig.js`, `src/App.css`, `README.md`
+- **Verify:** `npm test` pass; `npm run build` pass (0 errors); click nút 3 chấm hiển thị trọn vẹn menu ẩn và ẩn/hiện chính xác.
+
 ### [2026-08-23] Nâng Cấp ADVANCED PRICE ACTION: Info Chip, Wall Aging, Alert & Crosshair Sync `(FEATURE)`
 - **Lane / Mode:** FEATURE UX/UI + WALL INTELLIGENCE
 - **Tóm tắt:** Gói nâng cấp lớn cho panel **Advanced Price Action**: (UX) info chip POC/VAH/VAL kèm % distance + trạng thái Value Area, axis label cho POC & wall mạnh nhất, hover tooltip chi tiết từng price line, wall aging theo thời gian tồn tại, gom toolbar thành nhóm [Nav] | [Overlays ▾] | 🔔 Alert | TF, alert khi giá chạm mốc; (Tính năng) phát hiện wall bị **EATEN/PULLED** kèm event feed, đồng bộ crosshair AdvancedChart → CVD Panel.

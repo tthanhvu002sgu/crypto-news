@@ -1233,151 +1233,153 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
           <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
         </h3>
-        <div className="advanced-chart-toolbar" aria-label="Chart controls">
-          {/* ── Nhóm 1: Navigation ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '8px', borderRight: '1px solid var(--border-panel)' }}>
-            <div className="advanced-chart-field" title="Khoảng cách từ nến hiện tại đến lề phải (đơn vị: số nến)">
-              <span>OFF</span>
-              <input
-                type="number"
-                value={rightOffset}
-                onChange={handleRightOffsetChange}
-                aria-label="Right offset in bars"
-                min="0" max="300"
-              />
-              <span>B</span>
+        <div className="advanced-chart-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="advanced-chart-toolbar" aria-label="Chart controls">
+            {/* ── Nhóm 1: Navigation ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '8px', borderRight: '1px solid var(--border-panel)' }}>
+              <div className="advanced-chart-field" title="Khoảng cách từ nến hiện tại đến lề phải (đơn vị: số nến)">
+                <span>OFF</span>
+                <input
+                  type="number"
+                  value={rightOffset}
+                  onChange={handleRightOffsetChange}
+                  aria-label="Right offset in bars"
+                  min="0" max="300"
+                />
+                <span>B</span>
+              </div>
+              <button
+                onClick={() => {
+                  if (chartRef.current) {
+                    chartRef.current.timeScale().scrollToRealTime();
+                  }
+                }}
+                title="Cuộn ngay đến nến mới nhất"
+                className="advanced-chart-control is-live font-mono"
+              >
+                ⏩ Latest
+              </button>
+              <button
+                onClick={() => {
+                  const nextVal = !autoScroll;
+                  setAutoScroll(nextVal);
+                  autoScrollRef.current = nextVal;
+                  if (nextVal && chartRef.current) {
+                    chartRef.current.timeScale().scrollToRealTime();
+                  }
+                }}
+                title="Tự động bám sát theo nến realtime"
+                className={`advanced-chart-control font-mono ${autoScroll ? 'is-active is-auto' : ''}`}
+              >
+                ⚡ Auto
+              </button>
             </div>
-            <button
-              onClick={() => {
-                if (chartRef.current) {
-                  chartRef.current.timeScale().scrollToRealTime();
-                }
-              }}
-              title="Cuộn ngay đến nến mới nhất"
-              className="advanced-chart-control is-live font-mono"
-            >
-              ⏩ Latest
-            </button>
-            <button
-              onClick={() => {
-                const nextVal = !autoScroll;
-                setAutoScroll(nextVal);
-                autoScrollRef.current = nextVal;
-                if (nextVal && chartRef.current) {
-                  chartRef.current.timeScale().scrollToRealTime();
-                }
-              }}
-              title="Tự động bám sát theo nến realtime"
-              className={`advanced-chart-control font-mono ${autoScroll ? 'is-active is-auto' : ''}`}
-            >
-              ⚡ Auto
-            </button>
-          </div>
 
-          {/* ── Nhóm 2: Overlays dropdown ── */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setOverlaysOpen(o => !o)}
-              title="Lớp phủ: Walls, Liq, Volume Bubbles, TPO, Wall width"
-              className={`advanced-chart-control font-mono ${overlaysOpen ? 'is-active' : ''}`}
-            >
-              ▤ Overlays ▾
-            </button>
-            {overlaysOpen && (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setOverlaysOpen(false)} />
-                <div
-                  style={{
-                    position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31,
-                    background: 'var(--bg-slate-950, #0b0e14)', border: '1px solid var(--border-panel)',
-                    borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column',
-                    gap: '8px', minWidth: '200px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                  }}
-                >
-                  <span className="font-mono" style={{ fontSize: '0.55rem', color: 'var(--text-slate-500)', fontWeight: 700 }}>OVERLAY LAYERS</span>
-                  <button
-                    onClick={() => setShowWalls(!showWalls)}
-                    title="Bật/tắt Limit Walls"
-                    className={`advanced-chart-control font-mono ${showWalls ? 'is-active is-walls' : ''}`}
-                    style={{ justifyContent: 'space-between' }}
-                  >
-                    🎯 Limit Walls {showWalls ? 'ON' : 'OFF'}
-                  </button>
-                  <button
-                    onClick={() => setShowLiq(!showLiq)}
-                    title="Bật/tắt Liquidation Zones"
-                    className={`advanced-chart-control font-mono ${showLiq ? 'is-active is-liq' : ''}`}
-                    style={{ justifyContent: 'space-between' }}
-                  >
-                    🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const val = !showBubbles;
-                      setShowBubbles(val);
-                      localStorage.setItem('hft_show_bubbles', val);
+            {/* ── Nhóm 2: Overlays dropdown ── */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setOverlaysOpen(o => !o)}
+                title="Lớp phủ: Walls, Liq, Volume Bubbles, TPO, Wall width"
+                className={`advanced-chart-control font-mono ${overlaysOpen ? 'is-active' : ''}`}
+              >
+                ▤ Overlays ▾
+              </button>
+              {overlaysOpen && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 30 }} onClick={() => setOverlaysOpen(false)} />
+                  <div
+                    style={{
+                      position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31,
+                      background: 'var(--bg-slate-950, #0b0e14)', border: '1px solid var(--border-panel)',
+                      borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column',
+                      gap: '8px', minWidth: '200px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                     }}
-                    title="Bật/tắt Volume Bubbles"
-                    className={`advanced-chart-control font-mono ${showBubbles ? 'is-active is-live' : ''}`}
-                    style={{ justifyContent: 'space-between' }}
                   >
-                    🫧 Vol Bubbles {showBubbles ? 'ON' : 'OFF'}
-                  </button>
-                  <button
-                    onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}
-                    title="Chuyển TPO: tắt, blocks, letters"
-                    className={`advanced-chart-control font-mono ${tpoMode !== 'off' ? 'is-active is-tpo' : ''}`}
-                    style={{ justifyContent: 'space-between' }}
-                  >
-                    🧩 TPO {tpoMode === 'off' ? 'OFF' : tpoMode === 'blocks' ? 'BLOCKS' : 'LETTERS'}
-                  </button>
-                  <div className="advanced-chart-field" title="Tỉ lệ % chiều rộng của vùng Limit Wall" style={{ marginTop: '2px' }}>
-                    <span>WALL W</span>
-                    <input
-                      type="number"
-                      value={wallWidth}
-                      onChange={handleWallWidthChange}
-                      aria-label="Wall width percentage"
-                      min="10" max="100"
-                    />
-                    <span>%</span>
+                    <span className="font-mono" style={{ fontSize: '0.55rem', color: 'var(--text-slate-500)', fontWeight: 700 }}>OVERLAY LAYERS</span>
+                    <button
+                      onClick={() => setShowWalls(!showWalls)}
+                      title="Bật/tắt Limit Walls"
+                      className={`advanced-chart-control font-mono ${showWalls ? 'is-active is-walls' : ''}`}
+                      style={{ justifyContent: 'space-between' }}
+                    >
+                      🎯 Limit Walls {showWalls ? 'ON' : 'OFF'}
+                    </button>
+                    <button
+                      onClick={() => setShowLiq(!showLiq)}
+                      title="Bật/tắt Liquidation Zones"
+                      className={`advanced-chart-control font-mono ${showLiq ? 'is-active is-liq' : ''}`}
+                      style={{ justifyContent: 'space-between' }}
+                    >
+                      🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const val = !showBubbles;
+                        setShowBubbles(val);
+                        localStorage.setItem('hft_show_bubbles', val);
+                      }}
+                      title="Bật/tắt Volume Bubbles"
+                      className={`advanced-chart-control font-mono ${showBubbles ? 'is-active is-live' : ''}`}
+                      style={{ justifyContent: 'space-between' }}
+                    >
+                      🫧 Vol Bubbles {showBubbles ? 'ON' : 'OFF'}
+                    </button>
+                    <button
+                      onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}
+                      title="Chuyển TPO: tắt, blocks, letters"
+                      className={`advanced-chart-control font-mono ${tpoMode !== 'off' ? 'is-active is-tpo' : ''}`}
+                      style={{ justifyContent: 'space-between' }}
+                    >
+                      🧩 TPO {tpoMode === 'off' ? 'OFF' : tpoMode === 'blocks' ? 'BLOCKS' : 'LETTERS'}
+                    </button>
+                    <div className="advanced-chart-field" title="Tỉ lệ % chiều rộng của vùng Limit Wall" style={{ marginTop: '2px' }}>
+                      <span>WALL W</span>
+                      <input
+                        type="number"
+                        value={wallWidth}
+                        onChange={handleWallWidthChange}
+                        aria-label="Wall width percentage"
+                        min="10" max="100"
+                      />
+                      <span>%</span>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
 
-          {/* ── Nhóm 3: Alert ── */}
-          <button
-            onClick={() => {
-              const next = !showAlerts;
-              setShowAlerts(next);
-              localStorage.setItem('hft_show_alerts', String(next));
-            }}
-            title="Báo động khi giá chạm POC / Wall / Liq Zone (cooldown 2 phút mỗi mốc)"
-            className={`advanced-chart-control font-mono ${showAlerts ? 'is-active is-liq' : ''}`}
-          >
-            🔔 Alert {showAlerts ? 'ON' : 'OFF'}
-          </button>
-
-          {/* ── Nhóm 4: Timeframe ── */}
-          <div className="advanced-chart-field advanced-chart-timeframe">
-            <span>TF</span>
-            <select
-              value={timeframe}
-              onChange={(e) => {
-                setTimeframe(e.target.value);
-                localStorage.setItem('hft_timeframe', e.target.value);
+            {/* ── Nhóm 3: Alert ── */}
+            <button
+              onClick={() => {
+                const next = !showAlerts;
+                setShowAlerts(next);
+                localStorage.setItem('hft_show_alerts', String(next));
               }}
-              aria-label="Chart timeframe"
+              title="Báo động khi giá chạm POC / Wall / Liq Zone (cooldown 2 phút mỗi mốc)"
+              className={`advanced-chart-control font-mono ${showAlerts ? 'is-active is-liq' : ''}`}
             >
-              <option value="1m">1M</option>
-              <option value="5m">5M</option>
-              <option value="15m">15M</option>
-              <option value="30m">30M</option>
-              <option value="1h">1H</option>
-              <option value="4h">4H</option>
-            </select>
+              🔔 Alert {showAlerts ? 'ON' : 'OFF'}
+            </button>
+
+            {/* ── Nhóm 4: Timeframe ── */}
+            <div className="advanced-chart-field advanced-chart-timeframe">
+              <span>TF</span>
+              <select
+                value={timeframe}
+                onChange={(e) => {
+                  setTimeframe(e.target.value);
+                  localStorage.setItem('hft_timeframe', e.target.value);
+                }}
+                aria-label="Chart timeframe"
+              >
+                <option value="1m">1M</option>
+                <option value="5m">5M</option>
+                <option value="15m">15M</option>
+                <option value="30m">30M</option>
+                <option value="1h">1H</option>
+                <option value="4h">4H</option>
+              </select>
+            </div>
           </div>
           {moduleId && <ModuleMenu moduleId={moduleId} />}
         </div>

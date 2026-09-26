@@ -2137,11 +2137,17 @@ export default function HftRadarTab({
         )}
 
         {(!isModuleHidden('hft_heatmap') || !isModuleHidden('hft_whale_walls')) && (
-          <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap}>
-            {!isModuleHidden('hft_whale_walls') && (
-              <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={true} />
-            )}
-          </MemoAdvancedChartWrapper>
+          !isModuleHidden('hft_heatmap') ? (
+            <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap}>
+              {!isModuleHidden('hft_whale_walls') && (
+                <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={true} />
+              )}
+            </MemoAdvancedChartWrapper>
+          ) : (
+            !isModuleHidden('hft_whale_walls') && (
+              <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={false} />
+            )
+          )
         )}
 
         {!isModuleHidden('hft_orderbook') && (

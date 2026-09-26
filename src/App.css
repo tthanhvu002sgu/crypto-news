@@ -1276,18 +1276,24 @@
   display: flex; align-items: center; gap: 6px; margin: 0;
 }
 .advanced-chart-header {
-  gap: 6px;
-  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.advanced-chart-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .advanced-chart-toolbar {
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  padding: 1px 0 3px;
-  scrollbar-width: thin;
+  padding: 1px 0;
 }
 .advanced-chart-field,
 .advanced-chart-control {

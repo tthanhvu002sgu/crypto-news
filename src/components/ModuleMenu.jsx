@@ -64,7 +64,7 @@ export default function ModuleMenu({ moduleId, className = "", style = {} }) {
             borderRadius: '6px',
             padding: '4px',
             boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
-            zIndex: 50,
+            zIndex: 100,
             display: 'flex',
             flexDirection: 'column'
           }}
