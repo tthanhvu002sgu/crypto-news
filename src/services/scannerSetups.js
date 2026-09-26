@@ -17,6 +17,7 @@ import {
   SETUP_STATES,
   SETUP_TYPES,
   DIRECTIONS,
+  HYSTERESIS_CONFIG,
 } from './scannerConfig.js';
 
 const isFiniteNumber = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -372,8 +373,20 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
       ? 'Đã chạm vùng hỗ trợ swing low, đang chờ nến tăng xác nhận'
       : 'Đang điều chỉnh về vùng hỗ trợ swing low, chờ nến tăng xác nhận';
 
+    const wasAlreadyReady = existing?.status === SETUP_STATES.READY
+      || existing?.initialStatus === SETUP_STATES.READY
+      || options?.wasReady === true;
+
+    const maxAllowedExtension = wasAlreadyReady
+      ? (HYSTERESIS_CONFIG?.maintenanceMaxExtensionAtr ?? 1.8)
+      : SETUP_CONFIG.maxExtensionAtr;
+
+    const minAllowedRR = wasAlreadyReady
+      ? (HYSTERESIS_CONFIG?.maintenanceMinRewardRisk ?? 1.6)
+      : SETUP_CONFIG.minTargetRewardRisk;
+
     if (isConfirmed) {
-      if (distanceAtr > SETUP_CONFIG.maxExtensionAtr) {
+      if (distanceAtr > maxAllowedExtension) {
         status = SETUP_STATES.EXTENDED;
         reason = `Đã xác nhận nhưng giá hiện tại đã chạy xa vùng hỗ trợ (+${distanceAtr} ATR)`;
       } else if (candles.length - 1 - confirmedIdx > SETUP_CONFIG.maxFormingBars) {
@@ -382,9 +395,9 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
       } else if (!targetLevel) {
         status = SETUP_STATES.FORMING;
         reason = 'Đã xác nhận pullback nhưng chưa có cản mục tiêu cấu trúc (target) hợp lệ';
-      } else if (rr.gross === null || rr.gross < SETUP_CONFIG.minTargetRewardRisk) {
+      } else if (rr.gross === null || rr.gross < minAllowedRR) {
         status = SETUP_STATES.FORMING;
-        reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${SETUP_CONFIG.minTargetRewardRisk}R`;
+        reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${minAllowedRR}R`;
       } else {
         status = SETUP_STATES.READY;
         reason = `Nến tăng xác nhận lấy lại vùng swing low và vượt đỉnh nến trước (${distanceAtr} ATR)`;
@@ -393,6 +406,8 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
       status = SETUP_STATES.EXPIRED;
       reason = `Quá ${SETUP_CONFIG.maxFormingBars} nến 1H chưa có xác nhận tiếp diễn`;
     }
+
+    setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false, status });
 
     return {
       type: SETUP_TYPES.PULLBACK,
@@ -499,8 +514,20 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
     ? 'Đã chạm vùng kháng cự swing high, đang chờ nến giảm xác nhận'
     : 'Đang hồi phục về vùng kháng cự swing high, chờ nến giảm xác nhận';
 
+  const wasAlreadyReady = existing?.status === SETUP_STATES.READY
+    || existing?.initialStatus === SETUP_STATES.READY
+    || options?.wasReady === true;
+
+  const maxAllowedExtension = wasAlreadyReady
+    ? (HYSTERESIS_CONFIG?.maintenanceMaxExtensionAtr ?? 1.8)
+    : SETUP_CONFIG.maxExtensionAtr;
+
+  const minAllowedRR = wasAlreadyReady
+    ? (HYSTERESIS_CONFIG?.maintenanceMinRewardRisk ?? 1.6)
+    : SETUP_CONFIG.minTargetRewardRisk;
+
   if (isConfirmed) {
-    if (distanceAtr > SETUP_CONFIG.maxExtensionAtr) {
+    if (distanceAtr > maxAllowedExtension) {
       status = SETUP_STATES.EXTENDED;
       reason = `Đã xác nhận nhưng giá hiện tại đã chạy xa vùng kháng cự (+${distanceAtr} ATR)`;
     } else if (candles.length - 1 - confirmedIdx > SETUP_CONFIG.maxFormingBars) {
@@ -509,9 +536,9 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
     } else if (!targetLevel) {
       status = SETUP_STATES.FORMING;
       reason = 'Đã xác nhận pullback nhưng chưa có cản mục tiêu cấu trúc (target) hợp lệ';
-    } else if (rr.gross === null || rr.gross < SETUP_CONFIG.minTargetRewardRisk) {
+    } else if (rr.gross === null || rr.gross < minAllowedRR) {
       status = SETUP_STATES.FORMING;
-      reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${SETUP_CONFIG.minTargetRewardRisk}R`;
+      reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${minAllowedRR}R`;
     } else {
       status = SETUP_STATES.READY;
       reason = `Nến giảm xác nhận giữ dưới vùng swing high và phá đáy nến trước (${distanceAtr} ATR)`;
@@ -520,6 +547,8 @@ export function detectPullbackSetup(candles, direction, atr1h, options = {}) {
     status = SETUP_STATES.EXPIRED;
     reason = `Quá ${SETUP_CONFIG.maxFormingBars} nến 1H chưa có xác nhận tiếp diễn`;
   }
+
+  setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false, status });
 
   return {
     type: SETUP_TYPES.PULLBACK,
@@ -708,8 +737,20 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
     let status = SETUP_STATES.FORMING;
     let reason = 'Đang retest vùng breakout, chờ phản ứng giữ hỗ trợ';
 
+    const wasAlreadyReady = existing?.status === SETUP_STATES.READY
+      || existing?.initialStatus === SETUP_STATES.READY
+      || options?.wasReady === true;
+
+    const maxAllowedExtension = wasAlreadyReady
+      ? (HYSTERESIS_CONFIG?.maintenanceMaxExtensionAtr ?? 1.8)
+      : SETUP_CONFIG.maxExtensionAtr;
+
+    const minAllowedRR = wasAlreadyReady
+      ? (HYSTERESIS_CONFIG?.maintenanceMinRewardRisk ?? 1.6)
+      : SETUP_CONFIG.minTargetRewardRisk;
+
     if (isConfirmed) {
-      if (distanceAtr > SETUP_CONFIG.maxExtensionAtr) {
+      if (distanceAtr > maxAllowedExtension) {
         status = SETUP_STATES.EXTENDED;
         reason = `Đã retest thành công nhưng giá hiện tại đã chạy xa vùng trigger (+${distanceAtr} ATR)`;
       } else if (candles.length - 1 - confirmedIdx > SETUP_CONFIG.maxFormingBars) {
@@ -718,9 +759,9 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
       } else if (!targetLevel) {
         status = SETUP_STATES.FORMING;
         reason = 'Đã retest thành công nhưng chưa có cản mục tiêu cấu trúc (target) hợp lệ';
-      } else if (rr.gross === null || rr.gross < SETUP_CONFIG.minTargetRewardRisk) {
+      } else if (rr.gross === null || rr.gross < minAllowedRR) {
         status = SETUP_STATES.FORMING;
-        reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${SETUP_CONFIG.minTargetRewardRisk}R`;
+        reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${minAllowedRR}R`;
       } else {
         status = SETUP_STATES.READY;
         reason = `Nến retest đóng giữ vững trên vùng breakout với phản ứng tăng (+${distanceAtr} ATR)`;
@@ -729,6 +770,8 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
       status = SETUP_STATES.EXPIRED;
       reason = `Quá ${SETUP_CONFIG.maxFormingBars} nến chưa xác nhận retest`;
     }
+
+    setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false, status });
 
     return {
       type: SETUP_TYPES.BREAKOUT_RETEST,
@@ -894,8 +937,20 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
   let status = SETUP_STATES.FORMING;
   let reason = 'Đang retest vùng breakdown, chờ phản ứng từ chối';
 
+  const wasAlreadyReady = existing?.status === SETUP_STATES.READY
+    || existing?.initialStatus === SETUP_STATES.READY
+    || options?.wasReady === true;
+
+  const maxAllowedExtension = wasAlreadyReady
+    ? (HYSTERESIS_CONFIG?.maintenanceMaxExtensionAtr ?? 1.8)
+    : SETUP_CONFIG.maxExtensionAtr;
+
+  const minAllowedRR = wasAlreadyReady
+    ? (HYSTERESIS_CONFIG?.maintenanceMinRewardRisk ?? 1.6)
+    : SETUP_CONFIG.minTargetRewardRisk;
+
   if (isConfirmed) {
-    if (distanceAtr > SETUP_CONFIG.maxExtensionAtr) {
+    if (distanceAtr > maxAllowedExtension) {
       status = SETUP_STATES.EXTENDED;
       reason = `Đã retest từ chối nhưng giá hiện tại đã chạy xa vùng trigger (+${distanceAtr} ATR)`;
     } else if (candles.length - 1 - confirmedIdx > SETUP_CONFIG.maxFormingBars) {
@@ -904,9 +959,9 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
     } else if (!targetLevel) {
       status = SETUP_STATES.FORMING;
       reason = 'Đã retest từ chối nhưng chưa có cản mục tiêu cấu trúc (target) hợp lệ';
-    } else if (rr.gross === null || rr.gross < SETUP_CONFIG.minTargetRewardRisk) {
+    } else if (rr.gross === null || rr.gross < minAllowedRR) {
       status = SETUP_STATES.FORMING;
-      reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${SETUP_CONFIG.minTargetRewardRisk}R`;
+      reason = `Tỷ lệ R:R tại giá vào khả dụng (${rr.gross ?? '---'}R) chưa đạt tối thiểu ${minAllowedRR}R`;
     } else {
       status = SETUP_STATES.READY;
       reason = `Nến retest đóng giữ vững dưới đáy cũ với phản ứng giảm (+${distanceAtr} ATR)`;
@@ -915,6 +970,8 @@ export function detectBreakoutRetestSetup(candles, direction, atr1h, options = {
     status = SETUP_STATES.EXPIRED;
     reason = `Quá ${SETUP_CONFIG.maxFormingBars} nến chưa xác nhận retest`;
   }
+
+  setupStateRegistry.set(setupKey, { atr: setupAtr, invalidationLevel, isInvalidated: false, status });
 
   return {
     type: SETUP_TYPES.BREAKOUT_RETEST,

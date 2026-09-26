@@ -9,6 +9,7 @@ import {
   evaluateForwardOutcome,
   summarizePerformance,
   updatePendingEventOutcomes,
+  getTrackingSummary,
   __resetScannerEventStoreForTests,
 } from './scannerEventStore.js';
 import { DIRECTIONS, SETUP_STATES, SETUP_TYPES } from './scannerConfig.js';
@@ -543,4 +544,151 @@ test('missing confirmation price remains null and outcomes use the frozen discov
   assert.equal(saved.discoveredAt, 10800000);
   assert.ok(calls.every(call => call.start === 10800000));
   assert.equal(saved.outcomes.return4h, 0.98);
+});
+
+test('getTrackingSummary computes accurate appearanceCount, hoursSpan, persistenceScore, latest levels, and bestPerformer', async () => {
+  const now = Date.now();
+  const threeHoursAgo = now - (3 * 3600 * 1000);
+  const twoHoursAgo = now - (2 * 3600 * 1000);
+
+  // Coin A: 3 scans, active for 3 hours, peakGain 10%, READY status
+  // scanCount = 3, appearanceCount = 3, hoursSpan = 3
+  // persistenceScore = (3 * 1.5) + (3 * 3) + (10 * 0.5) + 5 = 4.5 + 9 + 5 + 5 = 23.5
+  await saveScannerEvent({
+    symbol: 'COINAUSDT',
+    direction: DIRECTIONS.LONG,
+    setupType: SETUP_TYPES.PULLBACK,
+    status: SETUP_STATES.READY,
+    formedAt: threeHoursAgo,
+    confirmedAt: threeHoursAgo,
+    timestamp: threeHoursAgo,
+    scanCount: 3,
+    lastSeenAt: now,
+    currentPrice: 100,
+    triggerPrice: 100,
+    invalidationLevel: 95,
+    targetLevel: 115,
+    outcomes: {
+      resolution: 'TRIGGERED_WIN',
+      maxFavorableExcursionPct: 10.0,
+      maxAdverseExcursionPct: 1.0,
+      return24h: 8.0,
+      relReturn24hVsBtc: 5.0,
+    },
+  });
+
+  // Coin B: 1 scan, peakGain null or negative, WATCH status
+  // appearanceCount = 1, hoursSpan = 1, peakGain = 0, status = WATCH
+  // persistenceScore = (1 * 1.5) + (1 * 3) + 0 + 0 = 4.5
+  await saveScannerEvent({
+    symbol: 'COINBUSDT',
+    direction: DIRECTIONS.LONG,
+    setupType: SETUP_TYPES.PULLBACK,
+    status: SETUP_STATES.WATCH,
+    formedAt: twoHoursAgo,
+    timestamp: twoHoursAgo,
+    scanCount: 1,
+    lastSeenAt: twoHoursAgo,
+    currentPrice: 50,
+    triggerPrice: 50,
+    invalidationLevel: 45,
+    targetLevel: 60,
+    outcomes: null,
+  });
+
+  const summary = await getTrackingSummary('24h');
+  assert.equal(summary.totalTrackedCoins, 2);
+  assert.equal(summary.totalReadySetups, 1);
+  assert.equal(summary.winCount, 1);
+  assert.equal(summary.lossCount, 0);
+  assert.equal(summary.winRate, 100);
+
+  const leaderA = summary.leaders.find(c => c.symbol === 'COINAUSDT');
+  assert.ok(leaderA);
+  assert.equal(leaderA.appearanceCount, 3);
+  assert.equal(leaderA.hoursSpan, 3);
+  assert.equal(leaderA.persistenceScore, 23.5);
+  assert.equal(leaderA.latestPrice, 100);
+  assert.equal(leaderA.latestStatus, SETUP_STATES.READY);
+
+  const leaderB = summary.leaders.find(c => c.symbol === 'COINBUSDT');
+  assert.ok(leaderB);
+  assert.equal(leaderB.appearanceCount, 1);
+  assert.equal(leaderB.hoursSpan, 2);
+  assert.equal(leaderB.persistenceScore, 7.5);
+
+  // bestPerformer should be COINAUSDT with 10%
+  assert.ok(summary.bestPerformer);
+  assert.equal(summary.bestPerformer.symbol, 'COINAUSDT');
+  assert.equal(summary.bestPerformer.peakGainPct, 10.0);
+});
+
+test('updatePendingEventOutcomes throttles resolved trades if less than 24 hours have elapsed', async () => {
+  const now = Date.now();
+  const twoHoursAgo = now - (2 * 3600 * 1000);
+
+  // Event that resolved early (TRIGGERED_WIN), return24h is null, but was formed only 2 hours ago
+  await saveScannerEvent({
+    symbol: 'EARLYUSDT',
+    direction: DIRECTIONS.LONG,
+    setupType: SETUP_TYPES.PULLBACK,
+    status: SETUP_STATES.READY,
+    formedAt: twoHoursAgo,
+    confirmedAt: twoHoursAgo,
+    timestamp: twoHoursAgo,
+    currentPrice: 10,
+    triggerPrice: 10,
+    invalidationLevel: 9,
+    targetLevel: 12,
+    outcomes: {
+      resolution: 'TRIGGERED_WIN',
+      return24h: null,
+    },
+  });
+
+  let fetchCalled = false;
+  const updated = await updatePendingEventOutcomes({
+    now,
+    fetchCandles: async () => {
+      fetchCalled = true;
+      return [];
+    },
+  });
+
+  // Must NOT fetch because < 24 hours elapsed
+  assert.equal(fetchCalled, false);
+  assert.equal(updated.length, 0);
+
+  // If 25 hours have elapsed, it SHOULD fetch
+  const futureNow = now + (23 * 3600 * 1000); // 2 + 23 = 25 hours
+  await updatePendingEventOutcomes({
+    now: futureNow,
+    fetchCandles: async () => {
+      fetchCalled = true;
+      return [];
+    },
+  });
+  assert.equal(fetchCalled, true);
+});
+
+test('getTrackingSummary returns null bestPerformer when no coins have positive gain', async () => {
+  const now = Date.now();
+  await saveScannerEvent({
+    symbol: 'LOSERUSDT',
+    direction: DIRECTIONS.LONG,
+    setupType: SETUP_TYPES.PULLBACK,
+    status: SETUP_STATES.READY,
+    formedAt: now - 3600000,
+    confirmedAt: now - 3600000,
+    timestamp: now - 3600000,
+    currentPrice: 10,
+    outcomes: {
+      resolution: 'TRIGGERED_LOSS',
+      maxFavorableExcursionPct: 0,
+      maxAdverseExcursionPct: 5.0,
+    },
+  });
+
+  const summary = await getTrackingSummary('24h');
+  assert.equal(summary.bestPerformer, null);
 });

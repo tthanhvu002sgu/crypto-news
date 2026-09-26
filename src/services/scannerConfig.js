@@ -65,3 +65,18 @@ export const DIRECTIONS = {
   LONG: 'LONG',
   SHORT: 'SHORT',
 };
+
+export const HYSTERESIS_CONFIG = {
+  entryMinRewardRisk: 2.0,
+  entryMaxExtensionAtr: 1.5,
+  entryMinStrengthPercentile: 70,
+  entryMaxStrengthPercentileShort: 30,
+
+  maintenanceMinRewardRisk: 1.6,
+  maintenanceMaxExtensionAtr: 1.8,
+  maintenanceMinStrengthPercentile: 63,
+  maintenanceMaxStrengthPercentileShort: 37,
+
+  gracePeriodMs: 2 * 60 * 60 * 1000, // 2 hours
+};
+

@@ -586,4 +586,45 @@ test('detectBreakoutRetestSetup preserves structural targetLevel even when inval
   assert.equal(res.targetLevel, 115);
 });
 
+test('setupStateRegistry updates status to EXTENDED and clears stale READY flag when coin runs too far', () => {
+  const baseTime = 1700000000000;
+  const atr1h = 2.0;
+  const klines = [];
+
+  for (let i = 0; i < 5; i += 1) {
+    klines.push(makeKline(baseTime + (i * 3600000), 105 - i, 106 - i, 104 - i, 104 - i));
+  }
+  klines.push(makeKline(baseTime + (5 * 3600000), 101, 102, 98, 100)); // low = 98
+
+  for (let i = 6; i <= 14; i += 1) {
+    klines.push(makeKline(baseTime + (i * 3600000), 99 + (i - 5), 101 + (i - 5), 98 + (i - 5), 100 + (i - 5)));
+  }
+  klines.push(makeKline(baseTime + (15 * 3600000), 114, 118, 113, 116)); // peak at 118
+
+  for (let i = 16; i <= 20; i += 1) {
+    klines.push(makeKline(baseTime + (i * 3600000), 116 - ((i - 15) * 3), 117 - ((i - 15) * 3), 113 - ((i - 15) * 3), 114 - ((i - 15) * 3)));
+  }
+
+  // Index 21: in zone (98.6)
+  klines.push(makeKline(baseTime + (21 * 3600000), 99.5, 99.8, 98.2, 98.6));
+  // Index 22: bullish confirmation candle (close 100.2, high 100.5)
+  klines.push(makeKline(baseTime + (22 * 3600000), 98.6, 100.5, 98.4, 100.2));
+
+  const parsed = klines.map(k => ({
+    openTime: k[0], open: Number(k[1]), high: Number(k[2]), low: Number(k[3]), close: Number(k[4]), quoteVolume: 7000, closeTime: k[6],
+  }));
+
+  // 1. Initial detection -> READY
+  const first = detectPullbackSetup(parsed, DIRECTIONS.LONG, atr1h, { symbol: 'TESTCOIN' });
+  assert.equal(first.status, SETUP_STATES.READY);
+
+  // 2. Next scan: live price runs far away (> 1.8 ATR from trigger 98 -> e.g. 106.0)
+  const extended = detectPullbackSetup(parsed, DIRECTIONS.LONG, atr1h, { symbol: 'TESTCOIN', latestPrice: 106.0 });
+  assert.equal(extended.status, SETUP_STATES.EXTENDED);
+
+  // 3. Third scan: price at 103.5 (1.67 ATR). Without stale READY, maxAllowedExtension is 1.5 ATR, so it remains EXTENDED.
+  const check = detectPullbackSetup(parsed, DIRECTIONS.LONG, atr1h, { symbol: 'TESTCOIN', latestPrice: 103.5 });
+  assert.equal(check.status, SETUP_STATES.EXTENDED);
+});
+
 

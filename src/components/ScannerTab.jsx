@@ -1,11 +1,10 @@
-/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: modern-minimal · theme: Terminal */
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { runFullScan } from '../services/coinScanner';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { runFullScan, getTrackingSummary } from '../services/coinScanner';
 import { SETUP_STATES, SETUP_TYPES } from '../services/scannerConfig';
 import {
   RefreshCw, Zap, ExternalLink, TrendingUp, TrendingDown, ShieldCheck,
   Clock, CheckCircle2, ChevronDown, ChevronUp, AlertTriangle, HelpCircle,
-  X, Activity, Check, Crosshair, Target,
+  X, Activity, Check, Crosshair, Target, History, Award, Flame,
 } from 'lucide-react';
 
 const fmtCvd = (n) => {
@@ -618,6 +617,235 @@ function ScannerMobileCard({ coin, rank, isExpanded, onToggle, direction }) {
   );
 }
 
+// ── SUBCOMPONENT: 24H / 7D TRACKING SUMMARY VIEW ─────────────────────────────
+function TrackingSummaryView({ trackingData, isLoading, viewMode }) {
+  if (isLoading) {
+    return (
+      <div className="scanner-skeleton-loader glass-panel">
+        <RefreshCw size={24} className="spin text-cyan-400" />
+        <p className="loading-text">
+          Đang truy vấn lịch sử tracking {viewMode === 'TRACKING_7D' ? '7 ngày' : '24 giờ'} từ IndexedDB...
+        </p>
+      </div>
+    );
+  }
+
+  const tfLabel = viewMode === 'TRACKING_7D' ? '7 Ngày Qua' : '24 Giờ Qua';
+  const leaders = trackingData?.leaders || [];
+  const winRate = trackingData?.winRate;
+  const avgRelReturn = trackingData?.avgRelReturn24h;
+  const bestPerformer = trackingData?.bestPerformer;
+
+  return (
+    <div className="scanner-tracking-panel">
+      {/* 1. Bento Metric Banner */}
+      <div className="tracking-metric-banner glass-panel">
+        <div className="track-stat-card">
+          <span className="track-stat-label">
+            <Award size={13} className="text-amber-400 inline mr-1" />
+            LEADERS GHI NHẬN ({tfLabel.toUpperCase()})
+          </span>
+          <span className="track-stat-value text-contrast">
+            {trackingData?.totalTrackedCoins || leaders.length} <small>coin vào bảng</small>
+          </span>
+          <span className="track-stat-sub">
+            Xếp hạng theo độ bền bỉ &amp; tần suất giữ vị thế
+          </span>
+        </div>
+
+        <div className="track-stat-card">
+          <span className="track-stat-label">
+            <Target size={13} className="text-emerald-400 inline mr-1" />
+            TỶ LỆ THẮNG SETUP (WIN RATE)
+          </span>
+          <span className="track-stat-value text-emerald-400 font-bold">
+            {winRate !== null ? `${winRate}%` : 'Đang đo lường'}
+          </span>
+          <span className="track-stat-sub">
+            {trackingData?.winCount || 0} win / {(trackingData?.winCount || 0) + (trackingData?.lossCount || 0)} kèo chạm cản hoặc dừng lỗ
+          </span>
+        </div>
+
+        <div className="track-stat-card">
+          <span className="track-stat-label">
+            <TrendingUp size={13} className="text-cyan-400 inline mr-1" />
+            HIỆU SUẤT VS BITCOIN
+          </span>
+          <span className={`track-stat-value font-bold ${avgRelReturn && avgRelReturn > 0 ? 'text-emerald-400' : 'text-contrast'}`}>
+            {avgRelReturn !== null ? `${avgRelReturn > 0 ? '+' : ''}${avgRelReturn}%` : '---'}
+          </span>
+          <span className="track-stat-sub">Mức vượt trội trung bình 24H so với BTC</span>
+        </div>
+
+        <div className="track-stat-card">
+          <span className="track-stat-label">
+            <Flame size={13} className="text-rose-400 inline mr-1" />
+            ĐỈNH SÓNG CAO NHẤT (BEST MFE)
+          </span>
+          <span className="track-stat-value text-rose-400 font-bold">
+            {bestPerformer?.peakGainPct ? `+${bestPerformer.peakGainPct}%` : '---'}
+          </span>
+          <span className="track-stat-sub">
+            {bestPerformer?.symbol || 'Đang theo dõi chu kỳ'}
+          </span>
+        </div>
+      </div>
+
+      {/* 2. Persistent Leaders Table */}
+      <div className="scanner-table-wrapper glass-panel">
+        <div className="tracking-table-header">
+          <div className="tracking-title-wrap">
+            <History size={16} className="text-cyan-400" />
+            <h3 className="tracking-title">
+              TOP COIN TRỤ BẢNG BỀN BỈ &amp; KẾT QUẢ THEO DÕI ({tfLabel.toUpperCase()})
+            </h3>
+          </div>
+          <span className="tracking-note text-muted">
+            Tự động lưu vết IndexedDB · Xếp hạng theo độ bền bỉ (tần suất giữ vị thế) và mức tăng tối đa
+          </span>
+        </div>
+
+        {leaders.length === 0 ? (
+          <div className="scanner-empty-state">
+            <Clock size={36} className="text-cyan-400" />
+            <h4 className="empty-heading font-bold">Chưa có đủ lịch sử quét cho chu kỳ {tfLabel}</h4>
+            <p className="empty-sub">
+              Hệ thống lưu vết tự động vào IndexedDB ở mỗi lần quét. Hãy tiếp tục sử dụng Scanner để hệ thống tích lũy dữ liệu tracking!
+            </p>
+          </div>
+        ) : (
+          <div className="table-responsive-scroll">
+            <table className="scanner-table table-five-col tracking-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '22%' }}>COIN &amp; HƯỚNG</th>
+                  <th style={{ width: '24%' }}>ĐỘ BỀN BỈ (PERSISTENCE)</th>
+                  <th style={{ width: '18%' }}>GIÁ VÀO / CẢN</th>
+                  <th style={{ width: '18%' }}>MỨC TĂNG TỐI ĐA (PEAK)</th>
+                  <th style={{ width: '18%' }}>KẾT QUẢ / TRẠNG THÁI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaders.map((coin, idx) => {
+                  const isWin = coin.resolution === 'TRIGGERED_WIN';
+                  const isLoss = coin.resolution === 'TRIGGERED_LOSS';
+                  const isRunning = coin.resolution === 'RUNNING' || coin.latestStatus === 'READY';
+                  const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
+
+                  return (
+                    <tr key={`${coin.symbol}_${idx}`} className="scanner-row">
+                      <td className="td-coin-primary">
+                        <div className="coin-cell-layout">
+                          <span className={`rank-badge rank-${idx + 1}`}>#{idx + 1}</span>
+                          <div className="coin-meta">
+                            <a
+                              href={tvChartUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="coin-symbol-link"
+                              title="Mở TradingView Chart"
+                            >
+                              <strong className="symbol-base">{coin.baseAsset || coin.symbol}</strong>
+                              <ExternalLink size={10} className="link-ext-icon" />
+                            </a>
+                            <div className="coin-price-row">
+                              <span className={`conclusion-badge ${coin.direction === 'LONG' ? 'badge-emerald' : 'badge-rose'}`}>
+                                {coin.direction}
+                              </span>
+                              <span className="price-num">{fmtPrice(coin.latestPrice)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="td-strength">
+                        <div className="tracking-persistence-cell">
+                          <span className="persistence-badge font-bold text-contrast">
+                            Xuất hiện {coin.appearanceCount} lần quét
+                          </span>
+                          <span className="persistence-hours text-muted">
+                            Duy trì: ~{coin.hoursSpan} giờ
+                          </span>
+                          <div className="persistence-bar-track">
+                            <div
+                              className="persistence-bar-fill"
+                              style={{ width: `${Math.min(100, (coin.appearanceCount / (viewMode === 'TRACKING_7D' ? 40 : 12)) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="td-setup">
+                        <div className="tracking-levels-cell">
+                          <span className="track-level-entry">
+                            Entry: <strong>{fmtPrice(coin.initialPrice || coin.latestPrice)}</strong>
+                          </span>
+                          {coin.targetLevel && (
+                            <span className="track-level-target text-emerald-400">
+                              Target: {fmtPrice(coin.targetLevel)}
+                            </span>
+                          )}
+                          {coin.rewardRiskRatio && (
+                            <span className="track-level-rr text-muted">
+                              R:R: {coin.rewardRiskRatio}R
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="td-rr">
+                        <div className="tracking-peak-cell">
+                          {coin.peakGainPct != null ? (
+                            <span className="peak-gain-badge text-emerald-400 font-extrabold">
+                              +{coin.peakGainPct}%
+                            </span>
+                          ) : (
+                            <span className="text-muted">Đang theo dõi</span>
+                          )}
+                          {coin.relReturnVsBtc != null && (
+                            <small className={`rel-btc-sub ${coin.relReturnVsBtc >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {coin.relReturnVsBtc >= 0 ? '+' : ''}{coin.relReturnVsBtc}% vs BTC
+                            </small>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="td-flow">
+                        <div className="tracking-status-cell">
+                          {isWin ? (
+                            <span className="conclusion-badge badge-emerald">
+                              TARGET HIT 🎯
+                            </span>
+                          ) : isLoss ? (
+                            <span className="conclusion-badge badge-rose">
+                              STOPPED ⛔
+                            </span>
+                          ) : isRunning ? (
+                            <span className="conclusion-badge badge-cyan">
+                              RUNNING ⏳
+                            </span>
+                          ) : (
+                            <span className="conclusion-badge badge-slate">
+                              {coin.latestStatus}
+                            </span>
+                          )}
+                          <span className="track-date-time text-muted">
+                            Lần cuối: {new Date(coin.lastSeen).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN SCANNER TAB COMPONENT ────────────────────────────────────────────────
 export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory = [] }) {
   const [scanResult, setScanResult] = useState({
@@ -635,6 +863,39 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
   const [activeStatusFilter, setActiveStatusFilter] = useState('ALL'); // 'ALL' | 'READY' | 'FORMING' | 'WATCH' | 'EXTENDED'
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
+  const [viewMode, setViewMode] = useState('LIVE'); // 'LIVE' | 'TRACKING_24H' | 'TRACKING_7D'
+  const viewModeRef = useRef(viewMode);
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+  const [trackingData, setTrackingData] = useState(null);
+  const [isLoadingTracking, setIsLoadingTracking] = useState(false);
+
+  const loadTracking = useCallback(async (mode) => {
+    if (mode === 'LIVE') return;
+    setIsLoadingTracking(true);
+    try {
+      const tf = mode === 'TRACKING_7D' ? '7d' : '24h';
+      const summary = await getTrackingSummary(tf);
+      if (viewModeRef.current === mode) {
+        setTrackingData(summary);
+      }
+    } catch (e) {
+      console.error('[ScannerTab] Error loading tracking summary:', e);
+    } finally {
+      if (viewModeRef.current === mode) {
+        setIsLoadingTracking(false);
+      }
+    }
+  }, []);
+
+  const handleSelectViewMode = (mode) => {
+    viewModeRef.current = mode;
+    setViewMode(mode);
+    if (mode !== 'LIVE') {
+      loadTracking(mode);
+    }
+  };
 
   const fallbackBtcChange = data.btc?.change;
 
@@ -650,13 +911,16 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
       const res = await runFullScan({ isBtcBullish, isEtfInflow }, force);
       setScanResult(res);
       setSecondsUntilRefresh(300);
+      if (viewMode !== 'LIVE') {
+        loadTracking(viewMode);
+      }
     } catch (e) {
       console.error('[ScannerTab] Scan error:', e);
       setScanResult(prev => ({ ...prev, errorState: 'PROVIDER_UNAVAILABLE' }));
     } finally {
       setIsScanning(false);
     }
-  }, [btcChange24h, fallbackBtcChange, etfHistory]);
+  }, [btcChange24h, fallbackBtcChange, etfHistory, viewMode, loadTracking]);
 
   useEffect(() => {
     const initialScan = setTimeout(() => executeScan(false), 0);
@@ -691,11 +955,13 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
 
   const filteredCoins = useMemo(() => {
     if (activeStatusFilter === 'ALL') {
-      // Default: top 5 prioritized results
-      return activeDirection === 'BUY' ? (scanResult.topBuy || []) : (scanResult.topSell || []);
+      // Default: top 8 prioritized results (expanded from 5 to prevent churn dropoff)
+      return activeDirection === 'BUY'
+        ? (scanResult.allCandidates?.buy?.length ? scanResult.allCandidates.buy.slice(0, 8) : scanResult.topBuy || [])
+        : (scanResult.allCandidates?.sell?.length ? scanResult.allCandidates.sell.slice(0, 8) : scanResult.topSell || []);
     }
-    return rawDirectionCoins.filter(coin => coin.status === activeStatusFilter).slice(0, 5);
-  }, [rawDirectionCoins, activeStatusFilter, activeDirection, scanResult.topBuy, scanResult.topSell]);
+    return rawDirectionCoins.filter(coin => coin.status === activeStatusFilter).slice(0, 8);
+  }, [rawDirectionCoins, activeStatusFilter, activeDirection, scanResult.allCandidates, scanResult.topBuy, scanResult.topSell]);
 
   const statusCounts = useMemo(() => {
     const counts = { ALL: rawDirectionCoins.length, READY: 0, FORMING: 0, WATCH: 0, EXTENDED: 0, INVALIDATED: 0 };
@@ -798,116 +1064,176 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
         </div>
       </div>
 
-      {/* ── DUAL DIRECTION TAB SWITCHER & STATUS FILTERS ───────────────────── */}
-      <div className="scanner-direction-bar">
-        <div className="direction-toggle-group">
-          <button
-            onClick={() => setActiveDirection('BUY')}
-            className={`btn-direction-tab ${activeDirection === 'BUY' ? 'active buy-active' : ''}`}
-          >
-            <TrendingUp size={16} />
-            <span>TOP LONG (BUY)</span>
-            <span className="chip-count buy">
-              {scanResult.topBuy?.length || 0}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveDirection('SELL')}
-            className={`btn-direction-tab ${activeDirection === 'SELL' ? 'active sell-active' : ''}`}
-          >
-            <TrendingDown size={16} />
-            <span>TOP SHORT (SELL)</span>
-            <span className="chip-count sell">
-              {scanResult.topSell?.length || 0}
-            </span>
-          </button>
-        </div>
-
-        <div className="status-filter-group">
-          <button
-            className={`filter-chip ${activeStatusFilter === 'ALL' ? 'active' : ''}`}
-            onClick={() => setActiveStatusFilter('ALL')}
-          >
-            Ưu Tiên Top 5
-          </button>
-          <button
-            className={`filter-chip chip-ready ${activeStatusFilter === 'READY' ? 'active' : ''}`}
-            onClick={() => setActiveStatusFilter('READY')}
-          >
-            READY ({statusCounts.READY})
-          </button>
-          <button
-            className={`filter-chip chip-forming ${activeStatusFilter === 'FORMING' ? 'active' : ''}`}
-            onClick={() => setActiveStatusFilter('FORMING')}
-          >
-            FORMING ({statusCounts.FORMING})
-          </button>
-          <button
-            className={`filter-chip chip-watch ${activeStatusFilter === 'WATCH' ? 'active' : ''}`}
-            onClick={() => setActiveStatusFilter('WATCH')}
-          >
-            WATCH ({statusCounts.WATCH})
-          </button>
-          <button
-            className={`filter-chip chip-extended ${activeStatusFilter === 'EXTENDED' ? 'active' : ''}`}
-            onClick={() => setActiveStatusFilter('EXTENDED')}
-          >
-            EXTENDED ({statusCounts.EXTENDED})
-          </button>
-          {statusCounts.INVALIDATED > 0 && (
-            <button
-              className={`filter-chip chip-invalidated ${activeStatusFilter === 'INVALIDATED' ? 'active' : ''}`}
-              onClick={() => setActiveStatusFilter('INVALIDATED')}
-            >
-              INVALIDATED ({statusCounts.INVALIDATED})
-            </button>
-          )}
-        </div>
-
-        <div className="scanner-universe-info">
-          <span className="universe-stat-item">
-            Quét: <strong>{scanResult.scannedCount || 0} coin</strong>
-          </span>
-          <span className="stat-separator">·</span>
-          <span className="universe-stat-item">
-            Quality Gate: <strong>{scanResult.qualifiedCount || 0} coin</strong>
-          </span>
-          {scanResult.timestamp > 0 && (
-            <>
-              <span className="stat-separator">·</span>
-              <span className="universe-stat-item text-muted">
-                Cập nhật: {new Date(scanResult.timestamp).toLocaleTimeString('vi-VN')}
-              </span>
-            </>
-          )}
-        </div>
+      {/* ── VIEW MODE SELECTOR (LIVE / 24H TRACKING / 7D TRACKING) ───────── */}
+      <div className="view-mode-toggle-group">
+        <button
+          className={`btn-mode-tab ${viewMode === 'LIVE' ? 'active' : ''}`}
+          onClick={() => handleSelectViewMode('LIVE')}
+        >
+          <Zap size={14} />
+          <span>THỜI GIAN THỰC (LIVE)</span>
+        </button>
+        <button
+          className={`btn-mode-tab ${viewMode === 'TRACKING_24H' ? 'active' : ''}`}
+          onClick={() => handleSelectViewMode('TRACKING_24H')}
+        >
+          <History size={14} />
+          <span>BẢNG THEO DÕI 24 GIỜ</span>
+        </button>
+        <button
+          className={`btn-mode-tab ${viewMode === 'TRACKING_7D' ? 'active' : ''}`}
+          onClick={() => handleSelectViewMode('TRACKING_7D')}
+        >
+          <Award size={14} />
+          <span>BẢNG THEO DÕI 7 NGÀY</span>
+        </button>
       </div>
 
-      {/* ── MAIN SCANNER TABLE (DESKTOP 5-COLUMNS: Coin · Strength · Setup · R:R · Flow) ── */}
-      <div className="scanner-table-wrapper glass-panel hide-on-mobile">
-        {isScanning && filteredCoins.length === 0 ? (
-          <div className="scanner-skeleton-loader">
-            <RefreshCw size={24} className="spin text-amber-400" />
-            <p className="loading-text">Đang kiểm tra 5 cửa lọc: Dữ liệu · Thanh khoản · Sức mạnh · Setup · Vị trí giá...</p>
+      {viewMode !== 'LIVE' ? (
+        <TrackingSummaryView
+          trackingData={trackingData}
+          isLoading={isLoadingTracking}
+          viewMode={viewMode}
+        />
+      ) : (
+        <>
+          {/* ── DUAL DIRECTION TAB SWITCHER & STATUS FILTERS ───────────────────── */}
+          <div className="scanner-direction-bar">
+            <div className="direction-toggle-group">
+              <button
+                onClick={() => setActiveDirection('BUY')}
+                className={`btn-direction-tab ${activeDirection === 'BUY' ? 'active buy-active' : ''}`}
+              >
+                <TrendingUp size={16} />
+                <span>TOP LONG (BUY)</span>
+                <span className="chip-count buy">
+                  {scanResult.topBuy?.length || 0}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setActiveDirection('SELL')}
+                className={`btn-direction-tab ${activeDirection === 'SELL' ? 'active sell-active' : ''}`}
+              >
+                <TrendingDown size={16} />
+                <span>TOP SHORT (SELL)</span>
+                <span className="chip-count sell">
+                  {scanResult.topSell?.length || 0}
+                </span>
+              </button>
+            </div>
+
+            <div className="status-filter-group">
+              <button
+                className={`filter-chip ${activeStatusFilter === 'ALL' ? 'active' : ''}`}
+                onClick={() => setActiveStatusFilter('ALL')}
+              >
+                Ưu Tiên Top 8
+              </button>
+              <button
+                className={`filter-chip chip-ready ${activeStatusFilter === 'READY' ? 'active' : ''}`}
+                onClick={() => setActiveStatusFilter('READY')}
+              >
+                READY ({statusCounts.READY})
+              </button>
+              <button
+                className={`filter-chip chip-forming ${activeStatusFilter === 'FORMING' ? 'active' : ''}`}
+                onClick={() => setActiveStatusFilter('FORMING')}
+              >
+                FORMING ({statusCounts.FORMING})
+              </button>
+              <button
+                className={`filter-chip chip-watch ${activeStatusFilter === 'WATCH' ? 'active' : ''}`}
+                onClick={() => setActiveStatusFilter('WATCH')}
+              >
+                WATCH ({statusCounts.WATCH})
+              </button>
+              <button
+                className={`filter-chip chip-extended ${activeStatusFilter === 'EXTENDED' ? 'active' : ''}`}
+                onClick={() => setActiveStatusFilter('EXTENDED')}
+              >
+                EXTENDED ({statusCounts.EXTENDED})
+              </button>
+              {statusCounts.INVALIDATED > 0 && (
+                <button
+                  className={`filter-chip chip-invalidated ${activeStatusFilter === 'INVALIDATED' ? 'active' : ''}`}
+                  onClick={() => setActiveStatusFilter('INVALIDATED')}
+                >
+                  INVALIDATED ({statusCounts.INVALIDATED})
+                </button>
+              )}
+            </div>
+
+            <div className="scanner-universe-info">
+              <span className="universe-stat-item">
+                Quét: <strong>{scanResult.scannedCount || 0} coin</strong>
+              </span>
+              <span className="stat-separator">·</span>
+              <span className="universe-stat-item">
+                Quality Gate: <strong>{scanResult.qualifiedCount || 0} coin</strong>
+              </span>
+              {scanResult.timestamp > 0 && (
+                <>
+                  <span className="stat-separator">·</span>
+                  <span className="universe-stat-item text-muted">
+                    Cập nhật: {new Date(scanResult.timestamp).toLocaleTimeString('vi-VN')}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
-        ) : filteredCoins.length === 0 ? (
-          renderEmptyOrErrorState()
-        ) : (
-          <div className="table-responsive-scroll">
-            <table className="scanner-table table-five-col">
-              <thead>
-                <tr>
-                  <th style={{ width: '22%' }}>COIN</th>
-                  <th style={{ width: '20%' }}>STRENGTH</th>
-                  <th style={{ width: '24%' }}>SETUP / TRẠNG THÁI</th>
-                  <th style={{ width: '18%' }}>KHOẢNG TRỐNG / R:R</th>
-                  <th style={{ width: '16%' }}>FLOW</th>
-                </tr>
-              </thead>
-              <tbody>
+
+          {/* ── MAIN SCANNER TABLE (DESKTOP 5-COLUMNS: Coin · Strength · Setup · R:R · Flow) ── */}
+          <div className="scanner-table-wrapper glass-panel hide-on-mobile">
+            {isScanning && filteredCoins.length === 0 ? (
+              <div className="scanner-skeleton-loader">
+                <RefreshCw size={24} className="spin text-amber-400" />
+                <p className="loading-text">Đang kiểm tra 5 cửa lọc: Dữ liệu · Thanh khoản · Sức mạnh · Setup · Vị trí giá...</p>
+              </div>
+            ) : filteredCoins.length === 0 ? (
+              renderEmptyOrErrorState()
+            ) : (
+              <div className="table-responsive-scroll">
+                <table className="scanner-table table-five-col">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '22%' }}>COIN</th>
+                      <th style={{ width: '20%' }}>STRENGTH</th>
+                      <th style={{ width: '24%' }}>SETUP / TRẠNG THÁI</th>
+                      <th style={{ width: '18%' }}>KHOẢNG TRỐNG / R:R</th>
+                      <th style={{ width: '16%' }}>FLOW</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCoins.map((coin, index) => (
+                      <ScannerRow
+                        key={coin.symbol}
+                        coin={coin}
+                        rank={index + 1}
+                        direction={activeDirection}
+                        isExpanded={expandedSymbol === coin.symbol}
+                        onToggle={() => toggleRowExpansion(coin.symbol)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ── MOBILE COMPACT CARDS VIEW ──────────────────────────────────────── */}
+          <div className="scanner-mobile-container hide-on-desktop">
+            {isScanning && filteredCoins.length === 0 ? (
+              <div className="scanner-skeleton-loader glass-panel">
+                <RefreshCw size={24} className="spin text-amber-400" />
+                <p className="loading-text">Đang lọc setup Scanner v8...</p>
+              </div>
+            ) : filteredCoins.length === 0 ? (
+              <div className="glass-panel">{renderEmptyOrErrorState()}</div>
+            ) : (
+              <div className="mobile-cards-list">
                 {filteredCoins.map((coin, index) => (
-                  <ScannerRow
+                  <ScannerMobileCard
                     key={coin.symbol}
                     coin={coin}
                     rank={index + 1}
@@ -916,36 +1242,11 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
                     onToggle={() => toggleRowExpansion(coin.symbol)}
                   />
                 ))}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      {/* ── MOBILE COMPACT CARDS VIEW ──────────────────────────────────────── */}
-      <div className="scanner-mobile-container hide-on-desktop">
-        {isScanning && filteredCoins.length === 0 ? (
-          <div className="scanner-skeleton-loader glass-panel">
-            <RefreshCw size={24} className="spin text-amber-400" />
-            <p className="loading-text">Đang lọc setup Scanner v8...</p>
-          </div>
-        ) : filteredCoins.length === 0 ? (
-          <div className="glass-panel">{renderEmptyOrErrorState()}</div>
-        ) : (
-          <div className="mobile-cards-list">
-            {filteredCoins.map((coin, index) => (
-              <ScannerMobileCard
-                key={coin.symbol}
-                coin={coin}
-                rank={index + 1}
-                direction={activeDirection}
-                isExpanded={expandedSymbol === coin.symbol}
-                onToggle={() => toggleRowExpansion(coin.symbol)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* ── METHODOLOGY DRAWER MODAL ───────────────────────────────────────── */}
       <ScannerMethodologyDrawer

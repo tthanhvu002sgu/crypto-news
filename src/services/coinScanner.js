@@ -9,6 +9,7 @@ import {
   EXCLUDED_SYMBOLS,
   SETUP_STATES,
   DIRECTIONS,
+  HYSTERESIS_CONFIG,
 } from './scannerConfig.js';
 import {
   evaluateDataIntegrity,
@@ -25,6 +26,7 @@ import {
   queryScannerEvents,
   buildHydratedSetupRegistry,
   updatePendingEventOutcomes,
+  getTrackingSummary,
 } from './scannerEventStore.js';
 
 export {
@@ -37,6 +39,7 @@ export {
   evaluateStrength,
   calculateRsDurability,
   updatePendingEventOutcomes,
+  getTrackingSummary,
 };
 
 const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -247,7 +250,7 @@ async function fetchUniverseMetric(symbol) {
  * - 10 Top Positive Momentum pairs (top 24h gainers)
  * - 10 Top Negative Momentum pairs (top 24h losers)
  */
-export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
+export async function getTop30dVolumePairs(marketCapMap, limit = 50, retainedSymbols = new Set()) {
   try {
     const response = await axios.get('https://api.binance.com/api/v3/ticker/24hr', { timeout: 8000 });
     const liquidPairs = (response.data || [])
@@ -270,6 +273,14 @@ export async function getTop30dVolumePairs(marketCapMap, limit = 50) {
       .slice(0, 10);
 
     const candidateMap = new Map();
+    // Prioritize retained symbols so active setups are never dropped from universe
+    if (retainedSymbols && retainedSymbols.size > 0) {
+      liquidPairs.forEach(item => {
+        if (retainedSymbols.has(item.symbol)) {
+          candidateMap.set(item.symbol, item);
+        }
+      });
+    }
     [...coreLiquid, ...topGainers, ...topLosers].forEach(item => {
       if (!candidateMap.has(item.symbol)) {
         candidateMap.set(item.symbol, item);
@@ -898,10 +909,13 @@ async function analyzeCoin(pair, futuresBookMap, fundingMap, benchmark, scanTime
 /**
  * Builds candidate record for a specific direction (LONG or SHORT) in Scanner v8.
  */
-function buildV8Candidate(coin, direction, benchmark, macroContext = {}, hydratedRegistry = null) {
+function buildV8Candidate(coin, direction, benchmark, macroContext = {}, hydratedRegistry = null, previousCandidate = null) {
   const isLong = direction === DIRECTIONS.LONG || direction === 'BUY';
   const targetDir = isLong ? DIRECTIONS.LONG : DIRECTIONS.SHORT;
   const legacyDir = isLong ? 'BUY' : 'SELL';
+
+  const wasStrong = previousCandidate?.strengthPassed === true;
+  const wasReady = previousCandidate?.status === SETUP_STATES.READY;
 
   // 1. Evaluate Strength (Mandatory Gate) with aligned series
   const alignedCoinSeries = coin.alignedCoin1h ?? coin.closes1h ?? [];
@@ -912,6 +926,7 @@ function buildV8Candidate(coin, direction, benchmark, macroContext = {}, hydrate
     benchmark,
     alignedCoinSeries,
     alignedBtcSeries,
+    { wasStrong },
   );
 
   // 2. Evaluate Setups
@@ -925,6 +940,7 @@ function buildV8Candidate(coin, direction, benchmark, macroContext = {}, hydrate
     latestPrice: latestFuturesPrice,
     symbol: coin.symbol,
     hydratedRegistry,
+    wasReady,
   });
 
   // 3. Score for display / reference
@@ -1037,7 +1053,22 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
       errorState = 'INSUFFICIENT_COVERAGE';
     }
 
-    const universe = await getTop30dVolumePairs(marketCapMap, 50);
+    const previousCached = storageGet(RESULT_CACHE_KEY);
+    const cacheAge = Date.now() - (previousCached?.timestamp || 0);
+    const isCacheFresh = previousCached && cacheAge <= (HYSTERESIS_CONFIG?.gracePeriodMs || 7200000);
+    const previousLongMap = isCacheFresh
+      ? new Map((previousCached?.allCandidates?.buy || previousCached?.topBuy || []).map(c => [c.symbol, c]))
+      : new Map();
+    const previousShortMap = isCacheFresh
+      ? new Map((previousCached?.allCandidates?.sell || previousCached?.topSell || []).map(c => [c.symbol, c]))
+      : new Map();
+
+    const retainedSymbols = new Set([
+      ...previousLongMap.keys(),
+      ...previousShortMap.keys(),
+    ]);
+
+    const universe = await getTop30dVolumePairs(marketCapMap, 50, retainedSymbols);
     if (!universe || universe.length === 0) {
       if (!errorState) errorState = 'PROVIDER_UNAVAILABLE';
       const emptyResult = {
@@ -1075,13 +1106,13 @@ export async function runFullScan(macroContext = {}, forceRefresh = false) {
     const qualified = analyzed.filter(passesQualityGate);
     assignStrengthPercentiles(qualified);
 
-    // Build v8 Candidates for LONG and SHORT
+    // Build v8 Candidates for LONG and SHORT with Hysteresis
     const longCandidates = qualified
-      .map(coin => buildV8Candidate(coin, DIRECTIONS.LONG, benchmark, macroContext, hydratedRegistry))
+      .map(coin => buildV8Candidate(coin, DIRECTIONS.LONG, benchmark, macroContext, hydratedRegistry, previousLongMap.get(coin.symbol)))
       .filter(Boolean);
 
     const shortCandidates = qualified
-      .map(coin => buildV8Candidate(coin, DIRECTIONS.SHORT, benchmark, macroContext, hydratedRegistry))
+      .map(coin => buildV8Candidate(coin, DIRECTIONS.SHORT, benchmark, macroContext, hydratedRegistry, previousShortMap.get(coin.symbol)))
       .filter(Boolean);
 
     // Sorting function prioritizing READY > FORMING > WATCH > EXTENDED

@@ -113,6 +113,8 @@ export function normalizeEvent(event) {
     relativeStrength24h: event.relativeStrength24h ?? null,
     reason: event.reason || '',
     outcomes: event.outcomes || null,
+    scanCount: event.scanCount || 1,
+    lastSeenAt: event.lastSeenAt || event.updatedAt || event.timestamp || Date.now(),
     updatedAt: Date.now(),
   };
 }
@@ -137,6 +139,8 @@ export function mergeEventWithExisting(newItem, existing) {
       latestTriggerPrice: newItem.triggerPrice,
       latestInvalidationLevel: newItem.invalidationLevel,
       latestTargetLevel: newItem.targetLevel,
+      scanCount: newItem.scanCount || 1,
+      lastSeenAt: Date.now(),
       updatedAt: Date.now(),
     };
   }
@@ -247,6 +251,8 @@ export function mergeEventWithExisting(newItem, existing) {
     latestTriggerPrice: newItem.triggerPrice ?? existing.latestTriggerPrice,
     latestInvalidationLevel: newItem.invalidationLevel ?? existing.latestInvalidationLevel,
     latestTargetLevel: newItem.targetLevel ?? existing.latestTargetLevel,
+    scanCount: (existing?.scanCount || 1) + 1,
+    lastSeenAt: Date.now(),
     updatedAt: Date.now(),
   };
 }
@@ -330,7 +336,7 @@ export async function queryScannerEvents(filter = {}) {
         items = items.filter(i => i.status === filter.status);
       }
       if (filter.fromTime) {
-        items = items.filter(i => i.timestamp >= filter.fromTime);
+        items = items.filter(i => Math.max(i.lastSeenAt || 0, i.updatedAt || 0, i.timestamp || 0) >= filter.fromTime);
       }
       if (filter.toTime) {
         items = items.filter(i => i.timestamp <= filter.toTime);
@@ -442,11 +448,23 @@ export function evaluateForwardOutcome(event, subsequentCandles = [], btcSubsequ
  */
 export async function updatePendingEventOutcomes(options = {}) {
   const pending = await queryScannerEvents();
-  const candidates = pending.filter(e =>
-    (e.status === SETUP_STATES.READY || e.initialStatus === SETUP_STATES.READY)
-    && (!e.outcomes || e.outcomes.resolution === 'UNRESOLVED' || e.outcomes.return24h === null)
-    && (e.confirmedAt || e.formedAt)
-  ).slice(0, 10);
+  const now = options.now || Date.now();
+  const candidates = pending.filter(e => {
+    const isReady = e.status === SETUP_STATES.READY || e.initialStatus === SETUP_STATES.READY;
+    if (!isReady) return false;
+    const eventTime = e.confirmedAt || e.formedAt || e.timestamp;
+    if (!eventTime) return false;
+
+    if (!e.outcomes || e.outcomes.resolution === 'UNRESOLVED') {
+      return true;
+    }
+
+    if ((e.outcomes.resolution === 'TRIGGERED_WIN' || e.outcomes.resolution === 'TRIGGERED_LOSS') && e.outcomes.return24h === null) {
+      return (now - eventTime) >= 24 * 3600 * 1000;
+    }
+
+    return false;
+  }).slice(0, 10);
 
   if (candidates.length === 0) return [];
 
@@ -541,6 +559,134 @@ export function summarizePerformance(events = []) {
     resolvedCount: resolved.length,
     winRate: winRate !== null ? Math.round(winRate * 10) / 10 : null,
     avgRelReturn24h: avgRelReturn24h !== null ? Math.round(avgRelReturn24h * 100) / 100 : null,
+  };
+}
+
+/**
+ * Aggregates historical scanner events over 24H or 7D to identify persistent leaders,
+ * triggered setups, and aggregate performance.
+ *
+ * @param {'24h'|'7d'} timeframe
+ */
+export async function getTrackingSummary(timeframe = '24h') {
+  const now = Date.now();
+  const durationMs = timeframe === '7d' ? 7 * 24 * 3600 * 1000 : 24 * 3600 * 1000;
+  const fromTime = now - durationMs;
+
+  const allEvents = await queryScannerEvents({ fromTime });
+
+  const coinMap = new Map();
+  const readyEvents = [];
+
+  for (const event of allEvents) {
+    const symbol = event.symbol;
+    if (!symbol) continue;
+
+    const isReady = event.status === SETUP_STATES.READY
+      || event.initialStatus === SETUP_STATES.READY
+      || event.outcomes?.resolution === 'TRIGGERED_WIN'
+      || event.outcomes?.resolution === 'TRIGGERED_LOSS';
+
+    if (isReady) {
+      readyEvents.push(event);
+    }
+
+    if (!coinMap.has(symbol)) {
+      coinMap.set(symbol, {
+        symbol,
+        baseAsset: symbol.replace(/USDT$/, ''),
+        direction: event.direction || 'LONG',
+        setupType: event.setupType,
+        firstSeen: event.formedAt || event.timestamp,
+        lastSeen: event.lastSeenAt || event.updatedAt || event.timestamp || now,
+        appearanceCount: event.scanCount || 1,
+        latestStatus: event.latestStatus ?? event.status ?? 'WATCH',
+        initialPrice: event.confirmationPrice || event.initialPrice || event.currentPrice || 0,
+        latestPrice: event.latestPrice ?? event.currentPrice ?? event.initialPrice ?? 0,
+        triggerPrice: event.triggerPrice,
+        invalidationLevel: event.invalidationLevel,
+        targetLevel: event.targetLevel,
+        rewardRiskRatio: event.rewardRiskRatio,
+        peakGainPct: event.outcomes?.maxFavorableExcursionPct ?? null,
+        maxDrawdownPct: event.outcomes?.maxAdverseExcursionPct ?? null,
+        relReturnVsBtc: event.outcomes?.relReturn24hVsBtc ?? null,
+        return24h: event.outcomes?.return24h ?? null,
+        resolution: event.outcomes?.resolution ?? (isReady ? 'RUNNING' : 'OBSERVING'),
+      });
+    } else {
+      const existing = coinMap.get(symbol);
+      existing.appearanceCount += (event.scanCount || 1);
+      existing.firstSeen = Math.min(existing.firstSeen, event.formedAt || event.timestamp);
+      const eventLastSeen = event.lastSeenAt || event.updatedAt || event.timestamp || now;
+      existing.lastSeen = Math.max(existing.lastSeen, eventLastSeen);
+
+      if (isReady) {
+        if (existing.latestStatus !== SETUP_STATES.READY) {
+          existing.latestStatus = event.latestStatus ?? event.status ?? SETUP_STATES.READY;
+          existing.setupType = event.setupType;
+        }
+        existing.triggerPrice = event.triggerPrice ?? existing.triggerPrice;
+        existing.invalidationLevel = event.invalidationLevel ?? existing.invalidationLevel;
+        existing.targetLevel = event.targetLevel ?? existing.targetLevel;
+        existing.initialPrice = event.confirmationPrice || event.initialPrice || event.currentPrice || existing.initialPrice;
+      }
+
+      if (event.outcomes?.maxFavorableExcursionPct != null) {
+        existing.peakGainPct = Math.max(existing.peakGainPct || 0, event.outcomes.maxFavorableExcursionPct);
+      }
+      if (event.outcomes?.relReturn24hVsBtc != null) {
+        existing.relReturnVsBtc = event.outcomes.relReturn24hVsBtc;
+      }
+      if (event.outcomes?.resolution && event.outcomes.resolution !== 'UNRESOLVED') {
+        existing.resolution = event.outcomes.resolution;
+      }
+    }
+  }
+
+  const leaders = Array.from(coinMap.values()).map(coin => {
+    const hoursSpan = Math.max(1, Math.round((coin.lastSeen - coin.firstSeen) / 3600000));
+    const persistenceScore = (coin.appearanceCount * 1.5)
+      + (hoursSpan * 3)
+      + (coin.peakGainPct > 0 ? Math.min(20, coin.peakGainPct * 0.5) : 0)
+      + (coin.latestStatus === SETUP_STATES.READY ? 5 : 0);
+
+    return {
+      ...coin,
+      hoursSpan,
+      persistenceScore: Math.round(persistenceScore * 10) / 10,
+    };
+  }).sort((a, b) => b.persistenceScore - a.persistenceScore);
+
+  const resolved = readyEvents.filter(e => e.outcomes?.resolution === 'TRIGGERED_WIN' || e.outcomes?.resolution === 'TRIGGERED_LOSS');
+  const wins = resolved.filter(e => e.outcomes?.resolution === 'TRIGGERED_WIN');
+  const winRate = resolved.length > 0 ? Math.round((wins.length / resolved.length) * 1000) / 10 : null;
+
+  const validRelReturns = readyEvents
+    .map(e => e.outcomes?.relReturn24hVsBtc)
+    .filter(v => v !== null && v !== undefined && Number.isFinite(v));
+  const avgRelReturn = validRelReturns.length > 0
+    ? Math.round((validRelReturns.reduce((acc, v) => acc + v, 0) / validRelReturns.length) * 100) / 100
+    : null;
+
+  const validGainers = leaders.filter(c => c.peakGainPct != null && c.peakGainPct > 0);
+  const bestCoin = validGainers.length > 0
+    ? validGainers.reduce((best, c) => (c.peakGainPct > (best?.peakGainPct ?? 0) ? c : best), null)
+    : null;
+
+  return {
+    timeframe,
+    fromTime,
+    toTime: now,
+    totalTrackedCoins: leaders.length,
+    totalReadySetups: readyEvents.length,
+    resolvedCount: resolved.length,
+    winCount: wins.length,
+    lossCount: resolved.length - wins.length,
+    winRate,
+    avgRelReturn24h: avgRelReturn,
+    bestPerformer: bestCoin ? { symbol: bestCoin.symbol, peakGainPct: bestCoin.peakGainPct } : null,
+    leaders: leaders.slice(0, 15),
+    recentTriggered: readyEvents.slice(0, 10),
   };
 }
 

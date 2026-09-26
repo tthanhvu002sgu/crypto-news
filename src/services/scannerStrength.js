@@ -9,6 +9,7 @@ import {
   QUALITY_GATE_THRESHOLDS,
   STRENGTH_THRESHOLDS,
   DIRECTIONS,
+  HYSTERESIS_CONFIG,
 } from './scannerConfig.js';
 
 const isFiniteNumber = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -121,7 +122,7 @@ export function calculateRsDurability(coin1hCloses, btc1hCloses, direction = DIR
  * Strict conditions: RS4h, RS24h, Percentile, 4H EMA structure, EMA slope, 4H Close, RS Durability.
  * Breakout is excluded from strength (reserved for setups).
  */
-export function evaluateStrength(coin, direction, benchmark, coin1hCloses = [], btc1hCloses = []) {
+export function evaluateStrength(coin, direction, benchmark, coin1hCloses = [], btc1hCloses = [], options = {}) {
   const isLong = direction === DIRECTIONS.LONG;
   const reasons = [];
   const failedConditions = [];
@@ -164,16 +165,24 @@ export function evaluateStrength(coin, direction, benchmark, coin1hCloses = [], 
     }
   }
 
-  // 3. Percentile Rank in eligible universe
+  // 3. Percentile Rank in eligible universe with Hysteresis
   const percentile = toNumber(coin.strengthPercentile, null);
+  const wasStrong = coin?._wasStrong === true || options?.wasStrong === true;
+  const longMinPercentile = wasStrong
+    ? (HYSTERESIS_CONFIG?.maintenanceMinStrengthPercentile ?? 63)
+    : STRENGTH_THRESHOLDS.longPercentileMin;
+  const shortMaxPercentile = wasStrong
+    ? (HYSTERESIS_CONFIG?.maintenanceMaxStrengthPercentileShort ?? 37)
+    : STRENGTH_THRESHOLDS.shortPercentileMax;
+
   if (isLong) {
-    if (percentile !== null && percentile >= STRENGTH_THRESHOLDS.longPercentileMin) {
+    if (percentile !== null && percentile >= longMinPercentile) {
       reasons.push(`Thuộc top ${Math.round(100 - percentile)}% mạnh nhất universe (Percentile ${percentile}%)`);
     } else {
       failedConditions.push(`Percentile chưa đạt top 30% (hiện tại: ${percentile ?? '---'}%)`);
     }
   } else {
-    if (percentile !== null && percentile <= STRENGTH_THRESHOLDS.shortPercentileMax) {
+    if (percentile !== null && percentile <= shortMaxPercentile) {
       reasons.push(`Thuộc top ${Math.round(percentile)}% yếu nhất universe (Percentile ${percentile}%)`);
     } else {
       failedConditions.push(`Percentile chưa đạt top 30% yếu (hiện tại: ${percentile ?? '---'}%)`);

@@ -10,6 +10,7 @@ import {
   detectPriceActionContext,
   evaluateShortlistUtility,
   alignSeriesByTimestamp,
+  getTop30dVolumePairs,
 } from './coinScanner.js';
 
 function kline(quoteVolume, takerBuyQuote) {
@@ -285,4 +286,25 @@ test('runFullScan loads auxiliary data and analyzes a qualified coin without run
   assert.equal(result.errorState, null);
   assert.equal(result.analyzedCount, 1);
   assert.equal(result.qualifiedCount, 1);
+});
+
+test('getTop30dVolumePairs strictly caps candidate count to limit (50)', async (t) => {
+  const mockTickers = Array.from({ length: 70 }, (_, i) => ({
+    symbol: `COIN${i}USDT`,
+    quoteVolume: String(10_000_000 - i * 100_000),
+    priceChangePercent: String((i % 2 === 0 ? 1 : -1) * (i + 1)),
+  }));
+
+  t.mock.method(axios, 'get', async (url) => {
+    if (url.includes('ticker/24hr')) {
+      return { data: mockTickers };
+    }
+    if (url.includes('klines')) {
+      return { data: Array.from({ length: 30 }, () => [Date.now(), '1', '2', '0.5', '1.5', '1000', Date.now(), '5000000']) };
+    }
+    return { data: [] };
+  });
+
+  const universe = await getTop30dVolumePairs(new Map(), 50);
+  assert.ok(universe.length <= 50, `Universe length (${universe.length}) must not exceed limit 50`);
 });
