@@ -1,11 +1,32 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { runFullScan, getTrackingSummary } from '../services/coinScanner';
-import { SETUP_STATES, SETUP_TYPES } from '../services/scannerConfig';
+import { SETUP_STATES, SETUP_TYPES, RESULT_CACHE_KEY, SCANNER_VERSION } from '../services/scannerConfig';
 import {
   RefreshCw, Zap, ExternalLink, TrendingUp, TrendingDown, ShieldCheck,
   Clock, CheckCircle2, ChevronDown, ChevronUp, AlertTriangle, HelpCircle,
   X, Activity, Check, Crosshair, Target, History, Award, Flame,
 } from 'lucide-react';
+
+function getInitialScanResult() {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(RESULT_CACHE_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.algorithmVersion === SCANNER_VERSION) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return {
+    topBuy: [],
+    topSell: [],
+    allCandidates: { buy: [], sell: [] },
+    scannedCount: 0,
+    qualifiedCount: 0,
+    errorState: null,
+    timestamp: 0,
+  };
+}
 
 const fmtCvd = (n) => {
   if (n == null || n === 0) return '---';
@@ -138,7 +159,7 @@ function ScannerMethodologyDrawer({ isOpen, onClose }) {
 }
 
 // ── SUBCOMPONENT: EXPANDED ROW DETAILS ─────────────────────────────────────────
-function ScannerRowDetails({ coin }) {
+const ScannerRowDetails = React.memo(function ScannerRowDetails({ coin }) {
   const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
   const binanceUrl = `https://www.binance.com/en/trade/${coin.baseAsset}_USDT`;
 
@@ -372,10 +393,10 @@ function ScannerRowDetails({ coin }) {
       </div>
     </div>
   );
-}
+});
 
 // ── SUBCOMPONENT: 5-COLUMN TABLE ROW (SCANNER V8) ─────────────────────────────
-function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
+const ScannerRow = React.memo(function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
   const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
 
   const isLong = direction === 'BUY';
@@ -533,10 +554,10 @@ function ScannerRow({ coin, rank, isExpanded, onToggle, direction }) {
       )}
     </>
   );
-}
+});
 
 // ── SUBCOMPONENT: MOBILE COMPACT CARD ─────────────────────────────────────────
-function ScannerMobileCard({ coin, rank, isExpanded, onToggle, direction }) {
+const ScannerMobileCard = React.memo(function ScannerMobileCard({ coin, rank, isExpanded, onToggle, direction }) {
   const tvChartUrl = `https://www.tradingview.com/chart/?symbol=BINANCE:${coin.symbol}`;
 
   const statusBadgeClass = coin.status === SETUP_STATES.READY ? 'badge-emerald'
@@ -615,10 +636,10 @@ function ScannerMobileCard({ coin, rank, isExpanded, onToggle, direction }) {
       )}
     </div>
   );
-}
+});
 
 // ── SUBCOMPONENT: 24H / 7D TRACKING SUMMARY VIEW ─────────────────────────────
-function TrackingSummaryView({ trackingData, isLoading, viewMode }) {
+const TrackingSummaryView = React.memo(function TrackingSummaryView({ trackingData, isLoading, viewMode }) {
   if (isLoading) {
     return (
       <div className="scanner-skeleton-loader glass-panel">
@@ -844,19 +865,11 @@ function TrackingSummaryView({ trackingData, isLoading, viewMode }) {
       </div>
     </div>
   );
-}
+});
 
 // ── MAIN SCANNER TAB COMPONENT ────────────────────────────────────────────────
 export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory = [] }) {
-  const [scanResult, setScanResult] = useState({
-    topBuy: [],
-    topSell: [],
-    allCandidates: { buy: [], sell: [] },
-    scannedCount: 0,
-    qualifiedCount: 0,
-    errorState: null,
-    timestamp: 0,
-  });
+  const [scanResult, setScanResult] = useState(getInitialScanResult);
   const [isScanning, setIsScanning] = useState(false);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(300);
   const [activeDirection, setActiveDirection] = useState('BUY'); // 'BUY' | 'SELL'
@@ -864,12 +877,19 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
   const [viewMode, setViewMode] = useState('LIVE'); // 'LIVE' | 'TRACKING_24H' | 'TRACKING_7D'
+  const [trackingData, setTrackingData] = useState(null);
+  const [isLoadingTracking, setIsLoadingTracking] = useState(false);
+
+  const isScanningRef = useRef(false);
   const viewModeRef = useRef(viewMode);
   useEffect(() => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
-  const [trackingData, setTrackingData] = useState(null);
-  const [isLoadingTracking, setIsLoadingTracking] = useState(false);
+
+  const propsRef = useRef({ btcChange24h, fallbackBtcChange: data.btc?.change, etfHistory });
+  useEffect(() => {
+    propsRef.current = { btcChange24h, fallbackBtcChange: data.btc?.change, etfHistory };
+  }, [btcChange24h, data.btc?.change, etfHistory]);
 
   const loadTracking = useCallback(async (mode) => {
     if (mode === 'LIVE') return;
@@ -897,41 +917,42 @@ export default function ScannerTab({ data = {}, btcChange24h = null, etfHistory 
     }
   };
 
-  const fallbackBtcChange = data.btc?.change;
-
   const executeScan = useCallback(async (force = false) => {
+    if (isScanningRef.current) return;
+    isScanningRef.current = true;
     setIsScanning(true);
     try {
-      const btcChange = isFiniteValue(btcChange24h)
-        ? Number(btcChange24h)
-        : isFiniteValue(fallbackBtcChange) ? Number(fallbackBtcChange) : null;
-      const latestEtf = [...etfHistory].reverse().find(row => isFreshEtfObservation(row));
+      const { btcChange24h: curBtcChange, fallbackBtcChange: curFallbackBtc, etfHistory: curEtfHistory } = propsRef.current;
+      const btcChange = isFiniteValue(curBtcChange)
+        ? Number(curBtcChange)
+        : isFiniteValue(curFallbackBtc) ? Number(curFallbackBtc) : null;
+      const latestEtf = [...(curEtfHistory || [])].reverse().find(row => isFreshEtfObservation(row));
       const isBtcBullish = btcChange === null ? null : btcChange > 0;
       const isEtfInflow = latestEtf ? Number(latestEtf.flow) > 0 : null;
       const res = await runFullScan({ isBtcBullish, isEtfInflow }, force);
       setScanResult(res);
       setSecondsUntilRefresh(300);
-      if (viewMode !== 'LIVE') {
-        loadTracking(viewMode);
+      if (viewModeRef.current !== 'LIVE') {
+        loadTracking(viewModeRef.current);
       }
     } catch (e) {
       console.error('[ScannerTab] Scan error:', e);
       setScanResult(prev => ({ ...prev, errorState: 'PROVIDER_UNAVAILABLE' }));
     } finally {
+      isScanningRef.current = false;
       setIsScanning(false);
     }
-  }, [btcChange24h, fallbackBtcChange, etfHistory, viewMode, loadTracking]);
+  }, [loadTracking]);
 
   useEffect(() => {
-    const initialScan = setTimeout(() => executeScan(false), 0);
-    return () => clearTimeout(initialScan);
+    executeScan(false);
   }, [executeScan]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setSecondsUntilRefresh(prev => {
         if (prev <= 1) {
-          executeScan(false);
+          setTimeout(() => executeScan(false), 0);
           return 300;
         }
         return prev - 1;
