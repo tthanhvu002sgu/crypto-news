@@ -169,34 +169,86 @@ export default function CapitalFlowPanel({
       </header>
 
       <div className="capital-flow-hero">
-        <div className="capital-flow-verdict">
-          <span className="capital-flow-state font-mono">{verdict.flow}</span>
-          <div>
-            <strong>{verdict.label}</strong>
-            <p>{verdict.detail}</p>
+        <div className="capital-flow-status">
+          <div className="capital-flow-headline">
+            <span className={`capital-flow-state-badge font-mono state-${(verdict.flow || 'neutral').toLowerCase()}`}>
+              {verdict.flow}
+            </span>
+            <strong className="capital-flow-title">{verdict.label}</strong>
           </div>
+          <p className="capital-flow-desc">{verdict.detail}</p>
         </div>
-        <div className="capital-flow-taxonomy font-mono">
-          <div><span>DIRECTIONAL BIAS</span><strong>{verdict.bias}</strong></div>
-          <div><span>MECHANISM</span><strong>{verdict.mechanism.replaceAll('_', ' ')}</strong></div>
-          <div><span>SPOT ALIGNMENT</span><strong>{verdict.spotAlignment?.label ?? '---'}</strong></div>
-          <div><span>HORIZON</span><strong>{verdict.horizon}</strong></div>
+
+        <div className="capital-flow-pills font-mono">
+          <div className="capital-flow-pill">
+            <span className="pill-label">BIAS</span>
+            <strong className={`pill-val tone-${(verdict.bias || '').toLowerCase()}`}>{verdict.bias}</strong>
+          </div>
+          <div className="capital-flow-pill">
+            <span className="pill-label">SPOT</span>
+            <strong className={`pill-val tone-${verdict.spotAlignment?.tone || 'neutral'}`}>
+              {verdict.spotAlignment?.label ?? '---'}
+            </strong>
+          </div>
+          <div className="capital-flow-pill">
+            <span className="pill-label">CROWDING</span>
+            <strong className={`pill-val tone-${verdict.crowding?.tone || 'neutral'}`}>
+              {verdict.crowding?.label ?? '---'}
+            </strong>
+          </div>
         </div>
       </div>
 
-      <dl className="capital-flow-metrics font-mono">
-        <div><dt>PRICE 24H</dt><dd>{signedPct(priceChangePct)}</dd></div>
-        <div><dt>FUTURES CVD</dt><dd>{compactUsd(inputs.netDelta)}</dd><small>{signedPct(inputs.cvdRatioPct)} / volume</small></div>
-        <div><dt>SPOT CVD</dt><dd>{compactUsd(inputs.spotNetDelta)}</dd><small>{signedPct(inputs.spotCvdRatioPct)} / volume</small></div>
-        <div><dt>OPEN INTEREST</dt><dd>{signedPct(inputs.oiChangePct)}</dd><small>{openInterest ? `${(Number(openInterest) / 1000).toFixed(1)}K BTC` : '---'}</small></div>
-        <div><dt>FUNDING</dt><dd>{fundingRate == null ? '---' : `${(Number(fundingRate) * 100).toFixed(4)}%`}</dd></div>
-        <div><dt>BASIS</dt><dd>{signedPct(basisPct, 4)}</dd></div>
-        <div><dt>CROWDING</dt><dd>{verdict.crowding.label}</dd></div>
-      </dl>
+      <div className="capital-flow-metrics-grid font-mono">
+        <div className="capital-metric-card">
+          <span className="metric-label">GIÁ 24H</span>
+          <span className={`metric-main ${(priceChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+            {signedPct(priceChangePct)}
+          </span>
+        </div>
 
-      <div className="capital-flow-notes font-mono">
-        <span>{verdict.quality.detail}{verdict.spotAlignment?.detail ? ` · ${verdict.spotAlignment.detail}` : ''}</span>
-        <span>OI quyết định exposure mở rộng/co lại; CVD chỉ xác định phía giao dịch chủ động.</span>
+        <div className="capital-metric-card">
+          <span className="metric-label">FUTURES CVD 24H</span>
+          <span className={`metric-main ${(inputs.netDelta || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+            {compactUsd(inputs.netDelta)}
+          </span>
+          <span className="metric-sub text-slate-400">
+            {signedPct(inputs.cvdRatioPct)} vol
+          </span>
+        </div>
+
+        <div className="capital-metric-card">
+          <span className="metric-label">SPOT CVD 24H</span>
+          <span className={`metric-main ${(inputs.spotNetDelta || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+            {compactUsd(inputs.spotNetDelta)}
+          </span>
+          <span className="metric-sub text-slate-400">
+            {signedPct(inputs.spotCvdRatioPct)} vol
+          </span>
+        </div>
+
+        <div className="capital-metric-card">
+          <span className="metric-label">OPEN INTEREST &amp; FUNDING</span>
+          <div className="metric-main-group">
+            <span className={`metric-main ${(inputs.oiChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+              {signedPct(inputs.oiChangePct)}
+            </span>
+            {openInterest && (
+              <span className="metric-sub-val text-slate-400">
+                ({`${(Number(openInterest) / 1000).toFixed(1)}K BTC`})
+              </span>
+            )}
+          </div>
+          <span className="metric-sub text-slate-400">
+            Funding: {fundingRate == null ? '---' : `${(Number(fundingRate) * 100).toFixed(4)}%`}{basisPct != null ? ` · Basis: ${signedPct(basisPct, 2)}` : ''}
+          </span>
+        </div>
+      </div>
+
+      <div className="capital-flow-footer font-mono">
+        <span className="text-slate-400">
+          {verdict.quality.detail}{verdict.spotAlignment?.detail ? ` · ${verdict.spotAlignment.detail}` : ''}
+        </span>
       </div>
     </section>
   );

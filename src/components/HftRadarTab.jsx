@@ -16,7 +16,7 @@ import {
 } from '../services/moveTracker';
 import { describeMoveEvent } from '../services/moveTrackerCore';
 import { subscribeCrosshair } from '../services/crosshairSync';
-import { classifyFuturesPositioning, classifySpotFutures, computeFlowMetrics } from '../services/orderFlowMetrics';
+import { classifySpotFutures, computeFlowMetrics } from '../services/orderFlowMetrics';
 import { withWindowCumulative } from '../services/cvdService';
 
 // Plugin vẽ đường dọc highlight trên chart CVD theo crosshair của AdvancedChart
@@ -529,24 +529,6 @@ function CVDPanel({
   }), [spotList, spotSeries.displayVol.buy, spotSeries.displayVol.sell, latestCvdS]);
   const flowVerdict = useMemo(() => classifySpotFutures(spotMetrics, futuresMetrics), [spotMetrics, futuresMetrics]);
 
-  const futuresPriceChangePct = useMemo(() => {
-    const first = Number(futuresList.find((point) => Number(point?.price) > 0)?.price);
-    const last = Number([...futuresList].reverse().find((point) => Number(point?.price) > 0)?.price);
-    return first > 0 && last > 0 ? ((last - first) / first) * 100 : null;
-  }, [futuresList]);
-  const oiChangePct = useMemo(() => {
-    if (!Array.isArray(oiHistory) || oiHistory.length < 2) return null;
-    const first = Number(oiHistory[0]?.sumOpenInterest);
-    const last = Number(oiHistory.at(-1)?.sumOpenInterest);
-    return first > 0 && last > 0 ? ((last - first) / first) * 100 : null;
-  }, [oiHistory]);
-  const futuresPositioning = useMemo(() => classifyFuturesPositioning({
-    priceChangePct: futuresPriceChangePct,
-    oiChangePct,
-    flowDirection: futuresMetrics.direction,
-    fundingRate,
-  }), [futuresPriceChangePct, oiChangePct, futuresMetrics.direction, fundingRate]);
-
   // ── Crosshair sync từ AdvancedChart ──
   const [syncIdx, setSyncIdx] = useState(null);
   const syncSourceRef = useRef(futuresList.length > 0 ? futuresList : spotList);
@@ -810,11 +792,14 @@ function CVDPanel({
           <ModuleMenu moduleId="hft_cvd" />
         </div>
       </div>
+      {/* Unified Flow Verdict & Market Pressure */}
       <section className={`flow-verdict flow-tone-${flowVerdict?.tone || 'neutral'}`} aria-label="Kết luận dòng lệnh Spot và Futures">
         <div className="flow-verdict-main">
-          <span className="flow-kicker font-mono">MARKET FLOW VERDICT · BINANCE BTCUSDT</span>
-          <strong>{flowVerdict?.title || 'Dòng lệnh cân bằng'}</strong>
-          <span>{flowVerdict?.detail || 'Chưa có bên nào kiểm soát rõ ràng.'}</span>
+          <div className="flow-verdict-title-row">
+            <span className="flow-kicker font-mono">ORDER FLOW VERDICT · {cvdTf}</span>
+            <strong className="flow-verdict-title">{flowVerdict?.title || 'Dòng lệnh cân bằng'}</strong>
+          </div>
+          <span className="flow-verdict-sub">{flowVerdict?.detail || 'Chưa có bên nào kiểm soát rõ ràng.'}</span>
         </div>
         <div className="flow-verdict-confidence font-mono">
           <span>CONFIDENCE</span>
@@ -826,56 +811,44 @@ function CVDPanel({
         {flowCards.map(({ key, accent, series, metrics, netDelta }) => (
           <article className={`flow-pressure-card is-${metrics?.direction || 'neutral'}`} key={key} style={{ '--flow-accent': accent }}>
             <div className="flow-pressure-head font-mono">
-              <span>{key} AGGRESSIVE FLOW</span>
+              <span className="flow-venue-label">{key} AGGRESSIVE FLOW</span>
               <span className={`flow-direction is-${metrics?.direction || 'neutral'}`}>{(metrics?.direction || 'neutral').toUpperCase()}</span>
             </div>
             <div className="flow-pressure-score font-mono">
-              <strong>{metrics?.strengthScore ?? '—'}</strong><span>/100</span>
-              <small>{fmtCvdUsd(netDelta)}</small>
+              <span className={`flow-delta-val ${(netDelta ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                {fmtCvdUsd(netDelta)}
+              </span>
+              <span className="flow-ratio-val text-slate-400">
+                {fmtSignedPct(metrics?.deltaRatioPct)} vol
+              </span>
             </div>
-            <dl className="flow-pressure-metrics font-mono">
-              <div><dt>DELTA / VOL</dt><dd>{fmtSignedPct(metrics?.deltaRatioPct)}</dd></div>
-              <div><dt>Z-SCORE</dt><dd>{metrics?.zScore == null ? 'đang tích lũy' : `${metrics.zScore > 0 ? '+' : ''}${metrics.zScore.toFixed(2)}σ`}</dd></div>
-              <div><dt>MOMENTUM</dt><dd>{(metrics?.momentum || 'stable').toUpperCase()}</dd></div>
-            </dl>
-            <div className="flow-data-health font-mono">
-              <span className={series?.isComplete ? 'is-complete' : 'is-incomplete'}>{(Number(series?.coverage) || 0).toFixed(0)}% COVERAGE</span>
-              <span>{fmtAge(series?.asOf)}</span>
+            <div className="flow-pressure-footer font-mono">
+              <span className="flow-momentum-tag">
+                MOMENTUM: <strong className="text-slate-200">{metrics?.momentum === 'accelerating' ? 'TĂNG TỐC ↗' : metrics?.momentum === 'decelerating' ? 'GIẢM TỐC ↘' : 'ỔN ĐỊNH →'}</strong>
+              </span>
+              <span className="flow-strength-tag">
+                STRENGTH: <strong className="text-slate-200">{metrics?.strengthScore ?? '—'}</strong>/100
+              </span>
             </div>
           </article>
         ))}
       </div>
 
-      <section className={`futures-positioning flow-tone-${futuresPositioning?.tone || 'neutral'}`}>
-        <div>
-          <span className="flow-kicker font-mono">FUTURES POSITIONING · OI CONTEXT 24H</span>
-          <strong>{futuresPositioning?.label || 'Chưa đủ dữ liệu định vị'}</strong>
-          <p>{futuresPositioning?.detail || 'Cần Price, CVD và lịch sử OI đồng thời.'}</p>
-        </div>
-        <dl className="futures-positioning-stats font-mono">
-          <div><dt>PRICE</dt><dd>{fmtSignedPct(futuresPriceChangePct)}</dd></div>
-          <div><dt>ΔOI</dt><dd>{fmtSignedPct(oiChangePct)}</dd></div>
-          <div><dt>OI</dt><dd>{openInterest ? `${(Number(openInterest) / 1000).toFixed(1)}K BTC` : '---'}</dd></div>
-          <div><dt>FUNDING</dt><dd>{Number.isFinite(Number(fundingRate)) ? `${(Number(fundingRate) * 100).toFixed(4)}%` : '---'}</dd></div>
-        </dl>
-      </section>
-
-      <div className="cvd-hero" style={{ paddingBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '10px 28px' }}>
-        <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title="CVD ròng Futures từ Binance">
-            {`CVD RÒNG FUTURES (${rangeLabel})`}
-          </span>
-          <span className={`cvd-value font-mono ${(latestCvdF ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+      {/* CVD Chart Integrated Legend Bar */}
+      <div className="cvd-chart-legend-bar font-mono">
+        <div className="cvd-legend-item cvd-legend-futures">
+          <span className="cvd-legend-dot" style={{ backgroundColor: '#a78bfa' }} />
+          <span className="cvd-legend-title">FUTURES CVD ({rangeLabel}):</span>
+          <strong className={`cvd-legend-value ${(latestCvdF ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
             {fmtCvdUsd(latestCvdF)}
-          </span>
+          </strong>
         </div>
-        <div className="cvd-value-wrap">
-          <span className="cvd-label font-mono" title="CVD ròng Spot từ Binance">
-            {`CVD RÒNG SPOT (${rangeLabel})`}
-          </span>
-          <span className={`cvd-value font-mono ${(latestCvdS ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+        <div className="cvd-legend-item cvd-legend-spot">
+          <span className="cvd-legend-dot" style={{ backgroundColor: '#34d399' }} />
+          <span className="cvd-legend-title">SPOT CVD ({rangeLabel}):</span>
+          <strong className={`cvd-legend-value ${(latestCvdS ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
             {fmtCvdUsd(latestCvdS)}
-          </span>
+          </strong>
         </div>
       </div>
 
