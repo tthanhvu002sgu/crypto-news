@@ -1,0 +1,196 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-09-27T00:00:00.000Z",
+  "entries": [
+    {
+      "symbol": "SOLUSDT",
+      "productScore": 100,
+      "productEvidence": "Solana xử lý >40M non-vote txs/ngày với base/priority fees trả bằng SOL trên mainnet.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "50% transaction fee bị burn vĩnh viễn, 50% chuyển cho validator; staking yield ~6.5%.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://solana.com/docs/core/fees"
+    },
+    {
+      "symbol": "BNBUSDT",
+      "productScore": 100,
+      "productEvidence": "BNB Chain là một trong các L1 EVM có volume và txs cao nhất với hàng triệu active addresses.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Cơ chế Auto-Burn định kỳ hàng quý và BEP-95 realtime gas burn trực tiếp từ phí giao dịch.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://www.bnbburn.info"
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "productScore": 100,
+      "productEvidence": "Avalanche C-Chain và hệ sinh thái Subnets đang hoạt động với nhu cầu gas thực tế.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "100% phí giao dịch trên C-Chain và subnet registration fees bị đốt vĩnh viễn.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://burnedavax.com"
+    },
+    {
+      "symbol": "SUIUSDT",
+      "productScore": 100,
+      "productEvidence": "Sui mainnet xử lý lượng lớn PTB (Programmable Transaction Blocks) với gas storage fund thực tế.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Storage fund và gas fee thu bằng SUI, phân bổ validator staking rewards.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://docs.sui.io/concepts/tokenomics"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "productScore": 100,
+      "productEvidence": "NEAR sharding Nightshade xử lý hàng triệu transactions người dùng với fast finality.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "70% transaction fees bị burn, 30% gửi cho contract tạo ra giao dịch.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://docs.near.org/concepts/basics/economics"
+    },
+    {
+      "symbol": "APTUSDT",
+      "productScore": 100,
+      "productEvidence": "Aptos Move execution engine xử lý hàng chục nghìn TPS đỉnh điểm với ứng dụng thực tế.",
+      "tokenAccrualScore": 50,
+      "tokenAccrualEvidence": "Phí gas bằng APT chuyển cho validator; đề xuất fee burn đang thảo luận nhưng chưa áp dụng toàn phần.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://aptos.dev/concepts/governance"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "productScore": 100,
+      "productEvidence": "Arbitrum One là L2 có TVL và giao dịch hàng đầu trên Ethereum, thu phí gas L2 từ người dùng.",
+      "tokenAccrualScore": 50,
+      "tokenAccrualEvidence": "ARB là governance token; DAO treasury tích lũy surplus sequencer fees nhưng chưa kích hoạt fee switch cho token holder.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://docs.arbitrum.io/dao"
+    },
+    {
+      "symbol": "OPUSDT",
+      "productScore": 100,
+      "productEvidence": "Optimism Superchain (OP Mainnet, Base, World Chain) tạo doanh thu sequencer đáng kể.",
+      "tokenAccrualScore": 50,
+      "tokenAccrualEvidence": "Sequencer revenue nạp vào RetroPGF và Treasury; OP dùng biểu quyết tài trợ nhưng chưa chia doanh thu trực tiếp.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://community.optimism.io/docs/governance"
+    },
+    {
+      "symbol": "POLUSDT",
+      "productScore": 100,
+      "productEvidence": "Polygon PoS chain và ZK-Rollups hoạt động liên tục với hàng triệu active addresses.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "POL là token staking và gas cho AggLayer và PoS, có cơ chế burn theo EIP-1559.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://polygon.technology/pol"
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "productScore": 100,
+      "productEvidence": "Aave v3 là giao thức lending lớn nhất DeFi với hàng tỷ USD tiền vay đang sinh lãi thực tế.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Doanh thu protocol tích lũy vào Collector; Umbrella safety module và 'fee share / buyback' đã thông qua qua Aave DAO.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://governance.aave.com"
+    },
+    {
+      "symbol": "UNIUSDT",
+      "productScore": 100,
+      "productEvidence": "Uniswap v2/v3/v4 xử lý volume giao dịch DEX lớn nhất toàn ngành.",
+      "tokenAccrualScore": 50,
+      "tokenAccrualEvidence": "Đề xuất kích hoạt Fee Switch đã hoàn thành staging testnet; DAO đang bỏ phiếu triển khai chính thức.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://uniswap.org/governance"
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "productScore": 100,
+      "productEvidence": "Pendle AMM yield-stripping cho phép giao dịch PT/YT với hàng tỷ USD TVL và trading volume.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "80% protocol swap fees và yield interest được phân phối trực tiếp cho vePENDLE holders.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://docs.pendle.finance/ProtocolMechanics/Mechanisms/vePENDLE"
+    },
+    {
+      "symbol": "MKRUSDT",
+      "productScore": 100,
+      "productEvidence": "Maker/Sky phát hành DAI/USDS sinh doanh thu từ lãi vay RWA và crypto-collateral.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Smart Burn Engine sử dụng surplus buffer để mua và đốt MKR tự động trên DEX.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://makerburn.com"
+    },
+    {
+      "symbol": "LINKUSDT",
+      "productScore": 100,
+      "productEvidence": "Chainlink Data Feeds và CCIP là tiêu chuẩn hạ tầng bảo vệ phần lớn DeFi và institutional pilots.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Chainlink Staking v0.2 phân phối reward từ protocol fees cho node operators và stakers.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://staking.chain.link"
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "productScore": 100,
+      "productEvidence": "Ondo Finance quản lý sản phẩm tokenized Treasuries (USDY, OUSG) với hàng trăm triệu USD AUM thực tế.",
+      "tokenAccrualScore": 50,
+      "tokenAccrualEvidence": "Management fees thu về quỹ dự án; ONDO hiện giữ vai trò quản trị DAO, fee distribution chưa bật.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://ondo.finance"
+    },
+    {
+      "symbol": "RENDERUSDT",
+      "productScore": 100,
+      "productEvidence": "Mạng Render Network kết nối GPU render và AI training với hàng triệu frames được render trả phí.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Burn-and-Mint Equilibrium (BME): khách hàng trả USD để burn RENDER tương ứng để đổi RENDER credits.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://render.x.io"
+    },
+    {
+      "symbol": "FILUSDT",
+      "productScore": 100,
+      "productEvidence": "Filecoin lưu trữ hàng Exabytes dữ liệu thực tế từ các tổ chức khoa học và doanh nghiệp.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Gas fee burn và Storage Provider collateral slashing khóa và tiêu hủy FIL.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://filfox.info"
+    },
+    {
+      "symbol": "TAOUSDT",
+      "productScore": 100,
+      "productEvidence": "Bittensor subnets cạnh tranh cung cấp machine learning inference và model training phi tập trung.",
+      "tokenAccrualScore": 100,
+      "tokenAccrualEvidence": "Dynamic TAO (dTAO) và subnet registration fees yêu cầu khóa/tiêu thụ TAO; root staking phân bổ emission.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://bittensor.com"
+    },
+    {
+      "symbol": "FETUSDT",
+      "productScore": 50,
+      "productEvidence": "ASI Alliance cung cấp nền tảng AI agents và marketplace, đang mở rộng ứng dụng doanh nghiệp.",
+      "tokenAccrualScore": 50,
+      "tokenAccrualEvidence": "Staking bảo mật mạng và thanh toán dịch vụ agent; doanh thu thương mại đang trong giai đoạn đầu.",
+      "evaluatedAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-11-30T00:00:00.000Z",
+      "sourceUrl": "https://fetch.ai"
+    }
+  ]
+}

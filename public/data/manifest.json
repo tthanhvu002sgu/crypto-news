@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "v9.0.0",
+  "modelVersion": "v1.0.0",
+  "latestDate": "2026-09-27",
+  "updatedAt": "2026-09-27T03:30:44.240Z",
+  "snapshots": [
+    {
+      "date": "2026-09-27",
+      "asOf": "2026-09-27T00:00:00.000Z",
+      "generatedAt": "2026-09-27T03:29:13.458Z",
+      "assetCount": 50,
+      "completeCount": 6,
+      "schemaVersion": "v9.0.0",
+      "modelVersion": "v1.0.0"
+    },
+    {
+      "date": "2026-09-26",
+      "asOf": "2026-09-26T00:00:00.000Z",
+      "generatedAt": "2026-09-27T03:30:06.870Z",
+      "assetCount": 50,
+      "completeCount": 0,
+      "schemaVersion": "v9.0.0",
+      "modelVersion": "v1.0.0"
+    }
+  ]
+}

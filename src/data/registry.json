@@ -1,0 +1,491 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-09-27T00:00:00.000Z",
+  "excludedSymbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "USDTUSDC",
+    "USDCUSDT",
+    "BUSDUSDT",
+    "TUSDUSDT",
+    "FDUSDUSDT",
+    "DAIUSDT",
+    "USDEUSDT",
+    "USDUSDT",
+    "EURUSDT",
+    "WBTCUSDT",
+    "WETHUSDT",
+    "WEETHUSDT",
+    "WBETHUSDT"
+  ],
+  "assets": [
+    {
+      "symbol": "SOLUSDT",
+      "baseAsset": "SOL",
+      "name": "Solana",
+      "sector": "L1",
+      "narratives": ["DePIN", "High-Throughput", "DeFi"],
+      "coingeckoId": "solana",
+      "defillamaSlug": "solana"
+    },
+    {
+      "symbol": "BNBUSDT",
+      "baseAsset": "BNB",
+      "name": "BNB",
+      "sector": "L1",
+      "narratives": ["Exchange", "EVM"],
+      "coingeckoId": "binancecoin",
+      "defillamaSlug": "bsc"
+    },
+    {
+      "symbol": "XRPUSDT",
+      "baseAsset": "XRP",
+      "name": "XRP",
+      "sector": "L1",
+      "narratives": ["Payments", "Enterprise"],
+      "coingeckoId": "ripple",
+      "defillamaSlug": "xrp"
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "baseAsset": "DOGE",
+      "name": "Dogecoin",
+      "sector": "L1",
+      "narratives": ["Meme", "Payments"],
+      "coingeckoId": "dogecoin",
+      "defillamaSlug": "doge"
+    },
+    {
+      "symbol": "ADAUSDT",
+      "baseAsset": "ADA",
+      "name": "Cardano",
+      "sector": "L1",
+      "narratives": ["PoS", "Smart-Contracts"],
+      "coingeckoId": "cardano",
+      "defillamaSlug": "cardano"
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "baseAsset": "AVAX",
+      "name": "Avalanche",
+      "sector": "L1",
+      "narratives": ["Subnets", "RWA", "DeFi"],
+      "coingeckoId": "avalanche-2",
+      "defillamaSlug": "avax"
+    },
+    {
+      "symbol": "SUIUSDT",
+      "baseAsset": "SUI",
+      "name": "Sui",
+      "sector": "L1",
+      "narratives": ["Move", "High-Throughput", "DeFi"],
+      "coingeckoId": "sui",
+      "defillamaSlug": "sui"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "baseAsset": "NEAR",
+      "name": "NEAR Protocol",
+      "sector": "L1",
+      "narratives": ["AI", "Sharding", "User-Chain"],
+      "coingeckoId": "near",
+      "defillamaSlug": "near"
+    },
+    {
+      "symbol": "APTUSDT",
+      "baseAsset": "APT",
+      "name": "Aptos",
+      "sector": "L1",
+      "narratives": ["Move", "High-Throughput"],
+      "coingeckoId": "aptos",
+      "defillamaSlug": "aptos"
+    },
+    {
+      "symbol": "TONUSDT",
+      "baseAsset": "TON",
+      "name": "The Open Network",
+      "sector": "L1",
+      "narratives": ["Telegram", "Payments", "Apps"],
+      "coingeckoId": "the-open-network",
+      "defillamaSlug": "ton"
+    },
+    {
+      "symbol": "TRXUSDT",
+      "baseAsset": "TRX",
+      "name": "TRON",
+      "sector": "L1",
+      "narratives": ["Payments", "Stablecoins"],
+      "coingeckoId": "tron",
+      "defillamaSlug": "tron"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "baseAsset": "DOT",
+      "name": "Polkadot",
+      "sector": "L1",
+      "narratives": ["Interoperability", "Substrate"],
+      "coingeckoId": "polkadot",
+      "defillamaSlug": "polkadot"
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "baseAsset": "ATOM",
+      "name": "Cosmos",
+      "sector": "L1",
+      "narratives": ["Interoperability", "IBC"],
+      "coingeckoId": "cosmos",
+      "defillamaSlug": "cosmos"
+    },
+    {
+      "symbol": "ICPUSDT",
+      "baseAsset": "ICP",
+      "name": "Internet Computer",
+      "sector": "L1",
+      "narratives": ["AI", "Cloud", "Canisters"],
+      "coingeckoId": "internet-computer",
+      "defillamaSlug": "icp"
+    },
+    {
+      "symbol": "HBARUSDT",
+      "baseAsset": "HBAR",
+      "name": "Hedera",
+      "sector": "L1",
+      "narratives": ["Enterprise", "RWA"],
+      "coingeckoId": "hedera-hashgraph",
+      "defillamaSlug": "hedera"
+    },
+    {
+      "symbol": "KASUSDT",
+      "baseAsset": "KAS",
+      "name": "Kaspa",
+      "sector": "L1",
+      "narratives": ["PoW", "BlockDAG"],
+      "coingeckoId": "kaspa",
+      "defillamaSlug": "kaspa"
+    },
+    {
+      "symbol": "SEIUSDT",
+      "baseAsset": "SEI",
+      "name": "Sei",
+      "sector": "L1",
+      "narratives": ["Parallel-EVM", "Trading"],
+      "coingeckoId": "sei-network",
+      "defillamaSlug": "sei"
+    },
+    {
+      "symbol": "INJUSDT",
+      "baseAsset": "INJ",
+      "name": "Injective",
+      "sector": "L1",
+      "narratives": ["DeFi", "Orderbook", "Cosmos"],
+      "coingeckoId": "injective-protocol",
+      "defillamaSlug": "injective"
+    },
+    {
+      "symbol": "TIAUSDT",
+      "baseAsset": "TIA",
+      "name": "Celestia",
+      "sector": "L1",
+      "narratives": ["Modular", "Data-Availability"],
+      "coingeckoId": "celestia",
+      "defillamaSlug": "celestia"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "baseAsset": "ARB",
+      "name": "Arbitrum",
+      "sector": "L2",
+      "narratives": ["Optimistic-Rollup", "DeFi", "Ethereum"],
+      "coingeckoId": "arbitrum",
+      "defillamaSlug": "arbitrum"
+    },
+    {
+      "symbol": "OPUSDT",
+      "baseAsset": "OP",
+      "name": "Optimism",
+      "sector": "L2",
+      "narratives": ["Superchain", "Optimistic-Rollup"],
+      "coingeckoId": "optimism",
+      "defillamaSlug": "optimism"
+    },
+    {
+      "symbol": "POLUSDT",
+      "baseAsset": "POL",
+      "name": "Polygon",
+      "sector": "L2",
+      "narratives": ["AggLayer", "ZK-Rollup", "PoS"],
+      "coingeckoId": "polygon-ecosystem-token",
+      "defillamaSlug": "polygon"
+    },
+    {
+      "symbol": "STXUSDT",
+      "baseAsset": "STX",
+      "name": "Stacks",
+      "sector": "L2",
+      "narratives": ["Bitcoin-L2", "Smart-Contracts"],
+      "coingeckoId": "blockstack",
+      "defillamaSlug": "stacks"
+    },
+    {
+      "symbol": "IMXUSDT",
+      "baseAsset": "IMX",
+      "name": "Immutable",
+      "sector": "L2",
+      "narratives": ["Gaming", "ZK-Rollup", "NFT"],
+      "coingeckoId": "immutable-x",
+      "defillamaSlug": "immutablex"
+    },
+    {
+      "symbol": "STRKUSDT",
+      "baseAsset": "STRK",
+      "name": "Starknet",
+      "sector": "L2",
+      "narratives": ["ZK-Rollup", "Cairo"],
+      "coingeckoId": "starknet",
+      "defillamaSlug": "starknet"
+    },
+    {
+      "symbol": "ZKUSDT",
+      "baseAsset": "ZK",
+      "name": "ZKsync",
+      "sector": "L2",
+      "narratives": ["ZK-Rollup", "Elastic-Chain"],
+      "coingeckoId": "zksync",
+      "defillamaSlug": "zksync-era"
+    },
+    {
+      "symbol": "LINKUSDT",
+      "baseAsset": "LINK",
+      "name": "Chainlink",
+      "sector": "DeFi",
+      "narratives": ["Oracle", "RWA", "CCIP"],
+      "coingeckoId": "chainlink",
+      "defillamaSlug": "chainlink"
+    },
+    {
+      "symbol": "UNIUSDT",
+      "baseAsset": "UNI",
+      "name": "Uniswap",
+      "sector": "DeFi",
+      "narratives": ["DEX", "AMM", "Unichain"],
+      "coingeckoId": "uniswap",
+      "defillamaSlug": "uniswap"
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "baseAsset": "AAVE",
+      "name": "Aave",
+      "sector": "DeFi",
+      "narratives": ["Lending", "GHO", "Multi-Chain"],
+      "coingeckoId": "aave",
+      "defillamaSlug": "aave"
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "baseAsset": "PENDLE",
+      "name": "Pendle",
+      "sector": "DeFi",
+      "narratives": ["Yield-Trading", "Restaking", "LRT"],
+      "coingeckoId": "pendle",
+      "defillamaSlug": "pendle"
+    },
+    {
+      "symbol": "MKRUSDT",
+      "baseAsset": "MKR",
+      "name": "Maker / Sky",
+      "sector": "DeFi",
+      "narratives": ["CDP", "Stablecoins", "RWA"],
+      "coingeckoId": "maker",
+      "defillamaSlug": "makerdao"
+    },
+    {
+      "symbol": "CRVUSDT",
+      "baseAsset": "CRV",
+      "name": "Curve DAO",
+      "sector": "DeFi",
+      "narratives": ["DEX", "crvUSD", "Stablecoins"],
+      "coingeckoId": "curve-dao-token",
+      "defillamaSlug": "curve-finance"
+    },
+    {
+      "symbol": "LDOUSDT",
+      "baseAsset": "LDO",
+      "name": "Lido DAO",
+      "sector": "DeFi",
+      "narratives": ["Liquid-Staking", "stETH"],
+      "coingeckoId": "lido-dao",
+      "defillamaSlug": "lido"
+    },
+    {
+      "symbol": "RUNEUSDT",
+      "baseAsset": "RUNE",
+      "name": "THORChain",
+      "sector": "DeFi",
+      "narratives": ["Cross-Chain", "DEX"],
+      "coingeckoId": "thorchain",
+      "defillamaSlug": "thorchain"
+    },
+    {
+      "symbol": "ENAUSDT",
+      "baseAsset": "ENA",
+      "name": "Ethena",
+      "sector": "DeFi",
+      "narratives": ["Synthetic-Dollar", "Delta-Neutral"],
+      "coingeckoId": "ethena",
+      "defillamaSlug": "ethena"
+    },
+    {
+      "symbol": "JUPUSDT",
+      "baseAsset": "JUP",
+      "name": "Jupiter",
+      "sector": "DeFi",
+      "narratives": ["DEX-Aggregator", "Perps", "Solana"],
+      "coingeckoId": "jupiter-exchange-solana",
+      "defillamaSlug": "jupiter"
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "baseAsset": "ONDO",
+      "name": "Ondo Finance",
+      "sector": "RWA",
+      "narratives": ["US-Treasuries", "Institutional-Yield"],
+      "coingeckoId": "ondo-finance",
+      "defillamaSlug": "ondo-finance"
+    },
+    {
+      "symbol": "CFGUSDT",
+      "baseAsset": "CFG",
+      "name": "Centrifuge",
+      "sector": "RWA",
+      "narratives": ["Credit", "Structured-Finance"],
+      "coingeckoId": "centrifuge",
+      "defillamaSlug": "centrifuge"
+    },
+    {
+      "symbol": "MPLUSDT",
+      "baseAsset": "MPL",
+      "name": "Maple Finance",
+      "sector": "RWA",
+      "narratives": ["Institutional-Lending", "Credit"],
+      "coingeckoId": "maple",
+      "defillamaSlug": "maple"
+    },
+    {
+      "symbol": "GFIUSDT",
+      "baseAsset": "GFI",
+      "name": "Goldfinch",
+      "sector": "RWA",
+      "narratives": ["Emerging-Markets", "Credit"],
+      "coingeckoId": "goldfinch",
+      "defillamaSlug": "goldfinch"
+    },
+    {
+      "symbol": "RENDERUSDT",
+      "baseAsset": "RENDER",
+      "name": "Render",
+      "sector": "DePIN",
+      "narratives": ["GPU-Compute", "AI", "Rendering"],
+      "coingeckoId": "render-token",
+      "defillamaSlug": "render"
+    },
+    {
+      "symbol": "FILUSDT",
+      "baseAsset": "FIL",
+      "name": "Filecoin",
+      "sector": "DePIN",
+      "narratives": ["Decentralized-Storage", "FVM"],
+      "coingeckoId": "filecoin",
+      "defillamaSlug": "filecoin"
+    },
+    {
+      "symbol": "ARUSDT",
+      "baseAsset": "AR",
+      "name": "Arweave",
+      "sector": "DePIN",
+      "narratives": ["Permanent-Storage", "AO-Computer"],
+      "coingeckoId": "arweave",
+      "defillamaSlug": "arweave"
+    },
+    {
+      "symbol": "HNTUSDT",
+      "baseAsset": "HNT",
+      "name": "Helium",
+      "sector": "DePIN",
+      "narratives": ["Wireless", "5G", "IoT"],
+      "coingeckoId": "helium",
+      "defillamaSlug": "helium"
+    },
+    {
+      "symbol": "THETAUSDT",
+      "baseAsset": "THETA",
+      "name": "Theta Network",
+      "sector": "DePIN",
+      "narratives": ["Video-Delivery", "Edge-Compute", "AI"],
+      "coingeckoId": "theta-token",
+      "defillamaSlug": "theta"
+    },
+    {
+      "symbol": "AKTUSDT",
+      "baseAsset": "AKT",
+      "name": "Akash Network",
+      "sector": "DePIN",
+      "narratives": ["Cloud-Compute", "AI", "Cosmos"],
+      "coingeckoId": "akash-network",
+      "defillamaSlug": "akash"
+    },
+    {
+      "symbol": "TAOUSDT",
+      "baseAsset": "TAO",
+      "name": "Bittensor",
+      "sector": "AI",
+      "narratives": ["Subnets", "Machine-Learning", "Inference"],
+      "coingeckoId": "bittensor",
+      "defillamaSlug": "bittensor"
+    },
+    {
+      "symbol": "FETUSDT",
+      "baseAsset": "FET",
+      "name": "Artificial Superintelligence Alliance",
+      "sector": "AI",
+      "narratives": ["Autonomous-Agents", "ASI"],
+      "coingeckoId": "fetch-ai",
+      "defillamaSlug": "fetch-ai"
+    },
+    {
+      "symbol": "AGIXUSDT",
+      "baseAsset": "AGIX",
+      "name": "SingularityNET",
+      "sector": "AI",
+      "narratives": ["AI-Marketplace", "ASI"],
+      "coingeckoId": "singularitynet",
+      "defillamaSlug": "singularitynet"
+    },
+    {
+      "symbol": "WLDUSDT",
+      "baseAsset": "WLD",
+      "name": "Worldcoin",
+      "sector": "AI",
+      "narratives": ["Proof-of-Humanity", "Identity"],
+      "coingeckoId": "worldcoin-wld",
+      "defillamaSlug": "worldcoin"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "baseAsset": "ARKM",
+      "name": "Arkham",
+      "sector": "AI",
+      "narratives": ["On-Chain-Intelligence", "Deanonymization"],
+      "coingeckoId": "arkham",
+      "defillamaSlug": "arkham"
+    },
+    {
+      "symbol": "IOUSDT",
+      "baseAsset": "IO",
+      "name": "io.net",
+      "sector": "AI",
+      "narratives": ["GPU-Clustering", "DePIN", "Solana"],
+      "coingeckoId": "io",
+      "defillamaSlug": "io-net"
+    }
+  ]
+}

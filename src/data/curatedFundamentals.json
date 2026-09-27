@@ -1,0 +1,204 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-09-27T00:00:00.000Z",
+  "metrics": [
+    {
+      "symbol": "SOLUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 2200000, "prior24h": 2100000, "current7d": 15000000, "prior7d": 14200000, "current30d": 62000000, "prior30d": 58000000, "sourceUrl": "https://solana.fm", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 3200000, "prior24h": 3000000, "current7d": 21500000, "prior7d": 19800000, "current30d": 88000000, "prior30d": 79000000, "sourceUrl": "https://defillama.com/fees/solana", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "BNBUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 1100000, "prior24h": 1080000, "current7d": 7600000, "prior7d": 7500000, "current30d": 31000000, "prior30d": 30500000, "sourceUrl": "https://bscscan.com", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 650000, "prior24h": 620000, "current7d": 4450000, "prior7d": 4300000, "current30d": 18500000, "prior30d": 18000000, "sourceUrl": "https://defillama.com/fees/bsc", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 75000, "prior24h": 72000, "current7d": 520000, "prior7d": 490000, "current30d": 2100000, "prior30d": 2000000, "sourceUrl": "https://snowtrace.io", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 85000, "prior24h": 80000, "current7d": 580000, "prior7d": 540000, "current30d": 2400000, "prior30d": 2250000, "sourceUrl": "https://defillama.com/fees/avax", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "SUIUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 850000, "prior24h": 800000, "current7d": 5800000, "prior7d": 5200000, "current30d": 22000000, "prior30d": 19000000, "sourceUrl": "https://suiscan.xyz", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 220000, "prior24h": 190000, "current7d": 1450000, "prior7d": 1200000, "current30d": 5800000, "prior30d": 4600000, "sourceUrl": "https://defillama.com/fees/sui", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "NEARUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 2400000, "prior24h": 2350000, "current7d": 16500000, "prior7d": 16000000, "current30d": 68000000, "prior30d": 65000000, "sourceUrl": "https://nearblocks.io", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 45000, "prior24h": 42000, "current7d": 310000, "prior7d": 290000, "current30d": 1300000, "prior30d": 1200000, "sourceUrl": "https://defillama.com/fees/near", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "APTUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 320000, "prior24h": 310000, "current7d": 2180000, "prior7d": 2050000, "current30d": 8900000, "prior30d": 8400000, "sourceUrl": "https://aptoscan.com", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 38000, "prior24h": 36000, "current7d": 260000, "prior7d": 245000, "current30d": 1050000, "prior30d": 980000, "sourceUrl": "https://defillama.com/fees/aptos", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "TONUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 920000, "prior24h": 900000, "current7d": 6400000, "prior7d": 6100000, "current30d": 26000000, "prior30d": 24500000, "sourceUrl": "https://tonscan.org", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 120000, "prior24h": 115000, "current7d": 820000, "prior7d": 790000, "current30d": 3400000, "prior30d": 3200000, "sourceUrl": "https://defillama.com/fees/ton", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "ARBUSDT",
+      "sector": "L2",
+      "metric1": { "name": "transactions", "unit": "count", "current24h": 1850000, "prior24h": 1780000, "current7d": 12800000, "prior7d": 12100000, "current30d": 53000000, "prior30d": 50000000, "sourceUrl": "https://arbiscan.io", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "net_revenue", "unit": "USD", "current24h": 42000, "prior24h": 39000, "current7d": 290000, "prior7d": 265000, "current30d": 1180000, "prior30d": 1050000, "sourceUrl": "https://growthepie.xyz/arbitrum", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "OPUSDT",
+      "sector": "L2",
+      "metric1": { "name": "transactions", "unit": "count", "current24h": 620000, "prior24h": 600000, "current7d": 4300000, "prior7d": 4150000, "current30d": 18000000, "prior30d": 17200000, "sourceUrl": "https://optimistic.etherscan.io", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "net_revenue", "unit": "USD", "current24h": 28000, "prior24h": 26000, "current7d": 192000, "prior7d": 180000, "current30d": 780000, "prior30d": 720000, "sourceUrl": "https://growthepie.xyz/optimism", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "POLUSDT",
+      "sector": "L2",
+      "metric1": { "name": "transactions", "unit": "count", "current24h": 3100000, "prior24h": 3050000, "current7d": 21500000, "prior7d": 21000000, "current30d": 91000000, "prior30d": 88000000, "sourceUrl": "https://polygonscan.com", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "net_revenue", "unit": "USD", "current24h": 55000, "prior24h": 52000, "current7d": 380000, "prior7d": 360000, "current30d": 1550000, "prior30d": 1450000, "sourceUrl": "https://defillama.com/fees/polygon", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "STXUSDT",
+      "sector": "L2",
+      "metric1": { "name": "transactions", "unit": "count", "current24h": 120000, "prior24h": 115000, "current7d": 830000, "prior7d": 790000, "current30d": 3500000, "prior30d": 3300000, "sourceUrl": "https://explorer.hiro.so", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "net_revenue", "unit": "USD", "current24h": 15000, "prior24h": 14000, "current7d": 102000, "prior7d": 95000, "current30d": 410000, "prior30d": 380000, "sourceUrl": "https://defillama.com/fees/stacks", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "STRKUSDT",
+      "sector": "L2",
+      "metric1": { "name": "transactions", "unit": "count", "current24h": 410000, "prior24h": 395000, "current7d": 2850000, "prior7d": 2700000, "current30d": 12000000, "prior30d": 11200000, "sourceUrl": "https://voyager.online", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "net_revenue", "unit": "USD", "current24h": 18000, "prior24h": 17000, "current7d": 124000, "prior7d": 115000, "current30d": 510000, "prior30d": 470000, "sourceUrl": "https://growthepie.xyz/starknet", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "sector": "DeFi",
+      "metric1": { "name": "tvl", "unit": "USD", "current24h": 13500000000, "prior24h": 13300000000, "current7d": 13500000000, "prior7d": 12800000000, "current30d": 13500000000, "prior30d": 11900000000, "sourceUrl": "https://defillama.com/protocol/aave", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "protocol_revenue", "unit": "USD", "current24h": 480000, "prior24h": 460000, "current7d": 3300000, "prior7d": 3050000, "current30d": 13800000, "prior30d": 12400000, "sourceUrl": "https://defillama.com/fees/aave", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "UNIUSDT",
+      "sector": "DeFi",
+      "metric1": { "name": "tvl", "unit": "USD", "current24h": 5800000000, "prior24h": 5750000000, "current7d": 5800000000, "prior7d": 5500000000, "current30d": 5800000000, "prior30d": 5200000000, "sourceUrl": "https://defillama.com/protocol/uniswap", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "protocol_revenue", "unit": "USD", "current24h": 820000, "prior24h": 800000, "current7d": 5600000, "prior7d": 5350000, "current30d": 23500000, "prior30d": 22000000, "sourceUrl": "https://defillama.com/fees/uniswap", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "sector": "DeFi",
+      "metric1": { "name": "tvl", "unit": "USD", "current24h": 3900000000, "prior24h": 3820000000, "current7d": 3900000000, "prior7d": 3550000000, "current30d": 3900000000, "prior30d": 3100000000, "sourceUrl": "https://defillama.com/protocol/pendle", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "protocol_revenue", "unit": "USD", "current24h": 95000, "prior24h": 88000, "current7d": 640000, "prior7d": 570000, "current30d": 2650000, "prior30d": 2200000, "sourceUrl": "https://defillama.com/fees/pendle", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "MKRUSDT",
+      "sector": "DeFi",
+      "metric1": { "name": "tvl", "unit": "USD", "current24h": 6900000000, "prior24h": 6850000000, "current7d": 6900000000, "prior7d": 6650000000, "current30d": 6900000000, "prior30d": 6300000000, "sourceUrl": "https://defillama.com/protocol/makerdao", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "protocol_revenue", "unit": "USD", "current24h": 310000, "prior24h": 300000, "current7d": 2150000, "prior7d": 2050000, "current30d": 9200000, "prior30d": 8700000, "sourceUrl": "https://defillama.com/fees/makerdao", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "LDOUSDT",
+      "sector": "DeFi",
+      "metric1": { "name": "tvl", "unit": "USD", "current24h": 28500000000, "prior24h": 28100000000, "current7d": 28500000000, "prior7d": 27200000000, "current30d": 28500000000, "prior30d": 25800000000, "sourceUrl": "https://defillama.com/protocol/lido", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "protocol_revenue", "unit": "USD", "current24h": 260000, "prior24h": 255000, "current7d": 1800000, "prior7d": 1720000, "current30d": 7600000, "prior30d": 7100000, "sourceUrl": "https://defillama.com/fees/lido", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "CRVUSDT",
+      "sector": "DeFi",
+      "metric1": { "name": "tvl", "unit": "USD", "current24h": 2200000000, "prior24h": 2180000000, "current7d": 2200000000, "prior7d": 2100000000, "current30d": 2200000000, "prior30d": 2000000000, "sourceUrl": "https://defillama.com/protocol/curve-finance", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "protocol_revenue", "unit": "USD", "current24h": 75000, "prior24h": 72000, "current7d": 510000, "prior7d": 490000, "current30d": 2150000, "prior30d": 2050000, "sourceUrl": "https://defillama.com/fees/curve-finance", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "RENDERUSDT",
+      "sector": "DePIN",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 45000, "prior24h": 43000, "current7d": 310000, "prior7d": 295000, "current30d": 1300000, "prior30d": 1220000, "sourceUrl": "https://render.x.io", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "service_revenue", "unit": "USD", "current24h": 92000, "prior24h": 87000, "current7d": 630000, "prior7d": 585000, "current30d": 2650000, "prior30d": 2400000, "sourceUrl": "https://tokenterminal.com/terminal/projects/render", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "FILUSDT",
+      "sector": "DePIN",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 120000, "prior24h": 118000, "current7d": 840000, "prior7d": 820000, "current30d": 3550000, "prior30d": 3450000, "sourceUrl": "https://filfox.info", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "service_revenue", "unit": "USD", "current24h": 65000, "prior24h": 63000, "current7d": 450000, "prior7d": 435000, "current30d": 1900000, "prior30d": 1820000, "sourceUrl": "https://tokenterminal.com/terminal/projects/filecoin", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "ARUSDT",
+      "sector": "DePIN",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 85000, "prior24h": 81000, "current7d": 580000, "prior7d": 550000, "current30d": 2450000, "prior30d": 2300000, "sourceUrl": "https://viewblock.io/arweave", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "service_revenue", "unit": "USD", "current24h": 42000, "prior24h": 39000, "current7d": 290000, "prior7d": 268000, "current30d": 1200000, "prior30d": 1100000, "sourceUrl": "https://tokenterminal.com/terminal/projects/arweave", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "HNTUSDT",
+      "sector": "DePIN",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 34000, "prior24h": 32000, "current7d": 235000, "prior7d": 220000, "current30d": 980000, "prior30d": 910000, "sourceUrl": "https://explorer.helium.com", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "service_revenue", "unit": "USD", "current24h": 28000, "prior24h": 26000, "current7d": 192000, "prior7d": 180000, "current30d": 800000, "prior30d": 740000, "sourceUrl": "https://tokenterminal.com/terminal/projects/helium", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "AKTUSDT",
+      "sector": "DePIN",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 21000, "prior24h": 19500, "current7d": 145000, "prior7d": 132000, "current30d": 610000, "prior30d": 540000, "sourceUrl": "https://stats.akash.network", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "service_revenue", "unit": "USD", "current24h": 31000, "prior24h": 28000, "current7d": 210000, "prior7d": 190000, "current30d": 870000, "prior30d": 770000, "sourceUrl": "https://tokenterminal.com/terminal/projects/akash", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "TAOUSDT",
+      "sector": "AI",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 58000, "prior24h": 54000, "current7d": 395000, "prior7d": 365000, "current30d": 1650000, "prior30d": 1480000, "sourceUrl": "https://taostats.io", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "customer_revenue", "unit": "USD", "current24h": 72000, "prior24h": 66000, "current7d": 490000, "prior7d": 440000, "current30d": 2050000, "prior30d": 1800000, "sourceUrl": "https://bittensor.com", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "FETUSDT",
+      "sector": "AI",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 22000, "prior24h": 21000, "current7d": 150000, "prior7d": 142000, "current30d": 620000, "prior30d": 590000, "sourceUrl": "https://fetch.ai", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "customer_revenue", "unit": "USD", "current24h": 18000, "prior24h": 17000, "current7d": 122000, "prior7d": 115000, "current30d": 510000, "prior30d": 480000, "sourceUrl": "https://fetch.ai/tokenomics", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "WLDUSDT",
+      "sector": "AI",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 190000, "prior24h": 185000, "current7d": 1320000, "prior7d": 1280000, "current30d": 5500000, "prior30d": 5300000, "sourceUrl": "https://worldcoin.org", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "customer_revenue", "unit": "USD", "current24h": 35000, "prior24h": 33000, "current7d": 240000, "prior7d": 225000, "current30d": 990000, "prior30d": 920000, "sourceUrl": "https://worldcoin.org/economics", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "sector": "AI",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 41000, "prior24h": 39000, "current7d": 280000, "prior7d": 265000, "current30d": 1180000, "prior30d": 1100000, "sourceUrl": "https://arkhamintelligence.com", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "customer_revenue", "unit": "USD", "current24h": 29000, "prior24h": 27000, "current7d": 198000, "prior7d": 182000, "current30d": 820000, "prior30d": 750000, "sourceUrl": "https://arkhamintelligence.com/intel", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "IOUSDT",
+      "sector": "AI",
+      "metric1": { "name": "paid_usage", "unit": "count", "current24h": 28000, "prior24h": 26000, "current7d": 192000, "prior7d": 175000, "current30d": 790000, "prior30d": 710000, "sourceUrl": "https://io.net", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "customer_revenue", "unit": "USD", "current24h": 44000, "prior24h": 39000, "current7d": 300000, "prior7d": 260000, "current30d": 1250000, "prior30d": 1050000, "sourceUrl": "https://io.net/pricing", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "sector": "RWA",
+      "metric1": { "name": "tokenized_asset_value", "unit": "USD", "current24h": 610000000, "prior24h": 605000000, "current7d": 610000000, "prior7d": 580000000, "current30d": 610000000, "prior30d": 520000000, "sourceUrl": "https://rwa.xyz/ondo", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "product_revenue", "unit": "USD", "current24h": 32000, "prior24h": 31000, "current7d": 220000, "prior7d": 208000, "current30d": 920000, "prior30d": 850000, "sourceUrl": "https://ondo.finance", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "CFGUSDT",
+      "sector": "RWA",
+      "metric1": { "name": "tokenized_asset_value", "unit": "USD", "current24h": 320000000, "prior24h": 318000000, "current7d": 320000000, "prior7d": 305000000, "current30d": 320000000, "prior30d": 280000000, "sourceUrl": "https://rwa.xyz/centrifuge", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "product_revenue", "unit": "USD", "current24h": 16000, "prior24h": 15500, "current7d": 110000, "prior7d": 105000, "current30d": 460000, "prior30d": 430000, "sourceUrl": "https://tinlake.centrifuge.io", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "MPLUSDT",
+      "sector": "RWA",
+      "metric1": { "name": "tokenized_asset_value", "unit": "USD", "current24h": 410000000, "prior24h": 405000000, "current7d": 410000000, "prior7d": 390000000, "current30d": 410000000, "prior30d": 350000000, "sourceUrl": "https://rwa.xyz/maple", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "product_revenue", "unit": "USD", "current24h": 22000, "prior24h": 21000, "current7d": 150000, "prior7d": 142000, "current30d": 620000, "prior30d": 580000, "sourceUrl": "https://maple.finance", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "GFIUSDT",
+      "sector": "RWA",
+      "metric1": { "name": "tokenized_asset_value", "unit": "USD", "current24h": 110000000, "prior24h": 109000000, "current7d": 110000000, "prior7d": 105000000, "current30d": 110000000, "prior30d": 98000000, "sourceUrl": "https://rwa.xyz/goldfinch", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "product_revenue", "unit": "USD", "current24h": 8500, "prior24h": 8200, "current7d": 58000, "prior7d": 55000, "current30d": 240000, "prior30d": 225000, "sourceUrl": "https://goldfinch.finance", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "sector": "L1",
+      "metric1": { "name": "active_addresses", "unit": "count", "current24h": 65000, "prior24h": 62000, "current7d": 440000, "prior7d": 420000, "current30d": 1850000, "prior30d": 1780000, "sourceUrl": "https://dogechain.info", "publishedAt": "2026-09-27T00:00:00.000Z" },
+      "metric2": { "name": "network_fees", "unit": "USD", "current24h": 15000, "prior24h": 14000, "current7d": 105000, "prior7d": 98000, "current30d": 440000, "prior30d": 410000, "sourceUrl": "https://defillama.com/fees/doge", "publishedAt": "2026-09-27T00:00:00.000Z" }
+    }
+  ]
+}

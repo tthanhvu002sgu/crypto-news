@@ -1,0 +1,81 @@
+name: Daily Altcoin Scanner v9 Snapshot
+
+on:
+  schedule:
+    # 01:15 UTC daily = 08:15 Vietnam Time (UTC+7)
+    - cron: '15 1 * * *'
+  workflow_dispatch:
+    inputs:
+      asOfDate:
+        description: 'Snapshot Date (YYYY-MM-DD), defaults to today'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scanner-snapshot
+  cancel-in-progress: false
+
+jobs:
+  build-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm run test:scanner
+
+      - name: Checkout Data Branch to Separate Directory
+        uses: actions/checkout@v4
+        with:
+          ref: codex/scanner-data
+          path: data-branch
+          fetch-depth: 1
+        continue-on-error: true
+
+      - name: Ensure Data Branch Initialized
+        run: |
+          if [ ! -d "data-branch/.git" ]; then
+            echo "Data branch directory not cloned; initializing fresh..."
+            mkdir -p data-branch
+            cd data-branch
+            git init -b codex/scanner-data
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            cd ..
+          fi
+
+      - name: Generate Scanner Snapshot
+        run: |
+          if [ -n "${{ github.event.inputs.asOfDate }}" ]; then
+            node scripts/generateScannerSnapshot.mjs --as-of "${{ github.event.inputs.asOfDate }}" --out-dir data-branch/data
+          else
+            node scripts/generateScannerSnapshot.mjs --out-dir data-branch/data
+          fi
+
+      - name: Commit and Push Snapshot to codex/scanner-data
+        run: |
+          cd data-branch
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "chore(scanner): daily snapshot $(date -u +%Y-%m-%d)"
+            git push origin codex/scanner-data
+          fi
