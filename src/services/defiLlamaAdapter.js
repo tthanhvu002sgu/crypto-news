@@ -92,15 +92,16 @@ export async function probeDefiLlamaStatus() {
  * Extract historical fees metric from DefiLlama chart data for a specified window and asOf.
  */
 export function extractHistoricalFeesWindow(feesData, windowKey = '7d', asOfTime = Date.now()) {
-  if (!feesData) return null;
+  if (!feesData || !Number.isFinite(asOfTime)) return null;
 
   const days = windowKey === '24h' ? 1 : windowKey === '30d' ? 30 : 7;
-  const asOfSec = Math.floor(asOfTime / 1000);
   const daySec = 86400;
+  const asOfSec = Math.floor(asOfTime / 1000);
+  if (asOfSec % daySec !== 0) return null;
 
   let chart = feesData.totalDataChart || feesData.chart || feesData.dailyFees;
   if (Array.isArray(chart) && chart.length > 0) {
-    const points = [];
+    const points = new Map();
     for (const item of chart) {
       let t = null;
       let v = null;
@@ -114,38 +115,28 @@ export function extractHistoricalFeesWindow(feesData, windowKey = '7d', asOfTime
       if (t > 1e11) t = Math.floor(t / 1000);
 
       if (Number.isFinite(t) && Number.isFinite(v) && v >= 0) {
-        points.push({ timestamp: t, value: v });
+        const day = Math.floor(t / daySec) * daySec;
+        // Duplicate daily observations are ambiguous; never count them twice.
+        if (points.has(day)) return null;
+        points.set(day, { value: v, timestamp: t });
       }
     }
 
-    if (points.length > 0) {
-      points.sort((a, b) => a.timestamp - b.timestamp);
-
-      const currentEndSec = asOfSec;
-      const currentStartSec = asOfSec - (days * daySec);
-      const priorStartSec = asOfSec - (2 * days * daySec);
-
-      // Current window: (currentStartSec, currentEndSec]
-      // Prior window: (priorStartSec, currentStartSec]
-      const currentPoints = points.filter(p => p.timestamp > currentStartSec && p.timestamp <= currentEndSec);
-      const priorPoints = points.filter(p => p.timestamp > priorStartSec && p.timestamp <= currentStartSec);
-
-      const minRequiredPoints = days === 1 ? 1 : Math.max(1, Math.floor(days * 0.7));
-      if (currentPoints.length >= minRequiredPoints && priorPoints.length >= minRequiredPoints) {
-        const curVal = currentPoints.reduce((sum, p) => sum + p.value, 0);
-        const priorVal = priorPoints.reduce((sum, p) => sum + p.value, 0);
-
-        if (priorVal > 0 && curVal >= 0) {
-          const growthRate = (curVal - priorVal) / priorVal;
-          const maxPointTime = Math.max(...currentPoints.map(p => p.timestamp));
-          return {
-            currentValue: curVal,
-            priorValue: priorVal,
-            growthRate,
-            publishedAt: new Date(maxPointTime * 1000).toISOString(),
-          };
-        }
-      }
+    let curVal = 0;
+    let priorVal = 0;
+    for (let offset = 1; offset <= 2 * days; offset += 1) {
+      const point = points.get(asOfSec - offset * daySec);
+      if (!point) return null;
+      if (offset <= days) curVal += point.value;
+      else priorVal += point.value;
+    }
+    if (priorVal > 0) {
+      return {
+        currentValue: curVal,
+        priorValue: priorVal,
+        growthRate: (curVal - priorVal) / priorVal,
+        publishedAt: new Date(points.get(asOfSec - daySec).timestamp * 1000).toISOString(),
+      };
     }
   }
 
@@ -181,42 +172,6 @@ export async function fetchLiveDefiLlamaMetrics(slug, windowKey = '7d', asOfMidn
     };
   }
 
-  // 2. If no historical chart coverage, only use live summary if asOf is current (within 1 day of now)
-  const isCurrentDate = Math.abs(Date.now() - asOfTime) <= 24 * 60 * 60 * 1000;
-  if (isCurrentDate) {
-    let curVal = null;
-    let changePct = null;
-    if (windowKey === '24h') {
-      curVal = Number(feesData.total24h);
-      changePct = Number(feesData.change_1d);
-    } else if (windowKey === '7d') {
-      curVal = Number(feesData.total7d);
-      changePct = Number(feesData.change_7d);
-    } else if (windowKey === '30d') {
-      curVal = Number(feesData.total30d);
-      changePct = Number(feesData.change_30d);
-    }
-
-    if (Number.isFinite(curVal) && curVal > 0 && Number.isFinite(changePct)) {
-      const growth = changePct / 100;
-      const priorVal = curVal / (1 + growth);
-      const sourceTime = feesData.latestTimestamp
-        ? new Date(feesData.latestTimestamp * 1000).toISOString()
-        : (feesData.timestamp ? new Date(feesData.timestamp * 1000).toISOString() : new Date().toISOString());
-
-      return {
-        metricName: 'network_fees',
-        metricUnit: 'USD',
-        currentValue: curVal,
-        priorValue: priorVal,
-        growthRate: growth,
-        sourceUrl: `https://defillama.com/fees/${slug}`,
-        publishedAt: sourceTime,
-        isValid: true,
-      };
-    }
-  }
-
-  // Past date without historical chart data: return null
+  // Summary totals have no closed-day endpoints and cannot establish a snapshot window.
   return null;
 }

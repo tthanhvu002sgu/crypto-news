@@ -173,7 +173,7 @@ export function getSectorMetricsGrowthForWindow(symbol, windowKey = '7d', asOf =
     if (hasLiveM1 || hasLiveM1Values) {
       const liveM1Pub = live.publishedAt ? new Date(live.publishedAt).getTime() : 0;
       // Anti-lookahead check on live data
-      if (!Number.isFinite(asOfTime) || liveM1Pub <= asOfTime + MS_PER_DAY) {
+      if (Number.isFinite(asOfTime) && Number.isFinite(liveM1Pub) && liveM1Pub > 0 && liveM1Pub <= asOfTime) {
         cur1 = live.metric1Value ?? cur1;
         prev1 = live.metric1Prior ?? prev1;
         g1 = hasLiveM1 ? Number(live.metric1Growth) : computeMetricGrowth(cur1, prev1);
@@ -190,7 +190,7 @@ export function getSectorMetricsGrowthForWindow(symbol, windowKey = '7d', asOf =
     if (hasLiveM2 || hasLiveM2Values) {
       const liveM2Pub = live.publishedAt ? new Date(live.publishedAt).getTime() : 0;
       // Anti-lookahead check on live data
-      if (!Number.isFinite(asOfTime) || liveM2Pub <= asOfTime + MS_PER_DAY) {
+      if (Number.isFinite(asOfTime) && Number.isFinite(liveM2Pub) && liveM2Pub > 0 && liveM2Pub <= asOfTime) {
         cur2 = live.metric2Value ?? cur2;
         prev2 = live.metric2Prior ?? prev2;
         g2 = hasLiveM2 ? Number(live.metric2Growth) : computeMetricGrowth(cur2, prev2);

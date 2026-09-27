@@ -83,7 +83,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `src/services/scannerCalculations.js` — Động cơ tính toán toán học & thống kê thuần túy: Relative Strength vs BTC/ETH qua synthetic cross rates, Spot CVD & Flow Pressure, Delta OI base/USD, funding average & sum, phân loại dòng tiền (`SPOT_SUPPORTED`, `SHORT_COVERING`, `DERIVATIVES_DOMINATED`, `MIXED_OR_INSUFFICIENT`), midrank percentiles xử lý ties bất biến, điểm xác nhận phái sinh 4 điều kiện, quant sector percentiles với quy tắc tối thiểu 5 peers, tính toán tổng hợp 4 trụ cột an toàn không look-ahead, thống kê summary stats và delta tracking.
 - `src/services/scannerDataEngine.js` — Động cơ thu thập và tạo snapshot: tải universe top 50 volume Binance Spot, song song klines 30 ngày, klines phái sinh, open interest và funding rate, đóng gói dữ liệu nến đóng 00:00 UTC thành schema snapshot v9.
 - `src/services/scannerClient.js` & `src/services/coinScanner.js` — Client service nạp manifest, tải snapshot hằng ngày, cache cục bộ, tính toán tracking delta và xuất báo cáo CSV/JSON.
-- `src/services/assetRegistry.js`, `src/services/rubricRegistry.js`, `src/services/curatedFundamentalsService.js` — Quản lý metadata tài sản, lưu trữ rubric định tính có bằng chứng chống look-ahead (90 ngày hết hạn) và tính toán chỉ số cơ bản theo sector.
+- `src/services/assetRegistry.js`, `src/services/rubricRegistry.js`, `src/services/curatedFundamentalsService.js`, `src/services/defiLlamaAdapter.js` — Quản lý metadata tài sản, rubric định tính, và chỉ số cơ bản theo sector. Adapter chỉ dùng lịch sử phí khi cả kỳ hiện tại và kỳ trước có đủ từng ngày; service chỉ nhận dữ liệu công bố không muộn hơn mốc snapshot.
 - `src/services/cvdService.js` — Động cơ CVD trung tâm quản lý mốc neo cố định UTC Anchor (2020-01-01), sổ cái snapshot ngày đóng bất biến (`hft_cvd_daily_snapshots_v1`), cơ chế tự động backfill từ Binance, và Data Contract 3 lớp (`cumulativeFromAnchor`, `cumulativeWithinWindow`, `windowNetDelta`).
 - `src/services/cvdService.test.js` — Bộ 15 unit test tự động kiểm chứng tính bất biến của timestamp, tính độc lập Spot/Futures, an toàn rollover nửa đêm UTC, miễn nhiễm quy mô cho Bias Engine và đối chiếu đồng nhất Google Sheets.
 - `src/services/orderFlowMetrics.js` — Chuẩn hóa Delta/Volume, rolling z-score, momentum, Spot–Futures verdict và Futures positioning từ Price–CVD–OI–Funding.
@@ -105,6 +105,10 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-09-27] Sửa dữ liệu fundamentals của Scanner v9
+- **Thay đổi:** Yêu cầu đủ từng ngày trong hai cửa sổ 24h/7d/30d khi tính tăng trưởng phí DefiLlama; dữ liệu thiếu hoặc trùng ngày trả về `null`. Không dựng snapshot ngày đã đóng từ summary hiện tại. Chặn chỉ số live có thời điểm công bố sau mốc snapshot.
+- **Kiểm chứng:** Thêm test hồi quy cho ngày thiếu, ngày trùng, summary thiếu lịch sử và dữ liệu công bố muộn; `npm test`, `npm run build` và ESLint cho các file vừa sửa.
 
 ### [2026-09-27] Scanner v9: Xếp hạng altcoin và tracking 24h / 7d / 30d `(FULL)`
 - **Mode / Type / Action / Lane:** REFACTOR / ARCHITECTURE / EXECUTE / FULL
