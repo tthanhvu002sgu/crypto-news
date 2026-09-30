@@ -137,7 +137,7 @@ const formatHourRange = (startTime) => {
 };
 
 const fmtPrice = (n) => n ? `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '---';
-const fmtSignedPct = (n, digits = 2) => Number.isFinite(Number(n))
+const fmtSignedPct = (n, digits = 2) => n != null && Number.isFinite(Number(n))
   ? `${Number(n) > 0 ? '+' : ''}${Number(n).toFixed(digits)}%`
   : '---';
 const fmtAge = (timestamp) => {
@@ -275,11 +275,11 @@ function useMarketCvdSeries({
       if (activeCompleted) {
         return activeCompleted.windowNetDelta ?? activeCompleted.cvd ?? 0;
       }
-      const lastCandle = (hist24?.points || hist24 || []).at?.(-1);
-      return (lastCandle?.delta ?? 0) + delta24;
+      return null;
     }
-    return (Number(normHistory?.windowNetDelta) || 0) + (Number(delta) || 0);
-  }, [tf, activeCompleted, normHistory?.windowNetDelta, delta, hist24, delta24]);
+    if (historyPoints.length === 0) return null;
+    return (Number(normHistory.windowNetDelta) || 0) + (Number(delta) || 0);
+  }, [tf, activeCompleted, normHistory.windowNetDelta, delta, historyPoints.length]);
 
   const displayVol = useMemo(() => {
     if (tf === '1H') {
@@ -288,7 +288,7 @@ function useMarketCvdSeries({
         : { buy: 0, sell: 0 };
     }
     if (!historyPoints || historyPoints.length === 0) {
-      return { buy: buyVolume || 0, sell: sellVolume || 0 };
+      return { buy: 0, sell: 0 };
     }
     let buySum = 0;
     let sellSum = 0;
@@ -302,7 +302,7 @@ function useMarketCvdSeries({
     buySum += buyIncrement;
     sellSum += sellIncrement;
     return { buy: buySum, sell: sellSum };
-  }, [tf, activeCompleted, buyVolume, sellVolume, historyPoints, buyIncrement, sellIncrement]);
+  }, [tf, activeCompleted, historyPoints, buyIncrement, sellIncrement]);
 
   const expectedBuckets = tf === '1H' ? 60 : tf === '24H' ? 24 : tf === '7D' ? 42 : 30;
   const receivedBuckets = tf === '1H'
@@ -803,7 +803,7 @@ function CVDPanel({
         </div>
         <div className="flow-verdict-confidence font-mono">
           <span>CONFIDENCE</span>
-          <strong>{flowVerdict?.confidence ?? 50}%</strong>
+          <strong title="Score theo cường độ dòng lệnh, không phải xác suất dự báo giá.">{flowVerdict?.confidence == null ? '—' : `${flowVerdict.confidence}%`}</strong>
         </div>
       </section>
 
@@ -827,7 +827,7 @@ function CVDPanel({
                 MOMENTUM: <strong className="text-slate-200">{metrics?.momentum === 'accelerating' ? 'TĂNG TỐC ↗' : metrics?.momentum === 'decelerating' ? 'GIẢM TỐC ↘' : 'ỔN ĐỊNH →'}</strong>
               </span>
               <span className="flow-strength-tag">
-                STRENGTH: <strong className="text-slate-200">{metrics?.strengthScore ?? '—'}</strong>/100
+                <span title="Cường độ mua hoặc bán ròng trong khung đã chọn; 0 là cân bằng, 100 là áp lực mạnh.">STRENGTH: <strong className="text-slate-200">{metrics?.strengthScore ?? '—'}</strong>/100</span>
               </span>
             </div>
           </article>
@@ -899,13 +899,13 @@ function CVDPanel({
         return (
           <div className="vol-gauge-container" key={key} style={{ marginBottom: '10px' }} title={`Tỷ lệ Buy/Sell Volume trong khung ${cvdTf} từ BINANCE ${venueLabel}`}>
             <div className="vol-gauge-labels font-mono">
-              <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {bpct.toFixed(1)}%</span>
+              <span className="text-emerald" title="Tỷ lệ Volume Mua Chủ Động (Market Buy)">BUY {totalVol > 0 ? `${bpct.toFixed(1)}%` : '—'}</span>
               <span className="font-mono" style={{ cursor: 'help', color: accent, fontWeight: 600 }} title={`Volume Ratio đo tỷ lệ Mua/Bán trong khung ${cvdTf} của BINANCE ${key}`}>VOLUME RATIO ({key} - {cvdTf})</span>
-              <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {spct.toFixed(1)}%</span>
+              <span className="text-rose" title="Tỷ lệ Volume Bán Chủ Động (Market Sell)">SELL {totalVol > 0 ? `${spct.toFixed(1)}%` : '—'}</span>
             </div>
             <div className="vol-gauge-bar">
-              <div className="vol-gauge-buy" style={{ width: `${bpct}%` }} />
-              <div className="vol-gauge-sell" style={{ width: `${spct}%` }} />
+              <div className="vol-gauge-buy" style={{ width: `${totalVol > 0 ? bpct : 0}%` }} />
+              <div className="vol-gauge-sell" style={{ width: `${totalVol > 0 ? spct : 0}%` }} />
             </div>
             <div className="vol-gauge-values font-mono">
               <span>{fmtUsd(buy)}</span>

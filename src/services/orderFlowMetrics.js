@@ -1,4 +1,5 @@
 const finite = (value) => {
+  if (value == null || value === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 };
@@ -21,7 +22,8 @@ export function computeFlowMetrics({ points = [], buyVolume = 0, sellVolume = 0,
   const sell = finite(sellVolume) ?? 0;
   const totalVolume = buy + sell;
   const resolvedDelta = finite(netDelta) ?? (buy - sell);
-  const deltaRatioPct = totalVolume > 0 ? (resolvedDelta / totalVolume) * 100 : null;
+  const hasData = buy >= 0 && sell >= 0 && totalVolume > 0;
+  const deltaRatioPct = hasData ? (resolvedDelta / totalVolume) * 100 : null;
 
   const bucketRatios = points
     .map((point) => {
@@ -51,24 +53,27 @@ export function computeFlowMetrics({ points = [], buyVolume = 0, sellVolume = 0,
   }
 
   const normalizedImpulse = deltaRatioPct == null ? 0 : deltaRatioPct;
-  const zImpulse = zScore == null ? 0 : zScore;
-  const strengthScore = totalVolume > 0
-    ? Math.round(clamp(50 + (normalizedImpulse * 7) + (zImpulse * 6), 0, 100))
+  // Strength is the magnitude of selected-window pressure, for either side.
+  // A relative improvement (positive z-score) can still be net selling.
+  const strengthScore = hasData
+    ? Math.round(clamp(Math.abs(normalizedImpulse) * 7, 0, 100))
     : null;
 
-  const directionalValue = zScore != null && Math.abs(zScore) >= 0.75 ? zScore : normalizedImpulse / 0.35;
-  const direction = totalVolume <= 0 || Math.abs(directionalValue) < 1
+  const direction = !hasData || Math.abs(normalizedImpulse) < 0.35
     ? 'neutral'
-    : directionalValue > 0 ? 'buy' : 'sell';
+    : normalizedImpulse > 0 ? 'buy' : 'sell';
 
-  const momentum = velocityPct == null || Math.abs(velocityPct) < 0.15
+  // Velocity is signed toward buying; momentum is relative to the active side.
+  const directionalVelocity = direction === 'sell' ? -velocityPct : velocityPct;
+  const momentum = direction === 'neutral' || velocityPct == null || Math.abs(velocityPct) < 0.15
     ? 'stable'
-    : velocityPct > 0 ? 'accelerating' : 'decelerating';
+    : directionalVelocity > 0 ? 'accelerating' : 'decelerating';
 
   return {
     buyVolume: buy,
     sellVolume: sell,
     totalVolume,
+    hasData,
     netDelta: resolvedDelta,
     deltaRatioPct,
     zScore,
@@ -80,6 +85,9 @@ export function computeFlowMetrics({ points = [], buyVolume = 0, sellVolume = 0,
 }
 
 export function classifySpotFutures(spot, futures) {
+  if (!spot || !futures || spot.hasData === false || futures.hasData === false) {
+    return { title: 'Chưa đủ dữ liệu dòng lệnh', detail: 'Cần volume và CVD của cả Spot và Futures trong khung đã chọn.', tone: 'neutral', confidence: null };
+  }
   const spotDirection = spot?.direction ?? 'neutral';
   const futuresDirection = futures?.direction ?? 'neutral';
   const key = `${spotDirection}:${futuresDirection}`;
@@ -95,8 +103,8 @@ export function classifySpotFutures(spot, futures) {
     'neutral:neutral': ['Dòng lệnh cân bằng', 'Chưa có bên nào kiểm soát rõ ràng.', 'neutral'],
   };
   const [title, detail, tone] = verdicts[key] ?? verdicts['neutral:neutral'];
-  const spotSignal = Math.abs((spot?.strengthScore ?? 50) - 50);
-  const futuresSignal = Math.abs((futures?.strengthScore ?? 50) - 50);
+  const spotSignal = spotDirection === 'neutral' ? 0 : clamp(finite(spot.strengthScore) ?? 0, 0, 100) / 2;
+  const futuresSignal = futuresDirection === 'neutral' ? 0 : clamp(finite(futures.strengthScore) ?? 0, 0, 100) / 2;
   const confidence = Math.round(clamp(45 + spotSignal + futuresSignal, 45, 92));
   return { title, detail, tone, confidence };
 }
@@ -105,7 +113,7 @@ export function classifyFuturesPositioning({ priceChangePct, oiChangePct, flowDi
   const price = finite(priceChangePct);
   const oi = finite(oiChangePct);
   const funding = finite(fundingRate);
-  if (price == null || oi == null || flowDirection === 'neutral') {
+  if (price == null || oi == null || !['buy', 'sell'].includes(flowDirection)) {
     return { label: 'Chưa đủ dữ liệu định vị', detail: 'Cần Price, CVD và lịch sử OI đồng thời.', tone: 'neutral' };
   }
 
