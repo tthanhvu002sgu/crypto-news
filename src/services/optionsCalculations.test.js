@@ -275,4 +275,180 @@ describe('optionsCalculations', () => {
     assert.equal(parseDeribitExpiryDate('32JAN26'), null);
   });
 
+  // ── LOGIC-001: Multi-expiry GEX sum(Gamma * OI) ───────────────────────────
+  test('LOGIC-001: aggregateStrikeOI & calculateGexByStrike correctly sum(Gamma * OI) for multi-expiry', () => {
+    const multiExpiryInstruments = [
+      { instrumentName: 'BTC-28MAR26-100000-C', openInterest: 100, gamma: 0.05 },
+      { instrumentName: 'BTC-25SEP26-100000-C', openInterest: 200, gamma: 0.02 },
+    ];
+    const agg = aggregateStrikeOI(multiExpiryInstruments, 100000);
+    assert.equal(agg.length, 1);
+    assert.equal(agg[0].callOI, 300);
+    // callGammaOI must be 100*0.05 + 200*0.02 = 5 + 4 = 9
+    assert.equal(agg[0].callGammaOI, 9);
+
+    const gex = calculateGexByStrike(agg, 100000);
+    // GEX = 9 * 100000 * 1 = 900000 (NOT sum(Gamma)*sum(OI) = 0.07*300*100000 = 2100000)
+    assert.equal(gex[0].callGex, 900000);
+  });
+
+  // ── LOGIC-002: Zero Gamma flip level closest to spot ───────────────────────
+  test('LOGIC-002: findGexFlipLevel selects flip level closest to spot price over deep OTM noise', () => {
+    const noisyGex = [
+      { strike: 40000, netGex: -100 },
+      { strike: 45000, netGex: 100 }, // Flip 1 around 42500 (deep OTM noise)
+      { strike: 90000, netGex: -5000000 },
+      { strike: 100000, netGex: 5000000 }, // Flip 2 at 95000 (near spot)
+      { strike: 110000, netGex: 6000000 },
+    ];
+    // With spot at 98000, it must pick 95000, not 42500
+    const flip = findGexFlipLevel(noisyGex, 98000);
+    assert.equal(flip, 95000);
+
+    // Flat zeroes should not register as a flip
+    const flatZeroGex = [
+      { strike: 40000, netGex: 0 },
+      { strike: 45000, netGex: 0 },
+      { strike: 50000, netGex: 0 },
+    ];
+    assert.equal(findGexFlipLevel(flatZeroGex, 45000), null);
+  });
+
+  // ── LOGIC-003: No 100x TradFi equity contract multiplier ───────────────────
+  test('LOGIC-003: calculateGexByStrike has NO 100x TradFi equity multiplier', () => {
+    const singleData = [{ strike: 100000, callOI: 10, putOI: 10, callGamma: 0.01, putGamma: 0.01 }];
+    const gex = calculateGexByStrike(singleData, 100000, 1);
+    // 0.01 * 10 * 100000 = 10000 (NOT 1000000)
+    assert.equal(gex[0].callGex, 10000);
+    assert.equal(gex[0].putGex, -10000);
+  });
+
+  // ── LOGIC-004: Market-wide PCR & Wings walls outside +/-30% ────────────────
+  test('LOGIC-004: analyzeBtcOptions captures walls and PCR outside +/-30% strike window', () => {
+    const wideMarket = [
+      // Within +/-30% of 100k
+      { instrumentName: 'BTC-28MAR26-100000-C', expirationTimestamp: Date.now() + 86400000, openInterest: 200, gamma: 0.05 },
+      { instrumentName: 'BTC-28MAR26-100000-P', expirationTimestamp: Date.now() + 86400000, openInterest: 300, gamma: 0.05 },
+      // Far OTM Wing Calls (+60% at 160k)
+      { instrumentName: 'BTC-28MAR26-160000-C', expirationTimestamp: Date.now() + 86400000, openInterest: 5000, gamma: 0.001 },
+      // Far OTM Wing Puts (-50% at 50k)
+      { instrumentName: 'BTC-28MAR26-50000-P', expirationTimestamp: Date.now() + 86400000, openInterest: 6000, gamma: 0.001 },
+    ];
+
+    const result = analyzeBtcOptions(wideMarket, 100000);
+    // Walls must capture true market walls at 160k and 50k
+    assert.equal(result.callWall?.strike, 160000);
+    assert.equal(result.callWall?.oi, 5000);
+    assert.equal(result.putWall?.strike, 50000);
+    assert.equal(result.putWall?.oi, 6000);
+
+    // PCR must include 160k calls and 50k puts: totalCallOI = 5200, totalPutOI = 6300
+    assert.equal(result.pcr?.totalCallOI, 5200);
+    assert.equal(result.pcr?.totalPutOI, 6300);
+
+    // But strikeDistribution for UI chart remains within +/-30%
+    assert.ok(result.strikeDistribution.every(s => s.strike >= 70000 && s.strike <= 130000));
+  });
+
+  // ── LOGIC-006: identifyWalls ignores zero OI strikes ───────────────────────
+  test('LOGIC-006: identifyWalls returns null when strikes have 0 OI (does not select strike when maxOI = -1)', () => {
+    const zeroOIStrikes = [
+      { strike: 90000, callOI: 0, putOI: 0 },
+      { strike: 100000, callOI: 0, putOI: 0 },
+      { strike: 110000, callOI: 0, putOI: 0 },
+    ];
+    const { callWall, putWall } = identifyWalls(zeroOIStrikes, 100000);
+    assert.equal(callWall, null);
+    assert.equal(putWall, null);
+
+    const callsOnly = [
+      { strike: 90000, callOI: 0, putOI: 0 },
+      { strike: 100000, callOI: 150, putOI: 0 },
+    ];
+    const res = identifyWalls(callsOnly, 100000);
+    assert.equal(res.callWall?.strike, 100000);
+    assert.equal(res.putWall, null);
+
+    // Malformed and null items handled gracefully
+    const malformed = [null, { strike: 'invalid' }, { strike: 105000, callOI: 50, putOI: 60 }];
+    const res2 = identifyWalls(malformed, 100000);
+    assert.equal(res2.callWall?.strike, 105000);
+    assert.equal(res2.putWall, null);
+  });
+
+  // ── LOGIC-002 (Enhanced): Zero-strike sign crossings and false-flip prevention ───
+  test('LOGIC-002 (Enhanced): findGexFlipLevel does NOT register false flip on intermediate 0 strikes in one-sided regime', () => {
+    // Intermediate zero in all-positive regime
+    const allPositiveWithZero = [
+      { strike: 90000, netGex: 100 },
+      { strike: 95000, netGex: 0 },
+      { strike: 100000, netGex: 150 },
+    ];
+    assert.equal(findGexFlipLevel(allPositiveWithZero, 95000), null);
+
+    // Intermediate zero in all-negative regime
+    const allNegativeWithZero = [
+      { strike: 90000, netGex: -100 },
+      { strike: 95000, netGex: 0 },
+      { strike: 100000, netGex: -150 },
+    ];
+    assert.equal(findGexFlipLevel(allNegativeWithZero, 95000), null);
+
+    // True transition across a zero strike
+    const transitionThroughZero = [
+      { strike: 90000, netGex: -100 },
+      { strike: 95000, netGex: 0 },
+      { strike: 100000, netGex: 150 },
+    ];
+    assert.equal(findGexFlipLevel(transitionThroughZero, 95000), 95000);
+
+    // True transition across multiple consecutive zero strikes (flips at midpoint)
+    const transitionAcrossMultipleZeroes = [
+      { strike: 80000, netGex: -100 },
+      { strike: 85000, netGex: 0 },
+      { strike: 90000, netGex: 0 },
+      { strike: 95000, netGex: 100 },
+    ];
+    assert.equal(findGexFlipLevel(transitionAcrossMultipleZeroes, 87500), 87500);
+
+    // Leading or trailing zeroes do not register false flips
+    const trailingZeroes = [
+      { strike: 90000, netGex: 100 },
+      { strike: 95000, netGex: 0 },
+      { strike: 100000, netGex: 0 },
+    ];
+    assert.equal(findGexFlipLevel(trailingZeroes, 95000), null);
+  });
+
+  // ── Robustness: Malformed and partial data defense ─────────────────────────
+  test('Defensive robustness: calculateMaxPain and calculatePCR handle nulls/non-finites gracefully', () => {
+    const dirtyData = [
+      null,
+      { strike: 90000, callOI: 'invalid', putOI: null },
+      { strike: 95000, callOI: 100, putOI: 200 },
+      { strike: 100000, callOI: 300, putOI: 100 },
+    ];
+    const mp = calculateMaxPain(dirtyData);
+    assert.ok(mp !== null);
+    assert.ok(Number.isFinite(mp.maxPainPrice));
+
+    const pcr = calculatePCR(dirtyData);
+    assert.ok(pcr !== null);
+    assert.equal(pcr.totalCallOI, 400);
+    assert.equal(pcr.totalPutOI, 300);
+    assert.equal(pcr.pcr, 0.75);
+  });
+
+  test('Defensive robustness: aggregateStrikeOI clamps negative gamma and non-finite OI', () => {
+    const badInstruments = [
+      { instrumentName: 'BTC-28MAR26-95000-C', openInterest: -10, gamma: -0.05 },
+      { instrumentName: 'BTC-28MAR26-95000-P', openInterest: 50, gamma: 150 }, // gamma > 100 clamped
+    ];
+    const agg = aggregateStrikeOI(badInstruments, 95000);
+    assert.equal(agg.length, 1);
+    assert.equal(agg[0].callOI, 0); // negative clamped to 0
+    assert.equal(agg[0].callGamma, 0); // negative gamma clamped to 0
+    assert.equal(agg[0].putGamma, 100); // capped at 100
+  });
+
 });

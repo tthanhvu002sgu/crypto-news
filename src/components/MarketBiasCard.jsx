@@ -3,9 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { calculateMarketBias } from '../services/biasEngine';
 import { getBiasSnapshots, recordBiasSnapshot } from '../services/biasSnapshotStore';
 import ModuleMenu from './ModuleMenu';
+import BiasComparisonChart from './BiasComparisonChart';
 import {
   ChevronDown, ChevronUp, AlertTriangle, Activity, Gauge, Filter, X,
-  Clock, Database, Zap, HelpCircle, History, TrendingUp, TrendingDown
+  Clock, Database, Zap, HelpCircle, History, TrendingUp, TrendingDown,
+  LineChart
 } from 'lucide-react';
 
 const fmt = (n, decimals = 0) => n != null ? Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : '---';
@@ -92,9 +94,10 @@ function BiasSparkline({ snapshots, color }) {
   );
 }
 
-export default function MarketBiasCard({ data, etfHistory, btcDisplay, moduleId = 'dash_bias' }) {
+export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = 'dark', moduleId = 'dash_bias' }) {
   const [expanded, setExpanded] = useState(false);
   const [showSnapshots, setShowSnapshots] = useState(false);
+  const [showChart, setShowChart] = useState(false);
   const [activePillarFilter, setActivePillarFilter] = useState(null); // null | 'microstructure' | 'onChain' | 'institutional' | 'newsRisk'
   const [snapshots, setSnapshots] = useState(() => getBiasSnapshots(30));
 
@@ -223,6 +226,16 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, moduleId 
               <span>BỎ LỌC TRỤ CỘT</span>
             </button>
           )}
+
+          <button
+            type="button"
+            className={`bias-toggle-btn font-mono ${showChart ? 'is-active-btn' : ''}`}
+            onClick={() => setShowChart(!showChart)}
+            title="Xem biểu đồ đối chiếu song song Bias Score & Giá BTC (7D / 30D)"
+          >
+            <LineChart size={13} />
+            <span>{showChart ? 'ẨN ĐỐI CHIẾU' : 'ĐỐI CHIẾU 7D/30D'}</span>
+          </button>
 
           <button
             type="button"
@@ -363,6 +376,16 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, moduleId 
           {confirmation.description || 'Tín hiệu Bias và hành vi giá đang ở trạng thái cân bằng.'}
         </div>
       </div>
+
+      {/* ── Dual-Axis Comparison Chart (Market Bias vs BTC Price 7D / 30D) ── */}
+      {showChart && (
+        <BiasComparisonChart
+          data={data}
+          etfHistory={etfHistory}
+          snapshots={snapshots}
+          theme={theme}
+        />
+      )}
 
       {/* ── Modern Spectrum Gauge Bar ──────────────────────────────── */}
       <div className="bias-gauge-wrapper">

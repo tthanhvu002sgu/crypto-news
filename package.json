@@ -12,7 +12,7 @@
     "test:move": "node --test src/services/moveTrackerCore.test.js src/services/atrCalculator.test.js src/services/moveEventStore.test.js",
     "test:macro": "node --test src/services/macroDashboardEngine.test.js",
     "test:sheets": "node --test src/services/googleSheetSync.test.js",
-    "test:bias": "node --test src/services/biasEngine.test.js",
+    "test:bias": "node --test src/services/biasEngine.test.js src/services/biasHistoryService.test.js",
     "test:cvd": "node --test src/services/cvdService.test.js",
     "test:orderflow": "node --test src/services/orderFlowMetrics.test.js",
     "test:capitalflow": "node --test src/services/capitalFlowEngine.test.js",

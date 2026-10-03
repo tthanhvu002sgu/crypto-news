@@ -53,17 +53,19 @@ const MAX_GAMMA = 100;
 
 /**
  * Group instruments by strike price, sum Call OI and Put OI separately.
- * Filter strikes within ±30% of underlying price.
+ * Optionally filter strikes within ±strikeRangePct of underlying price (default 0.30, null for no range filter).
+ * Accumulates sum(Gamma * OI) per strike for accurate multi-expiry GEX calculations.
  * @param {Array} instruments 
  * @param {number} underlyingPrice 
- * @param {number} strikeRangePct 
- * @returns {Array<{ strike: number, callOI: number, putOI: number, callGamma: number, putGamma: number }>}
+ * @param {number|null} strikeRangePct 
+ * @returns {Array<{ strike: number, callOI: number, putOI: number, callGamma: number, putGamma: number, callGammaOI: number, putGammaOI: number }>}
  */
 export const aggregateStrikeOI = (instruments, underlyingPrice, strikeRangePct = 0.30) => {
   if (!Array.isArray(instruments) || finite(underlyingPrice) === null) return [];
   
-  const minStrike = underlyingPrice * (1 - strikeRangePct);
-  const maxStrike = underlyingPrice * (1 + strikeRangePct);
+  const hasRange = strikeRangePct != null && Number.isFinite(strikeRangePct);
+  const minStrike = hasRange ? underlyingPrice * (1 - strikeRangePct) : -Infinity;
+  const maxStrike = hasRange ? underlyingPrice * (1 + strikeRangePct) : Infinity;
   
   const strikeMap = new Map();
   
@@ -77,19 +79,29 @@ export const aggregateStrikeOI = (instruments, underlyingPrice, strikeRangePct =
     if (strike < minStrike || strike > maxStrike) continue;
     
     if (!strikeMap.has(strike)) {
-      strikeMap.set(strike, { strike, callOI: 0, putOI: 0, callGamma: 0, putGamma: 0 });
+      strikeMap.set(strike, {
+        strike,
+        callOI: 0,
+        putOI: 0,
+        callGamma: 0,
+        putGamma: 0,
+        callGammaOI: 0,
+        putGammaOI: 0
+      });
     }
     
     const data = strikeMap.get(strike);
-    const oi = finite(inst.openInterest || inst.open_interest) || 0;
-    const gamma = Math.min(finite(inst.gamma) || 0, MAX_GAMMA);
+    const oi = Math.max(0, finite(inst.openInterest || inst.open_interest) || 0);
+    const gamma = Math.max(0, Math.min(finite(inst.gamma) || 0, MAX_GAMMA));
     
     if (type === 'C') {
       data.callOI += oi;
       data.callGamma += gamma;
+      data.callGammaOI += gamma * oi;
     } else if (type === 'P') {
       data.putOI += oi;
       data.putGamma += gamma;
+      data.putGammaOI += gamma * oi;
     }
   }
   
@@ -104,19 +116,24 @@ export const aggregateStrikeOI = (instruments, underlyingPrice, strikeRangePct =
 export const calculateMaxPain = (strikeData) => {
   if (!Array.isArray(strikeData) || strikeData.length === 0) return null;
   
+  const valid = strikeData.filter(d => d && finite(d.strike) !== null);
+  if (valid.length === 0) return null;
+
   let minPain = Infinity;
   let maxPainPrice = null;
   
-  for (const candidate of strikeData) {
+  for (const candidate of valid) {
     const candidateStrike = candidate.strike;
     let totalPain = 0;
     
-    for (const option of strikeData) {
+    for (const option of valid) {
       const strike = option.strike;
-      // call buyer value at expiration = max(0, underlying - strike), where underlying is candidateStrike
-      const callVal = Math.max(0, candidateStrike - strike) * option.callOI;
-      // put buyer value at expiration = max(0, strike - underlying)
-      const putVal = Math.max(0, strike - candidateStrike) * option.putOI;
+      const callOI = finite(option.callOI) || 0;
+      const putOI = finite(option.putOI) || 0;
+      // call buyer value at expiration = max(0, candidateStrike - strike) * callOI
+      const callVal = Math.max(0, candidateStrike - strike) * callOI;
+      // put buyer value at expiration = max(0, strike - candidateStrike) * putOI
+      const putVal = Math.max(0, strike - candidateStrike) * putOI;
       totalPain += callVal + putVal;
     }
     
@@ -131,8 +148,10 @@ export const calculateMaxPain = (strikeData) => {
 };
 
 /**
- * Net Gamma Exposure per strike
- * @param {Array<{ strike: number, callOI: number, putOI: number, callGamma: number, putGamma: number }>} strikeData 
+ * Net Gamma Exposure per strike (Deribit BTC: 1 contract = 1 BTC, no 100x TradFi multiplier)
+ * Call GEX is positive, Put GEX is negative (MM Net Long Calls / Net Short Puts)
+ * Uses exact sum(Gamma * OI) if available.
+ * @param {Array<{ strike: number, callOI: number, putOI: number, callGamma?: number, putGamma?: number, callGammaOI?: number, putGammaOI?: number }>} strikeData 
  * @param {number} underlyingPrice 
  * @param {number} contractMultiplier 
  * @returns {Array<{ strike: number, callGex: number, putGex: number, netGex: number }>}
@@ -140,25 +159,38 @@ export const calculateMaxPain = (strikeData) => {
 export const calculateGexByStrike = (strikeData, underlyingPrice, contractMultiplier = 1) => {
   if (!Array.isArray(strikeData) || finite(underlyingPrice) === null) return [];
   
-  return strikeData.map(data => {
-    const rawCallGex = (data.callGamma || 0) * (data.callOI || 0) * underlyingPrice * contractMultiplier * 100 * 1;
-    const rawPutGex = (data.putGamma || 0) * (data.putOI || 0) * underlyingPrice * contractMultiplier * 100 * (-1);
-    const callGex = rawCallGex === 0 ? 0 : rawCallGex;
-    const putGex = rawPutGex === 0 ? 0 : rawPutGex;
-    const rawNetGex = callGex + putGex;
-    const netGex = rawNetGex === 0 ? 0 : rawNetGex;
-    
-    return {
-      strike: data.strike,
-      callGex,
-      putGex,
-      netGex
-    };
-  }).sort((a, b) => a.strike - b.strike);
+  const spot = finite(underlyingPrice);
+  const mult = finite(contractMultiplier) ?? 1;
+
+  return strikeData
+    .filter(data => data && finite(data.strike) !== null)
+    .map(data => {
+      const callGammaOI = data.callGammaOI != null
+        ? (finite(data.callGammaOI) || 0)
+        : (finite(data.callGamma) || 0) * (finite(data.callOI) || 0);
+      const putGammaOI = data.putGammaOI != null
+        ? (finite(data.putGammaOI) || 0)
+        : (finite(data.putGamma) || 0) * (finite(data.putOI) || 0);
+      const rawCallGex = callGammaOI * spot * mult * 1;
+      const rawPutGex = putGammaOI * spot * mult * (-1);
+      const callGex = rawCallGex === 0 ? 0 : rawCallGex;
+      const putGex = rawPutGex === 0 ? 0 : rawPutGex;
+      const rawNetGex = callGex + putGex;
+      const netGex = rawNetGex === 0 ? 0 : rawNetGex;
+      
+      return {
+        strike: data.strike,
+        callGex,
+        putGex,
+        netGex
+      };
+    })
+    .sort((a, b) => a.strike - b.strike);
 };
 
 /**
- * Identify call wall and put wall
+ * Identify call wall and put wall.
+ * Requires OI > 0 so zero-OI strikes are never selected as walls.
  * @param {Array<{ strike: number, callOI: number, putOI: number }>} strikeData 
  * @param {number} underlyingPrice 
  * @returns {{ callWall: { strike: number, oi: number } | null, putWall: { strike: number, oi: number } | null }}
@@ -171,20 +203,27 @@ export const identifyWalls = (strikeData, underlyingPrice) => {
     return { callWall, putWall };
   }
   
-  let maxCallOI = -1;
-  let maxPutOI = -1;
+  let maxCallOI = 0;
+  let maxPutOI = 0;
   
   for (const data of strikeData) {
-    if (data.strike >= underlyingPrice) {
-      if (data.callOI > maxCallOI) {
-        maxCallOI = data.callOI;
-        callWall = { strike: data.strike, oi: data.callOI };
+    if (!data) continue;
+    const strike = finite(data.strike);
+    if (strike === null) continue;
+
+    const callOI = finite(data.callOI) || 0;
+    const putOI = finite(data.putOI) || 0;
+
+    if (strike >= underlyingPrice) {
+      if (callOI > maxCallOI) {
+        maxCallOI = callOI;
+        callWall = { strike, oi: callOI };
       }
     }
-    if (data.strike <= underlyingPrice) {
-      if (data.putOI > maxPutOI) {
-        maxPutOI = data.putOI;
-        putWall = { strike: data.strike, oi: data.putOI };
+    if (strike <= underlyingPrice) {
+      if (putOI > maxPutOI) {
+        maxPutOI = putOI;
+        putWall = { strike, oi: putOI };
       }
     }
   }
@@ -194,27 +233,81 @@ export const identifyWalls = (strikeData, underlyingPrice) => {
 
 /**
  * Find the strike price where Net GEX crosses zero (sign change).
+ * When underlyingPrice is provided, returns the flip level closest to current Spot price.
+ * Accurately handles transitions across zero-OI strikes without registering false flips.
  * @param {Array<{ strike: number, netGex: number }>} gexByStrike 
+ * @param {number|null} underlyingPrice 
  * @returns {number | null}
  */
-export const findGexFlipLevel = (gexByStrike) => {
+export const findGexFlipLevel = (gexByStrike, underlyingPrice = null) => {
   if (!Array.isArray(gexByStrike) || gexByStrike.length < 2) return null;
   
-  for (let i = 1; i < gexByStrike.length; i++) {
-    const prev = gexByStrike[i - 1];
-    const curr = gexByStrike[i];
+  // Filter valid items with numeric strike and netGex
+  const valid = [];
+  for (const item of gexByStrike) {
+    if (item && finite(item.strike) !== null && finite(item.netGex) !== null) {
+      valid.push({ strike: Number(item.strike), netGex: Number(item.netGex) });
+    }
+  }
+  if (valid.length < 2) return null;
+
+  const flips = [];
+  
+  for (let i = 0; i < valid.length - 1; i++) {
+    const curr = valid[i];
+    const next = valid[i + 1];
     
-    // Check if sign flips between adjacent strikes
-    if ((prev.netGex < 0 && curr.netGex >= 0) || (prev.netGex > 0 && curr.netGex <= 0)) {
-      const spread = Math.abs(prev.netGex) + Math.abs(curr.netGex);
-      if (spread === 0) return curr.strike;
-      const ratio = Math.abs(prev.netGex) / spread;
-      const flipPrice = prev.strike + ratio * (curr.strike - prev.strike);
-      return flipPrice;
+    // Case 1: Direct sign change between two non-zero strikes
+    if ((curr.netGex < 0 && next.netGex > 0) || (curr.netGex > 0 && next.netGex < 0)) {
+      const spread = Math.abs(curr.netGex) + Math.abs(next.netGex);
+      if (spread > 0) {
+        const ratio = Math.abs(curr.netGex) / spread;
+        const flipPrice = curr.strike + ratio * (next.strike - curr.strike);
+        flips.push(flipPrice);
+      }
+      continue;
+    }
+
+    // Case 2: One or more zeroes between non-zero strikes.
+    // Trigger when leaving a non-zero strike into a zero strike (curr.netGex !== 0 and next.netGex === 0).
+    if (curr.netGex !== 0 && next.netGex === 0) {
+      let endIdx = i + 1;
+      while (endIdx < valid.length && valid[endIdx].netGex === 0) {
+        endIdx++;
+      }
+
+      // If there is a non-zero strike after the zero block, check for true sign change
+      if (endIdx < valid.length) {
+        const after = valid[endIdx];
+        if ((curr.netGex < 0 && after.netGex > 0) || (curr.netGex > 0 && after.netGex < 0)) {
+          const firstZeroStrike = valid[i + 1].strike;
+          const lastZeroStrike = valid[endIdx - 1].strike;
+          const flipPrice = (firstZeroStrike + lastZeroStrike) / 2;
+          flips.push(flipPrice);
+        }
+      }
+      // Advance loop index to the end of the zero block
+      i = endIdx - 1;
     }
   }
   
-  return null;
+  if (flips.length === 0) return null;
+
+  const spot = finite(underlyingPrice);
+  if (spot !== null) {
+    let closestFlip = flips[0];
+    let minDiff = Math.abs(flips[0] - spot);
+    for (let j = 1; j < flips.length; j++) {
+      const diff = Math.abs(flips[j] - spot);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestFlip = flips[j];
+      }
+    }
+    return closestFlip;
+  }
+  
+  return flips[0];
 };
 
 /**
@@ -228,13 +321,15 @@ export const classifyGammaRegime = (gexByStrike, currentPrice) => {
     return { regime: 'NEUTRAL', netGexAtPrice: 0, description: 'No data' };
   }
   
-  const minStrike = currentPrice * 0.95;
-  const maxStrike = currentPrice * 1.05;
+  const spot = finite(currentPrice);
+  const minStrike = spot * 0.95;
+  const maxStrike = spot * 1.05;
   
   let netGexAtPrice = 0;
   for (const data of gexByStrike) {
+    if (!data || finite(data.strike) === null) continue;
     if (data.strike >= minStrike && data.strike <= maxStrike) {
-      netGexAtPrice += data.netGex;
+      netGexAtPrice += finite(data.netGex) || 0;
     }
   }
   
@@ -258,8 +353,9 @@ export const calculatePCR = (strikeData) => {
   let totalPutOI = 0;
   
   for (const data of strikeData) {
-    totalCallOI += data.callOI;
-    totalPutOI += data.putOI;
+    if (!data) continue;
+    totalCallOI += Math.max(0, finite(data.callOI) || 0);
+    totalPutOI += Math.max(0, finite(data.putOI) || 0);
   }
   
   if (totalCallOI === 0) return null;
@@ -285,14 +381,17 @@ export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null
   }
   
   const filtered = filterByDte(instruments, dteFilter);
-  const strikeDistribution = aggregateStrikeOI(filtered, underlyingPrice);
+  // Full chain without strike truncation for market-wide metrics (PCR, Walls, Max Pain)
+  const allStrikeDistribution = aggregateStrikeOI(filtered, underlyingPrice, null);
+  // Display strikes within ±30% for localized GEX & distribution chart
+  const strikeDistribution = aggregateStrikeOI(filtered, underlyingPrice, 0.30);
   
-  const maxPain = calculateMaxPain(strikeDistribution);
+  const maxPain = calculateMaxPain(allStrikeDistribution.length > 0 ? allStrikeDistribution : strikeDistribution);
   const gexByStrike = calculateGexByStrike(strikeDistribution, underlyingPrice);
-  const { callWall, putWall } = identifyWalls(strikeDistribution, underlyingPrice);
-  const gexFlipPrice = findGexFlipLevel(gexByStrike);
+  const { callWall, putWall } = identifyWalls(allStrikeDistribution, underlyingPrice);
+  const gexFlipPrice = findGexFlipLevel(gexByStrike, underlyingPrice);
   const gammaRegime = classifyGammaRegime(gexByStrike, underlyingPrice);
-  const pcr = calculatePCR(strikeDistribution);
+  const pcr = calculatePCR(allStrikeDistribution);
   
   return {
     strikeDistribution,

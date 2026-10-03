@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ModuleMenu from './ModuleMenu';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import { fetchCached } from '../utils/cache.js';
@@ -26,44 +26,50 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const hasDataRef = useRef(false);
+
+  const loadData = useCallback(async (force = false) => {
+    setLoading(true);
+    try {
+      const result = await fetchCached(
+        CACHE_KEY,
+        () => fetchDeribitOptionChain('BTC'),
+        CACHE_TTL,
+        null,
+        null,
+        force
+      );
+      if (result && Array.isArray(result.instruments) && result.instruments.length > 0) {
+        hasDataRef.current = true;
+        setChain(result);
+        setLastUpdated(result.timestamp || Date.now());
+        setError(null);
+      } else if (!hasDataRef.current) {
+        setError('Không thể tải dữ liệu Options từ Deribit (API không phản hồi hoặc không có dữ liệu)');
+      }
+    } catch (e) {
+      console.error('[OptionsRegimePanel]', e.message);
+      if (!hasDataRef.current) {
+        setError(e.message || 'Lỗi kết nối Deribit API');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let ignore = false;
 
-    const loadData = async (force = false) => {
-      try {
-        const result = await fetchCached(
-          CACHE_KEY,
-          () => fetchDeribitOptionChain('BTC'),
-          CACHE_TTL,
-          null,
-          null,
-          force
-        );
-        if (!ignore && result && result.instruments) {
-          setChain(result);
-          setLastUpdated(result.timestamp || Date.now());
-          setError(null);
-        }
-      } catch (e) {
-        if (!ignore) {
-          console.error('[OptionsRegimePanel]', e.message);
-          setError(e.message);
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
-    };
+    loadData(false);
+    const interval = setInterval(() => {
+      if (!ignore) loadData(false);
+    }, CACHE_TTL);
 
-    loadData();
-    const interval = setInterval(() => loadData(false), CACHE_TTL);
     return () => {
       ignore = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [loadData]);
 
   // Re-analyze with current DTE filter whenever chain or filter changes
   const filtered = useMemo(() => {
@@ -72,6 +78,24 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
   }, [chain, dteFilter]);
 
   const strikeDistribution = filtered?.strikeDistribution;
+
+  // Closest strike to spot price (LOGIC-007)
+  const closestStrikeToSpot = useMemo(() => {
+    if (!strikeDistribution || strikeDistribution.length === 0 || !filtered?.meta?.underlyingPrice) {
+      return null;
+    }
+    const spot = filtered.meta.underlyingPrice;
+    let closest = strikeDistribution[0].strike;
+    let minDiff = Math.abs(closest - spot);
+    for (let i = 1; i < strikeDistribution.length; i++) {
+      const diff = Math.abs(strikeDistribution[i].strike - spot);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = strikeDistribution[i].strike;
+      }
+    }
+    return closest;
+  }, [strikeDistribution, filtered?.meta?.underlyingPrice]);
 
   // Find max OI for bar scaling
   const maxOI = useMemo(() => {
@@ -130,7 +154,45 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
 
       {error && !chain && (
         <div className="chart-empty font-mono" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-rose-400)', fontSize: '0.7rem' }}>
-          Lỗi kết nối Deribit: {error}
+          <div style={{ marginBottom: '8px' }}>
+            {error.startsWith('Không') || error.startsWith('Lỗi') ? error : `Lỗi kết nối Deribit: ${error}`}
+          </div>
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            style={{
+              padding: '4px 12px',
+              fontSize: '0.65rem',
+              background: 'transparent',
+              border: '1px solid var(--border-panel)',
+              borderRadius: '4px',
+              color: 'var(--text-slate-300)',
+              cursor: 'pointer'
+            }}
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && !chain && (
+        <div className="chart-empty font-mono" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-rose-400)', fontSize: '0.7rem' }}>
+          <div style={{ marginBottom: '8px' }}>Không có dữ liệu Options từ Deribit</div>
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            style={{
+              padding: '4px 12px',
+              fontSize: '0.65rem',
+              background: 'transparent',
+              border: '1px solid var(--border-panel)',
+              borderRadius: '4px',
+              color: 'var(--text-slate-300)',
+              cursor: 'pointer'
+            }}
+          >
+            Thử lại
+          </button>
         </div>
       )}
 
@@ -152,10 +214,10 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
             }}>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>CALL WALL (Khang cu)</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-rose-400)' }}>
-                {filtered.callWall ? fmtStrike(filtered.callWall.strike) : '---'}
+                {filtered.callWall?.strike != null ? fmtStrike(filtered.callWall.strike) : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                {filtered.callWall ? `OI: ${filtered.callWall.oi.toLocaleString()} BTC` : 'N/A'}
+                {filtered.callWall?.oi != null ? `OI: ${filtered.callWall.oi.toLocaleString()} BTC` : 'N/A'}
               </div>
             </div>
 
@@ -168,10 +230,10 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
             }}>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>PUT WALL (Ho tro)</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-emerald-400)' }}>
-                {filtered.putWall ? fmtStrike(filtered.putWall.strike) : '---'}
+                {filtered.putWall?.strike != null ? fmtStrike(filtered.putWall.strike) : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                {filtered.putWall ? `OI: ${filtered.putWall.oi.toLocaleString()} BTC` : 'N/A'}
+                {filtered.putWall?.oi != null ? `OI: ${filtered.putWall.oi.toLocaleString()} BTC` : 'N/A'}
               </div>
             </div>
 
@@ -184,7 +246,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
             }}>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>MAX PAIN (Luc hut dao han)</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-amber-400)' }}>
-                {filtered.maxPain ? fmtStrike(filtered.maxPain.maxPainPrice) : '---'}
+                {filtered.maxPain?.maxPainPrice != null ? fmtStrike(filtered.maxPain.maxPainPrice) : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
                 {filtered.meta?.underlyingPrice
@@ -202,7 +264,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
             }}>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>GEX FLIP (Ranh gioi bien dong)</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-cyan-400)' }}>
-                {filtered.gexFlipPrice ? fmtStrike(Math.round(filtered.gexFlipPrice)) : '---'}
+                {filtered.gexFlipPrice != null ? fmtStrike(Math.round(filtered.gexFlipPrice)) : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
                 Zero Gamma Level
@@ -218,10 +280,10 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
             }}>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>PUT/CALL RATIO</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 600, color: filtered?.pcr?.pcr > 1.0 ? 'var(--color-rose-400)' : filtered?.pcr?.pcr < 0.7 ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
-                {filtered.pcr ? filtered.pcr.pcr.toFixed(2) : '---'}
+                {filtered?.pcr?.pcr != null ? filtered.pcr.pcr.toFixed(2) : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                {filtered.pcr?.pcr > 1.2 ? 'Hedging cao' : filtered.pcr?.pcr < 0.6 ? 'Bullish skew' : 'Can bang'}
+                {filtered?.pcr?.pcr > 1.2 ? 'Hedging cao' : filtered?.pcr?.pcr < 0.6 ? 'Bullish skew' : 'Can bang'}
               </div>
             </div>
 
@@ -264,8 +326,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
                 filtered.strikeDistribution.map((row) => {
                   const callPct = (row.callOI / maxOI) * 100;
                   const putPct = (row.putOI / maxOI) * 100;
-                  const isCurrentPrice = filtered.meta?.underlyingPrice &&
-                    Math.abs(row.strike - filtered.meta.underlyingPrice) / filtered.meta.underlyingPrice < 0.01;
+                  const isCurrentPrice = row.strike === closestStrikeToSpot;
                   const isCallWall = filtered.callWall?.strike === row.strike;
                   const isPutWall = filtered.putWall?.strike === row.strike;
 
@@ -314,7 +375,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
                         textAlign: 'center',
                         whiteSpace: 'nowrap'
                       }}>
-                        {(row.strike / 1000).toFixed(0)}K
+                        {row.strike % 1000 === 0 ? `${row.strike / 1000}K` : `${(row.strike / 1000).toFixed(1)}K`}
                         {isCurrentPrice && ' <'}
                       </div>
 
@@ -374,7 +435,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
             lineHeight: 1.5,
             padding: '0 2px'
           }}>
-            Gia dinh: MM Net Short OTM Options (Standard Dealer Positioning).
+            Gia dinh: MM Net Long Calls / Net Short Puts (Standard Dealer Positioning).
             Max Pain chi la luc hut thu cap gan dao han, khong phai target gia tuyet doi.
             Nguon: Deribit Public API — Cap nhat moi 15 phut.
           </div>

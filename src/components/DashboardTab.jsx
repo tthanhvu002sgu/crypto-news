@@ -56,7 +56,7 @@ export default function DashboardTab({
     <div className="dashboard-layout">
       {/* ── HERO: Market Bias Engine Card ── */}
       {!isModuleHidden('dash_bias') && (
-        <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} moduleId="dash_bias" />
+        <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} theme={theme} moduleId="dash_bias" />
       )}
 
       {/* ── SECTION 01: VĨ MÔ & THÁC THANH KHOẢN ── */}
