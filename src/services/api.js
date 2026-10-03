@@ -11,6 +11,7 @@ import {
   getUtcMidnight,
   extractCvdNetDelta
 } from './cvdService.js';
+import { processCotData } from './cotEngine.js';
 
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -2106,9 +2107,31 @@ export const getUSNetLiquidityData = async (apiKey) => {
 };
 
 /**
- * Lấy báo cáo vị thế CME Bitcoin Futures (COT) từ Tradingster qua Jina Reader
+ * Lấy báo cáo vị thế CME Bitcoin Futures (COT) từ CFTC Socrata TFF Dataset
+ * Kèm phân tích xu hướng lịch sử 26-52 tuần và diễn giải chiến lược
  */
 export const getCMECot = async () => {
+  // 1. Thử lấy dữ liệu chính thức từ CFTC Socrata TFF API qua Jina Reader
+  try {
+    const cftcUrl = 'https://publicreporting.cftc.gov/resource/gpe5-46if.json?cftc_contract_market_code=133741&%24limit=52&%24order=report_date_as_yyyy_mm_dd%20DESC';
+    const rawData = await fetchWithJina(cftcUrl, 'text');
+    if (rawData) {
+      const text = typeof rawData === 'string' ? rawData : JSON.stringify(rawData);
+      const start = text.indexOf('[');
+      const end = text.lastIndexOf(']') + 1;
+      if (start !== -1 && end > start) {
+        const records = JSON.parse(text.slice(start, end));
+        const processed = processCotData(records);
+        if (processed && processed.assetManager && processed.leveragedFunds) {
+          return processed;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[API] CFTC Socrata fetch error, attempting Tradingster fallback:', err.message);
+  }
+
+  // 2. Fallback: Lấy từ Tradingster qua Jina Reader
   try {
     const url = 'https://tradingster.com/cot/futures/fin/133741';
     const markdown = await fetchWithJina(url, 'text');
@@ -2196,11 +2219,13 @@ export const getCMECot = async () => {
         const [y, m, d] = dateStr.split('-');
         formattedDate = `${d}/${m}/${y}`;
       }
-      
-      return {
+
+      // Đóng gói thành snapshot đầy đủ
+      const snapshot = {
         date: formattedDate,
         rawDate: dateStr,
         openInterest,
+        openInterestChange: 0,
         dealerIntermediary,
         assetManager,
         leveragedFunds,
@@ -2209,6 +2234,8 @@ export const getCMECot = async () => {
         isFallback: false,
         source: 'CFTC_TRADINGSTER'
       };
+      
+      return snapshot;
     }
     return null;
   } catch (e) {

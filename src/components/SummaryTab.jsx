@@ -609,6 +609,10 @@ ${path}`;
 
     const cotStr = data.cotData
       ? `- Observation date: ${data.cotData.date || 'N/A'}
+- Structural Regime: ${data.cotData.regime?.label || 'N/A'}
+- Asset Manager COT Index (26W Percentile): ${data.cotData.analytics?.amCotIndex ?? data.cotData.cotIndex ?? 'N/A'}%
+- Asset Manager 4-Week Net Momentum: ${data.cotData.analytics?.deltas?.am4W != null ? (data.cotData.analytics.deltas.am4W >= 0 ? '+' : '') + data.cotData.analytics.deltas.am4W + ' contracts' : 'N/A'}
+- Leveraged Funds 4-Week Net Momentum: ${data.cotData.analytics?.deltas?.lf4W != null ? (data.cotData.analytics.deltas.lf4W >= 0 ? '+' : '') + data.cotData.analytics.deltas.lf4W + ' contracts' : 'N/A'}
 ${formatCotRow('Dealer Intermediary', data.cotData.dealerIntermediary)}
 ${formatCotRow('Asset Manager / Institutional', data.cotData.assetManager)}
 ${formatCotRow('Leveraged Funds', data.cotData.leveragedFunds)}
@@ -931,6 +935,7 @@ ${cotStr}
 - CME COT open interest: ${data.cotData?.openInterest ?? 'N/A'}
 - COT observation age at report time: ${cotObservationAgeDays === null ? 'N/A' : cotObservationAgeDays + ' days'}
 - COT release caveat: Friday release reflects Tuesday positions, approximately 3-7 days lagged.
+- COT Strategic Synthesis: ${data.cotData?.narrative?.overview || 'N/A'}
 
 ## 5. DERIVATIVES
 - BTC 24h price change input for price/OI matrix: ${formatSigned(data.btc?.change, 2, '%')}

@@ -235,11 +235,11 @@ export function CotChart({ cotData }) {
   if (!cotData) return null;
   
   const groups = [
-    { label: 'Asset Manager (Quỹ)', net: cotData.assetManager?.net || 0 },
-    { label: 'Leveraged Funds (Đòn bẩy)', net: cotData.leveragedFunds?.net || 0 },
-    { label: 'Dealer Intermediary', net: cotData.dealerIntermediary?.net || 0 },
-    { label: 'Other Reportables', net: cotData.otherReportables?.net || 0 },
-    { label: 'Non-Reportable', net: cotData.nonReportable?.net || 0 }
+    { label: 'Asset Manager (Quỹ)', net: cotData.assetManager?.net || 0, wow: cotData.analytics?.deltas?.amWoW ?? cotData.assetManager?.netChange },
+    { label: 'Leveraged Funds (Đòn bẩy)', net: cotData.leveragedFunds?.net || 0, wow: cotData.analytics?.deltas?.lfWoW ?? cotData.leveragedFunds?.netChange },
+    { label: 'Dealer Intermediary', net: cotData.dealerIntermediary?.net || 0, wow: cotData.analytics?.deltas?.dealerWoW },
+    { label: 'Other Reportables', net: cotData.otherReportables?.net || 0, wow: null },
+    { label: 'Non-Reportable (Cá nhân)', net: cotData.nonReportable?.net || 0, wow: cotData.analytics?.deltas?.retailWoW }
   ];
 
   const data = {
@@ -248,26 +248,50 @@ export function CotChart({ cotData }) {
       {
         label: 'Vị thế Ròng Net Contracts (Long - Short)',
         data: groups.map(g => g.net),
-        backgroundColor: groups.map(g => g.net >= 0 ? 'rgba(59, 130, 246, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
-        borderColor: groups.map(g => g.net >= 0 ? '#3b82f6' : '#ef4444'),
+        backgroundColor: groups.map(g => g.net >= 0 ? 'rgba(16, 185, 129, 0.75)' : 'rgba(239, 68, 68, 0.75)'),
+        borderColor: groups.map(g => g.net >= 0 ? '#10b981' : '#ef4444'),
         borderWidth: 1,
         borderRadius: 4,
       }
     ]
   };
 
+  const amIndex = cotData.analytics?.amCotIndex ?? (cotData.cotIndex ?? null);
+  const regimeLabel = cotData.regime?.label || 'PHÂN TÍCH VỊ THẾ CME';
+
   const options = {
     ...commonOptions,
     indexAxis: 'y', // Horizontal Bar Chart
     plugins: {
       ...commonOptions.plugins,
-      title: { display: true, text: `🏛️ CME COT POSITIONING (AS OF ${cotData.date || 'LATEST'})`, color: '#8b5cf6', font: { family: 'monospace', size: 11 } }
+      title: {
+        display: true,
+        text: `🏛️ CME COT POSITIONING (AS OF ${cotData.date || 'LATEST'}) • ${regimeLabel}`,
+        color: '#8b5cf6',
+        font: { family: 'monospace', size: 11 }
+      },
+      tooltip: {
+        callbacks: {
+          afterLabel: (ctx) => {
+            const group = groups[ctx.dataIndex];
+            return group?.wow != null ? ` Thay đổi tuần (WoW): ${group.wow >= 0 ? '+' : ''}${group.wow.toLocaleString()} hđ` : '';
+          }
+        }
+      }
     }
   };
 
   return (
-    <div className="summary-chart-container" style={{ height: '230px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
-      <Bar data={data} options={options} />
+    <div className="summary-chart-container" style={{ minHeight: '240px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
+      <div style={{ height: '200px' }}>
+        <Bar data={data} options={options} />
+      </div>
+      {amIndex != null && (
+        <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginTop: '8px', display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
+          <span>COT Index Thể Chế (26W): <strong style={{ color: '#10b981' }}>{amIndex}%</strong></span>
+          <span>Open Interest: <strong>{cotData.openInterest ? cotData.openInterest.toLocaleString() : '---'}</strong> hđ</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import EconomicCalendarPanel from './EconomicCalendarPanel';
 import CascadeTab from './CascadeTab';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import CmeCotCard from './CmeCotCard';
 
 const isPlausibleCpiYoY = (value) => {
   const number = Number(value);
@@ -332,99 +333,9 @@ export default function DashboardTab({
         </div>
       )}
 
-      {/* CME COT Table Row */}
+      {/* CME COT Module (Enhanced with Narrative & Historical Trend) */}
       {!isModuleHidden('dash_cme_cot') && (
-        <div className="fng-cot-row">
-          <div className="glass-panel whale-panel" style={{ height: '100%', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 className="chart-title font-mono text-amber" style={{ margin: 0 }}>
-                  <span className="dot dot-amber" /> CME BITCOIN FUTURES COT (AS OF {data.cotData?.date || 'N/A'})
-              </h3>
-              <ModuleMenu moduleId="dash_cme_cot" />
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="whale-table font-mono" style={{ width: '100%', fontSize: '0.62rem', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}></th>
-                    <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Long</th>
-                    <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Short</th>
-                    <th colSpan="3" style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Spread</th>
-                  </tr>
-                  <tr style={{ color: 'var(--text-contrast)' }}>
-                    <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}></th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Positions</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}>Open Int</th>
-                    <th style={{ textAlign: 'right', padding: '6px 4px', borderBottom: '1px solid var(--border-panel)' }}># Traders</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { label: 'Dealer Intermediary', key: 'dealerIntermediary' },
-                    { label: 'Asset Manager/ Institutional', key: 'assetManager' },
-                    { label: 'Leveraged Funds', key: 'leveragedFunds' },
-                    { label: 'Other Reportables', key: 'otherReportables' },
-                    { label: 'Nonreportable Positions', key: 'nonReportable' }
-                  ].map(row => {
-                    const rData = data.cotData?.[row.key];
-                    if (!rData) return null;
-                    
-                    const renderCell = (pos, change) => {
-                      if (pos == null) return '---';
-                      if (pos === 0 && change === 0) return '0';
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                          <span>{pos.toLocaleString()}</span>
-                          {change !== 0 && change != null && (
-                            <span style={{ 
-                              color: 'white', 
-                              backgroundColor: change > 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)', 
-                              padding: '1px 3px', 
-                              borderRadius: '2px', 
-                              fontSize: '0.55rem' 
-                            }}>
-                              {change > 0 ? '+' : ''}{change.toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    };
-
-                    return (
-                      <tr key={row.key} style={{ borderBottom: '1px solid var(--border-panel)', backgroundColor: row.key === 'nonReportable' ? 'rgba(0,0,0,0.1)' : 'transparent' }}>
-                        <td style={{ padding: '8px 4px', color: 'var(--text-contrast)', fontWeight: 'bold' }}>{row.label}</td>
-                        
-                        {/* Long */}
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{renderCell(rData.long, rData.longChange)}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{typeof rData.longOi === 'number' ? `${rData.longOi.toFixed(1)}%` : '---'}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{rData.longTraders != null ? rData.longTraders : '---'}</td>
-                        
-                        {/* Short */}
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{renderCell(rData.short, rData.shortChange)}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{typeof rData.shortOi === 'number' ? `${rData.shortOi.toFixed(1)}%` : '---'}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{rData.shortTraders != null ? rData.shortTraders : '---'}</td>
-                        
-                        {/* Spread */}
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? renderCell(rData.spread, rData.spreadChange) : ''}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? (typeof rData.spreadOi === 'number' ? `${rData.spreadOi.toFixed(1)}%` : '---') : ''}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{row.key !== 'nonReportable' ? (rData.spreadTraders != null ? rData.spreadTraders : '---') : ''}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="font-mono text-slate-500" style={{ fontSize: '0.52rem', marginTop: '10px', textAlign: 'right' }}>
-              Open Interest: {data.cotData?.openInterest ? data.cotData.openInterest.toLocaleString() : '---'} contracts
-            </div>
-          </div>
-        </div>
+        <CmeCotCard cotData={data.cotData} theme={theme} moduleId="dash_cme_cot" />
       )}
 
       {/* Macro Dashboard Valuator + PnL Matrix */}
