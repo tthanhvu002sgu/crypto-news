@@ -56,14 +56,35 @@ export async function fetchDeribitInstruments(currency = 'BTC') {
   }
 }
 
+const DERIBIT_MONTHS = {
+  JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+  JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11
+};
+
+/**
+ * Parse Deribit expiry date string like '4OCT26' or '28MAR26'
+ * @param {string} dateStr
+ * @returns {number|null} timestamp in ms (at 08:00 UTC)
+ */
+export function parseDeribitExpiryDate(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const match = dateStr.match(/^(\d{1,2})([A-Z]{3})(\d{2})$/);
+  if (!match) return null;
+  const day = parseInt(match[1], 10);
+  const monthStr = match[2].toUpperCase();
+  const year = 2000 + parseInt(match[3], 10);
+  const month = DERIBIT_MONTHS[monthStr];
+  if (month === undefined || day < 1 || day > 31) return null;
+  // Deribit expirations are at 08:00 UTC
+  return Date.UTC(year, month, day, 8, 0, 0, 0);
+}
+
 export async function fetchDeribitOptionChain(currency = 'BTC') {
   try {
     const summaries = await fetchDeribitBookSummary(currency);
-    if (!summaries) return null;
+    if (!summaries || !Array.isArray(summaries) || summaries.length === 0) return null;
 
-    let overallUnderlyingPrice = 0;
-    let count = 0;
-    
+    const spotPrice = parseFloat(summaries[0].estimated_delivery_price || summaries[0].underlying_price || 0);
     const nowMs = Date.now();
     const instruments = [];
 
@@ -86,30 +107,20 @@ export async function fetchDeribitOptionChain(currency = 'BTC') {
       
       let expTimestamp = item.expiration_timestamp;
       if (!expTimestamp) {
-          const dateStr = parts[1]; // e.g. '24JUN22'
-          const day = parseInt(dateStr.slice(0, 2), 10);
-          const monthStr = dateStr.slice(2, 5);
-          const yearStr = dateStr.slice(5);
-          const months = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
-          const month = months[monthStr];
-          const year = 2000 + parseInt(yearStr, 10);
-          // Deribit expirations are at 08:00 UTC
-          expTimestamp = Date.UTC(year, month, day, 8, 0, 0, 0);
+        expTimestamp = parseDeribitExpiryDate(parts[1]);
       }
+      if (!expTimestamp) continue;
 
       const dteMs = expTimestamp - nowMs;
       const dte = dteMs / (1000 * 60 * 60 * 24);
       const T = dteMs / (1000 * 60 * 60 * 24 * 365.25); // in years
       
-      const F = underlying_price || estimated_delivery_price;
+      const F = underlying_price || estimated_delivery_price || spotPrice;
       if (!F) continue;
       
-      if (F > 0) {
-        overallUnderlyingPrice += F;
-        count++;
-      }
-      
-      const iv = mark_iv || 0;
+      // Deribit provides mark_iv as percent (e.g. 42.5 = 42.5%), convert to decimal for Black-76
+      const rawIv = mark_iv || 0;
+      const iv = rawIv > 1 ? rawIv / 100 : rawIv;
       
       let gamma = 0;
       let delta = 0;
@@ -132,7 +143,7 @@ export async function fetchDeribitOptionChain(currency = 'BTC') {
         dte,
         openInterest: open_interest,
         underlyingPrice: F,
-        markIv: iv,
+        markIv: rawIv,
         gamma,
         delta,
         volume24h: volume || 0,
@@ -141,7 +152,7 @@ export async function fetchDeribitOptionChain(currency = 'BTC') {
 
     return {
       instruments,
-      underlyingPrice: count > 0 ? overallUnderlyingPrice / count : 0,
+      underlyingPrice: spotPrice,
       timestamp: Date.now()
     };
   } catch (e) {

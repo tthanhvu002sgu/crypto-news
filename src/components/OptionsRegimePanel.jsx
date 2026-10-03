@@ -5,7 +5,7 @@ import { fetchCached } from '../utils/cache.js';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService.js';
 import { analyzeBtcOptions } from '../services/optionsCalculations.js';
 
-const CACHE_KEY = 'deribit_options_btc_v1';
+const CACHE_KEY = 'deribit_options_btc_v2';
 const CACHE_TTL = 15 * 60 * 1000; // 15 phút (WARM tier)
 
 const DTE_OPTIONS = [

@@ -12,6 +12,7 @@ import {
   calculatePCR,
   analyzeBtcOptions
 } from './optionsCalculations.js';
+import { parseDeribitExpiryDate } from './deribitOptionsService.js';
 
 // ── Fixture Data ────────────────────────────────────────────────────────────────
 const UNDERLYING_PRICE = 100000;
@@ -244,6 +245,34 @@ describe('optionsCalculations', () => {
     assert.equal(r.gexFlipPrice, null);
     assert.equal(r.gammaRegime.regime, 'NEUTRAL');
     assert.deepEqual(r.strikeDistribution, []);
+  });
+
+  // ── parseDeribitExpiryDate ───────────────────────────────────────────────────
+  test('parseDeribitExpiryDate: parses 1-digit day dates like 4OCT26', () => {
+    const ts = parseDeribitExpiryDate('4OCT26');
+    assert.ok(ts);
+    const d = new Date(ts);
+    assert.equal(d.getUTCFullYear(), 2026);
+    assert.equal(d.getUTCMonth(), 9); // October = 9
+    assert.equal(d.getUTCDate(), 4);
+    assert.equal(d.getUTCHours(), 8);
+  });
+
+  test('parseDeribitExpiryDate: parses 2-digit day dates like 28MAR26', () => {
+    const ts = parseDeribitExpiryDate('28MAR26');
+    assert.ok(ts);
+    const d = new Date(ts);
+    assert.equal(d.getUTCFullYear(), 2026);
+    assert.equal(d.getUTCMonth(), 2); // March = 2
+    assert.equal(d.getUTCDate(), 28);
+    assert.equal(d.getUTCHours(), 8);
+  });
+
+  test('parseDeribitExpiryDate: returns null for invalid formats', () => {
+    assert.equal(parseDeribitExpiryDate('INVALID'), null);
+    assert.equal(parseDeribitExpiryDate(''), null);
+    assert.equal(parseDeribitExpiryDate(null), null);
+    assert.equal(parseDeribitExpiryDate('32JAN26'), null);
   });
 
 });
