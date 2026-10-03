@@ -18,6 +18,7 @@ export const MODULES_CONFIG = {
   dash_news: { id: 'dash_news', label: 'Tin Tức Vĩ Mô & Thị Trường', category: 'Overview & Regime' },
   dash_polymarket: { id: 'dash_polymarket', label: 'Polymarket — Whale Tracker', category: 'Overview & Regime' },
   dash_btc_chart: { id: 'dash_btc_chart', label: 'BTC/USDT — Giá 48 Giờ Gần Nhất (1H)', category: 'Overview & Regime' },
+  dash_options_regime: { id: 'dash_options_regime', label: 'Options Regime — BTC (Deribit GEX, Max Pain, Walls)', category: 'Overview & Regime' },
 
   // 2. Order Flow & Vi Cấu Trúc
   tab_orderflow: { id: 'tab_orderflow', label: 'Tab Order Flow', category: 'Order Flow' },

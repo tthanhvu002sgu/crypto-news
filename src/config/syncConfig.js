@@ -35,6 +35,7 @@ export const CACHE_TTL = {
   qqq: 30 * MS.MIN,
   cvd24h: 10 * MS.MIN,
   cvd7d: 30 * MS.MIN,
+  optionsSummary: 15 * MS.MIN,
 
   // COLD
   macroFred: 12 * MS.HOUR,

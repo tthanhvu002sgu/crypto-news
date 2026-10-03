@@ -385,7 +385,7 @@ function useDraggableScroll() {
 }
 
 const NAV_TABS_CONFIG = [
-  { id: 'overview',  icon: <BarChart2 size={13} />, label: 'OVERVIEW & REGIME' },
+  { id: 'overview',  icon: <BarChart2 size={13} />, label: 'OVERVIEW' },
   { id: 'orderflow', icon: <Crosshair size={13} />, label: 'ORDER FLOW' },
   { id: 'scanner',   icon: <Zap size={13} />,       label: 'ALTCOIN SCANNER' },
   { id: 'ailab',     icon: <Sparkles size={13} />,  label: 'AI DECISION LAB' },
@@ -1756,7 +1756,7 @@ function AppContent() {
 
           <div className="tab-content">
 
-            {/* ══ 1. OVERVIEW & REGIME TAB — Keep-Alive State ═══════════════════ */}
+            {/* ══ 1. OVERVIEW TAB — Keep-Alive State ═══════════════════ */}
             <div style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>
               <DashboardTab
                 data={data}

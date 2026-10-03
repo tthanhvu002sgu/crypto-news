@@ -4,6 +4,7 @@ import MacroDashboardCard from './MacroDashboardCard';
 import PolymarketWhales from './PolymarketWhales';
 import EconomicCalendarPanel from './EconomicCalendarPanel';
 import CascadeTab from './CascadeTab';
+import OptionsRegimePanel from './OptionsRegimePanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import CmeCotCard from './CmeCotCard';
@@ -207,10 +208,21 @@ export default function DashboardTab({
         />
       )}
 
-      {/* ── SECTION 02: TỔ CHỨC TRADFI & ĐỊNH GIÁ CHU KỲ ── */}
+      {/* ── SECTION 02: OPTIONS & GAMMA EXPOSURE ── */}
+      {!isModuleHidden('dash_options_regime') && (
+        <>
+          <div className="overview-section-header font-mono">
+            <span className="overview-section-badge">02 // OPTIONS &amp; GAMMA EXPOSURE</span>
+            <span className="overview-section-desc text-slate-500">Call/Put Wall, GEX Flip, Max Pain &amp; Gamma Regime tu Deribit</span>
+          </div>
+          <OptionsRegimePanel moduleId="dash_options_regime" />
+        </>
+      )}
+
+      {/* ── SECTION 03: TỔ CHỨC TRADFI & ĐỊNH GIÁ CHU KỲ ── */}
       {hasSection2 && (
         <div className="overview-section-header font-mono">
-          <span className="overview-section-badge">02 // TỔ CHỨC TRADFI &amp; ĐỊNH GIÁ CHU KỲ</span>
+          <span className="overview-section-badge">03 // TỔ CHỨC TRADFI &amp; ĐỊNH GIÁ CHU KỲ</span>
           <span className="overview-section-desc text-slate-500">Dòng vốn Spot ETF, vị thế phái sinh CME COT &amp; mô hình định giá chu kỳ</span>
         </div>
       )}
@@ -343,10 +355,10 @@ export default function DashboardTab({
         <MacroDashboardCard livePrice={btcDisplay?.price} theme={theme} moduleId="dash_macro_valuator" />
       )}
 
-      {/* ── SECTION 03: TIN TỨC & DỰ BÁO PHI TẬP TRUNG ── */}
+      {/* ── SECTION 04: TIN TỨC & DỰ BÁO PHI TẬP TRUNG ── */}
       {hasSection3 && (
         <div className="overview-section-header font-mono">
-          <span className="overview-section-badge">03 // TIN TỨC &amp; DỰ BÁO PHI TẬP TRUNG</span>
+          <span className="overview-section-badge">04 // TIN TỨC &amp; DỰ BÁO PHI TẬP TRUNG</span>
           <span className="overview-section-desc text-slate-500">Dòng tin tức thị trường &amp; cược thông minh Polymarket</span>
         </div>
       )}

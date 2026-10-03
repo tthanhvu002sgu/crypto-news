@@ -5,7 +5,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 **Các tính năng cốt lõi:**
 - **Kiến Trúc Điều Hướng 5 Phân Hệ Chiến Lược (5 Strategic Workspaces):** Tái cấu trúc toàn bộ ứng dụng từ 7 tab phân mảnh thành 5 không gian làm việc theo luồng tác vụ giao dịch (Task-Centric Flow), bảo tồn 100% keep-alive không re-mount và tương thích ngược URL hash/localStorage:
-  1. `OVERVIEW & REGIME`: Trung tâm vĩ mô, chu kỳ và xu hướng chủ đạo (Market Bias Engine, Macro Pulse, Lịch kinh tế 7 ngày, Thác thanh khoản 4 Tiers, Dòng vốn ETF TradFi, Vị thế CME COT và Macro Valuator).
+  1. `OVERVIEW`: Trung tâm vĩ mô, chu kỳ, xu hướng chủ đạo & cấu trúc Options (Market Bias Engine, Macro Pulse, Lịch kinh tế 7 ngày, Thác thanh khoản 4 Tiers, Options Regime Deribit GEX & Max Pain, Dòng vốn ETF TradFi, Vị thế CME COT và Macro Valuator).
   2. `ORDER FLOW`: Bàn làm việc vi cấu trúc phái sinh thời gian thực (Capital Flow In/Out 24H, CVD Benchmark đa khung `1H/24H/7D/30D`, biểu đồ Long/Short Ratio 24H & Open Interest 24H đối chiếu trực tiếp, Move Tracker v2, Depth Orderbook OBI, Liquidity Walls và Whale Trades).
   3. `ALTCOIN SCANNER`: Hệ thống xếp hạng 50 Altcoin thanh khoản hàng đầu theo 4 Trụ cột định lượng (Relative Strength 40%, Dòng tiền & Phái sinh 25%, Cơ bản theo Sector 25%, Thanh khoản 10%), tracking đa khung thời gian (24H / 7D / 30D), snapshot daily lưu trữ JSON tự động qua GitHub Actions, loại bỏ hoàn toàn trade setup / LONG-SHORT / Entry-Stop-Target.
   4. `AI DECISION LAB`: Phản biện chiến lược điều hành (AI Report 3 personas, Evidence Summary Charts, Trade Plan Auditor).
@@ -15,6 +15,7 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - **Thác Thanh Khoản Vĩ Mô (Cascade Flow — 4 Tiers):** Sơ đồ lưu chuyển dòng tiền từ Thượng nguồn Fed/Net Liquidity/M2 → Van USD & Lãi suất thực → Kênh Hấp thụ Chứng khoán/Credit → Bể chứa Crypto & Altcoins. Được tích hợp trực tiếp vào phân hệ `OVERVIEW & REGIME` (loại bỏ nhãn cũ `[BƯỚC 3]`).
 - **MOVE TRACKER Research v2:** Phát hiện nhịp biến động BTCUSDT realtime bằng champion ATR/Fixed USD, trong đó ATR(14) lấy từ **Binance Futures 5m đã đóng**. Mỗi event tách riêng snapshot tại trigger, snapshot cuối move và outcome `+15s/+30s/+60s/+5m/+15m`; shadow layer đo participation percentile và xác nhận executed flow Spot/Futures nhưng chưa lọc alert. Event được lưu IndexedDB 90 ngày, có thống kê theo detection horizon `15/30/60/120s`, context `5m/15m/1h`, và export CSV/JSON.
 - **Thống kê ETF & Cấu trúc dòng tiền:** Biểu đồ dòng tiền (Inflow/Outflow) của các quỹ ETF Bitcoin, Ethereum, Solana và đối chiếu vị thế CME Futures COT.
+- **Options Regime & Gamma Exposure (BTC Deribit):** Module phân tích vi cấu trúc cản tự nhiên phái sinh từ thị trường Bitcoin Options: Call Wall (kháng cự cứng), Put Wall (hỗ trợ cứng), Max Pain Strike (lực hút đáo hạn thứ Sáu 08:00 UTC), GEX Flip Level (ranh giới đảo chiều biến động) và Gamma Regime (+GEX hãm đà vs -GEX gia tốc squeeze). Trực quan hóa Strike Bar Profile đối xứng với bộ lọc kỳ hạn DTE (All, ≤ 7D, ≤ 30D), cache WARM 15 phút từ Deribit Public API.
 - **HFT Radar (Phân tích dòng tiền Phái sinh & Vi cấu trúc):**
   - **Capital Flow In / Out (24H):** Module đầu tiên của tab ORDER FLOW phân rã trạng thái vốn phái sinh bằng Price + Futures CVD + ΔOI + Funding + Basis, đồng thời bổ sung đối chiếu độc lập **Spot CVD & Spot Alignment** (Confluence / Divergence). Engine tách `IN / OUT / ROTATION / NEUTRAL / UNKNOWN`, directional bias và mechanism (new position, short covering, long exit, absorption), đối chiếu dòng tiền Spot mà không gộp chung vào hợp đồng phái sinh, abstain khi thiếu dữ liệu lõi và không diễn giải Funding/Basis như dòng vốn trực tiếp.
   - **CVD & Order Flow (Binance Benchmark):** Giữ CVD đa khung (`1H`, `24H`, `7D`, `30D`) với UTC Anchor cố định (`2020-01-01`) và immutable daily snapshot ledger, loại bỏ hoàn toàn hiện tượng trôi dạt baseline. Flow Pressure Cards và Market Flow Verdict lấy hướng mua/bán từ Delta/Volume toàn khung, kèm strength đối xứng, z-score độc lập và momentum theo phía mua/bán; thiếu dữ liệu thì chưa kết luận đồng thuận. Tích hợp Volume Ratio và Estimated Volume-by-Price Footprint $100 gap. Helper Futures Positioning (Price–CVD–OI–Funding) chưa tích hợp vào thẻ CVD.
@@ -105,6 +106,20 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-10-03] Module Options Regime & Gamma Exposure (GEX) cho BTC (FULL)
+- **Mode / Type / Action / Lane:** FEATURE / QUANT / EXECUTE / FULL
+- **Tóm tắt:** Hiện thực hóa module phân tích cấu trúc cản tự nhiên phái sinh từ thị trường Bitcoin Options theo framework `/frame-domain-problem`. Đổi tên tab 1 thành `OVERVIEW` và tích hợp module `OptionsRegimePanel` làm Section 02 độc lập (giữa Macro Cascade và TradFi ETF). Module kết nối Deribit Public REST API lấy toàn bộ danh mục options BTC đang hoạt động, ước tính Gamma/Delta qua Black-76, tổng hợp Strike Open Interest, tính toán Max Pain, Call Wall, Put Wall, GEX Flip level, phân loại Gamma Regime (+GEX Mean-Reversion vs -GEX Momentum Squeeze), và trực quan hóa phân bổ Call vs Put OI theo từng mức Strike với bộ lọc kỳ hạn DTE (All, ≤ 7D, ≤ 30D).
+- **Kiến trúc & Thuật toán:**
+  - `src/services/optionsCalculations.js`: Động cơ tính toán toán học thuần túy: parser mã hợp đồng Deribit, lọc DTE, gộp strike OI & gamma (cap MAX_GAMMA=100), thuật toán Max Pain cực tiểu hóa hàm tổn thất người mua, tính Net GEX theo chuẩn Dealer Short OTM, xác định Call/Put Wall theo vị thế giá Spot, nội suy tuyến tính GEX Flip level tại điểm đổi dấu Net GEX, phân loại trạng thái Gamma (Positive/Negative/Neutral) và tỷ lệ Put/Call Ratio (PCR).
+  - `src/services/deribitOptionsService.js`: Dịch vụ gọi Deribit Public API (`/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option`), chuẩn hóa dữ liệu, xấp xỉ Black-76 Greeks cho từng hợp đồng và đóng gói analysis pipeline.
+  - `src/components/OptionsRegimePanel.jsx`: Component giao diện Minimalist-UI tích hợp 5 thẻ Bento card (Call Wall, Put Wall, Max Pain, GEX Flip, PCR) + Badge Gamma Regime, biểu đồ phân bổ Strike Bar Profile đối xứng (Call OI đỏ vs Put OI xanh, vạch vàng Current Price), bộ chuyển DTE filter và disclaimer minh bạch nguồn gốc dữ liệu/giả định MM.
+  - `src/config/modulesConfig.js` & `src/config/syncConfig.js`: Cấu hình module `dash_options_regime` và WARM cache TTL 15 phút (`optionsSummary: 15 * MS.MIN`).
+- **Verify:**
+  - `npm run test:options`: 29/29 unit tests pass 100% (parser, DTE, strike aggregation, Max Pain, GEX calculations, walls, flip interpolation, regime classification, PCR, integration).
+  - `npm test`: 11/11 test suites pass 100% (Scanner, Move, Macro, Sheets, Bias, CVD, Order Flow, Capital Flow, Summary Layout, COT, Navigation, Options).
+  - `npx eslint`: 0 lỗi, 0 cảnh báo trên toàn bộ các file options và dashboard liên quan.
+  - `npm run build`: Vite build thành công sạch sẽ trong 1.72s.
 
 ### [2026-09-30] Sửa CVD âm bị gắn BUY và rà soát Order Flow `(FIX)`
 - **Thay đổi:** BUY/SELL dựa trên tỷ lệ CVD ròng của toàn khung, z-score không đảo chiều nhãn. Strength dùng `min(100, round(abs(deltaRatioPct) * 7))` cho cả mua/bán; confidence tính theo cường độ; momentum bán tăng tốc khi áp lực bán mạnh lên. Sửa fallback `null` thành buy-minus-sell trong metrics và từ chối phân loại positioning khi thiếu Price/OI/hướng flow.
