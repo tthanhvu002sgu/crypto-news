@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -45,6 +47,22 @@ const fmtSigned = (val) => {
   if (val == null || !Number.isFinite(val)) return '---';
   return `${val > 0 ? '+' : ''}${val.toLocaleString()}`;
 };
+
+function MarkdownNarrative({ content }) {
+  if (!content) return null;
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ node, ...props }) => <p style={{ margin: 0, lineHeight: 1.6 }} {...props} />,
+        strong: ({ node, ...props }) => <strong style={{ color: 'var(--text-contrast)', fontWeight: 'bold' }} {...props} />,
+        em: ({ node, ...props }) => <em style={{ fontStyle: 'italic', color: 'var(--text-contrast)' }} {...props} />,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
 
 export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_cme_cot' }) {
   const [activeTab, setActiveTab] = useState('narrative'); // 'narrative' | 'chart_net' | 'chart_oi' | 'table'
@@ -582,7 +600,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
               <strong style={{ color: 'var(--color-amber-500)', display: 'block', marginBottom: '2px' }}>
                 💡 ĐÁNH GIÁ TỔNG QUAN THỊ TRƯỜNG PHÁI SINH THỂ CHẾ:
               </strong>
-              {narrative?.overview || 'Cấu trúc vị thế phái sinh CME phản ánh sự phân tầng rõ rệt: Các tổ chức lớn (Asset Managers) duy trì vị thế Long chủ đạo trong khi các quỹ phòng hộ (Leveraged Funds) mở vị thế Short tương ứng nhằm thu lợi nhuận từ chênh lệch cơ sở (Basis Arbitrage).'}
+              <MarkdownNarrative content={narrative?.overview || 'Cấu trúc vị thế phái sinh CME phản ánh sự phân tầng rõ rệt: Các tổ chức lớn (Asset Managers) duy trì vị thế Long chủ đạo trong khi các quỹ phòng hộ (Leveraged Funds) mở vị thế Short tương ứng nhằm thu lợi nhuận từ chênh lệch cơ sở (Basis Arbitrage).'} />
             </div>
 
             {/* Deep-dive 3 Pillars */}
@@ -594,7 +612,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
                   <Building2 size={14} /> 1. DÒNG TIỀN THÔNG MINH (ASSET MANAGERS)
                 </div>
                 <div style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'var(--text-contrast)' }}>
-                  {narrative?.smartMoney || `Asset Managers đang nắm giữ vị thế ròng +${am.net.toLocaleString()} hợp đồng. Tỷ trọng Long áp đảo phản ánh cam kết nắm giữ trung-dài hạn của các quỹ đầu tư lớn.`}
+                  <MarkdownNarrative content={narrative?.smartMoney || `Asset Managers đang nắm giữ vị thế ròng **+${am.net.toLocaleString()} hợp đồng**. Tỷ trọng Long áp đảo phản ánh cam kết nắm giữ trung-dài hạn của các quỹ đầu tư lớn.`} />
                 </div>
                 <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
                   Biến động 26 tuần: Thấp nhất {analytics?.amRange26W?.min?.toLocaleString() || '---'} hđ | Cao nhất {analytics?.amRange26W?.max?.toLocaleString() || '---'} hđ
@@ -607,7 +625,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
                   <Scale size={14} /> 2. QUỸ PHÒNG HỘ & BASIS TRADE (LEVERAGED FUNDS)
                 </div>
                 <div style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'var(--text-contrast)' }}>
-                  {narrative?.hedgeFunds || `Leveraged Funds nắm giữ vị thế Short ròng ${lf.net.toLocaleString()} hợp đồng. Phần lớn vị thế Short này phục vụ chiến lược Cash & Carry ăn chênh lệch Basis.`}
+                  <MarkdownNarrative content={narrative?.hedgeFunds || `Leveraged Funds nắm giữ vị thế Short ròng **${lf.net.toLocaleString()} hợp đồng**. Phần lớn vị thế Short này phục vụ chiến lược Cash & Carry ăn chênh lệch Basis.`} />
                 </div>
                 <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
                   Biến động 26 tuần: Thấp nhất {analytics?.lfRange26W?.min?.toLocaleString() || '---'} hđ | Cao nhất {analytics?.lfRange26W?.max?.toLocaleString() || '---'} hđ
@@ -620,7 +638,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
                   <Users size={14} /> 3. TÂM LÝ NHỎ LẺ (NON-REPORTABLE)
                 </div>
                 <div style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'var(--text-contrast)' }}>
-                  {narrative?.retail || `Nhóm cá nhân nhỏ lẻ đang nắm giữ Net ${retail.net >= 0 ? '+' : ''}${retail.net.toLocaleString()} hợp đồng. Tín hiệu này đóng vai trò thước đo tâm lý đám đông đối chiếu với dòng tiền tổ chức.`}
+                  <MarkdownNarrative content={narrative?.retail || `Nhóm cá nhân nhỏ lẻ đang nắm giữ Net **${retail.net >= 0 ? '+' : ''}${retail.net.toLocaleString()} hợp đồng**. Tín hiệu này đóng vai trò thước đo tâm lý đám đông đối chiếu với dòng tiền tổ chức.`} />
                 </div>
                 <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
                   Tỷ lệ Long/Short: {retail.long.toLocaleString()} / {retail.short.toLocaleString()} ({((retail.long / ((retail.long + retail.short) || 1)) * 100).toFixed(1)}% Long)
