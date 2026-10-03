@@ -25,7 +25,7 @@ const getCoinMetricsUrl = () => (typeof window !== 'undefined' ? '/api-coinmetri
 /** BTC 24h ticker: price, % change, high, low, volume */
 export const getBTCTicker24h = async (symbol = 'BTCUSDT') => {
   try {
-    const res = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`);
+    const res = await axios.get(`https://data-api.binance.vision/api/v3/ticker/24hr?symbol=${symbol}`);
     return {
       price: parseFloat(res.data.lastPrice),
       change: parseFloat(res.data.priceChangePercent),
@@ -42,7 +42,7 @@ export const getBTCTicker24h = async (symbol = 'BTCUSDT') => {
 /** BTC OHLCV candlestick data for charting */
 export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 48) => {
   try {
-    const res = await axios.get('https://api.binance.com/api/v3/klines', {
+    const res = await axios.get('https://data-api.binance.vision/api/v3/klines', {
       params: { symbol, interval, limit },
     });
     return res.data.map(k => ({
@@ -83,7 +83,7 @@ export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', req
         const params = { symbol, interval, limit: batchLimit };
         if (endTime != null) params.endTime = endTime;
 
-        const response = await axios.get('https://api.binance.com/api/v3/klines', { params, timeout: 8000 });
+        const response = await axios.get('https://data-api.binance.vision/api/v3/klines', { params, timeout: 8000 });
         const batch = Array.isArray(response.data) ? response.data : [];
         if (batch.length === 0) break;
         rows.unshift(...batch);
@@ -127,7 +127,7 @@ export const getDailyCVD = async (symbol = 'BTCUSDT', market = 'futures') => {
     const startTime = startOfDay.getTime();
     
     const baseUrl = market === 'spot'
-      ? 'https://api.binance.com/api/v3/klines'
+      ? 'https://data-api.binance.vision/api/v3/klines'
       : 'https://fapi.binance.com/fapi/v1/klines';
 
     // 24 hours * 12 (5m intervals) = 288 candles, well under 1000 limit
@@ -249,7 +249,7 @@ export const getIntradayCVD = async (symbol = 'BTCUSDT', market = 'futures') => 
 export const getHistoricalFootprintNodes = async (symbol = 'BTCUSDT', market = 'futures', limit = 1000) => {
   try {
     const baseUrl = market === 'spot'
-      ? 'https://api.binance.com/api/v3/klines'
+      ? 'https://data-api.binance.vision/api/v3/klines'
       : 'https://fapi.binance.com/fapi/v1/klines';
 
     const res = await axios.get(baseUrl, {
@@ -293,7 +293,7 @@ export const getFootprintNodesForTimeframe = async (symbol = 'BTCUSDT', market =
   return fetchCached(cacheKey, async () => {
     try {
       const baseUrl = market === 'spot'
-        ? 'https://api.binance.com/api/v3/klines'
+        ? 'https://data-api.binance.vision/api/v3/klines'
         : 'https://fapi.binance.com/fapi/v1/klines';
 
       let interval = '1m';
@@ -528,7 +528,7 @@ export const getGlobalCryptoData = async () => {
 export const getSsrMovingAverageData = async () => {
   try {
     const [btcRes, stableRes] = await Promise.all([
-      axios.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=200'),
+      axios.get('https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=200'),
       axios.get('https://stablecoins.llama.fi/stablecoincharts/all')
     ]);
 
@@ -1150,7 +1150,7 @@ export const getWhaleWalls = async (symbol = 'BTCUSDT', minUsd = 500000) => {
 
   const urls = {
     binanceFutures: `https://fapi.binance.com/fapi/v1/depth?symbol=${symbolUpper}&limit=1000`,
-    binanceSpot: `https://api.binance.com/api/v3/depth?symbol=${symbolUpper}&limit=1000`,
+    binanceSpot: `https://data-api.binance.vision/api/v3/depth?symbol=${symbolUpper}&limit=1000`,
     bybitFutures: `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbolUpper}&limit=500`,
     bybitSpot: `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbolUpper}&limit=500`,
     okxFutures: `https://www.okx.com/api/v5/market/books?instId=${symbolOKXFutures}&sz=400`,
@@ -1474,7 +1474,7 @@ export const getCompletedHourCVD = async (symbol = 'BTCUSDT', market = 'futures'
 
   try {
     const baseUrl = market === 'spot'
-      ? 'https://api.binance.com/api/v3/klines'
+      ? 'https://data-api.binance.vision/api/v3/klines'
       : 'https://fapi.binance.com/fapi/v1/klines';
     const res = await axios.get(baseUrl, {
       // Binance endTime is inclusive. Stop at the last millisecond of the

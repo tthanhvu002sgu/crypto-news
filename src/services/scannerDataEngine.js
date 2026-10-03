@@ -37,9 +37,23 @@ import {
   calculateSummaryStatistics,
 } from './scannerCalculations.js';
 
-const BINANCE_SPOT_API = 'https://api.binance.com';
-const BINANCE_FUTURES_API = 'https://fapi.binance.com';
+const BINANCE_SPOT_BASE_URLS = [
+  'https://data-api.binance.vision',
+  'https://api.binance.com',
+  'https://api1.binance.com',
+  'https://api2.binance.com',
+  'https://api3.binance.com',
+  'https://api4.binance.com',
+];
 
+const BINANCE_FUTURES_BASE_URLS = [
+  'https://fapi.binance.com',
+  'https://fapi1.binance.com',
+  'https://fapi2.binance.com',
+  'https://fapi3.binance.com',
+];
+
+const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
@@ -59,22 +73,64 @@ export function getUtcMidnightDate(dateInput = new Date()) {
 }
 
 /**
- * Fetch with retry and backoff.
+ * Fetch Binance Spot endpoint with automatic mirror domain fallback.
  */
-async function fetchWithRetry(url, params = {}, retries = 3, delayMs = 500) {
-  for (let attempt = 1; attempt <= retries; attempt += 1) {
-    try {
-      const resp = await axios.get(url, {
-        params,
-        timeout: 10000,
-        headers: { 'User-Agent': 'CryptoNewsScanner/9.0' },
-      });
-      return resp.data;
-    } catch (err) {
-      if (attempt === retries) throw err;
-      await sleep(delayMs * attempt);
+async function fetchBinanceSpot(endpointPath, params = {}, retries = 2, delayMs = 300) {
+  let lastError = null;
+  for (const baseUrl of BINANCE_SPOT_BASE_URLS) {
+    const url = `${baseUrl}${endpointPath}`;
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      try {
+        const resp = await axios.get(url, {
+          params,
+          timeout: 10000,
+          headers: { 'User-Agent': DEFAULT_USER_AGENT },
+        });
+        return resp.data;
+      } catch (err) {
+        lastError = err;
+        const status = err.response?.status;
+        // If geo-blocked (451/403) or not found, fail over to next domain immediately
+        if (status === 451 || status === 403 || status === 404) {
+          break;
+        }
+        if (attempt < retries) {
+          await sleep(delayMs * attempt);
+        }
+      }
     }
   }
+  throw lastError || new Error(`Failed to fetch Binance Spot endpoint ${endpointPath}`);
+}
+
+/**
+ * Fetch Binance Futures endpoint with automatic mirror domain fallback.
+ */
+async function fetchBinanceFutures(endpointPath, params = {}, retries = 2, delayMs = 300) {
+  let lastError = null;
+  for (const baseUrl of BINANCE_FUTURES_BASE_URLS) {
+    const url = `${baseUrl}${endpointPath}`;
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      try {
+        const resp = await axios.get(url, {
+          params,
+          timeout: 10000,
+          headers: { 'User-Agent': DEFAULT_USER_AGENT },
+        });
+        return resp.data;
+      } catch (err) {
+        lastError = err;
+        const status = err.response?.status;
+        if (status === 451 || status === 403 || status === 404) {
+          break;
+        }
+        if (attempt < retries) {
+          await sleep(delayMs * attempt);
+        }
+      }
+    }
+  }
+  throw lastError || new Error(`Failed to fetch Binance Futures endpoint ${endpointPath}`);
 }
 
 /**
@@ -82,10 +138,10 @@ async function fetchWithRetry(url, params = {}, retries = 3, delayMs = 500) {
  */
 export async function fetchSpotActiveUsdtPairs() {
   try {
-    const data = await fetchWithRetry(`${BINANCE_SPOT_API}/api/v3/exchangeInfo`);
+    const data = await fetchBinanceSpot('/api/v3/exchangeInfo');
     const validPairs = [];
 
-    for (const s of data.symbols || []) {
+    for (const s of data?.symbols || []) {
       if (s.status === 'TRADING' && s.quoteAsset === 'USDT' && !isExcludedSymbol(s.symbol)) {
         validPairs.push(s.symbol);
       }
@@ -103,7 +159,7 @@ export async function fetchSpotActiveUsdtPairs() {
 export async function fetchSpotDailyKlines(symbol, asOfUtcMidnight, limit = 35) {
   const endTime = asOfUtcMidnight.getTime() - 1; // Last millisecond of previous UTC day
   try {
-    const data = await fetchWithRetry(`${BINANCE_SPOT_API}/api/v3/klines`, {
+    const data = await fetchBinanceSpot('/api/v3/klines', {
       symbol,
       interval: '1d',
       endTime,
@@ -121,7 +177,7 @@ export async function fetchSpotDailyKlines(symbol, asOfUtcMidnight, limit = 35) 
 export async function fetchFuturesDailyKlines(symbol, asOfUtcMidnight, limit = 35) {
   const endTime = asOfUtcMidnight.getTime() - 1;
   try {
-    const data = await fetchWithRetry(`${BINANCE_FUTURES_API}/fapi/v1/klines`, {
+    const data = await fetchBinanceFutures('/fapi/v1/klines', {
       symbol,
       interval: '1d',
       endTime,
@@ -140,7 +196,7 @@ export async function fetchFuturesOiHistory(symbol, asOfUtcMidnight, limit = 35)
   const asOfTime = asOfUtcMidnight instanceof Date ? asOfUtcMidnight.getTime() : new Date(asOfUtcMidnight).getTime();
   const endTime = asOfTime;
   try {
-    const data = await fetchWithRetry(`${BINANCE_FUTURES_API}/futures/data/openInterestHist`, {
+    const data = await fetchBinanceFutures('/futures/data/openInterestHist', {
       symbol,
       period: '1d',
       endTime,
@@ -162,7 +218,7 @@ export async function fetchFuturesFundingHistory(symbol, startTime, endTime) {
   
   try {
     while (currentStartTime <= endTime) {
-      const data = await fetchWithRetry(`${BINANCE_FUTURES_API}/fapi/v1/fundingRate`, {
+      const data = await fetchBinanceFutures('/fapi/v1/fundingRate', {
         symbol,
         startTime: currentStartTime,
         endTime,
@@ -211,7 +267,7 @@ export async function buildTop50Universe(asOfUtcMidnight, candidateSymbols = nul
   if (!pairs || pairs.length === 0) {
     try {
       // 1. Fetch 24hr tickers in a single call to pre-filter high-volume candidates
-      const tickers = await fetchWithRetry(`${BINANCE_SPOT_API}/api/v3/ticker/24hr`);
+      const tickers = await fetchBinanceSpot('/api/v3/ticker/24hr');
       const validTickerCandidates = [];
 
       for (const t of tickers || []) {

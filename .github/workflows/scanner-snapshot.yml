@@ -30,7 +30,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install Dependencies
@@ -77,5 +77,5 @@ jobs:
             echo "No data changes to commit."
           else
             git commit -m "chore(scanner): daily snapshot $(date -u +%Y-%m-%d)"
-            git push origin codex/scanner-data
+            git push -u origin codex/scanner-data
           fi

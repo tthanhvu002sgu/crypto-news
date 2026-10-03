@@ -68,7 +68,7 @@ async function fetchTickers() {
 
 async function fetchDailyKlines() {
   try {
-    const res = await axios.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=300', { timeout: 10000 });
+    const res = await axios.get('https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=300', { timeout: 10000 });
     return res.data.map(k => ({
       time: new Date(k[0]),
       open: parseFloat(k[1]),

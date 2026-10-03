@@ -280,7 +280,7 @@ export function upsertDailySnapshots(market = 'futures', snapshots = []) {
  */
 export function getBinanceKlinesUrl(market = 'futures') {
   return market === 'spot'
-    ? 'https://api.binance.com/api/v3/klines'
+    ? 'https://data-api.binance.vision/api/v3/klines'
     : 'https://fapi.binance.com/fapi/v1/klines';
 }
 
