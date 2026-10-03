@@ -1048,7 +1048,7 @@ function TargetLiquidityPanel({
         <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Tooltip content={METRIC_METADATA.whaleWalls}>
             <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-              <span className="hft-icon">🎯</span> TARGET LIQUIDITY (WHALE WALLS)
+              <span className="hft-icon">🎯</span> LIMIT ORDER
             </h3>
           </Tooltip>
           <ModuleMenu moduleId="hft_whale_walls" />
@@ -1063,7 +1063,7 @@ function TargetLiquidityPanel({
       <div className="hft-panel-header">
         <Tooltip content={METRIC_METADATA.whaleWalls}>
           <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-            <span className="hft-icon">🎯</span> TARGET LIQUIDITY (≥$500K)
+            <span className="hft-icon">🎯</span> LIMIT ORDER
           </h3>
         </Tooltip>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
