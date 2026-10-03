@@ -78,7 +78,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B codex/scanner-data
           
-          git add data/
+          # Prevent Vercel from trying to build this data-only branch
+          echo '{"ignoreCommand":"exit 0"}' > vercel.json
+
+          git add data/ vercel.json
           if git diff --staged --quiet; then
             echo "No data changes to commit."
           else
