@@ -13,6 +13,7 @@ import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import { fetchCached, readCacheValue } from './utils/cache';
 import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
+import { processCotData } from './services/cotEngine';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
   Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
@@ -277,13 +278,14 @@ const BASELINE_ETF_FLOWS = Object.assign([
   { date: '05/06/26', flow: -325.7 },
 ], { isFallback: true, status: 'FALLBACK' });
 
-const BASELINE_CME_COT = {
+const BASELINE_CME_COT = processCotData() || {
   isFallback: true,
   status: 'FALLBACK',
-  date: '02/06/2026',
-  openInterest: 19882,
-  assetManager: { long: 5256, longChange: -694, short: 2153, shortChange: 555, net: 3103, netChange: -1249 },
-  leveragedFunds: { long: 6269, longChange: 1603, short: 12827, shortChange: -473, net: -6558, netChange: 2076 }
+  date: '29/09/2026',
+  openInterest: 19596,
+  assetManager: { long: 5069, longChange: 107, short: 1483, shortChange: -308, net: 3586, netChange: 415 },
+  leveragedFunds: { long: 4980, longChange: 235, short: 11836, shortChange: -862, net: -6856, netChange: 1097 },
+  nonReportable: { long: 1109, longChange: -175, short: 804, shortChange: -127, net: 305, netChange: -48 }
 };
 
 const formatCacheDate = (date) => [
@@ -488,7 +490,8 @@ function AppContent() {
     const onChain = readCacheValue('btcOnChain');
     const onChainMetrics = readCacheValue('btcOnChainMetrics');
     const ethOnChainMetrics = readCacheValue('ethOnChainMetrics');
-    const cotData = readCacheValue(`cmeCot_${cmeCotCacheKey}`) || readCacheValue('cmeCot') || BASELINE_CME_COT;
+    const rawCot = readCacheValue(`cmeCot_v2_${cmeCotCacheKey}`) || readCacheValue('cmeCot_v2') || readCacheValue(`cmeCot_${cmeCotCacheKey}`) || readCacheValue('cmeCot');
+    const cotData = rawCot?.history?.length > 0 ? rawCot : (rawCot ? processCotData([rawCot]) : BASELINE_CME_COT);
     const fngData = readCacheValue('fearAndGreed');
 
     const cvdHistory24h = readCacheValue('hft_cvd_series_24h_futures_v4');
@@ -905,7 +908,7 @@ function AppContent() {
           fetchCached('ethOnChainMetrics', () => getETHOnChainMetrics(), CACHE_TTL.onChain, addLog, 'ETH On-chain Metrics (CoinMetrics)', force),
           fetchCached(`etfHoldings_${etfCacheKey}`, () => getETFHoldings(), CACHE_TTL.etf, addLog, 'Spot ETF Holdings (Bitbo)', force),
           fetchCached(`etfFlowHistory_${etfCacheKey}`, () => getETFFlowHistory(), CACHE_TTL.etf, addLog, 'Spot ETF Flow History (Farside)', force),
-          fetchCached(`cmeCot_${cmeCotCacheKey}`, () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (Tradingster)', force),
+          fetchCached(`cmeCot_v2_${cmeCotCacheKey}`, () => getCMECot(), CACHE_TTL.cot, addLog, 'Báo cáo CME COT (CFTC/Tradingster)', force),
           fetchCached('fearAndGreed', () => getFearAndGreed(), CACHE_TTL.fng, addLog, 'Chỉ số Fear & Greed (alternative.me)', force),
           fetchCached('hft_cvd_series_30d_futures_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'futures'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Futures', force),
           fetchCached('hft_cvd_series_30d_spot_v4', () => getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'), CACHE_TTL.cvd30d, addLog, 'Lịch sử CVD 30d Spot', force),

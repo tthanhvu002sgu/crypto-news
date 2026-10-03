@@ -89,7 +89,7 @@ describe('cotEngine', () => {
       }
     ];
 
-    const result = processCotData(rawMock);
+    const result = processCotData(rawMock, { mergeStatic: false });
     assert.ok(result);
     assert.equal(result.date, '29/09/2026');
     assert.equal(result.openInterest, 20000);
@@ -99,5 +99,9 @@ describe('cotEngine', () => {
     assert.equal(result.history.length, 2);
     assert.ok(result.narrative);
     assert.ok(result.narrative.smartMoney.includes('Asset Managers'));
+
+    // Test with default mergeStatic: true
+    const mergedResult = processCotData(rawMock);
+    assert.ok(mergedResult.history.length > 10);
   });
 });

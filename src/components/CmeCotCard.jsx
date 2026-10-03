@@ -22,10 +22,12 @@ import {
   Building2,
   Calendar,
   Layers,
-  HelpCircle
+  HelpCircle,
+  RefreshCw
 } from 'lucide-react';
 import ModuleMenu from './ModuleMenu';
-import { COT_REGIMES } from '../services/cotEngine';
+import { COT_REGIMES, processCotData } from '../services/cotEngine';
+import { getCMECot } from '../services/api';
 
 ChartJS.register(
   CategoryScale,
@@ -48,35 +50,61 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
   const [activeTab, setActiveTab] = useState('narrative'); // 'narrative' | 'chart_net' | 'chart_oi' | 'table'
   const [chartWeeks, setChartWeeks] = useState(26); // 12 | 26 | 52
   const [showGuide, setShowGuide] = useState(false);
+  const [liveData, setLiveData] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Tự động enrich nếu cotData truyền từ props bị thiếu history (ví dụ từ cache cũ của browser)
+  const currentCot = useMemo(() => {
+    const raw = liveData || cotData;
+    if (!raw) return processCotData();
+    if (Array.isArray(raw.history) && raw.history.length > 0 && raw.narrative) {
+      return raw;
+    }
+    return processCotData([raw]) || processCotData();
+  }, [liveData, cotData]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await getCMECot();
+      if (res && res.history) {
+        setLiveData(res);
+      }
+    } catch (err) {
+      console.error('CME COT manual refresh error:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const isLight = theme === 'light';
   const textColor = isLight ? '#334155' : '#94a3b8';
   const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
 
   // Dữ liệu analytics & deltas
-  const analytics = cotData?.analytics;
+  const analytics = currentCot?.analytics;
   const history = useMemo(() => {
-    if (!Array.isArray(cotData?.history)) return [];
-    return [...cotData.history].reverse(); // Đảo ngược để vẽ biểu đồ theo thứ tự thời gian tăng dần
-  }, [cotData?.history]);
+    if (!Array.isArray(currentCot?.history)) return [];
+    return [...currentCot.history].reverse(); // Đảo ngược để vẽ biểu đồ theo thứ tự thời gian tăng dần
+  }, [currentCot?.history]);
 
   const slicedHistory = useMemo(() => {
     if (history.length === 0) return [];
     return history.slice(Math.max(0, history.length - chartWeeks));
   }, [history, chartWeeks]);
 
-  const regime = cotData?.regime || COT_REGIMES.BALANCED_NEUTRAL;
-  const narrative = cotData?.narrative;
+  const regime = currentCot?.regime || COT_REGIMES.BALANCED_NEUTRAL;
+  const narrative = currentCot?.narrative;
   const deltas = analytics?.deltas || {
-    amWoW: cotData?.assetManager?.netChange || 0,
+    amWoW: currentCot?.assetManager?.netChange || 0,
     am4W: 0,
-    lfWoW: cotData?.leveragedFunds?.netChange || 0,
+    lfWoW: currentCot?.leveragedFunds?.netChange || 0,
     lf4W: 0,
-    oiWoW: cotData?.openInterestChange || 0,
+    oiWoW: currentCot?.openInterestChange || 0,
     oi4W: 0,
   };
 
-  const amCotIndex = analytics?.amCotIndex ?? (cotData?.assetManager?.net > 2000 ? 70 : 45);
+  const amCotIndex = analytics?.amCotIndex ?? (currentCot?.assetManager?.net > 2000 ? 70 : 45);
   const lfCotIndex = analytics?.lfCotIndex ?? 50;
 
   // ─── Biểu đồ 1: Vị thế Ròng Lịch Sử (Net History Chart) ──────────────────────
@@ -216,7 +244,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
     }
   }), [textColor, gridColor]);
 
-  if (!cotData) {
+  if (!currentCot) {
     return (
       <div className="glass-panel whale-panel" style={{ padding: '20px', textAlign: 'center' }}>
         <span className="font-mono text-slate-500">Đang tải dữ liệu CME Bitcoin Futures COT...</span>
@@ -224,9 +252,9 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
     );
   }
 
-  const am = cotData.assetManager || { long: 0, short: 0, net: 0, netChange: 0 };
-  const lf = cotData.leveragedFunds || { long: 0, short: 0, net: 0, netChange: 0 };
-  const retail = cotData.nonReportable || { long: 0, short: 0, net: 0, netChange: 0 };
+  const am = currentCot.assetManager || { long: 0, short: 0, net: 0, netChange: 0 };
+  const lf = currentCot.leveragedFunds || { long: 0, short: 0, net: 0, netChange: 0 };
+  const retail = currentCot.nonReportable || { long: 0, short: 0, net: 0, netChange: 0 };
 
   return (
     <div className="fng-cot-row">
@@ -240,7 +268,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
                 <span className="dot dot-amber" /> CME BITCOIN FUTURES COT
               </h3>
               <span className="font-mono text-slate-400" style={{ fontSize: '0.68rem', backgroundColor: 'var(--bg-panel-solid, rgba(0,0,0,0.2))', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
-                AS OF {cotData.date || 'LATEST'}
+                AS OF {currentCot.date || 'LATEST'}
               </span>
               <span style={{
                 fontSize: '0.65rem',
@@ -279,6 +307,28 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Làm mới trực tiếp từ CFTC Socrata API"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid var(--border-panel)',
+                borderRadius: '4px',
+                padding: '3px 8px',
+                color: 'var(--text-contrast)',
+                cursor: isRefreshing ? 'wait' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.62rem',
+                fontFamily: 'monospace'
+              }}
+            >
+              <RefreshCw size={11} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+              <span>{isRefreshing ? 'Đang tải...' : 'Làm mới CFTC'}</span>
+            </button>
             <ModuleMenu moduleId={moduleId} />
           </div>
         </div>
@@ -328,7 +378,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
               <Layers size={12} /> TỔNG OPEN INTEREST
             </div>
             <div className="font-mono" style={{ fontSize: '1rem', fontWeight: 'bold', marginTop: '4px', color: 'var(--text-contrast)' }}>
-              {cotData.openInterest ? cotData.openInterest.toLocaleString() : '---'} <span style={{ fontSize: '0.62rem', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>hđ</span>
+              {currentCot.openInterest ? currentCot.openInterest.toLocaleString() : '---'} <span style={{ fontSize: '0.62rem', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>hđ</span>
             </div>
             <div className="font-mono" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', gap: '6px' }}>
               <span style={{ color: deltas.oiWoW >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
@@ -631,7 +681,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
                   { label: 'Nonreportable Positions (Retail)', key: 'nonReportable', icon: '👥', deltaKey: 'retail' },
                   { label: 'Other Reportables', key: 'otherReportables', icon: '📋', deltaKey: null },
                 ].map(row => {
-                  const rData = cotData[row.key];
+                  const rData = currentCot[row.key];
                   if (!rData) return null;
 
                   const wowChange = rData.netChange != null ? rData.netChange : (row.deltaKey ? deltas[`${row.deltaKey}WoW`] : null);

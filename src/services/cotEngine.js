@@ -3,6 +3,8 @@
  * cho dữ liệu CME Bitcoin Futures Commitments of Traders (CFTC TFF Report)
  */
 
+import staticCotHistory from '../data/cmeCotHistoryStatic.json' with { type: 'json' };
+
 export const COT_REGIMES = {
   INSTITUTIONAL_ACCUMULATION: {
     id: 'INSTITUTIONAL_ACCUMULATION',
@@ -71,6 +73,23 @@ export const formatCotDate = (isoOrYmd) => {
  */
 export const parseCftcRecord = (r) => {
   if (!r) return null;
+  // Hỗ trợ record đã parse sẵn (từ snapshot hoặc cache)
+  if (r.assetManager && r.leveragedFunds && r.date) {
+    const rawDate = r.rawDate || r.date;
+    return {
+      date: formatCotDate(rawDate),
+      rawDate,
+      openInterest: toInt(r.openInterest),
+      openInterestChange: toInt(r.openInterestChange),
+      dealerIntermediary: r.dealerIntermediary || { long: 0, short: 0, spread: 0, net: 0, netChange: 0 },
+      assetManager: r.assetManager,
+      leveragedFunds: r.leveragedFunds,
+      otherReportables: r.otherReportables || { long: 0, short: 0, spread: 0, net: 0, netChange: 0 },
+      nonReportable: r.nonReportable || { long: 0, short: 0, net: 0, netChange: 0 },
+      totalTraders: toInt(r.totalTraders),
+    };
+  }
+
   const rawDate = r.report_date_as_yyyy_mm_dd ? r.report_date_as_yyyy_mm_dd.split('T')[0] : (r.date || '');
   const formattedDate = formatCotDate(rawDate);
   const openInterest = toInt(r.open_interest_all);
@@ -272,11 +291,22 @@ export const generateCotNarrative = ({
 /**
  * Xử lý danh sách báo cáo thô từ CFTC hoặc fallback thành đối tượng đầy đủ
  */
-export const processCotData = (rawList) => {
-  if (!Array.isArray(rawList) || rawList.length === 0) return null;
+export const processCotData = (rawList, options = { mergeStatic: true }) => {
+  let list = Array.isArray(rawList) && rawList.length > 0 ? rawList : staticCotHistory;
+  if (!Array.isArray(list) || list.length === 0) return null;
+
+  // Nếu list chỉ có ít hơn 10 records và mergeStatic được bật, tự động ghép với staticCotHistory
+  if (options?.mergeStatic !== false && list.length < 10 && Array.isArray(staticCotHistory)) {
+    const listRawDates = new Set(list.map(item => (item.report_date_as_yyyy_mm_dd?.split('T')[0] || item.rawDate || item.date)));
+    const additionalStatic = staticCotHistory.filter(s => {
+      const sDate = s.report_date_as_yyyy_mm_dd?.split('T')[0];
+      return sDate && !listRawDates.has(sDate);
+    });
+    list = [...list, ...additionalStatic];
+  }
 
   // Chuẩn hóa danh sách các tuần
-  const history = rawList
+  const history = list
     .map(parseCftcRecord)
     .filter(Boolean)
     .sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
