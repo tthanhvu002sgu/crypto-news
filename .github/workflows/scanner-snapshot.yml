@@ -53,8 +53,13 @@ jobs:
             echo "Data branch directory not cloned; initializing fresh..."
             mkdir -p data-branch
             cd data-branch
-            git init -b codex/scanner-data
+            git init
+            git checkout -B codex/scanner-data
             git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            cd ..
+          else
+            cd data-branch
+            git checkout codex/scanner-data || git checkout -b codex/scanner-data
             cd ..
           fi
 
@@ -71,6 +76,7 @@ jobs:
           cd data-branch
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B codex/scanner-data
           
           git add data/
           if git diff --staged --quiet; then
