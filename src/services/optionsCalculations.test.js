@@ -10,6 +10,7 @@ import {
   findGexFlipLevel,
   classifyGammaRegime,
   calculatePCR,
+  generateOptionsAsp100Narrative,
   analyzeBtcOptions
 } from './optionsCalculations.js';
 import { parseDeribitExpiryDate } from './deribitOptionsService.js';
@@ -449,6 +450,80 @@ describe('optionsCalculations', () => {
     assert.equal(agg[0].callOI, 0); // negative clamped to 0
     assert.equal(agg[0].callGamma, 0); // negative gamma clamped to 0
     assert.equal(agg[0].putGamma, 100); // capped at 100
+  });
+
+  // ── ASP100 Options Narrative Tests ─────────────────────────────────────────
+  describe('generateOptionsAsp100Narrative', () => {
+    test('ASP100: positive gamma with balanced PCR produces mean-reverting narrative with walls', () => {
+      const narrative = generateOptionsAsp100Narrative({
+        gammaRegime: { regime: 'POSITIVE_GAMMA' },
+        callWall: { strike: 105000, oi: 2500 },
+        putWall: { strike: 95000, oi: 3000 },
+        maxPain: { maxPainPrice: 100000 },
+        gexFlipPrice: 97000,
+        pcr: { pcr: 0.85 },
+        underlyingPrice: 100000
+      });
+
+      assert.equal(narrative.badge, '+GEX MEAN-REVERTING');
+      assert.equal(narrative.badgeType, 'positive');
+      assert.match(narrative.executive, /\+GEX/);
+      assert.match(narrative.positioning, /\$105,000/);
+      assert.match(narrative.positioning, /\$95,000/);
+      assert.match(narrative.positioning, /\$100,000/);
+      assert.match(narrative.sentiment, /0\.85/);
+      assert.match(narrative.sentiment, /cân bằng/);
+      assert.match(narrative.action, /Range Trading/);
+      assert.ok(narrative.wordCount >= 60 && narrative.wordCount <= 130, `wordCount ${narrative.wordCount} outside expected range`);
+    });
+
+    test('ASP100: negative gamma with high PCR produces momentum breakout narrative with hedging sentiment', () => {
+      const narrative = generateOptionsAsp100Narrative({
+        gammaRegime: { regime: 'NEGATIVE_GAMMA' },
+        callWall: { strike: 110000, oi: 1500 },
+        putWall: { strike: 88000, oi: 2200 },
+        maxPain: { maxPainPrice: 94000 },
+        gexFlipPrice: 96500,
+        pcr: { pcr: 1.25 },
+        underlyingPrice: 92000
+      });
+
+      assert.equal(narrative.badge, '-GEX MOMENTUM EXPANSION');
+      assert.equal(narrative.badgeType, 'negative');
+      assert.match(narrative.executive, /-GEX/);
+      assert.match(narrative.positioning, /\$96,500/);
+      assert.match(narrative.sentiment, /1\.25/);
+      assert.match(narrative.sentiment, /phòng hộ/);
+      assert.match(narrative.action, /Breakout Momentum/);
+    });
+
+    test('ASP100: defensive handling with null inputs does not throw', () => {
+      const narrative = generateOptionsAsp100Narrative({
+        gammaRegime: null,
+        callWall: null,
+        putWall: null,
+        maxPain: null,
+        gexFlipPrice: null,
+        pcr: null,
+        underlyingPrice: null
+      });
+
+      assert.equal(narrative.badge, 'NEUTRAL GAMMA');
+      assert.equal(narrative.badgeType, 'neutral');
+      assert.ok(narrative.executive.length > 0);
+      assert.ok(narrative.positioning.length > 0);
+      assert.ok(narrative.sentiment.length > 0);
+      assert.ok(narrative.action.length > 0);
+    });
+
+    test('ASP100: analyzeBtcOptions bundles narrative in return payload', () => {
+      const result = analyzeBtcOptions(mockInstruments, UNDERLYING_PRICE, null);
+      assert.ok(result.narrative);
+      assert.ok(result.narrative.badge);
+      assert.ok(result.narrative.positioning);
+      assert.ok(result.narrative.sentiment);
+      assert.ok(result.narrative.action);
+    });
   });
 
 });

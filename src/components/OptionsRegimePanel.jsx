@@ -304,6 +304,128 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
             </div>
           </div>
 
+          {/* ── ASP-100 Options Desk Brief ── */}
+          {filtered.narrative && (
+            <div style={{
+              background: 'var(--bg-slate-950)',
+              border: '1px solid var(--border-panel)',
+              borderRadius: '6px',
+              padding: '12px 14px',
+              marginBottom: '14px',
+              position: 'relative'
+            }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.8rem' }}>🧠</span>
+                  <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-amber-400)', letterSpacing: '0.04em' }}>
+                    DIỄN GIẢI OPTIONS DESK (ASP-100)
+                  </span>
+                  <span className="font-mono" style={{
+                    fontSize: '0.55rem',
+                    padding: '1px 6px',
+                    borderRadius: '3px',
+                    fontWeight: 600,
+                    background: filtered.narrative.badgeType === 'positive'
+                      ? 'rgba(16, 185, 129, 0.15)'
+                      : filtered.narrative.badgeType === 'negative'
+                        ? 'rgba(244, 63, 94, 0.15)'
+                        : 'rgba(148, 163, 184, 0.15)',
+                    color: filtered.narrative.badgeType === 'positive'
+                      ? 'var(--color-emerald-400)'
+                      : filtered.narrative.badgeType === 'negative'
+                        ? 'var(--color-rose-400)'
+                        : 'var(--text-slate-400)',
+                    border: `1px solid ${
+                      filtered.narrative.badgeType === 'positive'
+                        ? 'rgba(16, 185, 129, 0.3)'
+                        : filtered.narrative.badgeType === 'negative'
+                          ? 'rgba(244, 63, 94, 0.3)'
+                          : 'rgba(148, 163, 184, 0.3)'
+                    }`
+                  }}>
+                    {filtered.narrative.badge}
+                  </span>
+                </div>
+                <span className="font-mono text-slate-500" style={{ fontSize: '0.55rem' }}>
+                  ~{filtered.narrative.wordCount} từ • Deribit BTC
+                </span>
+              </div>
+
+              {/* Executive 1-Liner Callout */}
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.06)',
+                borderLeft: '3px solid var(--color-amber-400)',
+                padding: '7px 10px',
+                borderRadius: '0 4px 4px 0',
+                fontSize: '0.7rem',
+                lineHeight: 1.5,
+                color: 'var(--text-contrast)',
+                marginBottom: '10px'
+              }}>
+                <strong style={{ color: 'var(--color-amber-400)' }}>Tổng quan:</strong> {filtered.narrative.executive}
+              </div>
+
+              {/* 3 Trụ Cột ASP Grid */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: '8px'
+              }}>
+                {/* [P] Positioning */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '4px',
+                  padding: '8px 10px',
+                  fontSize: '0.67rem',
+                  lineHeight: 1.55
+                }}>
+                  <div className="font-mono" style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--color-cyan-400)', marginBottom: '3px' }}>
+                    📍 [P] POSITIONING (VỊ THẾ MM)
+                  </div>
+                  <div style={{ color: 'var(--text-slate-300)' }}>
+                    {filtered.narrative.positioning}
+                  </div>
+                </div>
+
+                {/* [S] Sentiment */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '4px',
+                  padding: '8px 10px',
+                  fontSize: '0.67rem',
+                  lineHeight: 1.55
+                }}>
+                  <div className="font-mono" style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--color-amber-400)', marginBottom: '3px' }}>
+                    🎯 [S] SENTIMENT (TÂM LÝ & SKEW)
+                  </div>
+                  <div style={{ color: 'var(--text-slate-300)' }}>
+                    {filtered.narrative.sentiment}
+                  </div>
+                </div>
+
+                {/* [A] Action */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '4px',
+                  padding: '8px 10px',
+                  fontSize: '0.67rem',
+                  lineHeight: 1.55
+                }}>
+                  <div className="font-mono" style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--color-emerald-400)', marginBottom: '3px' }}>
+                    ⚡ [A] ACTION (KỊCH BẢN THỰC CHIẾN)
+                  </div>
+                  <div style={{ color: 'var(--text-slate-300)' }}>
+                    {filtered.narrative.action}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Strike Distribution Bar Chart ── */}
           <div style={{
             background: 'var(--bg-slate-950)',

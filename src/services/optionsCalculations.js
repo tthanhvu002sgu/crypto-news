@@ -363,6 +363,131 @@ export const calculatePCR = (strikeData) => {
 };
 
 /**
+ * Format strike number as currency string
+ * @param {number|null} val 
+ * @returns {string}
+ */
+const fmtNarrativeStrike = (val) => {
+  if (val == null || !Number.isFinite(val)) return '---';
+  return `$${Math.round(val).toLocaleString()}`;
+};
+
+/**
+ * Generate concise, professional ASP100 narrative for BTC Options
+ * (Action - Sentiment - Positioning within ~100 words)
+ * @param {Object} params
+ * @returns {Object}
+ */
+export const generateOptionsAsp100Narrative = ({
+  gammaRegime,
+  callWall,
+  putWall,
+  maxPain,
+  gexFlipPrice,
+  pcr,
+  underlyingPrice
+}) => {
+  const spot = finite(underlyingPrice);
+  const regimeType = gammaRegime?.regime || 'NEUTRAL';
+  const pcrVal = finite(pcr?.pcr);
+
+  // 1. Executive Summary & Badge
+  let badge = 'NEUTRAL GAMMA';
+  let badgeType = 'neutral'; // 'positive' | 'negative' | 'neutral'
+  let executive = 'Cấu trúc Options cân bằng; vận động giá hiện tại phụ thuộc chủ yếu vào dòng tiền giao ngay (Spot Flow).';
+
+  if (regimeType === 'POSITIVE_GAMMA') {
+    badge = '+GEX MEAN-REVERTING';
+    badgeType = 'positive';
+    executive = 'Thị trường trong vùng +GEX: Cơ chế hedging của Dealer ghìm biên độ dao động, nén giá trong hành lang Call/Put Wall.';
+  } else if (regimeType === 'NEGATIVE_GAMMA') {
+    badge = '-GEX MOMENTUM EXPANSION';
+    badgeType = 'negative';
+    executive = 'Thị trường trong vùng -GEX: Dealer hedging cùng chiều khuếch đại biến động, giá nhạy cảm với các đợt bùng nổ theo đà.';
+  }
+
+  // 2. [P] POSITIONING (~25-30 words)
+  let positioning = '';
+  const cwStr = callWall?.strike != null ? fmtNarrativeStrike(callWall.strike) : null;
+  const pwStr = putWall?.strike != null ? fmtNarrativeStrike(putWall.strike) : null;
+  const mpStr = maxPain?.maxPainPrice != null ? fmtNarrativeStrike(maxPain.maxPainPrice) : null;
+  const flipStr = gexFlipPrice != null ? fmtNarrativeStrike(gexFlipPrice) : null;
+
+  if (regimeType === 'POSITIVE_GAMMA') {
+    if (cwStr && pwStr) {
+      positioning = `Dealer Long Gamma tạo trần kháng cự tại ${cwStr} (Call Wall) và sàn đỡ tại ${pwStr} (Put Wall).`;
+    } else if (cwStr) {
+      positioning = `Kháng cự thể chế chủ đạo tập trung dày đặc tại ${cwStr} (Call Wall).`;
+    } else if (pwStr) {
+      positioning = `Hỗ trợ thể chế chủ đạo được bảo vệ vững chắc tại ${pwStr} (Put Wall).`;
+    } else {
+      positioning = 'Lực kẹp phái sinh chưa hình thành rõ rệt do thiếu cụm OI tập trung.';
+    }
+    if (mpStr) {
+      positioning += ` Tâm hút Max Pain tại ${mpStr}.`;
+    }
+  } else if (regimeType === 'NEGATIVE_GAMMA') {
+    if (flipStr) {
+      positioning = `Spot dưới mốc Flip ${flipStr} kích hoạt Dealer bán tháo phòng hộ khi giá giảm.`;
+    } else {
+      positioning = 'Hiệu ứng Short Gamma của Dealer gia tăng áp lực trượt giá theo đà.';
+    }
+    if (cwStr || pwStr) {
+      positioning += ` Biên độ mở rộng giữa hỗ trợ ${pwStr || 'sâu'} và kháng cự ${cwStr || 'cao'}.`;
+    }
+  } else {
+    if (cwStr && pwStr) {
+      positioning = `Hành lang giao dịch phái sinh được xác lập giữa sàn ${pwStr} (Put Wall) và trần ${cwStr} (Call Wall).`;
+    } else {
+      positioning = 'Các mốc định vị quyền chọn chưa hội tụ đủ thanh khoản để tạo trần/sàn cứng.';
+    }
+    if (mpStr) {
+      positioning += ` Lực hút Max Pain duy trì quanh ${mpStr}.`;
+    }
+  }
+
+  // 3. [S] SENTIMENT (~20-25 words)
+  let sentiment = '';
+  if (pcrVal == null) {
+    sentiment = 'Chưa đủ dữ liệu Put/Call Ratio để xác lập thiên kiến phòng hộ phái sinh.';
+  } else if (pcrVal < 0.65) {
+    sentiment = `PCR ${pcrVal.toFixed(2)} cho thấy Call Skew áp đảo; dòng tiền thiên hướng đầu cơ tăng mạnh, cần lưu ý áp lực chốt lời khi áp sát Call Wall.`;
+  } else if (pcrVal <= 1.05) {
+    sentiment = `PCR ${pcrVal.toFixed(2)} ở mức cân bằng lành mạnh; tương quan giữa cược tăng giá và nhu cầu mua Put phòng hộ duy trì ổn định.`;
+  } else if (pcrVal <= 1.30) {
+    sentiment = `PCR ${pcrVal.toFixed(2)} thể hiện nhu cầu mua Put phòng hộ (Hedging) gia tăng, thị trường nâng cao tâm lý thận trọng ngắn hạn.`;
+  } else {
+    sentiment = `PCR ${pcrVal.toFixed(2)} cao cực đoan phản ánh tâm lý hoảng loạn mua bảo hiểm; đây thường là tín hiệu tạo đáy nghịch đảo (Contrarian Bottom).`;
+  }
+
+  // 4. [A] ACTIONABLE (~25-30 words)
+  let action = '';
+  if (regimeType === 'POSITIVE_GAMMA') {
+    action = `Ưu tiên Range Trading (chốt lời gần ${cwStr || 'trần'}, gom hàng gần ${pwStr || 'sàn'}). Chỉ breakout nếu Spot vượt ${cwStr || 'trần'} kèm volume lớn.`;
+  } else if (regimeType === 'NEGATIVE_GAMMA') {
+    action = `Hạn chế bắt dao rơi; ưu tiên bám đà bứt phá (Breakout Momentum) hoặc nới rộng Stop Loss để tránh bị quét râu nến trong vùng biến động cao.`;
+  } else {
+    action = `Quan sát phản ứng quanh mốc ${pwStr || 'hỗ trợ'} - ${cwStr || 'kháng cự'}; duy trì tỷ trọng an toàn và chờ xác nhận đồng pha từ Spot CVD trước khi vào lệnh lớn.`;
+  }
+
+  const fullText = `${executive}\n• [P] POSITIONING: ${positioning}\n• [S] SENTIMENT: ${sentiment}\n• [A] ACTION: ${action}`;
+
+  // Word count estimation
+  const wordCount = fullText.split(/\s+/).filter(Boolean).length;
+
+  return {
+    badge,
+    badgeType,
+    executive,
+    positioning,
+    sentiment,
+    action,
+    fullText,
+    wordCount
+  };
+};
+
+/**
  * Master function that orchestrates all the above
  * @param {Array} instruments 
  * @param {number} underlyingPrice 
@@ -376,6 +501,15 @@ export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null
       callWall: null, putWall: null, gexFlipPrice: null,
       gammaRegime: { regime: 'NEUTRAL', netGexAtPrice: 0, description: 'No data' },
       pcr: null,
+      narrative: generateOptionsAsp100Narrative({
+        gammaRegime: { regime: 'NEUTRAL' },
+        callWall: null,
+        putWall: null,
+        maxPain: null,
+        gexFlipPrice: null,
+        pcr: null,
+        underlyingPrice: null
+      }),
       meta: { underlyingPrice, dteFilter, instrumentCount: 0, lastUpdated: Date.now() }
     };
   }
@@ -392,6 +526,15 @@ export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null
   const gexFlipPrice = findGexFlipLevel(gexByStrike, underlyingPrice);
   const gammaRegime = classifyGammaRegime(gexByStrike, underlyingPrice);
   const pcr = calculatePCR(allStrikeDistribution);
+  const narrative = generateOptionsAsp100Narrative({
+    gammaRegime,
+    callWall,
+    putWall,
+    maxPain,
+    gexFlipPrice,
+    pcr,
+    underlyingPrice
+  });
   
   return {
     strikeDistribution,
@@ -402,6 +545,7 @@ export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null
     gexFlipPrice,
     gammaRegime,
     pcr,
+    narrative,
     meta: {
       underlyingPrice,
       dteFilter,
