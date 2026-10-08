@@ -1414,69 +1414,54 @@
   border: 1px dashed var(--border-panel); border-radius: var(--card-radius-xs);
 }
 
-/* ─── Capital Flow In / Out (Minimalist & Streamlined) ───────────────── */
+/* ─── Capital Flow Regime (Compact Terminal Bar) ───────────────────── */
 .capital-flow-panel {
   grid-column: span 2;
   position: relative;
   overflow: hidden;
   border-top: 2px solid var(--text-slate-500);
+  padding: 8px 14px;
+  gap: 0;
 }
 .capital-flow-panel.flow-in { border-top-color: var(--color-emerald-400); }
 .capital-flow-panel.flow-out { border-top-color: var(--color-rose-400); }
 .capital-flow-panel.flow-rotation { border-top-color: #38bdf8; }
 .capital-flow-panel.flow-warning { border-top-color: var(--color-amber-400); }
 
-.capital-flow-header { align-items: center; }
-.capital-flow-eyebrow {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--text-slate-500);
-  font-size: 0.49rem;
-  letter-spacing: 0.13em;
-}
-.capital-flow-header-actions { display: flex; align-items: center; gap: 8px; }
-.capital-flow-quality {
-  padding: 3px 8px;
-  border: 1px solid var(--border-panel);
-  color: var(--text-slate-400);
-  font-size: 0.48rem;
-  letter-spacing: 0.06em;
-  border-radius: var(--card-radius-xs);
-}
-.capital-flow-quality.is-high { color: var(--color-emerald-400); border-color: rgba(16,185,129,0.35); }
-.capital-flow-quality.is-medium { color: var(--color-amber-400); border-color: rgba(251,191,36,0.35); }
-.capital-flow-quality.is-low { color: var(--color-rose-400); border-color: rgba(244,63,94,0.35); }
-
-/* Hero Strip */
-.capital-flow-hero {
+.capital-flow-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
   gap: 14px;
-  padding: 12px 16px;
-  background: var(--bg-slate-950);
-  border: 1px solid var(--border-panel);
-  border-radius: var(--card-radius-sm);
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+  min-height: 38px;
 }
-.capital-flow-status {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 260px;
-  flex: 1;
-}
-.capital-flow-headline {
+
+.capital-flow-identity {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
+
+.capital-flow-kicker {
+  color: var(--text-slate-500);
+  font-size: 0.52rem;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.capital-flow-status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .capital-flow-state-badge {
   display: inline-block;
-  padding: 2px 8px;
-  font-size: 0.62rem;
+  padding: 2px 7px;
+  font-size: 0.6rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   border-radius: 4px;
@@ -1485,18 +1470,18 @@
 }
 .capital-flow-state-badge.state-in {
   color: var(--color-emerald-400);
-  background: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
 }
 .capital-flow-state-badge.state-out {
   color: var(--color-rose-400);
-  background: rgba(244, 63, 94, 0.1);
-  border-color: rgba(244, 63, 94, 0.3);
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.35);
 }
 .capital-flow-state-badge.state-rotation {
   color: #38bdf8;
-  background: rgba(56, 189, 248, 0.1);
-  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
 }
 .capital-flow-state-badge.state-neutral {
   color: var(--text-slate-300);
@@ -1504,94 +1489,90 @@
   border-color: rgba(148, 163, 184, 0.25);
 }
 
-.capital-flow-title {
-  font-size: 0.88rem;
+.capital-flow-label {
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--text-slate-100);
-}
-.capital-flow-desc {
-  margin: 0;
-  color: var(--text-slate-400);
-  font-size: 0.62rem;
-  line-height: 1.45;
+  cursor: help;
 }
 
-/* Pills / Tags */
-.capital-flow-pills {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.capital-flow-pill {
+.capital-flow-alerts {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
-  background: var(--bg-slate-900);
-  border: 1px solid var(--border-panel);
-  border-radius: 4px;
-  font-size: 0.52rem;
+  flex-wrap: wrap;
 }
-.capital-flow-pill .pill-label {
-  color: var(--text-slate-500);
-  letter-spacing: 0.06em;
-}
-.capital-flow-pill .pill-val {
-  color: var(--text-slate-200);
-  font-weight: 600;
-}
-.capital-flow-pill .pill-val.tone-bullish,
-.capital-flow-pill .pill-val.tone-long { color: var(--color-emerald-400); }
-.capital-flow-pill .pill-val.tone-bearish,
-.capital-flow-pill .pill-val.tone-short { color: var(--color-rose-400); }
-.capital-flow-pill .pill-val.tone-warning { color: var(--color-amber-400); }
-.capital-flow-pill .pill-val.tone-constructive { color: #38bdf8; }
 
-/* 4-Column Metrics Grid */
-.capital-flow-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 8px;
+.capital-flow-alert-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.54rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: help;
 }
-.capital-metric-card {
+.capital-flow-alert-pill.tone-warning {
+  color: var(--color-amber-400);
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+.capital-flow-alert-pill.tone-bullish {
+  color: var(--color-emerald-400);
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.capital-flow-alert-pill.tone-bearish {
+  color: var(--color-rose-400);
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
+/* Metrics Strip */
+.capital-flow-metrics-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.capital-flow-metric-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 14px;
-  background: var(--bg-slate-950);
-  border: 1px solid var(--border-panel);
-  border-radius: var(--card-radius-xs);
+  gap: 2px;
 }
-.capital-metric-card .metric-label {
+
+.capital-flow-metric-item .metric-label {
   font-size: 0.46rem;
+  font-weight: 600;
   color: var(--text-slate-500);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.capital-metric-card .metric-main {
-  font-size: 0.88rem;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.capital-metric-card .metric-main-group {
+
+.capital-flow-metric-item .metric-val-group {
   display: flex;
   align-items: baseline;
   gap: 6px;
 }
-.capital-metric-card .metric-sub-val {
-  font-size: 0.62rem;
-  font-weight: 500;
-}
-.capital-metric-card .metric-sub {
-  font-size: 0.52rem;
+
+.capital-flow-metric-item .metric-val {
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
-.capital-flow-footer {
-  padding-top: 2px;
-  font-size: 0.48rem;
-  line-height: 1.4;
+.capital-flow-metric-item .metric-sub-pct {
+  font-size: 0.55rem;
+  color: var(--text-slate-400);
+}
+
+.capital-flow-actions {
+  display: flex;
+  align-items: center;
+  padding-left: 2px;
 }
 
 /* ─── CVD Panel & Unified Order Flow Verdict ───────────────────────── */
@@ -2104,11 +2085,16 @@
   .venue-health-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .venue-contribution-grid { grid-template-columns: 1fr; }
   .venue-contribution-row { grid-template-columns: 58px minmax(30px, 1fr) 40px 68px; }
-  .capital-flow-panel { grid-column: span 1; }
-  .capital-flow-header { align-items: flex-start; }
-  .capital-flow-hero { flex-direction: column; align-items: flex-start; }
-  .capital-flow-pills { width: 100%; }
-  .capital-flow-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .capital-flow-panel { grid-column: span 1; padding: 10px 12px; }
+  .capital-flow-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .capital-flow-identity { justify-content: space-between; }
+  .capital-flow-metrics-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
   .cvd-chart-legend-bar { justify-content: flex-start; }
 }
 

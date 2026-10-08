@@ -151,105 +151,108 @@ export default function CapitalFlowPanel({
     inputs.spotNetDelta,
   ]);
 
-  const qualityClass = verdict.quality.level === 'HIGH'
-    ? 'is-high'
-    : verdict.quality.level === 'INSUFFICIENT' ? 'is-low' : 'is-medium';
+  const showAlertSpot = verdict.spotAlignment?.state === 'SPOT_DIVERGENCE' || verdict.spotAlignment?.state === 'SPOT_CONFLUENCE';
+  const showAlertCrowding = verdict.crowding?.state === 'CROWDED_LONGS' || verdict.crowding?.state === 'CROWDED_SHORTS';
+  const showAlertQuality = verdict.quality?.level === 'INSUFFICIENT' || verdict.quality?.level === 'DEGRADED';
+
+  const oiTooltip = [
+    inputs.oiChangePct != null ? `ΔOI 24H: ${signedPct(inputs.oiChangePct)}` : null,
+    openInterest ? `OI: ${(Number(openInterest) / 1000).toFixed(1)}K BTC` : null,
+    fundingRate != null ? `Funding: ${(Number(fundingRate) * 100).toFixed(4)}%` : null,
+    basisPct != null ? `Basis: ${signedPct(basisPct, 2)}` : null,
+  ].filter(Boolean).join(' | ');
 
   return (
-    <section className={`hft-panel glass-panel capital-flow-panel ${toneLabel[verdict.tone] || 'flow-neutral'}`} aria-label="Capital Flow In Out 24 giờ">
-      <header className="hft-panel-header capital-flow-header">
-        <div>
-          <span className="capital-flow-eyebrow font-mono">MARKET FLOW REGIME · 24H</span>
-          <h3 className="hft-panel-title font-mono">CAPITAL FLOW — IN / OUT</h3>
-        </div>
-        <div className="capital-flow-header-actions">
-          <span className={`capital-flow-quality font-mono ${qualityClass}`}>{verdict.quality.label}</span>
-          <ModuleMenu moduleId="hft_capital_flow" />
-        </div>
-      </header>
-
-      <div className="capital-flow-hero">
-        <div className="capital-flow-status">
-          <div className="capital-flow-headline">
+    <section
+      className={`hft-panel glass-panel capital-flow-panel ${toneLabel[verdict.tone] || 'flow-neutral'}`}
+      aria-label="Market Flow Regime 24 Giờ"
+    >
+      <div className="capital-flow-bar">
+        {/* Left: Identity, Regime & Dynamic Alerts */}
+        <div className="capital-flow-identity">
+          <span className="capital-flow-kicker font-mono">MARKET FLOW REGIME · 24H</span>
+          <div className="capital-flow-status-group">
             <span className={`capital-flow-state-badge font-mono state-${(verdict.flow || 'neutral').toLowerCase()}`}>
               {verdict.flow}
             </span>
-            <strong className="capital-flow-title">{verdict.label}</strong>
-          </div>
-          <p className="capital-flow-desc">{verdict.detail}</p>
-        </div>
-
-        <div className="capital-flow-pills font-mono">
-          <div className="capital-flow-pill">
-            <span className="pill-label">BIAS</span>
-            <strong className={`pill-val tone-${(verdict.bias || '').toLowerCase()}`}>{verdict.bias}</strong>
-          </div>
-          <div className="capital-flow-pill">
-            <span className="pill-label">SPOT</span>
-            <strong className={`pill-val tone-${verdict.spotAlignment?.tone || 'neutral'}`}>
-              {verdict.spotAlignment?.label ?? '---'}
+            <strong className="capital-flow-label font-mono" title={verdict.detail}>
+              {verdict.label}
             </strong>
           </div>
-          <div className="capital-flow-pill">
-            <span className="pill-label">CROWDING</span>
-            <strong className={`pill-val tone-${verdict.crowding?.tone || 'neutral'}`}>
-              {verdict.crowding?.label ?? '---'}
-            </strong>
-          </div>
-        </div>
-      </div>
 
-      <div className="capital-flow-metrics-grid font-mono">
-        <div className="capital-metric-card">
-          <span className="metric-label">GIÁ 24H</span>
-          <span className={`metric-main ${(priceChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {signedPct(priceChangePct)}
-          </span>
-        </div>
-
-        <div className="capital-metric-card">
-          <span className="metric-label">FUTURES CVD 24H</span>
-          <span className={`metric-main ${(inputs.netDelta || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {compactUsd(inputs.netDelta)}
-          </span>
-          <span className="metric-sub text-slate-400">
-            {signedPct(inputs.cvdRatioPct)} vol
-          </span>
+          {(showAlertSpot || showAlertCrowding || showAlertQuality) && (
+            <div className="capital-flow-alerts font-mono">
+              {showAlertSpot && (
+                <span className={`capital-flow-alert-pill tone-${verdict.spotAlignment.tone}`} title={verdict.spotAlignment.detail}>
+                  {verdict.spotAlignment.label}
+                </span>
+              )}
+              {showAlertCrowding && (
+                <span className={`capital-flow-alert-pill tone-${verdict.crowding.tone}`} title={verdict.crowding.detail}>
+                  {verdict.crowding.label}
+                </span>
+              )}
+              {showAlertQuality && (
+                <span className="capital-flow-alert-pill tone-warning" title={verdict.quality.detail}>
+                  {verdict.quality.label}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="capital-metric-card">
-          <span className="metric-label">SPOT CVD 24H</span>
-          <span className={`metric-main ${(inputs.spotNetDelta || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {compactUsd(inputs.spotNetDelta)}
-          </span>
-          <span className="metric-sub text-slate-400">
-            {signedPct(inputs.spotCvdRatioPct)} vol
-          </span>
-        </div>
-
-        <div className="capital-metric-card">
-          <span className="metric-label">OPEN INTEREST &amp; FUNDING</span>
-          <div className="metric-main-group">
-            <span className={`metric-main ${(inputs.oiChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-              {signedPct(inputs.oiChangePct)}
+        {/* Right: Core 4 Metrics Strip + Menu */}
+        <div className="capital-flow-metrics-strip font-mono">
+          <div className="capital-flow-metric-item">
+            <span className="metric-label">GIÁ</span>
+            <span className={`metric-val ${(priceChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+              {signedPct(priceChangePct)}
             </span>
-            {openInterest && (
-              <span className="metric-sub-val text-slate-400">
-                ({`${(Number(openInterest) / 1000).toFixed(1)}K BTC`})
-              </span>
-            )}
           </div>
-          <span className="metric-sub text-slate-400">
-            Funding: {fundingRate == null ? '---' : `${(Number(fundingRate) * 100).toFixed(4)}%`}{basisPct != null ? ` · Basis: ${signedPct(basisPct, 2)}` : ''}
-          </span>
-        </div>
-      </div>
 
-      <div className="capital-flow-footer font-mono">
-        <span className="text-slate-400">
-          {verdict.quality.detail}{verdict.spotAlignment?.detail ? ` · ${verdict.spotAlignment.detail}` : ''}
-        </span>
+          <div className="capital-flow-metric-item">
+            <span className="metric-label">FUTURES CVD</span>
+            <div className="metric-val-group">
+              <span className={`metric-val ${(inputs.netDelta || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                {compactUsd(inputs.netDelta)}
+              </span>
+              <span className="metric-sub-pct text-slate-400">
+                {signedPct(inputs.cvdRatioPct)} vol
+              </span>
+            </div>
+          </div>
+
+          <div className="capital-flow-metric-item">
+            <span className="metric-label">SPOT CVD</span>
+            <div className="metric-val-group">
+              <span className={`metric-val ${(inputs.spotNetDelta || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                {compactUsd(inputs.spotNetDelta)}
+              </span>
+              <span className="metric-sub-pct text-slate-400">
+                {signedPct(inputs.spotCvdRatioPct)} vol
+              </span>
+            </div>
+          </div>
+
+          <div className="capital-flow-metric-item" title={oiTooltip}>
+            <span className="metric-label">OPEN INTEREST</span>
+            <div className="metric-val-group">
+              <span className={`metric-val ${(inputs.oiChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                {signedPct(inputs.oiChangePct)}
+              </span>
+              <span className="metric-sub-pct text-slate-400">
+                {openInterest ? `${(Number(openInterest) / 1000).toFixed(1)}K BTC` : ''}
+                {fundingRate != null ? ` · F: ${(Number(fundingRate) * 100).toFixed(4)}%` : ''}
+              </span>
+            </div>
+          </div>
+
+          <div className="capital-flow-actions">
+            <ModuleMenu moduleId="hft_capital_flow" />
+          </div>
+        </div>
       </div>
     </section>
   );
 }
+
