@@ -205,9 +205,11 @@ export default function CapitalFlowPanel({
         <div className="capital-flow-metrics-strip font-mono">
           <div className="capital-flow-metric-item">
             <span className="metric-label">GIÁ</span>
-            <span className={`metric-val ${(priceChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-              {signedPct(priceChangePct)}
-            </span>
+            <div className="metric-val-group">
+              <span className={`metric-val ${(priceChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                {signedPct(priceChangePct)}
+              </span>
+            </div>
           </div>
 
           <div className="capital-flow-metric-item">

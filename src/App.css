@@ -1414,13 +1414,13 @@
   border: 1px dashed var(--border-panel); border-radius: var(--card-radius-xs);
 }
 
-/* ─── Capital Flow Regime (Compact Terminal Bar) ───────────────────── */
+/* ─── Capital Flow Regime (Terminal Bar) ───────────────────── */
 .capital-flow-panel {
   grid-column: span 2;
   position: relative;
   overflow: visible;
-  border-top: 2px solid var(--text-slate-500);
-  padding: 6px 14px;
+  border-top: 3px solid var(--text-slate-500);
+  padding: 12px 18px;
   gap: 0;
 }
 .capital-flow-panel.flow-in { border-top-color: var(--color-emerald-400); }
@@ -1431,23 +1431,24 @@
 .capital-flow-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: nowrap;
-  min-height: 36px;
+  min-height: 46px;
 }
 
 .capital-flow-identity {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
   white-space: nowrap;
+  padding-right: 18px;
+  border-right: 1px solid var(--border-panel);
 }
 
 .capital-flow-kicker {
   color: var(--text-slate-500);
-  font-size: 0.52rem;
+  font-size: 0.60rem;
   letter-spacing: 0.1em;
   font-weight: 700;
   text-transform: uppercase;
@@ -1456,13 +1457,13 @@
 .capital-flow-status-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .capital-flow-state-badge {
   display: inline-block;
-  padding: 1px 6px;
-  font-size: 0.58rem;
+  padding: 2.5px 8px;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   border-radius: 4px;
@@ -1500,9 +1501,9 @@
 }
 
 .capital-flow-label {
-  font-size: 0.78rem;
+  font-size: 0.90rem;
   font-weight: 700;
-  color: var(--text-slate-100);
+  color: var(--text-contrast, var(--text-slate-100));
   cursor: help;
 }
 
@@ -1517,9 +1518,9 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
-  font-size: 0.52rem;
+  font-size: 0.62rem;
   font-weight: 600;
   border: 1px solid transparent;
   cursor: help;
@@ -1551,24 +1552,33 @@
   border-color: rgba(148, 163, 184, 0.25);
 }
 
-/* Metrics Strip */
+/* Metrics Strip - Distributed 4-Column Grid */
 .capital-flow-metrics-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
   align-items: center;
-  gap: 14px;
-  flex-shrink: 1;
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .capital-flow-metric-item {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border-panel);
+  min-width: 0;
+}
+
+.capital-flow-metric-item:first-child {
+  border-left: none;
+  padding-left: 0;
 }
 
 .capital-flow-metric-item .metric-label {
-  font-size: 0.44rem;
-  font-weight: 600;
+  font-size: 0.58rem;
+  font-weight: 700;
   color: var(--text-slate-500);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1577,24 +1587,27 @@
 .capital-flow-metric-item .metric-val-group {
   display: flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .capital-flow-metric-item .metric-val {
-  font-size: 0.78rem;
+  font-size: 0.94rem;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
 }
 
 .capital-flow-metric-item .metric-sub-pct {
-  font-size: 0.52rem;
+  font-size: 0.64rem;
   color: var(--text-slate-400);
+  white-space: nowrap;
 }
 
 .capital-flow-actions {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  padding-left: 4px;
 }
 
 /* ─── CVD Panel & Unified Order Flow Verdict ───────────────────────── */
@@ -2117,6 +2130,8 @@
     grid-column: 1 / 2;
     flex-wrap: wrap;
     white-space: normal;
+    border-right: none;
+    padding-right: 0;
   }
   .capital-flow-actions {
     grid-column: 2 / 3;
@@ -2128,11 +2143,22 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px 12px;
     padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--border-panel);
     width: 100%;
     white-space: normal;
   }
+  .capital-flow-metric-item {
+    border-left: none;
+    padding-left: 0;
+  }
   .cvd-chart-legend-bar { justify-content: flex-start; }
+}
+
+@media (max-width: 640px) {
+  .capital-flow-metrics-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════ */
