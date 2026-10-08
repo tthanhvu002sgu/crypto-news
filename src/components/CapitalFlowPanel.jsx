@@ -170,7 +170,7 @@ export default function CapitalFlowPanel({
       <div className="capital-flow-bar">
         {/* Left: Identity, Regime & Dynamic Alerts */}
         <div className="capital-flow-identity">
-          <span className="capital-flow-kicker font-mono">MARKET FLOW REGIME · 24H</span>
+          <span className="capital-flow-kicker font-mono">FLOW REGIME · 24H</span>
           <div className="capital-flow-status-group">
             <span className={`capital-flow-state-badge font-mono state-${(verdict.flow || 'neutral').toLowerCase()}`}>
               {verdict.flow}
@@ -201,7 +201,7 @@ export default function CapitalFlowPanel({
           )}
         </div>
 
-        {/* Right: Core 4 Metrics Strip + Menu */}
+        {/* Center/Right: Core 4 Metrics Strip */}
         <div className="capital-flow-metrics-strip font-mono">
           <div className="capital-flow-metric-item">
             <span className="metric-label">GIÁ</span>
@@ -211,7 +211,7 @@ export default function CapitalFlowPanel({
           </div>
 
           <div className="capital-flow-metric-item">
-            <span className="metric-label">FUTURES CVD</span>
+            <span className="metric-label">FUT CVD</span>
             <div className="metric-val-group">
               <span className={`metric-val ${(inputs.netDelta || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
                 {compactUsd(inputs.netDelta)}
@@ -240,16 +240,18 @@ export default function CapitalFlowPanel({
               <span className={`metric-val ${(inputs.oiChangePct || 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
                 {signedPct(inputs.oiChangePct)}
               </span>
-              <span className="metric-sub-pct text-slate-400">
-                {openInterest ? `${(Number(openInterest) / 1000).toFixed(1)}K BTC` : ''}
-                {fundingRate != null ? ` · F: ${(Number(fundingRate) * 100).toFixed(4)}%` : ''}
-              </span>
+              {openInterest && (
+                <span className="metric-sub-pct text-slate-400">
+                  ({(Number(openInterest) / 1000).toFixed(1)}K BTC)
+                </span>
+              )}
             </div>
           </div>
+        </div>
 
-          <div className="capital-flow-actions">
-            <ModuleMenu moduleId="hft_capital_flow" />
-          </div>
+        {/* Far Right: Actions Menu */}
+        <div className="capital-flow-actions">
+          <ModuleMenu moduleId="hft_capital_flow" />
         </div>
       </div>
     </section>
