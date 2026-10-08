@@ -1469,21 +1469,30 @@
   border: 1px solid var(--border-panel);
   background: rgba(255, 255, 255, 0.04);
 }
+.capital-flow-state-badge.tone-bullish,
 .capital-flow-state-badge.state-in {
   color: var(--color-emerald-400);
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.35);
 }
+.capital-flow-state-badge.tone-bearish,
 .capital-flow-state-badge.state-out {
   color: var(--color-rose-400);
   background: rgba(244, 63, 94, 0.12);
   border-color: rgba(244, 63, 94, 0.35);
 }
+.capital-flow-state-badge.tone-constructive,
 .capital-flow-state-badge.state-rotation {
   color: #38bdf8;
   background: rgba(56, 189, 248, 0.12);
   border-color: rgba(56, 189, 248, 0.35);
 }
+.capital-flow-state-badge.tone-warning {
+  color: var(--color-amber-400);
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.capital-flow-state-badge.tone-neutral,
 .capital-flow-state-badge.state-neutral {
   color: var(--text-slate-300);
   background: rgba(148, 163, 184, 0.1);
@@ -1530,6 +1539,16 @@
   color: var(--color-rose-400);
   background: rgba(244, 63, 94, 0.12);
   border-color: rgba(244, 63, 94, 0.3);
+}
+.capital-flow-alert-pill.tone-constructive {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+.capital-flow-alert-pill.tone-neutral {
+  color: var(--text-slate-300);
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
 }
 
 /* Metrics Strip */

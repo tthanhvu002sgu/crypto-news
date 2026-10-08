@@ -87,6 +87,7 @@ function dataQuality({ priceChangePct, cvdRatioPct, oiChangePct, fundingRate, ba
 
 const BASE = {
   flow: 'UNKNOWN',
+  actionBadge: 'UNKNOWN',
   bias: 'MIXED',
   mechanism: 'UNRESOLVED',
   state: 'INSUFFICIENT_EVIDENCE',
@@ -117,7 +118,7 @@ function spotAlignmentContext(futuresFlow, spotCvdRatioPct, spotNetDelta) {
     if (isSpotBuy) {
       return {
         state: 'SPOT_CONFLUENCE',
-        label: 'Đồng thuận mua',
+        label: 'Spot đồng thuận mua',
         detail: 'Cả Futures lẫn Spot đều mua chủ động; tiền thịt ủng hộ đà tăng.',
         tone: 'bullish',
       };
@@ -125,7 +126,7 @@ function spotAlignmentContext(futuresFlow, spotCvdRatioPct, spotNetDelta) {
     if (isSpotSell) {
       return {
         state: 'SPOT_DIVERGENCE',
-        label: 'Phân kỳ bán Spot',
+        label: 'Spot phân kỳ bán',
         detail: 'Futures mua chủ động nhưng Spot đang bán ròng; rủi ro đòn bẩy quá mức hoặc bị xả hàng.',
         tone: 'warning',
       };
@@ -142,7 +143,7 @@ function spotAlignmentContext(futuresFlow, spotCvdRatioPct, spotNetDelta) {
     if (isSpotSell) {
       return {
         state: 'SPOT_CONFLUENCE',
-        label: 'Đồng thuận bán',
+        label: 'Spot đồng thuận bán',
         detail: 'Cả Futures lẫn Spot đều bán chủ động; áp lực bán bao trùm cả hai thị trường.',
         tone: 'bearish',
       };
@@ -150,7 +151,7 @@ function spotAlignmentContext(futuresFlow, spotCvdRatioPct, spotNetDelta) {
     if (isSpotBuy) {
       return {
         state: 'SPOT_DIVERGENCE',
-        label: 'Phân kỳ mua Spot',
+        label: 'Spot phân kỳ mua',
         detail: 'Futures ép bán nhưng Spot đang mua ròng; tiềm ẩn bẫy giá giảm hoặc hấp thụ.',
         tone: 'warning',
       };
@@ -182,7 +183,7 @@ function spotAlignmentContext(futuresFlow, spotCvdRatioPct, spotNetDelta) {
   }
   return {
     state: 'BALANCED',
-    label: 'Cân bằng',
+    label: 'Spot cân bằng',
     detail: 'Dòng tiền Spot ở trạng thái cân bằng trong biên độ hẹp.',
     tone: 'neutral',
   };
@@ -227,39 +228,39 @@ export function classifyCapitalFlow({
       if (priceDirection === 'up' && cvdDirection === 'buy') {
         return {
           ...result,
-          flow: 'IN', bias: 'LONG', mechanism: 'NEW_POSITION', state: 'CAPITAL_IN_LONG_BIAS', tone: 'bullish',
-          label: 'Vốn vào · Long bias',
+          flow: 'IN', actionBadge: 'LONG BUILD-UP', bias: 'LONG', mechanism: 'NEW_POSITION', state: 'CAPITAL_IN_LONG_BIAS', tone: 'bullish',
+          label: 'Mở vị thế Long',
           detail: 'OI mở rộng trong khi giá và aggressive Futures flow cùng tăng.',
         };
       }
       if (priceDirection === 'down' && cvdDirection === 'sell') {
         return {
           ...result,
-          flow: 'IN', bias: 'SHORT', mechanism: 'NEW_POSITION', state: 'CAPITAL_IN_SHORT_BIAS', tone: 'bearish',
-          label: 'Vốn vào · Short bias',
+          flow: 'IN', actionBadge: 'SHORT BUILD-UP', bias: 'SHORT', mechanism: 'NEW_POSITION', state: 'CAPITAL_IN_SHORT_BIAS', tone: 'bearish',
+          label: 'Mở vị thế Short',
           detail: 'OI mở rộng trong khi giá và aggressive Futures flow cùng giảm.',
         };
       }
       if (priceDirection === 'up' && cvdDirection === 'sell') {
         return {
           ...result,
-          flow: 'IN', bias: 'MIXED', mechanism: 'SELL_ABSORPTION', state: 'SELL_ABSORPTION_WITH_OI_IN', tone: 'constructive',
-          label: 'Vốn vào · Sell absorption',
+          flow: 'IN', actionBadge: 'ABSORPTION', bias: 'MIXED', mechanism: 'SELL_ABSORPTION', state: 'SELL_ABSORPTION_WITH_OI_IN', tone: 'constructive',
+          label: 'Hấp thụ lực bán',
           detail: 'OI tăng và giá đi lên dù aggressive flow nghiêng bán; bên mua thụ động đang hấp thụ.',
         };
       }
       if (priceDirection === 'down' && cvdDirection === 'buy') {
         return {
           ...result,
-          flow: 'IN', bias: 'MIXED', mechanism: 'BUY_ABSORPTION', state: 'BUY_ABSORPTION_OR_TRAPPED_LONGS', tone: 'warning',
-          label: 'Vốn vào · Buy absorption',
+          flow: 'IN', actionBadge: 'ABSORPTION', bias: 'MIXED', mechanism: 'BUY_ABSORPTION', state: 'BUY_ABSORPTION_OR_TRAPPED_LONGS', tone: 'warning',
+          label: 'Hấp thụ lực mua (Kẹt Long)',
           detail: 'OI tăng nhưng aggressive buy chưa nâng được giá; có thể là hấp thụ hoặc long bị kẹt.',
         };
       }
       return {
         ...result,
-        flow: 'IN', bias: 'MIXED', mechanism: 'NEW_POSITION', state: 'CAPITAL_IN_MIXED', tone: 'warning',
-        label: 'Vốn vào · Chưa rõ hướng',
+        flow: 'IN', actionBadge: 'BUILD-UP', bias: 'MIXED', mechanism: 'NEW_POSITION', state: 'CAPITAL_IN_MIXED', tone: 'warning',
+        label: 'Mở vị thế chưa rõ hướng',
         detail: 'OI đang mở rộng nhưng Price và Futures CVD chưa xác nhận cùng một hướng.',
       };
     }
@@ -268,23 +269,23 @@ export function classifyCapitalFlow({
       if (priceDirection === 'up' && cvdDirection === 'buy') {
         return {
           ...result,
-          flow: 'OUT', bias: 'SHORT', mechanism: 'SHORT_COVERING', state: 'CAPITAL_OUT_SHORT_COVER', tone: 'constructive',
-          label: 'Vốn ra · Short covering',
+          flow: 'OUT', actionBadge: 'SHORT COVER', bias: 'SHORT', mechanism: 'SHORT_COVERING', state: 'CAPITAL_OUT_SHORT_COVER', tone: 'constructive',
+          label: 'Đóng vị thế Short',
           detail: 'Giá và aggressive buy tăng trong khi OI co lại; gross exposure rời khỏi vị thế short.',
         };
       }
       if (priceDirection === 'down' && cvdDirection === 'sell') {
         return {
           ...result,
-          flow: 'OUT', bias: 'LONG', mechanism: 'LONG_EXIT_OR_LIQUIDATION', state: 'CAPITAL_OUT_LONG_EXIT', tone: 'bearish',
-          label: 'Vốn ra · Long exit',
+          flow: 'OUT', actionBadge: 'LONG UNWIND', bias: 'LONG', mechanism: 'LONG_EXIT_OR_LIQUIDATION', state: 'CAPITAL_OUT_LONG_EXIT', tone: 'bearish',
+          label: 'Thoát vị thế Long',
           detail: 'Giá, aggressive sell và OI cùng giảm; chưa thể tách voluntary close với liquidation.',
         };
       }
       return {
         ...result,
-        flow: 'OUT', bias: 'MIXED', mechanism: 'POSITION_CLOSING', state: 'CAPITAL_OUT_MIXED', tone: 'warning',
-        label: 'Vốn ra · Đóng vị thế hỗn hợp',
+        flow: 'OUT', actionBadge: 'UNWIND', bias: 'MIXED', mechanism: 'POSITION_CLOSING', state: 'CAPITAL_OUT_MIXED', tone: 'warning',
+        label: 'Đóng vị thế hỗn hợp',
         detail: 'OI đang co lại nhưng Price và Futures CVD chưa xác định rõ bên rút khỏi exposure.',
       };
     }
@@ -292,16 +293,16 @@ export function classifyCapitalFlow({
     if ((priceDirection === 'up' && cvdDirection === 'sell') || (priceDirection === 'down' && cvdDirection === 'buy')) {
       return {
         ...result,
-        flow: 'ROTATION', bias: 'MIXED', mechanism: priceDirection === 'up' ? 'SELL_ABSORPTION' : 'BUY_ABSORPTION', state: 'FLOW_ROTATION', tone: 'warning',
-        label: 'Luân chuyển · Absorption',
+        flow: 'ROTATION', actionBadge: 'ROTATION', bias: 'MIXED', mechanism: priceDirection === 'up' ? 'SELL_ABSORPTION' : 'BUY_ABSORPTION', state: 'FLOW_ROTATION', tone: 'warning',
+        label: 'Luân chuyển · Hấp thụ',
         detail: 'OI gần như không đổi trong khi giá chống lại aggressive flow; chưa có bằng chứng gross capital mở rộng hoặc co lại.',
       };
     }
 
     return {
       ...result,
-      flow: 'NEUTRAL', bias: 'MIXED', mechanism: 'NO_MATERIAL_CHANGE', state: 'NO_MATERIAL_FLOW_CHANGE', tone: 'neutral',
-      label: 'Dòng vốn trung tính',
+      flow: 'NEUTRAL', actionBadge: 'NEUTRAL', bias: 'MIXED', mechanism: 'NO_MATERIAL_CHANGE', state: 'NO_MATERIAL_FLOW_CHANGE', tone: 'neutral',
+      label: 'Dòng vốn đi ngang',
       detail: 'ΔOI nằm trong deadband; chưa có thay đổi gross derivatives exposure đáng kể.',
     };
   };

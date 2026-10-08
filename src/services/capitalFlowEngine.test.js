@@ -12,6 +12,8 @@ test('classifies new long-biased capital when Price, CVD and OI expand together'
   const result = classifyCapitalFlow({ ...complete, priceChangePct: 1.2, cvdRatioPct: 2.1, oiChangePct: 3.4 });
   assert.equal(result.state, 'CAPITAL_IN_LONG_BIAS');
   assert.equal(result.flow, 'IN');
+  assert.equal(result.actionBadge, 'LONG BUILD-UP');
+  assert.equal(result.label, 'Mở vị thế Long');
   assert.equal(result.mechanism, 'NEW_POSITION');
 });
 
@@ -19,17 +21,23 @@ test('classifies new short-biased capital when Price, CVD and OI fall/rise in th
   const result = classifyCapitalFlow({ ...complete, priceChangePct: -1.2, cvdRatioPct: -2.1, oiChangePct: 3.4 });
   assert.equal(result.state, 'CAPITAL_IN_SHORT_BIAS');
   assert.equal(result.bias, 'SHORT');
+  assert.equal(result.actionBadge, 'SHORT BUILD-UP');
+  assert.equal(result.label, 'Mở vị thế Short');
 });
 
 test('distinguishes short covering from new long capital', () => {
   const result = classifyCapitalFlow({ ...complete, priceChangePct: 1.2, cvdRatioPct: 2.1, oiChangePct: -3.4 });
   assert.equal(result.state, 'CAPITAL_OUT_SHORT_COVER');
   assert.equal(result.flow, 'OUT');
+  assert.equal(result.actionBadge, 'SHORT COVER');
+  assert.equal(result.label, 'Đóng vị thế Short');
 });
 
 test('labels falling Price, sell CVD and contracting OI as long exit with liquidation caveat', () => {
   const result = classifyCapitalFlow({ ...complete, priceChangePct: -1.2, cvdRatioPct: -2.1, oiChangePct: -3.4 });
   assert.equal(result.state, 'CAPITAL_OUT_LONG_EXIT');
+  assert.equal(result.actionBadge, 'LONG UNWIND');
+  assert.equal(result.label, 'Thoát vị thế Long');
   assert.match(result.detail, /chưa thể tách/i);
 });
 
@@ -37,6 +45,8 @@ test('does not force direction when OI expands against price/CVD alignment', () 
   const result = classifyCapitalFlow({ ...complete, priceChangePct: 1.2, cvdRatioPct: -2.1, oiChangePct: 3.4 });
   assert.equal(result.state, 'SELL_ABSORPTION_WITH_OI_IN');
   assert.equal(result.bias, 'MIXED');
+  assert.equal(result.actionBadge, 'ABSORPTION');
+  assert.equal(result.label, 'Hấp thụ lực bán');
 });
 
 test('abstains when a core input is missing', () => {
@@ -62,7 +72,7 @@ test('identifies spot confluence buy when long bias and spot CVD is positive', (
   });
   assert.equal(result.state, 'CAPITAL_IN_LONG_BIAS');
   assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
-  assert.equal(result.spotAlignment.label, 'Đồng thuận mua');
+  assert.equal(result.spotAlignment.label, 'Spot đồng thuận mua');
   assert.equal(result.spotAlignment.tone, 'bullish');
 });
 
@@ -77,7 +87,7 @@ test('identifies spot divergence sell when long bias but spot CVD is negative', 
   });
   assert.equal(result.state, 'CAPITAL_IN_LONG_BIAS');
   assert.equal(result.spotAlignment.state, 'SPOT_DIVERGENCE');
-  assert.equal(result.spotAlignment.label, 'Phân kỳ bán Spot');
+  assert.equal(result.spotAlignment.label, 'Spot phân kỳ bán');
   assert.equal(result.spotAlignment.tone, 'warning');
 });
 
@@ -92,7 +102,7 @@ test('identifies spot confluence sell when short bias and spot CVD is negative',
   });
   assert.equal(result.state, 'CAPITAL_IN_SHORT_BIAS');
   assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
-  assert.equal(result.spotAlignment.label, 'Đồng thuận bán');
+  assert.equal(result.spotAlignment.label, 'Spot đồng thuận bán');
   assert.equal(result.spotAlignment.tone, 'bearish');
 });
 
@@ -107,7 +117,7 @@ test('identifies spot divergence buy when short bias but spot CVD is positive', 
   });
   assert.equal(result.state, 'CAPITAL_IN_SHORT_BIAS');
   assert.equal(result.spotAlignment.state, 'SPOT_DIVERGENCE');
-  assert.equal(result.spotAlignment.label, 'Phân kỳ mua Spot');
+  assert.equal(result.spotAlignment.label, 'Spot phân kỳ mua');
   assert.equal(result.spotAlignment.tone, 'warning');
 });
 
@@ -135,7 +145,7 @@ test('identifies spot confluence sell during Long Exit when both Futures and Spo
   });
   assert.equal(result.state, 'CAPITAL_OUT_LONG_EXIT');
   assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
-  assert.equal(result.spotAlignment.label, 'Đồng thuận bán');
+  assert.equal(result.spotAlignment.label, 'Spot đồng thuận bán');
   assert.equal(result.spotAlignment.tone, 'bearish');
 });
 
@@ -150,7 +160,7 @@ test('identifies spot divergence buy during Long Exit when Spot is buying agains
   });
   assert.equal(result.state, 'CAPITAL_OUT_LONG_EXIT');
   assert.equal(result.spotAlignment.state, 'SPOT_DIVERGENCE');
-  assert.equal(result.spotAlignment.label, 'Phân kỳ mua Spot');
+  assert.equal(result.spotAlignment.label, 'Spot phân kỳ mua');
   assert.equal(result.spotAlignment.tone, 'warning');
 });
 
@@ -165,7 +175,7 @@ test('identifies spot confluence buy during Short Covering when both Futures and
   });
   assert.equal(result.state, 'CAPITAL_OUT_SHORT_COVER');
   assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
-  assert.equal(result.spotAlignment.label, 'Đồng thuận mua');
+  assert.equal(result.spotAlignment.label, 'Spot đồng thuận mua');
   assert.equal(result.spotAlignment.tone, 'bullish');
 });
 

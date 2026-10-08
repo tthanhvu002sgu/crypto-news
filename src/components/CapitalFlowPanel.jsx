@@ -172,8 +172,8 @@ export default function CapitalFlowPanel({
         <div className="capital-flow-identity">
           <span className="capital-flow-kicker font-mono">FLOW REGIME · 24H</span>
           <div className="capital-flow-status-group">
-            <span className={`capital-flow-state-badge font-mono state-${(verdict.flow || 'neutral').toLowerCase()}`}>
-              {verdict.flow}
+            <span className={`capital-flow-state-badge font-mono tone-${verdict.tone || 'neutral'}`}>
+              {verdict.actionBadge || verdict.flow}
             </span>
             <strong className="capital-flow-label font-mono" title={verdict.detail}>
               {verdict.label}
