@@ -95,7 +95,7 @@ const BASE = {
   tone: 'neutral',
 };
 
-function spotAlignmentContext(bias, spotCvdRatioPct, spotNetDelta) {
+function spotAlignmentContext(futuresFlow, spotCvdRatioPct, spotNetDelta) {
   const spotRatio = finite(spotCvdRatioPct);
   const spotNet = finite(spotNetDelta);
   if (spotRatio == null && spotNet == null) {
@@ -110,7 +110,10 @@ function spotAlignmentContext(bias, spotCvdRatioPct, spotNetDelta) {
   const isSpotBuy = spotRatio != null ? spotRatio > spotDeadband : spotNet > 0;
   const isSpotSell = spotRatio != null ? spotRatio < -spotDeadband : spotNet < 0;
 
-  if (bias === 'LONG') {
+  const isFuturesBuy = futuresFlow === 'BUY' || futuresFlow === 'LONG';
+  const isFuturesSell = futuresFlow === 'SELL' || futuresFlow === 'SHORT';
+
+  if (isFuturesBuy) {
     if (isSpotBuy) {
       return {
         state: 'SPOT_CONFLUENCE',
@@ -123,7 +126,7 @@ function spotAlignmentContext(bias, spotCvdRatioPct, spotNetDelta) {
       return {
         state: 'SPOT_DIVERGENCE',
         label: 'Phân kỳ bán Spot',
-        detail: 'Futures kéo Long nhưng Spot đang bán ròng; rủi ro đòn bẩy quá mức hoặc bị xả hàng.',
+        detail: 'Futures mua chủ động nhưng Spot đang bán ròng; rủi ro đòn bẩy quá mức hoặc bị xả hàng.',
         tone: 'warning',
       };
     }
@@ -135,7 +138,7 @@ function spotAlignmentContext(bias, spotCvdRatioPct, spotNetDelta) {
     };
   }
 
-  if (bias === 'SHORT') {
+  if (isFuturesSell) {
     if (isSpotSell) {
       return {
         state: 'SPOT_CONFLUENCE',
@@ -148,7 +151,7 @@ function spotAlignmentContext(bias, spotCvdRatioPct, spotNetDelta) {
       return {
         state: 'SPOT_DIVERGENCE',
         label: 'Phân kỳ mua Spot',
-        detail: 'Futures ép Short nhưng Spot đang mua ròng; tiềm ẩn bẫy giá giảm hoặc hấp thụ.',
+        detail: 'Futures ép bán nhưng Spot đang mua ròng; tiềm ẩn bẫy giá giảm hoặc hấp thụ.',
         tone: 'warning',
       };
     }
@@ -160,7 +163,7 @@ function spotAlignmentContext(bias, spotCvdRatioPct, spotNetDelta) {
     };
   }
 
-  // If bias is MIXED or unconfirmed
+  // If Futures flow is MIXED or flat
   if (isSpotBuy) {
     return {
       state: 'SPOT_BUY_LEAD',
@@ -304,7 +307,10 @@ export function classifyCapitalFlow({
   };
 
   const finalResult = resolveResult();
-  const spotAlignment = spotAlignmentContext(finalResult.bias, spotCvdRatioPct, spotNetDelta);
+  const futuresFlow = finalResult.cvdDirection === 'buy' ? 'BUY'
+    : finalResult.cvdDirection === 'sell' ? 'SELL'
+    : (finalResult.bias === 'LONG' ? 'BUY' : finalResult.bias === 'SHORT' ? 'SELL' : 'MIXED');
+  const spotAlignment = spotAlignmentContext(futuresFlow, spotCvdRatioPct, spotNetDelta);
 
   return {
     ...finalResult,

@@ -123,3 +123,49 @@ test('gracefully handles missing spot data as unavailable', () => {
   assert.equal(result.spotAlignment.state, 'UNAVAILABLE');
   assert.equal(result.spotAlignment.label, 'Spot chưa rõ');
 });
+
+test('identifies spot confluence sell during Long Exit when both Futures and Spot CVD are negative', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: -1.79,
+    cvdRatioPct: -4.47,
+    oiChangePct: -0.23,
+    spotCvdRatioPct: -1.85,
+    spotNetDelta: -31_510_000,
+  });
+  assert.equal(result.state, 'CAPITAL_OUT_LONG_EXIT');
+  assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
+  assert.equal(result.spotAlignment.label, 'Đồng thuận bán');
+  assert.equal(result.spotAlignment.tone, 'bearish');
+});
+
+test('identifies spot divergence buy during Long Exit when Spot is buying against Futures selling', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: -1.79,
+    cvdRatioPct: -4.47,
+    oiChangePct: -0.23,
+    spotCvdRatioPct: 1.5,
+    spotNetDelta: 30_000_000,
+  });
+  assert.equal(result.state, 'CAPITAL_OUT_LONG_EXIT');
+  assert.equal(result.spotAlignment.state, 'SPOT_DIVERGENCE');
+  assert.equal(result.spotAlignment.label, 'Phân kỳ mua Spot');
+  assert.equal(result.spotAlignment.tone, 'warning');
+});
+
+test('identifies spot confluence buy during Short Covering when both Futures and Spot CVD are positive', () => {
+  const result = classifyCapitalFlow({
+    ...complete,
+    priceChangePct: 1.5,
+    cvdRatioPct: 2.3,
+    oiChangePct: -0.8,
+    spotCvdRatioPct: 1.2,
+    spotNetDelta: 25_000_000,
+  });
+  assert.equal(result.state, 'CAPITAL_OUT_SHORT_COVER');
+  assert.equal(result.spotAlignment.state, 'SPOT_CONFLUENCE');
+  assert.equal(result.spotAlignment.label, 'Đồng thuận mua');
+  assert.equal(result.spotAlignment.tone, 'bullish');
+});
+
