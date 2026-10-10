@@ -8,35 +8,35 @@ import staticCotHistory from '../data/cmeCotHistoryStatic.json' with { type: 'js
 export const COT_REGIMES = {
   INSTITUTIONAL_ACCUMULATION: {
     id: 'INSTITUTIONAL_ACCUMULATION',
-    label: 'TÍCH LŨY THỂ CHẾ (BULLISH)',
+    label: 'TÍCH LŨY THỂ CHẾ',
     color: 'var(--color-emerald-500, #10b981)',
     badgeClass: 'badge-emerald',
     icon: '🏛️'
   },
   ARBITRAGE_HEDGED: {
     id: 'ARBITRAGE_HEDGED',
-    label: 'GIAO DỊCH CHÊNH LỆCH BASIS ARBITRAGE',
+    label: 'BASIS ARBITRAGE',
     color: 'var(--color-amber-500, #f59e0b)',
     badgeClass: 'badge-amber',
     icon: '⚖️'
   },
   SHORT_SQUEEZE_RISK: {
     id: 'SHORT_SQUEEZE_RISK',
-    label: 'CẢNH BÁO SHORT SQUEEZE (ĐÓNG VỊ THẾ BÁN)',
+    label: 'RỦI RO SHORT SQUEEZE',
     color: 'var(--color-cyan-500, #06b6d4)',
     badgeClass: 'badge-cyan',
     icon: '⚡'
   },
   DISTRIBUTION_DERISKING: {
     id: 'DISTRIBUTION_DERISKING',
-    label: 'PHÂN PHỐI / HẠ ĐÒN BẨY (BEARISH/DE-RISK)',
+    label: 'PHÂN PHỐI / HẠ ĐÒN BẨY',
     color: 'var(--color-rose-500, #ef4444)',
     badgeClass: 'badge-rose',
     icon: '⚠️'
   },
   BALANCED_NEUTRAL: {
     id: 'BALANCED_NEUTRAL',
-    label: 'CÂN BẰNG / TÍCH LŨY TRUNG TÍNH',
+    label: 'CÂN BẰNG TRUNG TÍNH',
     color: 'var(--color-slate-400, #94a3b8)',
     badgeClass: 'badge-slate',
     icon: '🔄'
@@ -233,51 +233,51 @@ export const generateCotNarrative = ({
 
   // 1. Nhận định Smart Money (Asset Managers)
   const amLongRatio = am.long + am.short > 0 ? ((am.long / (am.long + am.short)) * 100).toFixed(1) : '---';
-  let amText = `Nhóm Quỹ Quản lý Tài sản (Asset Managers / ETFs) hiện nắm giữ vị thế ròng **${am.net >= 0 ? '+' : ''}${am.net.toLocaleString()} hợp đồng** (Long chiếm ${amLongRatio}%). `;
+  let amText = `Asset Managers nắm giữ vị thế ròng **${am.net >= 0 ? '+' : ''}${am.net.toLocaleString()} hđ** (Long ${amLongRatio}%). `;
   if (deltas.amWoW > 0) {
-    amText += `Trong tuần qua, họ đã **tăng thêm +${deltas.amWoW.toLocaleString()} hợp đồng Long ròng**, `;
+    amText += `Tuần qua tăng **+${deltas.amWoW.toLocaleString()} hđ**, `;
   } else if (deltas.amWoW < 0) {
-    amText += `Tuần qua ghi nhận động thái **giảm nhẹ ${deltas.amWoW.toLocaleString()} hợp đồng Long ròng**, `;
+    amText += `Tuần qua giảm **${deltas.amWoW.toLocaleString()} hđ**, `;
   } else {
-    amText += `Vị thế duy trì ổn định so với tuần trước, `;
+    amText += `Vị thế duy trì ổn định, `;
   }
-  amText += `đưa chỉ số tích lũy COT Index 26 tuần đạt mức **${amCotIndex}%**. So với 4 tuần trước, vị thế của nhóm này biến động **${deltas.am4W >= 0 ? '+' : ''}${deltas.am4W.toLocaleString()} hợp đồng**, phản ánh dòng tiền thể chế tiếp tục duy trì thiên hướng tích lũy dài hạn.`;
+  amText += `COT Index 26 tuần đạt **${amCotIndex}%** (4W: **${deltas.am4W >= 0 ? '+' : ''}${deltas.am4W.toLocaleString()} hđ**), tiếp tục duy trì tích lũy dài hạn.`;
 
   // 2. Nhận định Quỹ Phòng Hộ & Basis Trade (Leveraged Funds)
-  let lfText = `Nhóm Quỹ Đòn bẩy (Hedge Funds) đang nắm giữ vị thế ròng **${lf.net.toLocaleString()} hợp đồng** (nghiêng hẳn về phía Short). `;
+  let lfText = `Leveraged Funds nắm giữ vị thế ròng **${lf.net.toLocaleString()} hđ** (thiên về Short). `;
   if (lf.net < -4000 && am.net > 1500) {
-    lfText += `Lưu ý rằng mức Short áp đảo của nhóm này phần lớn **không phải là cược giá giảm định hướng**, mà là vị thế bán phòng hộ trong chiến lược **Cash-and-Carry Basis Trade** (Mua Spot/ETF trên thị trường giao ngay và Bán CME Futures để ăn chênh lệch funding/basis). `;
+    lfText += `Vị thế Short chủ yếu nhằm **Basis Trade** (mua Spot/ETF, bán Futures ăn chênh lệch), không phải cược giảm giá. `;
   }
   if (deltas.lfWoW > 500) {
-    lfText += `Tuần này họ đã **đóng bớt Short (+${deltas.lfWoW.toLocaleString()} hợp đồng)**, làm giảm áp lực bán trên sàn phái sinh.`;
+    lfText += `Tuần qua đóng bớt Short (**+${deltas.lfWoW.toLocaleString()} hđ**), giảm áp lực bán.`;
   } else if (deltas.lfWoW < -500) {
-    lfText += `Họ tiếp tục mở rộng Short thêm **${deltas.lfWoW.toLocaleString()} hợp đồng**, cho thấy hoạt động chênh lệch giá cơ sở vẫn đang hấp thụ thanh khoản mạnh mẽ.`;
+    lfText += `Mở rộng Short thêm **${deltas.lfWoW.toLocaleString()} hđ** khi nhu cầu chênh lệch cơ sở tăng.`;
   } else {
-    lfText += `Quy mô Short được duy trì ở mức cân bằng với tuần trước.`;
+    lfText += `Quy mô Short duy trì cân bằng với tuần trước.`;
   }
 
   // 3. Nhận định Nhà Đầu Tư Nhỏ Lẻ (Retail / Non-Reportable)
-  let retailText = `Nhóm cá nhân nhỏ lẻ (Non-Reportable) đang nắm giữ vị thế ròng **${retail.net >= 0 ? '+' : ''}${retail.net.toLocaleString()} hợp đồng** (Long: ${retail.long.toLocaleString()} / Short: ${retail.short.toLocaleString()}). `;
+  let retailText = `Nhóm cá nhân nhỏ lẻ nắm giữ vị thế ròng **${retail.net >= 0 ? '+' : ''}${retail.net.toLocaleString()} hđ** (Long: ${retail.long.toLocaleString()} / Short: ${retail.short.toLocaleString()}). `;
   if (retail.net > 0 && am.net > 0) {
-    retailText += `Tâm lý cá nhân đồng thuận với dòng tiền thể chế, củng cố xu hướng tăng chung nhưng cần thận trọng khi phe Long trở nên quá đông đúc.`;
+    retailText += `Tâm lý đồng thuận với dòng tiền thể chế củng cố đà tăng, nhưng cần lưu ý khi phe Long quá đông đúc.`;
   } else if (retail.net < 0 && am.net > 0) {
-    retailText += `Tồn tại sự **phân kỳ thú vị**: Nhà đầu tư cá nhân thiên về Short trong khi các tổ chức lớn tích cực gom Long, đây là tín hiệu củng cố sức mạnh cho dòng tiền lớn (Smart Money Dominance).`;
+    retailText += `**Phân kỳ**: Cá nhân Short trong khi tổ chức gom Long, củng cố sức mạnh phe Smart Money.`;
   } else {
-    retailText += `Quy mô vị thế cá nhân chiếm tỷ trọng nhỏ (~${retail.longOi || 5}% OI), không chi phối cấu trúc giá chính.`;
+    retailText += `Tỷ trọng nhỏ (~${retail.longOi || 5}% OI), không chi phối cấu trúc giá chính.`;
   }
 
   // 4. Tổng kết hành động (Tactical Synthesis)
   let tacticalText = '';
   if (regime.id === 'INSTITUTIONAL_ACCUMULATION') {
-    tacticalText = `Cấu trúc vị thế thể hiện rõ trạng thái **Tích lũy Thể chế**: Smart Money duy trì vị thế Long vững chắc với COT Index cao. Xu hướng vĩ mô trung hạn của Bitcoin được hỗ trợ tốt, các nhịp điều chỉnh ngắn hạn là cơ hội tích lũy theo dòng tiền lớn.`;
+    tacticalText = `**Tích lũy Thể chế**: Smart Money duy trì vị thế Long vững chắc (COT Index ${amCotIndex}%), củng cố xu hướng tăng trung hạn. Các nhịp điều chỉnh là cơ hội tích lũy theo dòng tiền lớn.`;
   } else if (regime.id === 'ARBITRAGE_HEDGED') {
-    tacticalText = `Thị trường vận động lành mạnh dưới sự chi phối của **Basis Arbitrage**: Lượng hợp đồng mở duy trì ở mức cao (${oi.toLocaleString()} hợp đồng), vị thế Short lớn của Hedge Funds chỉ nhằm cân bằng thanh khoản với Spot ETFs chứ không tạo áp lực bán tháo.`;
+    tacticalText = `**Basis Arbitrage chi phối**: OI duy trì cao (${oi.toLocaleString()} hđ), vị thế Short của Hedge Funds nhằm phòng hộ với Spot ETFs thay vì bán tháo định hướng.`;
   } else if (regime.id === 'SHORT_SQUEEZE_RISK') {
-    tacticalText = `Cảnh báo biến động mạnh: Hedge Funds có dấu hiệu đóng Short nhanh khiến giá nhạy cảm với các đợt bật tăng bất ngờ (Short Squeeze).`;
+    tacticalText = `**Cảnh báo Short Squeeze**: Hedge Funds đang đóng Short nhanh khi OI sụt giảm, giá nhạy cảm với các nhịp bật tăng bất ngờ.`;
   } else if (regime.id === 'DISTRIBUTION_DERISKING') {
-    tacticalText = `Cảnh báo rủi ro: Smart Money đang hạ dần tỷ trọng Long trong 4 tuần qua. Cần quan sát chặt chẽ dòng tiền ETF và khối lượng giao dịch để phòng ngừa nhịp phân phối sâu hơn.`;
+    tacticalText = `**Cảnh báo Phân phối / Giảm rủi ro**: Smart Money hạ dần tỷ trọng Long 4 tuần qua. Cần theo dõi dòng tiền ETF để phòng ngừa điều chỉnh sâu.`;
   } else {
-    tacticalText = `Thị trường đang ở trạng thái cân bằng vị thế, chưa có tín hiệu gom hay xả cực đoan từ các tổ chức lớn.`;
+    tacticalText = `Thị trường cân bằng vị thế, chưa có tín hiệu gom hoặc xả rõ rệt từ các tổ chức lớn.`;
   }
 
   return {

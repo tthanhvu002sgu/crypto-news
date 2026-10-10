@@ -304,7 +304,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
               </span>
             </div>
             <div className="font-mono text-slate-500" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>CFTC TFF Report • Độ trễ công bố: ~3-7 ngày (Thứ 6 phát hành vị thế đóng phiên Thứ 3)</span>
+              <span>CFTC TFF Report • Độ trễ ~3-7 ngày (Thứ 6 phát hành số liệu phiên Thứ 3)</span>
               <button
                 type="button"
                 onClick={() => setShowGuide(prev => !prev)}
@@ -364,20 +364,20 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
             color: 'var(--text-contrast)'
           }}>
             <div style={{ fontWeight: 'bold', marginBottom: '6px', color: 'var(--color-amber-500)' }}>
-              📘 HƯỚNG DẪN ĐỌC BÁO CÁO CFTC TFF (TRADERS IN FINANCIAL FUTURES):
+              📘 Ý NGHĨA CÁC NHÓM NHÀ ĐẦU TƯ CFTC TFF:
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
               <div>
-                <strong style={{ color: '#10b981' }}>• Asset Manager / Institutional (Smart Money):</strong> Quỹ quản lý tài sản, ETF, quỹ hưu trí. Thường thiên về Long để nắm giữ dài hạn hoặc hedging vị thế giao ngay cho nhà đầu tư tổ chức.
+                <strong style={{ color: '#10b981' }}>• Asset Managers (Smart Money):</strong> Quỹ ETF, quản lý tài sản, hưu trí. Thường Long dài hạn.
               </div>
               <div>
-                <strong style={{ color: '#ef4444' }}>• Leveraged Funds (Hedge Funds):</strong> Các quỹ đầu cơ đòn bẩy. Đa phần mở Short lớn để thực hiện <em>Cash-and-Carry Basis Trade</em> (Mua Spot/ETF, Bán Futures để ăn lãi suất cơ sở không rủi ro).
+                <strong style={{ color: '#ef4444' }}>• Leveraged Funds (Hedge Funds):</strong> Quỹ đầu cơ đòn bẩy. Thường Short phòng hộ Basis Trade (ăn lãi chênh lệch).
               </div>
               <div>
-                <strong style={{ color: '#3b82f6' }}>• Dealer Intermediary:</strong> Nhà tạo lập thị trường phái sinh, đại lý thanh toán. Luôn đứng ra cân bằng thanh khoản giữa các bên tham gia.
+                <strong style={{ color: '#3b82f6' }}>• Dealer Intermediary:</strong> Nhà tạo lập thị trường, cân bằng thanh khoản giữa các bên.
               </div>
               <div>
-                <strong style={{ color: '#f59e0b' }}>• Non-Reportable (Retail):</strong> Nhà đầu tư cá nhân nhỏ lẻ. Thường là chỉ báo phản ánh tâm lý đám đông (Contrarian Sentiment).
+                <strong style={{ color: '#f59e0b' }}>• Non-Reportable (Retail):</strong> Nhà đầu tư cá nhân nhỏ lẻ (chỉ báo tâm lý đám đông).
               </div>
             </div>
           </div>
@@ -598,9 +598,9 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
               color: 'var(--text-contrast)'
             }}>
               <strong style={{ color: 'var(--color-amber-500)', display: 'block', marginBottom: '2px' }}>
-                💡 ĐÁNH GIÁ TỔNG QUAN THỊ TRƯỜNG PHÁI SINH THỂ CHẾ:
+                💡 TỔNG QUAN PHÁI SINH THỂ CHẾ:
               </strong>
-              <MarkdownNarrative content={narrative?.overview || 'Cấu trúc vị thế phái sinh CME phản ánh sự phân tầng rõ rệt: Các tổ chức lớn (Asset Managers) duy trì vị thế Long chủ đạo trong khi các quỹ phòng hộ (Leveraged Funds) mở vị thế Short tương ứng nhằm thu lợi nhuận từ chênh lệch cơ sở (Basis Arbitrage).'} />
+              <MarkdownNarrative content={narrative?.overview || 'Cấu trúc vị thế CME phản ánh phân tầng rõ nét: Asset Managers giữ Long chủ đạo, trong khi Hedge Funds mở Short để phòng hộ Basis Arbitrage.'} />
             </div>
 
             {/* Deep-dive 3 Pillars */}
@@ -609,39 +609,39 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
               {/* Pillar 1: Smart Money */}
               <div style={{ background: 'var(--bg-panel-solid, rgba(0,0,0,0.15))', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: '#10b981', fontWeight: 'bold', fontSize: '0.72rem' }}>
-                  <Building2 size={14} /> 1. DÒNG TIỀN THÔNG MINH (ASSET MANAGERS)
+                  <Building2 size={14} /> 1. SMART MONEY (ASSET MANAGERS)
                 </div>
                 <div style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'var(--text-contrast)' }}>
-                  <MarkdownNarrative content={narrative?.smartMoney || `Asset Managers đang nắm giữ vị thế ròng **+${am.net.toLocaleString()} hợp đồng**. Tỷ trọng Long áp đảo phản ánh cam kết nắm giữ trung-dài hạn của các quỹ đầu tư lớn.`} />
+                  <MarkdownNarrative content={narrative?.smartMoney || `Asset Managers nắm giữ vị thế ròng **+${am.net.toLocaleString()} hđ**, tiếp tục duy trì tích lũy dài hạn.`} />
                 </div>
                 <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
-                  Biến động 26 tuần: Thấp nhất {analytics?.amRange26W?.min?.toLocaleString() || '---'} hđ | Cao nhất {analytics?.amRange26W?.max?.toLocaleString() || '---'} hđ
+                  Biên độ 26 tuần: {analytics?.amRange26W?.min?.toLocaleString() || '---'} ~ {analytics?.amRange26W?.max?.toLocaleString() || '---'} hđ
                 </div>
               </div>
 
               {/* Pillar 2: Hedge Funds */}
               <div style={{ background: 'var(--bg-panel-solid, rgba(0,0,0,0.15))', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: '#ef4444', fontWeight: 'bold', fontSize: '0.72rem' }}>
-                  <Scale size={14} /> 2. QUỸ PHÒNG HỘ & BASIS TRADE (LEVERAGED FUNDS)
+                  <Scale size={14} /> 2. HEDGE FUNDS (LEVERAGED)
                 </div>
                 <div style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'var(--text-contrast)' }}>
-                  <MarkdownNarrative content={narrative?.hedgeFunds || `Leveraged Funds nắm giữ vị thế Short ròng **${lf.net.toLocaleString()} hợp đồng**. Phần lớn vị thế Short này phục vụ chiến lược Cash & Carry ăn chênh lệch Basis.`} />
+                  <MarkdownNarrative content={narrative?.hedgeFunds || `Leveraged Funds nắm giữ Short ròng **${lf.net.toLocaleString()} hđ**, chủ yếu phục vụ Basis Trade ăn chênh lệch.`} />
                 </div>
                 <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
-                  Biến động 26 tuần: Thấp nhất {analytics?.lfRange26W?.min?.toLocaleString() || '---'} hđ | Cao nhất {analytics?.lfRange26W?.max?.toLocaleString() || '---'} hđ
+                  Biên độ 26 tuần: {analytics?.lfRange26W?.min?.toLocaleString() || '---'} ~ {analytics?.lfRange26W?.max?.toLocaleString() || '---'} hđ
                 </div>
               </div>
 
               {/* Pillar 3: Retail Sentiment */}
               <div style={{ background: 'var(--bg-panel-solid, rgba(0,0,0,0.15))', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: '#f59e0b', fontWeight: 'bold', fontSize: '0.72rem' }}>
-                  <Users size={14} /> 3. TÂM LÝ NHỎ LẺ (NON-REPORTABLE)
+                  <Users size={14} /> 3. RETAIL (NON-REPORTABLE)
                 </div>
                 <div style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'var(--text-contrast)' }}>
-                  <MarkdownNarrative content={narrative?.retail || `Nhóm cá nhân nhỏ lẻ đang nắm giữ Net **${retail.net >= 0 ? '+' : ''}${retail.net.toLocaleString()} hợp đồng**. Tín hiệu này đóng vai trò thước đo tâm lý đám đông đối chiếu với dòng tiền tổ chức.`} />
+                  <MarkdownNarrative content={narrative?.retail || `Cá nhân nhỏ lẻ nắm giữ Net **${retail.net >= 0 ? '+' : ''}${retail.net.toLocaleString()} hđ**, đóng vai trò thước đo tâm lý đám đông.`} />
                 </div>
                 <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
-                  Tỷ lệ Long/Short: {retail.long.toLocaleString()} / {retail.short.toLocaleString()} ({((retail.long / ((retail.long + retail.short) || 1)) * 100).toFixed(1)}% Long)
+                  Tỷ lệ L/S: {retail.long.toLocaleString()} / {retail.short.toLocaleString()} ({((retail.long / ((retail.long + retail.short) || 1)) * 100).toFixed(1)}% Long)
                 </div>
               </div>
 
