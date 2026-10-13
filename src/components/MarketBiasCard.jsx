@@ -1,4 +1,3 @@
-/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: modern-minimal · theme: Terminal */
 import React, { useState, useEffect } from 'react';
 import { calculateMarketBias } from '../services/biasEngine';
 import { getBiasSnapshots, recordBiasSnapshot } from '../services/biasSnapshotStore';

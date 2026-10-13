@@ -213,7 +213,7 @@ export default function DashboardTab({
         <>
           <div className="overview-section-header font-mono">
             <span className="overview-section-badge">02 // OPTIONS &amp; GAMMA EXPOSURE</span>
-            <span className="overview-section-desc text-slate-500">Call/Put Wall, GEX Flip, Max Pain &amp; Gamma Regime tu Deribit</span>
+            <span className="overview-section-desc text-slate-500">Call/Put Wall, GEX Flip, Max Pain &amp; Gamma Regime từ Deribit</span>
           </div>
           <OptionsRegimePanel moduleId="dash_options_regime" />
         </>
@@ -296,7 +296,7 @@ export default function DashboardTab({
             <div className="glass-panel whale-panel">
               <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                  <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH Sử DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
+                  <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
                 </h3>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   {etfChartType === 'aum' && (

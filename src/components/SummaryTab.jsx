@@ -1188,7 +1188,6 @@ ${promptData}
             'Content-Type': 'application/json',
           };
 
-          console.log(`[AI] Attempt ${attempt + 1}: model=${model} lang=${selectedLang} style=${selectedStyle}`);
           const res = await fetch(url, {
             method: 'POST',
             headers,

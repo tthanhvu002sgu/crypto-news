@@ -89,12 +89,12 @@ export const METRIC_METADATA = {
     formula: 'NUPL = 1 - (1 / MVRV)'
   },
   btcSupplyProfit: {
-    api: 'Mô hình giả lập từ MVRV',
-    def: 'Ước tính Tỷ lệ % nguồn cung Bitcoin đang có lời (Percent Supply in Profit). Do CoinMetrics khóa chỉ số này ở gói Pro ($500+/tháng), hệ thống sử dụng mô hình hồi quy toán học bậc 2 từ MVRV được hiệu chỉnh khớp tuyệt đối với số liệu thực tế.',
+    api: 'Mô hình ước tính từ MVRV',
+    def: 'Ước tính Tỷ lệ % nguồn cung Bitcoin đang có lời (Percent Supply in Profit) dựa trên mô hình hồi quy toán học từ MVRV được hiệu chuẩn theo dữ liệu lịch sử.',
     formula: 'SupplyInProfit ≈ -10 + 52 × MVRV - 1.5 × MVRV²'
   },
   ethSupplyProfit: {
-    api: 'Mô hình giả lập từ MVRV',
+    api: 'Mô hình ước tính từ MVRV',
     def: 'Ước tính Tỷ lệ % nguồn cung Ethereum đang có lời (Percent Supply in Profit) dựa trên mô hình hồi quy toán học từ MVRV.',
     formula: 'SupplyInProfit ≈ -10 + 52 × MVRV - 1.5 × MVRV²'
   },

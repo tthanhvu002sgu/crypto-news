@@ -1311,7 +1311,7 @@ function AppContent() {
     if (est === null) return null;
     return {
       valStr: `${est}%`,
-      subStr: `Mô hình từ MVRV (cải tiến)`,
+      subStr: `Mô hình ước tính từ MVRV`,
       cls: est > 95 ? 'text-rose' : est < 50 ? 'text-emerald' : 'text-slate-400',
       aiStr: `${est}% (Estimated)`
     };
@@ -1323,7 +1323,7 @@ function AppContent() {
     if (est === null) return null;
     return {
       valStr: `${est}%`,
-      subStr: `Mô hình từ MVRV (cải tiến)`,
+      subStr: `Mô hình ước tính từ MVRV`,
       cls: est > 95 ? 'text-rose' : est < 50 ? 'text-emerald' : 'text-slate-400',
       aiStr: `${est}% (Estimated)`
     };

@@ -65,7 +65,7 @@ export default function PolymarketWhales({ fmt, moduleId }) {
       setMarkets(data);
     } else {
       setMarkets([]);
-      setError('Không thể tải dữ liệu thực tế từ Polymarket API (có thể do kết nối mạng hoặc DNS bị chặn).');
+      setError('Không thể kết nối đến Polymarket. Vui lòng kiểm tra mạng hoặc thử lại.');
     }
     setLoading(false);
     setRefreshing(false);
@@ -107,7 +107,7 @@ export default function PolymarketWhales({ fmt, moduleId }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
             <span className="dot dot-emerald" />
             <span className="font-mono text-emerald" style={{ fontSize: '0.68rem', fontWeight: 600, letterSpacing: '0.5px' }}>
-              POLYMARKET WHALES TRACKER (REAL DATA)
+              POLYMARKET WHALES TRACKER
             </span>
           </div>
           <span className="font-mono text-slate-400" style={{ fontSize: '0.68rem' }}>
@@ -212,7 +212,7 @@ export default function PolymarketWhales({ fmt, moduleId }) {
       <div>
         {loading ? (
           <div className="font-mono text-slate-400" style={{ padding: '36px 0', textAlign: 'center', fontSize: '0.8rem' }}>
-            Đang tải dữ liệu thực tế từ Polymarket Gamma API...
+            Đang tải dữ liệu từ Polymarket...
           </div>
         ) : error ? (
           <div className="font-mono text-rose" style={{ padding: '28px 12px', textAlign: 'center', fontSize: '0.78rem', background: 'rgba(244, 63, 94, 0.05)', borderRadius: 8, border: '1px solid rgba(244, 63, 94, 0.2)' }}>

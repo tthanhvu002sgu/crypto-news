@@ -32,7 +32,7 @@ export default function GlossaryTab() {
     <div className="glass-panel panel-section glossary-section">
       <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
-          <HelpCircle size={15} /> 📖 CẨM NANG THUẬT NGỮ &amp; ĐỊNH NGHĨA CHO NEWBIE
+          <HelpCircle size={15} /> 📖 CẨM NANG THUẬT NGỮ &amp; ĐỊNH NGHĨA
         </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className="panel-badge font-mono">{filteredData.length} thuật ngữ</span>
