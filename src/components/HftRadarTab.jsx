@@ -718,8 +718,8 @@ function CVDPanel({
   ];
 
   const flowCards = [
-    { key: 'SPOT', accent: '#34d399', series: spotSeries, metrics: spotMetrics, netDelta: latestCvdS },
     { key: 'FUTURES', accent: '#a78bfa', series: futuresSeries, metrics: futuresMetrics, netDelta: latestCvdF },
+    { key: 'SPOT', accent: '#34d399', series: spotSeries, metrics: spotMetrics, netDelta: latestCvdS },
   ];
 
   return (
