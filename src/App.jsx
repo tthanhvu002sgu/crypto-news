@@ -637,6 +637,20 @@ function AppContent() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const [isSyncingSheet, setIsSyncingSheet] = useState(false);
+  const [isExportingMd, setIsExportingMd] = useState(false);
+
+  // ── Binance WebSocket — realtime prices + funding rate ──────────────────
+  const { livePrice, liveChange, liveHigh, liveLow, liveVolume, liveFunding, liveMarkPrice, liveIndexPrice, liveBasisPct, liveEthPrice, liveSolPrice, liveLinkPrice, wsStatus } =
+    useBinanceWebSocket();
+
+  // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
+  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, futures, spot, whaleTrades, cvdStatus, volNodes } = useCVDStream();
+
+  const addLog = useCallback((msg, type = 'info') => {
+    const entry = { time: new Date().toLocaleTimeString('vi-VN'), msg, type };
+    logsRef.current = [entry, ...logsRef.current].slice(0, 80);
+    return entry;
+  }, []);
 
   const handleSyncGoogleSheet = async () => {
     const webhookUrl = apiKeys.googleSheetsWebhook;
@@ -696,8 +710,6 @@ function AppContent() {
       setIsSyncingSheet(false);
     }
   };
-
-  const [isExportingMd, setIsExportingMd] = useState(false);
 
   const handleExportMarkdown = useCallback(async () => {
     if (isExportingMd) return;
@@ -771,20 +783,6 @@ function AppContent() {
       localStorage.setItem('sidebar_accordion', JSON.stringify(updated));
       return updated;
     });
-  }, []);
-
-
-  // ── Binance WebSocket — realtime prices + funding rate ──────────────────
-  const { livePrice, liveChange, liveHigh, liveLow, liveVolume, liveFunding, liveMarkPrice, liveIndexPrice, liveBasisPct, liveEthPrice, liveSolPrice, liveLinkPrice, wsStatus } =
-    useBinanceWebSocket();
-
-  // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
-  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, futures, spot, whaleTrades, cvdStatus, volNodes } = useCVDStream();
-
-  const addLog = useCallback((msg, type = 'info') => {
-    const entry = { time: new Date().toLocaleTimeString('vi-VN'), msg, type };
-    logsRef.current = [entry, ...logsRef.current].slice(0, 80);
-    return entry;
   }, []);
 
   // Per-tier in-flight locks so HOT/WARM/COLD can overlap without skipping each other
