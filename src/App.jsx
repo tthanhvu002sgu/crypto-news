@@ -17,10 +17,11 @@ import { processCotData } from './services/cotEngine';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
   Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
-  ChevronDown, ChevronRight, FileSpreadsheet
+  ChevronDown, ChevronRight, FileSpreadsheet, FileDown
 } from 'lucide-react';
 import { calculateMarketBias } from './services/biasEngine';
 import { syncToGoogleSheetsFromBrowser, validateExportReadiness } from './services/googleSheetSync';
+import { exportMarketDataToMarkdown } from './services/markdownExportService';
 import GlossaryTab from './components/GlossaryTab';
 import HftRadarTab from './components/HftRadarTab';
 import SummaryTab from './components/SummaryTab';
@@ -695,6 +696,48 @@ function AppContent() {
       setIsSyncingSheet(false);
     }
   };
+
+  const [isExportingMd, setIsExportingMd] = useState(false);
+
+  const handleExportMarkdown = useCallback(async () => {
+    if (isExportingMd) return;
+    setIsExportingMd(true);
+    addLog('Đang chuẩn bị và tổng hợp 12 mục dữ liệu để xuất file Markdown (.md)...', 'system');
+    try {
+      const currentBias = calculateMarketBias(data, etfHistory);
+      const result = await exportMarketDataToMarkdown({
+        dashboardData: data,
+        biasData: currentBias,
+        etfHoldings,
+        etfHistory,
+        options: {
+          livePrice,
+          liveChange,
+          liveVolume,
+          liveHigh,
+          liveLow,
+          liveFunding,
+          liveEthPrice,
+          liveSolPrice,
+          orderBook: data?.orderBook,
+          whaleWalls: data?.whaleData,
+        },
+        onProgress: ({ message }) => {
+          addLog(`[Xuất Markdown] ${message}`, 'system');
+        },
+      });
+
+      if (result?.success) {
+        addLog(`✅ [Xuất Markdown] Đã xuất thành công: ${result.filename} (${result.stats.lines} dòng, ${(result.stats.length / 1024).toFixed(1)} KB)`, 'ok');
+      }
+    } catch (err) {
+      console.error('[Markdown Export Error]', err);
+      addLog(`❌ [Xuất Markdown Lỗi] ${err.message || 'Không thể xuất file Markdown'}`, 'error');
+      alert(`Xuất file Markdown thất bại: ${err.message || 'Lỗi không xác định'}`);
+    } finally {
+      setIsExportingMd(false);
+    }
+  }, [isExportingMd, data, etfHoldings, etfHistory, livePrice, liveChange, liveVolume, liveHigh, liveLow, liveFunding, liveEthPrice, liveSolPrice, addLog]);
 
   // Close settings modal on Escape key & lock background scroll
   useEffect(() => {
@@ -1375,6 +1418,15 @@ function AppContent() {
             <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
             {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
           </button>
+          <button
+            className="btn-sync font-mono btn-export-md"
+            onClick={handleExportMarkdown}
+            disabled={isExportingMd}
+            title="Xuất toàn bộ 12 mục dữ liệu Terminal (Market Bias, Options Deribit, ETF Flow, CME COT, Macro v2, CVD, Flow Regime, L/S, OI, Whale Walls, OBI, Altcoin Scanner - Mới nhất & Lịch sử) ra file Markdown (.md)"
+          >
+            <FileDown size={13} className={isExportingMd ? 'spinning' : ''} />
+            {isExportingMd ? 'ĐANG XUẤT MD...' : 'XUẤT DATA MD'}
+          </button>
         </div>
       </header>
 
@@ -1828,6 +1880,8 @@ function AppContent() {
                 ethNupl={ethNuplVal?.aiStr || 'N/A'}
                 btcSupplyProfit={btcSupplyProfitEst?.aiStr || 'N/A'}
                 ethSupplyProfit={ethSupplyProfitEst?.aiStr || 'N/A'}
+                onExportMarkdown={handleExportMarkdown}
+                isExportingMd={isExportingMd}
               />
             </div>
 
@@ -1995,6 +2049,31 @@ function AppContent() {
                 <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
                   URL Web App Google Apps Script để nhận dữ liệu ghi đè định kỳ cho AI đọc.
                 </span>
+              </div>
+
+              <div className="settings-modal-input-group" style={{ background: 'rgba(56, 189, 248, 0.05)', padding: '10px 12px', borderRadius: '6px', border: '1px solid rgba(56, 189, 248, 0.25)', marginTop: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <label className="text-slate-300" style={{ fontSize: '0.58rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', color: '#38bdf8' }}>
+                      <FileDown size={13} style={{ color: '#38bdf8' }} />
+                      XUẤT TOÀN BỘ DATA RA FILE MARKDOWN (.MD)
+                    </label>
+                    <span className="text-slate-400" style={{ fontSize: '0.52rem', display: 'block', marginTop: '2px' }}>
+                      Xuất 12 module dữ liệu (Mới nhất & Lịch sử) để import vào ChatGPT, Claude, Obsidian...
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-sync font-mono btn-export-md"
+                    onClick={handleExportMarkdown}
+                    disabled={isExportingMd}
+                    style={{ height: '26px', padding: '0 10px', fontSize: '0.54rem' }}
+                    title="Tải toàn bộ dữ liệu Terminal ra file Markdown"
+                  >
+                    <FileDown size={11} className={isExportingMd ? 'spinning' : ''} />
+                    {isExportingMd ? 'ĐANG XUẤT...' : 'TẢI FILE MD'}
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>

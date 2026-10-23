@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Sparkles, Loader2, Download } from 'lucide-react';
+import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
@@ -292,7 +292,8 @@ const isCompletedEtfObservation = (value, now = new Date()) => {
 export default function SummaryTab({ 
   data, apiKeys, cvd, spotCvd, buyVolume, sellVolume, etfHoldings, etfHistory,
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
-  btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit
+  btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit,
+  onExportMarkdown, isExportingMd
 }) {
   const [reportCvdData, setReportCvdData] = useState([]);
   const { isModuleHidden, showModule } = useModuleVisibility();
@@ -1548,10 +1549,59 @@ ${promptData}
                     ? 'ĐANG XUẤT...'
                     : 'EXPORTING...'
                   : isVi
-                    ? 'XUẤT DATA CHO AI'
-                    : 'EXPORT DATA FOR AI'}
+                    ? 'XUẤT PROMPT CHO AI'
+                    : 'EXPORT PROMPT FOR AI'}
               </button>
             </Tooltip>
+            {onExportMarkdown && (
+              <Tooltip
+                content={{
+                  api: 'Hệ thống (Markdown Engine)',
+                  def: isVi
+                    ? 'Xuất toàn bộ 12 mục dữ liệu định lượng (Market Bias, Options, ETF Flow, CME COT, Macro v2, CVD, Flow Regime, L/S, OI, Whale Walls, OBI, Altcoin Scanner - Mới nhất & Lịch sử) ra file Markdown.'
+                    : 'Export all 12 quantitative data modules (Latest & History) to a comprehensive Markdown file.',
+                }}
+                lastUpdated={lastSync}
+              >
+                <button
+                  className="font-mono btn-export-md"
+                  onClick={onExportMarkdown}
+                  disabled={isExportingMd || isAiLoading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 14px',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    background: isExportingMd || isAiLoading ? 'var(--bg-slate-800)' : 'rgba(56, 189, 248, 0.12)',
+                    color: isExportingMd || isAiLoading ? 'var(--text-slate-500)' : '#38bdf8',
+                    border: isExportingMd || isAiLoading ? '1px solid var(--border-panel)' : '1px solid rgba(56, 189, 248, 0.5)',
+                    cursor: isExportingMd || isAiLoading ? 'not-allowed' : 'pointer',
+                    boxShadow: 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isExportingMd && !isAiLoading) {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.borderColor = '#38bdf8';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!isExportingMd && !isAiLoading) {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.5)';
+                    }
+                  }}
+                >
+                  {isExportingMd ? <Loader2 size={14} className="spinning" /> : <FileDown size={14} />}
+                  {isExportingMd
+                    ? (isVi ? 'ĐANG XUẤT MD...' : 'EXPORTING MD...')
+                    : (isVi ? 'XUẤT FULL DATA (MD)' : 'EXPORT FULL MD')}
+                </button>
+              </Tooltip>
+            )}
             <Tooltip
               content={{
                 api: aiProvider === 'openrouter' ? 'OpenRouter API (Free Top 10)' : 'Gemini API',
