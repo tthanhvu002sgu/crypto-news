@@ -310,10 +310,16 @@ export default function SummaryTab({
 
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = localStorage.getItem('ai-model');
-    if (saved === 'gemini-flash-lite-latest' || saved === 'gemini-flash-latest') {
+    const validModels = [
+      'gemma-4-31b-it',
+      'gemma-4-26b-a4b-it',
+      'gemini-flash-lite-latest',
+      'gemini-flash-latest',
+    ];
+    if (saved && validModels.includes(saved)) {
       return saved;
     }
-    return 'gemini-flash-lite-latest';
+    return 'gemma-4-31b-it';
   });
 
   const handleModelChange = (newModel) => {
@@ -1156,9 +1162,16 @@ ${promptData}
     setAiSummary('');
 
     // Determine candidate models and order of attempts
-    const modelAttempts = selectedModel === 'gemini-flash-lite-latest'
-      ? ['gemini-flash-lite-latest', 'gemini-flash-latest']
-      : ['gemini-flash-latest', 'gemini-flash-lite-latest'];
+    const allModels = [
+      'gemma-4-31b-it',
+      'gemma-4-26b-a4b-it',
+      'gemini-flash-lite-latest',
+      'gemini-flash-latest',
+    ];
+    const modelAttempts = [
+      selectedModel,
+      ...allModels.filter((m) => m !== selectedModel),
+    ];
 
     let success = false;
     let finalError = null;
@@ -1492,6 +1505,8 @@ ${promptData}
                   cursor: 'pointer',
                 }}
               >
+                <option value="gemma-4-31b-it">Gemma 4 31B IT ({isVi ? 'Khuyên dùng' : 'Recommended'})</option>
+                <option value="gemma-4-26b-a4b-it">Gemma 4 26B A4B IT ({isVi ? 'Siêu tốc' : 'Speed'})</option>
                 <option value="gemini-flash-lite-latest">Gemini Flash Lite (Latest)</option>
                 <option value="gemini-flash-latest">Gemini Flash (Latest)</option>
               </select>

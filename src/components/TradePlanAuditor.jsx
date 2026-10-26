@@ -215,52 +215,88 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
           },
         });
       } else {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:streamGenerateContent?alt=sse&key=${geminiKey}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: { text: systemPrompt } },
-            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-            generationConfig: getGenerationConfig('compact'),
-          }),
-        });
+        const candidateModels = [
+          selectedModel,
+          'gemma-4-31b-it',
+          'gemma-4-26b-a4b-it',
+          'gemini-flash-lite-latest',
+          'gemini-flash-latest',
+        ];
+        const modelAttempts = Array.from(new Set(candidateModels.filter(Boolean)));
+        let lastError = null;
+        let success = false;
 
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(errText || `HTTP status ${res.status}`);
-        }
+        for (let attempt = 0; attempt < modelAttempts.length; attempt++) {
+          const currentModel = modelAttempts[attempt];
+          if (attempt > 0) {
+            setAuditResult(
+              isVi
+                ? `*Đang tự động chuyển sang model dự phòng: **${currentModel}** do model trước lỗi...*\n\n`
+                : `*Automatically falling back to backup model: **${currentModel}** due to previous model error...*\n\n`
+            );
+          } else {
+            setAuditResult('');
+          }
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-        let currentText = '';
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent?alt=sse&key=${geminiKey}`;
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                system_instruction: { parts: { text: systemPrompt } },
+                contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+                generationConfig: getGenerationConfig('compact'),
+              }),
+            });
 
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+            if (!res.ok) {
+              const errText = await res.text();
+              throw new Error(errText || `HTTP status ${res.status}`);
+            }
 
-          const lines = buffer.split(/\r?\n|\r/);
-          buffer = lines.pop() || '';
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            let currentText = '';
 
-          for (const line of lines) {
-            const cleanedStr = line.trim();
-            if (cleanedStr.startsWith('data: ')) {
-              const dataStr = cleanedStr.slice(6).trim();
-              if (!dataStr) continue;
-              try {
-                const parsed = JSON.parse(dataStr);
-                const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                if (text) {
-                  currentText = cleanLatex(currentText + text);
-                  setAuditResult(currentText);
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+
+              const lines = buffer.split(/\r?\n|\r/);
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                const cleanedStr = line.trim();
+                if (cleanedStr.startsWith('data: ')) {
+                  const dataStr = cleanedStr.slice(6).trim();
+                  if (!dataStr) continue;
+                  try {
+                    const parsed = JSON.parse(dataStr);
+                    const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    if (text) {
+                      currentText = cleanLatex(currentText + text);
+                      setAuditResult(currentText);
+                    }
+                  } catch {
+                    continue;
+                  }
                 }
-              } catch {
-                continue;
               }
             }
+
+            success = true;
+            break;
+          } catch (modelErr) {
+            console.warn(`[TradeAuditor] Model ${currentModel} failed:`, modelErr);
+            lastError = modelErr;
           }
+        }
+
+        if (!success && lastError) {
+          throw lastError;
         }
       }
     } catch (err) {
