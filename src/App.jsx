@@ -644,7 +644,7 @@ function AppContent() {
     useBinanceWebSocket();
 
   // ── HFT WebSocket Streams ──────────────────────────────────────────────────────
-  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, futures, spot, whaleTrades, cvdStatus, volNodes } = useCVDStream();
+  const { cvd, sessionCvd, buyVolume, sellVolume, volumeRatio, cvdHistory, futures, spot, whaleTrades, liquidations, liqStats5m, liqStats1h, cvdStatus, volNodes } = useCVDStream();
 
   const addLog = useCallback((msg, type = 'info') => {
     const entry = { time: new Date().toLocaleTimeString('vi-VN'), msg, type };
@@ -1840,7 +1840,7 @@ function AppContent() {
                 cvdHistory24h={data.cvdHistory24h} cvdHistory7d={data.cvdHistory7d} cvdHistory30d={data.cvdHistory30d}
                 cvdHistory24hSpot={data.cvdHistory24hSpot} cvdHistory7dSpot={data.cvdHistory7dSpot} cvdHistory30dSpot={data.cvdHistory30dSpot}
                 cvdStatus={cvdStatus} livePrice={livePrice}
-                whaleTrades={whaleTrades} volNodes={volNodes} theme={theme}
+                whaleTrades={whaleTrades} liquidations={liquidations} liqStats5m={liqStats5m} liqStats1h={liqStats1h} volNodes={volNodes} theme={theme}
                 data={data} fundingRate={fund}
                 liveChange={liveChange} liveHigh={liveHigh} liveLow={liveLow}
                 liveMarkPrice={liveMarkPrice} liveIndexPrice={liveIndexPrice} liveBasisPct={liveBasisPct}

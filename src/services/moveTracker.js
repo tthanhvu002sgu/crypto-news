@@ -4,8 +4,9 @@
  * and cross-venue flow labels; it never suppresses a champion event.
  */
 
-import { subscribeAggTrades, subscribeSpotAggTrades } from './websocket';
+import { subscribeAggTrades, subscribeSpotAggTrades, subscribeForceOrders } from './websocket';
 import { getATR, getATRState } from './atrCalculator';
+import { aggregateLiquidations } from './liquidationEngine';
 import {
   DETECTION_WINDOWS_SEC,
   OUTCOME_HORIZONS_SEC,
@@ -97,9 +98,28 @@ let moveListeners = new Set();
 
 const futuresBuckets = [];
 const spotBuckets = [];
+const liquidationRing = [];
 const pendingRecoveries = new Map();
 const recoveryTimers = new Map();
 const outcomeTrackers = new Map();
+
+function handleIncomingForceOrder(liq) {
+  if (!liq) return;
+  liquidationRing.push(liq);
+  const cutoff = Date.now() - RING_RETENTION_MS;
+  while (liquidationRing.length > 0 && liquidationRing[0].timestamp < cutoff) {
+    liquidationRing.shift();
+  }
+  if (activeMove && activeMove.liquidations) {
+    if (liq.positionSide === 'LONG') {
+      activeMove.liquidations.longLiqUsd += liq.usdValue;
+    } else if (liq.positionSide === 'SHORT') {
+      activeMove.liquidations.shortLiqUsd += liq.usdValue;
+    }
+    activeMove.liquidations.totalLiqUsd += liq.usdValue;
+    activeMove.liquidations.count += 1;
+  }
+}
 
 const marketHealth = {
   futuresLastTradeAt: null,
@@ -360,6 +380,13 @@ function buildTriggerEvent(candidate, detectionScores, price, now) {
     spotAligned: flow.spot.aligned,
     dataComplete,
   });
+  const rolling5mLiq = aggregateLiquidations(liquidationRing, now, 300_000);
+  const rolling1hLiq = aggregateLiquidations(liquidationRing, now, 3_600_000);
+  const windowLiq = aggregateLiquidations(
+    liquidationRing.filter((l) => l.timestamp >= candidate.startTime && l.timestamp <= now + 60_000),
+    now,
+    candidate.windowSec * 1000
+  );
   const id = `move_${now}_${Math.round(price * 100)}`;
   return {
     id,
@@ -399,6 +426,12 @@ function buildTriggerEvent(candidate, detectionScores, price, now) {
     largeTradesVol: futuresStats.largeTradesVol,
     maxSingleTradeUsd: futuresStats.maxSingleTradeUsd,
     maxSingleTradeSide: futuresStats.maxSingleTradeSide,
+    liquidations: {
+      longLiqUsd: windowLiq.longLiqUsd,
+      shortLiqUsd: windowLiq.shortLiqUsd,
+      totalLiqUsd: windowLiq.totalLiqUsd,
+      count: windowLiq.totalCount,
+    },
     spotTotalVolume: spotStats.totalVolume,
     spotTradeCount: spotStats.tradeCount,
     spotTakerBuyVol: spotStats.takerBuyVol,
@@ -417,6 +450,11 @@ function buildTriggerEvent(candidate, detectionScores, price, now) {
       participationPercentile: Number.isFinite(participationPercentile) ? participationPercentile : null,
       qualityTier,
       flowLabel: flow.label,
+      liquidations: {
+        window: windowLiq,
+        rolling5m: rolling5mLiq,
+        rolling1h: rolling1hLiq,
+      },
       dataQuality: { ...freshness, baselineSampleCount: baseline.length, complete: dataComplete },
       externalContext: externalContextSnapshot(now),
     },
@@ -472,6 +510,12 @@ function buildEndSnapshot(event, now, price) {
   const freshness = dataFreshness(now);
   const flow = classifyFlowLabel(event.direction, futuresStats, spotStats, freshness);
   const totalVolume = Math.max(1, futuresStats.totalVolume);
+  const moveDurationMs = Math.max(1000, now - event.startTime);
+  const duringMoveLiq = aggregateLiquidations(
+    liquidationRing.filter((l) => l.timestamp >= event.startTime && l.timestamp <= now + 60_000),
+    now,
+    moveDurationMs
+  );
   return {
     capturedAt: now,
     price,
@@ -485,6 +529,11 @@ function buildEndSnapshot(event, now, price) {
     },
     spot: { ...spotStats, ...flow.spot },
     flowLabel: flow.label,
+    liquidations: {
+      duringMove: duringMoveLiq,
+      rolling5m: aggregateLiquidations(liquidationRing, now, 300_000),
+      rolling1h: aggregateLiquidations(liquidationRing, now, 3_600_000),
+    },
     dataQuality: freshness,
     externalContext: externalContextSnapshot(now),
   };
@@ -677,6 +726,7 @@ async function initializeResearchHistory() {
 
 subscribeAggTrades(handleIncomingTrade);
 subscribeSpotAggTrades(handleIncomingSpotTrade);
+subscribeForceOrders(handleIncomingForceOrder);
 initializeResearchHistory();
 refreshAtrThreshold(true);
 refreshTimeframeContext();

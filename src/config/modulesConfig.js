@@ -8,6 +8,7 @@ export const MODULES_CONFIG = {
   // 1. Overview & Regime
   tab_overview: { id: 'tab_overview', label: 'Tab Overview & Regime', category: 'Overview & Regime' },
   dash_bias: { id: 'dash_bias', label: 'Market Bias Engine (Công Thức Bias Total)', category: 'Overview & Regime' },
+  dash_signal_scoreboard: { id: 'dash_signal_scoreboard', label: 'Signal Scoreboard (Kiểm Chứng Edge & Backtest Tự Động)', category: 'Overview & Regime' },
   dash_macro: { id: 'dash_macro', label: 'Macro Pulse (DXY, VIX, 10Y, S&P 500)', category: 'Overview & Regime' },
   dash_calendar: { id: 'dash_calendar', label: 'Lịch Kinh Tế Vĩ Mô (7 Ngày Trong Tuần)', category: 'Overview & Regime' },
   tab_cascade: { id: 'tab_cascade', label: 'Thác Thanh Khoản — Sơ Đồ Lưu Chuyển', category: 'Overview & Regime' },
@@ -18,10 +19,12 @@ export const MODULES_CONFIG = {
   dash_news: { id: 'dash_news', label: 'Tin Tức Vĩ Mô & Thị Trường', category: 'Overview & Regime' },
   dash_polymarket: { id: 'dash_polymarket', label: 'Polymarket — Whale Tracker', category: 'Overview & Regime' },
   dash_btc_chart: { id: 'dash_btc_chart', label: 'BTC/USDT — Giá 48 Giờ Gần Nhất (1H)', category: 'Overview & Regime' },
-  dash_options_regime: { id: 'dash_options_regime', label: 'Options Regime — BTC (Deribit GEX, Max Pain, Walls)', category: 'Overview & Regime' },
+  dash_options_regime: { id: 'dash_options_regime', label: 'Options Regime — BTC/ETH (Deribit GEX, Max Pain, Walls)', category: 'Overview & Regime' },
+  dash_correlation_matrix: { id: 'dash_correlation_matrix', label: 'Multi-Asset Correlation Matrix (30D / 90D)', category: 'Overview & Regime' },
 
   // 2. Order Flow & Vi Cấu Trúc
   tab_orderflow: { id: 'tab_orderflow', label: 'Tab Order Flow', category: 'Order Flow' },
+  hft_multi_funding: { id: 'hft_multi_funding', label: 'Multi-Exchange Funding & Basis (Crowding Radar)', category: 'Order Flow' },
   hft_capital_flow: { id: 'hft_capital_flow', label: 'Capital Flow In / Out (24H)', category: 'Order Flow' },
   hft_cvd: { id: 'hft_cvd', label: 'CVD & Order Flow (Spot vs Futures)', category: 'Order Flow' },
   dash_ls_chart: { id: 'dash_ls_chart', label: 'Long/Short Ratio — 24H', category: 'Order Flow' },
@@ -33,7 +36,7 @@ export const MODULES_CONFIG = {
   hft_target_liq: { id: 'hft_target_liq', label: 'Limit Order (Whale Walls)', category: 'Order Flow' },
   hft_orderbook: { id: 'hft_orderbook', label: 'Order Book Imbalance (OBI)', category: 'Order Flow' },
   hft_obi: { id: 'hft_obi', label: 'Order Book Imbalance', category: 'Order Flow' },
-  hft_liquidations: { id: 'hft_liquidations', label: 'Live Whale Trades (> $100k)', category: 'Order Flow' },
+  hft_liquidations: { id: 'hft_liquidations', label: 'Live Liquidations & Whale Trades (btcusdt@forceOrder)', category: 'Order Flow' },
   hft_whale_trades: { id: 'hft_whale_trades', label: 'Live Whale Trades', category: 'Order Flow' },
 
   // 4. AI Decision Lab

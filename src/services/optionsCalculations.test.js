@@ -11,7 +11,9 @@ import {
   classifyGammaRegime,
   calculatePCR,
   generateOptionsAsp100Narrative,
-  analyzeBtcOptions
+  analyzeBtcOptions,
+  analyzeOptionsChain,
+  formatOptionStrikeLabel,
 } from './optionsCalculations.js';
 import { parseDeribitExpiryDate } from './deribitOptionsService.js';
 
@@ -523,6 +525,49 @@ describe('optionsCalculations', () => {
       assert.ok(result.narrative.positioning);
       assert.ok(result.narrative.sentiment);
       assert.ok(result.narrative.action);
+    });
+  });
+
+  // ── ETH Options Support Tests ──────────────────────────────────────────────
+  describe('ETH Options Chain Analysis', () => {
+    const ethSpot = 2500;
+    const ethInstruments = [
+      { instrumentName: 'ETH-28MAR26-2400-P', expirationTimestamp: Date.now() + 5 * 86400000, openInterest: 800, gamma: 0.08 },
+      { instrumentName: 'ETH-28MAR26-2450-P', expirationTimestamp: Date.now() + 5 * 86400000, openInterest: 1200, gamma: 0.12 },
+      { instrumentName: 'ETH-28MAR26-2500-C', expirationTimestamp: Date.now() + 5 * 86400000, openInterest: 1500, gamma: 0.15 },
+      { instrumentName: 'ETH-28MAR26-2500-P', expirationTimestamp: Date.now() + 5 * 86400000, openInterest: 900, gamma: 0.15 },
+      { instrumentName: 'ETH-28MAR26-2600-C', expirationTimestamp: Date.now() + 5 * 86400000, openInterest: 2000, gamma: 0.10 },
+      { instrumentName: 'ETH-28MAR26-2700-C', expirationTimestamp: Date.now() + 5 * 86400000, openInterest: 1000, gamma: 0.05 },
+    ];
+
+    test('analyzeOptionsChain handles ETH currency and calculates correct walls & max pain', () => {
+      const res = analyzeOptionsChain(ethInstruments, ethSpot, null, 'ETH');
+      assert.equal(res.meta.currency, 'ETH');
+      assert.equal(res.meta.underlyingPrice, 2500);
+      assert.equal(res.callWall.strike, 2600); // 2600 has 2000 call OI
+      assert.equal(res.putWall.strike, 2450); // 2450 has 1200 put OI
+      assert.ok(res.maxPain.maxPainPrice >= 2400 && res.maxPain.maxPainPrice <= 2700);
+      assert.ok(res.pcr.pcr > 0);
+      assert.ok(res.narrative);
+    });
+
+    test('formatOptionStrikeLabel formats BTC vs ETH strikes correctly', () => {
+      // BTC strikes (>= 10000)
+      assert.equal(formatOptionStrikeLabel(95000, 95000), '95K');
+      assert.equal(formatOptionStrikeLabel(95500, 95000), '95.5K');
+      assert.equal(formatOptionStrikeLabel(100000, 100000), '100K');
+
+      // ETH strikes (< 10000) - prevents collision between 2450 and 2500
+      assert.equal(formatOptionStrikeLabel(2450, 2500), '$2,450');
+      assert.equal(formatOptionStrikeLabel(2500, 2500), '$2,500');
+      assert.equal(formatOptionStrikeLabel(2550, 2500), '$2,550');
+
+      // Sub-1000 strikes
+      assert.equal(formatOptionStrikeLabel(800, 800), '$800');
+
+      // Edge cases
+      assert.equal(formatOptionStrikeLabel(null), '---');
+      assert.equal(formatOptionStrikeLabel(undefined), '---');
     });
   });
 

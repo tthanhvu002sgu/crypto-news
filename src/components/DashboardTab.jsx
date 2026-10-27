@@ -8,6 +8,8 @@ import OptionsRegimePanel from './OptionsRegimePanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import CmeCotCard from './CmeCotCard';
+import SignalScoreboardPanel from './SignalScoreboardPanel';
+import CorrelationMatrixPanel from './CorrelationMatrixPanel';
 
 const isPlausibleCpiYoY = (value) => {
   const number = Number(value);
@@ -38,7 +40,7 @@ export default function DashboardTab({
 }) {
   const { isModuleHidden } = useModuleVisibility();
 
-  const hasSection1 = !isModuleHidden('dash_macro') || !isModuleHidden('dash_calendar') || !isModuleHidden('tab_cascade');
+  const hasSection1 = !isModuleHidden('dash_macro') || !isModuleHidden('dash_correlation_matrix') || !isModuleHidden('dash_calendar') || !isModuleHidden('tab_cascade');
   const hasSection2 = !isModuleHidden('dash_etf_holdings') || !isModuleHidden('dash_etf_flows') || !isModuleHidden('dash_cme_cot') || !isModuleHidden('dash_macro_valuator');
   const hasSection3 = (!isModuleHidden('dash_news') && data?.news && data.news.length > 0) || !isModuleHidden('dash_polymarket');
 
@@ -57,6 +59,17 @@ export default function DashboardTab({
       {/* ── HERO: Market Bias Engine Card ── */}
       {!isModuleHidden('dash_bias') && (
         <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} theme={theme} moduleId="dash_bias" />
+      )}
+
+      {/* ── SIGNAL SCOREBOARD: Edge Verification & Walk-Forward Backtest ── */}
+      {!isModuleHidden('dash_signal_scoreboard') && (
+        <SignalScoreboardPanel
+          data={data}
+          etfHistory={etfHistory}
+          btcDisplay={btcDisplay}
+          theme={theme}
+          moduleId="dash_signal_scoreboard"
+        />
       )}
 
       {/* ── SECTION 01: VĨ MÔ & THÁC THANH KHOẢN ── */}
@@ -188,6 +201,11 @@ export default function DashboardTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Ma Trận Tương Quan Vĩ Mô (Rolling 30D/90D) */}
+      {!isModuleHidden('dash_correlation_matrix') && (
+        <CorrelationMatrixPanel moduleId="dash_correlation_matrix" />
       )}
 
       {/* Lịch Kinh Tế Vĩ Mô 7 Ngày Trong Tuần */}

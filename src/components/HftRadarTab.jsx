@@ -5,6 +5,7 @@ import { getCompletedHourCVD, getOrderBookDepth, getWhaleWalls, getFootprintNode
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import CapitalFlowPanel from './CapitalFlowPanel';
+import MultiExchangeFundingPanel from './MultiExchangeFundingPanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import {
@@ -1461,7 +1462,16 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
 
 // ─── PANEL 4: Whale Trades ───────────────────────────────────────────────────
 
-function WhaleTradesPanel({ whaleTrades, volume24h }) {
+function WhaleTradesPanel({ whaleTrades, volume24h, liquidations = [], liqStats5m, liqStats1h }) {
+  const [feedTab, setFeedTab] = useState(() => {
+    return localStorage.getItem('hft_trade_feed_mode') || 'liquidations';
+  });
+
+  const handleTabChange = (mode) => {
+    setFeedTab(mode);
+    localStorage.setItem('hft_trade_feed_mode', mode);
+  };
+
   const [minVolume, setMinVolume] = useState(() => {
     const saved = localStorage.getItem('hft_whale_min_vol');
     return saved ? Number(saved) : 100000;
@@ -1508,132 +1518,344 @@ function WhaleTradesPanel({ whaleTrades, volume24h }) {
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header">
-        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-          <span className="hft-icon">🐋</span> LIVE WHALE TRADES
-        </h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select
-            className="font-mono text-slate-300"
-            value={minVolume}
-            onChange={handleVolumeChange}
-            style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', padding: '2px 6px', borderRadius: '4px', outline: 'none', cursor: 'pointer' }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              background: 'var(--bg-slate-900)',
+              borderRadius: '4px',
+              border: '1px solid var(--border-panel)',
+              overflow: 'hidden',
+            }}
           >
-            <option value={100000}>≥ $100K</option>
-            <option value={500000}>≥ $500K</option>
-            <option value={1000000}>≥ $1M</option>
-            <option value={5000000}>≥ $5M</option>
-          </select>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={() => handleTabChange('liquidations')}
+              style={{
+                fontSize: '0.65rem',
+                padding: '4px 10px',
+                border: 'none',
+                cursor: 'pointer',
+                background: feedTab === 'liquidations' ? 'rgba(244, 63, 94, 0.2)' : 'transparent',
+                color: feedTab === 'liquidations' ? '#FB7185' : 'var(--text-slate-400)',
+                fontWeight: feedTab === 'liquidations' ? 700 : 500,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              <span>🔥</span> THANH LÝ THỰC (forceOrder)
+            </button>
+            <button
+              type="button"
+              className="font-mono"
+              onClick={() => handleTabChange('whales')}
+              style={{
+                fontSize: '0.65rem',
+                padding: '4px 10px',
+                border: 'none',
+                cursor: 'pointer',
+                background: feedTab === 'whales' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                color: feedTab === 'whales' ? '#38BDF8' : 'var(--text-slate-400)',
+                fontWeight: feedTab === 'whales' ? 700 : 500,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              <span>🐋</span> LỆNH LỚN WHALE (≥ $100K)
+            </button>
+          </div>
+
+          {feedTab === 'liquidations' && (liqStats5m?.dominantSide || (liqStats5m?.dominanceLabel && liqStats5m.dominanceLabel !== 'QUIET')) && (
+            <span
+              className="font-mono"
+              style={{
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: '4px',
+                background: (liqStats5m.dominantSide === 'SHORT' || liqStats5m.dominanceLabel === 'SHORT_SQUEEZE')
+                  ? 'rgba(52, 211, 153, 0.15)'
+                  : (liqStats5m.dominantSide === 'LONG' || liqStats5m.dominanceLabel === 'LONG_FLUSH')
+                  ? 'rgba(251, 113, 133, 0.15)'
+                  : 'rgba(100, 116, 139, 0.15)',
+                color: (liqStats5m.dominantSide === 'SHORT' || liqStats5m.dominanceLabel === 'SHORT_SQUEEZE')
+                  ? 'var(--color-emerald-400)'
+                  : (liqStats5m.dominantSide === 'LONG' || liqStats5m.dominanceLabel === 'LONG_FLUSH')
+                  ? 'var(--color-rose-400)'
+                  : 'var(--text-slate-400)',
+                border: `1px solid ${
+                  (liqStats5m.dominantSide === 'SHORT' || liqStats5m.dominanceLabel === 'SHORT_SQUEEZE')
+                    ? 'rgba(52, 211, 153, 0.3)'
+                    : (liqStats5m.dominantSide === 'LONG' || liqStats5m.dominanceLabel === 'LONG_FLUSH')
+                    ? 'rgba(251, 113, 133, 0.3)'
+                    : 'rgba(100, 116, 139, 0.2)'
+                }`,
+              }}
+            >
+              {(liqStats5m.dominantSide === 'SHORT' || liqStats5m.dominanceLabel === 'SHORT_SQUEEZE')
+                ? '⚡ SHORT SQUEEZE DETECTED'
+                : (liqStats5m.dominantSide === 'LONG' || liqStats5m.dominanceLabel === 'LONG_FLUSH')
+                ? '⚡ LONG LIQUIDATION CASCADE'
+                : 'CÂN BẰNG'}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {feedTab === 'whales' && (
+            <select
+              className="font-mono text-slate-300"
+              value={minVolume}
+              onChange={handleVolumeChange}
+              style={{ background: 'var(--bg-slate-900)', border: '1px solid var(--border-panel)', padding: '2px 6px', borderRadius: '4px', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value={100000}>≥ $100K</option>
+              <option value={500000}>≥ $500K</option>
+              <option value={1000000}>≥ $1M</option>
+              <option value={5000000}>≥ $5M</option>
+            </select>
+          )}
           <ModuleMenu moduleId="hft_liquidations" />
         </div>
       </div>
 
-      {/* ── Whale Pressure Dashboard ────────────────────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px', background: 'var(--bg-slate-950)', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
-
-        {/* Row 1: Net Flow + Signal badge */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div className="font-mono text-slate-400" style={{ fontSize: '0.6rem', marginBottom: '3px', letterSpacing: '0.08em' }}>NET WHALE FLOW</div>
-            <div className="font-mono" style={{
-              fontSize: '1.1rem', fontWeight: 700,
-              color: netFlow > 0 ? 'var(--color-emerald-400)' : netFlow < 0 ? 'var(--color-rose-400)' : 'var(--text-slate-300)'
-            }}>
-              {netFlow > 0 ? '+' : ''}{fmtUsd(netFlow)}
-            </div>
-            {volume24h > 0 && (
-              <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '3px' }}>
-                Chiếm {(((buyUsd + sellUsd) / volume24h) * 100).toFixed(2)}% Vol 24H
+      {feedTab === 'liquidations' ? (
+        <>
+          {/* Liquidation 5m & 1h Aggregates */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px', background: 'var(--bg-slate-950)', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <div className="font-mono text-slate-400" style={{ fontSize: '0.6rem', marginBottom: '3px', letterSpacing: '0.08em' }}>
+                  TỔNG THANH LÝ 5 PHÚT (BTCUSDT)
+                </div>
+                <div className="font-mono" style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-contrast)' }}>
+                  {fmtUsd(liqStats5m?.totalUsd || 0)}
+                </div>
+                <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '3px' }}>
+                  1 Giờ qua: {fmtUsd(liqStats1h?.totalUsd || 0)} · {liqStats1h?.count || 0} lệnh
+                </div>
               </div>
-            )}
-          </div>
-          <div className="font-mono" style={{
-            fontSize: '0.65rem', fontWeight: 700,
-            padding: '4px 10px', borderRadius: '4px', letterSpacing: '0.06em',
-            background: signalCls === 'bullish' ? 'rgba(52,211,153,0.12)' : signalCls === 'bearish' ? 'rgba(251,113,133,0.12)' : 'rgba(100,116,139,0.15)',
-            color: signalCls === 'bullish' ? 'var(--color-emerald-400)' : signalCls === 'bearish' ? 'var(--color-rose-400)' : 'var(--text-slate-400)',
-            border: `1px solid ${signalCls === 'bullish' ? 'rgba(52,211,153,0.35)' : signalCls === 'bearish' ? 'rgba(251,113,133,0.35)' : 'rgba(100,116,139,0.3)'}`
-          }}>
-            {signal}
-          </div>
-        </div>
 
-        {/* Row 2: BUY vs SELL volume bar */}
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span className="font-mono text-emerald" style={{ fontSize: '0.62rem' }}>BUY {buyPct.toFixed(1)}% · {fmtUsd(buyUsd)}</span>
-            <span className="font-mono text-rose" style={{ fontSize: '0.62rem' }}>{fmtUsd(sellUsd)} · {sellPct.toFixed(1)}% SELL</span>
-          </div>
-          <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--bg-slate-800)' }}>
-            <div style={{ width: `${buyPct}%`, background: 'var(--color-emerald-400)', transition: 'width 0.4s ease' }} />
-            <div style={{ width: `${sellPct}%`, background: 'var(--color-rose-400)', transition: 'width 0.4s ease' }} />
-          </div>
-        </div>
+              <div style={{ display: 'flex', gap: '12px', textAlign: 'right' }}>
+                <div>
+                  <div className="font-mono text-rose" style={{ fontSize: '0.6rem', marginBottom: '2px' }}>
+                    LONG LIQ (5M)
+                  </div>
+                  <div className="font-mono text-rose" style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                    {fmtUsd(liqStats5m?.longUsd || 0)} ({((liqStats5m?.longRatio || 0.5) * 100).toFixed(1)}%)
+                  </div>
+                  <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem' }}>
+                    {liqStats5m?.longCount || 0} lệnh
+                  </div>
+                </div>
 
-        {/* Row 3: Trade count + max trade */}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <div style={{ flex: 1, background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.15)', borderRadius: '4px', padding: '6px 8px' }}>
-            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginBottom: '2px' }}>BUY TRADES</div>
-            <div className="font-mono text-emerald" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{bCount} lệnh</div>
-            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '2px' }}>Max: {bMax > 0 ? fmtUsd(bMax) : '---'}</div>
-          </div>
-          <div style={{ flex: 1, background: 'rgba(251,113,133,0.06)', border: '1px solid rgba(251,113,133,0.15)', borderRadius: '4px', padding: '6px 8px' }}>
-            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginBottom: '2px' }}>SELL TRADES</div>
-            <div className="font-mono text-rose" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{sCount} lệnh</div>
-            <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '2px' }}>Max: {sMax > 0 ? fmtUsd(sMax) : '---'}</div>
-          </div>
-        </div>
+                <div>
+                  <div className="font-mono text-emerald" style={{ fontSize: '0.6rem', marginBottom: '2px' }}>
+                    SHORT LIQ (5M)
+                  </div>
+                  <div className="font-mono text-emerald" style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                    {fmtUsd(liqStats5m?.shortUsd || 0)} ({((liqStats5m?.shortRatio || 0.5) * 100).toFixed(1)}%)
+                  </div>
+                  <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem' }}>
+                    {liqStats5m?.shortCount || 0} lệnh
+                  </div>
+                </div>
+              </div>
+            </div>
 
-      </div>
+            {/* Ratio Progress Bar */}
+            <div>
+              <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--bg-slate-800)' }}>
+                <div style={{ width: `${(liqStats5m?.longRatio || 0.5) * 100}%`, background: 'var(--color-rose-400)', transition: 'width 0.4s ease' }} />
+                <div style={{ width: `${(liqStats5m?.shortRatio || 0.5) * 100}%`, background: 'var(--color-emerald-400)', transition: 'width 0.4s ease' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                <span className="font-mono text-rose" style={{ fontSize: '0.58rem' }}>
+                  Long Liq (Bị ép bán) {((liqStats5m?.longRatio || 0.5) * 100).toFixed(1)}%
+                </span>
+                <span className="font-mono text-emerald" style={{ fontSize: '0.58rem' }}>
+                  {((liqStats5m?.shortRatio || 0.5) * 100).toFixed(1)}% Short Liq (Bị ép mua)
+                </span>
+              </div>
+            </div>
+          </div>
 
-      {filteredTrades.length === 0 ? (
-        <div className="hft-empty font-mono">Chưa có lệnh nào khớp với điều kiện lọc...</div>
+          {/* Real Liquidation Feed Table */}
+          {(!liquidations || liquidations.length === 0) ? (
+            <div className="hft-empty font-mono">
+              Đang lắng nghe feed btcusdt@forceOrder trực tiếp từ Binance Futures WebSocket...
+            </div>
+          ) : (
+            <div className="whale-table-wrap" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              <table className="liq-table font-mono" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-900)', zIndex: 1 }}>
+                  <tr>
+                    <th style={{ padding: '8px' }}>Thời gian</th>
+                    <th style={{ padding: '8px' }}>Vị thế bị ép đóng</th>
+                    <th style={{ padding: '8px' }}>Side lệnh thị trường</th>
+                    <th style={{ padding: '8px' }}>Giá thanh lý</th>
+                    <th style={{ padding: '8px' }}>Khối lượng (BTC)</th>
+                    <th style={{ padding: '8px' }}>Giá trị (USD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liquidations.slice(0, 100).map((liq, i) => {
+                    const isLong = (liq.positionSide || liq.posSide) === 'LONG';
+                    const side = liq.orderSide || liq.side || (isLong ? 'SELL' : 'BUY');
+                    const valUsd = Number(liq.usdValue ?? liq.usdtVol ?? 0);
+                    const isMega = valUsd >= 100000;
+
+                    return (
+                      <tr key={liq.id || `${liq.timestamp}-${liq.price}-${liq.qty}-${i}`} style={{ borderBottom: '1px solid var(--border-panel)' }}>
+                        <td style={{ color: 'var(--text-slate-400)', padding: '8px' }}>{liq.time}</td>
+                        <td style={{ padding: '8px' }}>
+                          <span
+                            className="font-mono"
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              fontWeight: 700,
+                              fontSize: '0.62rem',
+                              background: isLong ? 'rgba(251, 113, 133, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+                              color: isLong ? 'var(--color-rose-400)' : 'var(--color-emerald-400)',
+                              border: `1px solid ${isLong ? 'rgba(251, 113, 133, 0.3)' : 'rgba(52, 211, 153, 0.3)'}`,
+                            }}
+                          >
+                            {isLong ? '▼ LONG LIQ' : '▲ SHORT LIQ'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px' }}>
+                          <span style={{ fontSize: '0.65rem', color: isLong ? 'var(--color-rose-400)' : 'var(--color-emerald-400)' }}>
+                            {side} ({side === 'SELL' ? 'Forced Sell' : 'Forced Buy'})
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px' }}>{fmtPrice(liq.price)}</td>
+                        <td style={{ padding: '8px' }}>{liq.qty != null ? liq.qty.toFixed(3) : '---'}</td>
+                        <td className={isMega ? 'whale-mega' : ''} style={{ color: isLong ? 'var(--color-rose-400)' : 'var(--color-emerald-400)', padding: '8px', fontWeight: isMega ? 700 : 500 }}>
+                          {fmtUsd(valUsd)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       ) : (
-        <div className="whale-table-wrap" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-          <table className="liq-table font-mono" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-            <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-900)', zIndex: 1 }}>
-              <tr>
-                <th style={{ padding: '8px' }}>Thời gian</th>
-                <th style={{ padding: '8px' }}>Side</th>
-                <th style={{ padding: '8px' }}>Giá khớp</th>
-                <th style={{ padding: '8px' }}>Khối lượng (BTC)</th>
-                <th style={{ padding: '8px' }}>Giá trị (USD)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTrades.slice(0, 100).map((t, i) => (
-                <tr key={t.id || `${t.timestamp}-${t.price}-${t.qty}-${i}`} style={{ borderBottom: '1px solid var(--border-panel)' }}>
-                  <td style={{ color: 'var(--text-slate-400)', padding: '8px' }}>{t.time}</td>
-                  <td style={{ padding: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span className={`liq-side-tag ${t.side === 'BUY' ? 'liq-tag-long' : 'liq-tag-short'}`}>
-                        {t.side}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '0.45rem',
-                          opacity: 0.6,
-                          border: '1px solid var(--border-panel)',
-                          padding: '1px 3px',
-                          borderRadius: '2px',
-                          background: 'var(--bg-slate-900)',
-                          color: 'var(--text-slate-300)'
-                        }}
-                        title="Binance Futures"
-                      >
-                        BIN-F
-                      </span>
-                    </div>
-                  </td>
-                  <td style={{ padding: '8px' }}>{fmtPrice(t.price)}</td>
-                  <td style={{ padding: '8px' }}>{t.qty.toFixed(3)}</td>
-                  <td className={t.usdtVol >= 1e6 ? 'whale-mega' : ''} style={{ color: t.side === 'BUY' ? 'var(--color-emerald-400)' : 'var(--color-rose-400)', padding: '8px' }}>
-                    {fmtUsd(t.usdtVol)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* Whale Pressure Dashboard */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px', background: 'var(--bg-slate-950)', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+
+            {/* Row 1: Net Flow + Signal badge */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div className="font-mono text-slate-400" style={{ fontSize: '0.6rem', marginBottom: '3px', letterSpacing: '0.08em' }}>NET WHALE FLOW</div>
+                <div className="font-mono" style={{
+                  fontSize: '1.1rem', fontWeight: 700,
+                  color: netFlow > 0 ? 'var(--color-emerald-400)' : netFlow < 0 ? 'var(--color-rose-400)' : 'var(--text-slate-300)'
+                }}>
+                  {netFlow > 0 ? '+' : ''}{fmtUsd(netFlow)}
+                </div>
+                {volume24h > 0 && (
+                  <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '3px' }}>
+                    Chiếm {(((buyUsd + sellUsd) / volume24h) * 100).toFixed(2)}% Vol 24H
+                  </div>
+                )}
+              </div>
+              <div className="font-mono" style={{
+                fontSize: '0.65rem', fontWeight: 700,
+                padding: '4px 10px', borderRadius: '4px', letterSpacing: '0.06em',
+                background: signalCls === 'bullish' ? 'rgba(52,211,153,0.12)' : signalCls === 'bearish' ? 'rgba(251,113,133,0.12)' : 'rgba(100,116,139,0.15)',
+                color: signalCls === 'bullish' ? 'var(--color-emerald-400)' : signalCls === 'bearish' ? 'var(--color-rose-400)' : 'var(--text-slate-400)',
+                border: `1px solid ${signalCls === 'bullish' ? 'rgba(52,211,153,0.35)' : signalCls === 'bearish' ? 'rgba(251,113,133,0.35)' : 'rgba(100,116,139,0.3)'}`
+              }}>
+                {signal}
+              </div>
+            </div>
+
+            {/* Row 2: BUY vs SELL volume bar */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span className="font-mono text-emerald" style={{ fontSize: '0.62rem' }}>BUY {buyPct.toFixed(1)}% · {fmtUsd(buyUsd)}</span>
+                <span className="font-mono text-rose" style={{ fontSize: '0.62rem' }}>{fmtUsd(sellUsd)} · {sellPct.toFixed(1)}% SELL</span>
+              </div>
+              <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--bg-slate-800)' }}>
+                <div style={{ width: `${buyPct}%`, background: 'var(--color-emerald-400)', transition: 'width 0.4s ease' }} />
+                <div style={{ width: `${sellPct}%`, background: 'var(--color-rose-400)', transition: 'width 0.4s ease' }} />
+              </div>
+            </div>
+
+            {/* Row 3: Trade count + max trade */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ flex: 1, background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.15)', borderRadius: '4px', padding: '6px 8px' }}>
+                <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginBottom: '2px' }}>BUY TRADES</div>
+                <div className="font-mono text-emerald" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{bCount} lệnh</div>
+                <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '2px' }}>Max: {bMax > 0 ? fmtUsd(bMax) : '---'}</div>
+              </div>
+              <div style={{ flex: 1, background: 'rgba(251,113,133,0.06)', border: '1px solid rgba(251,113,133,0.15)', borderRadius: '4px', padding: '6px 8px' }}>
+                <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginBottom: '2px' }}>SELL TRADES</div>
+                <div className="font-mono text-rose" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{sCount} lệnh</div>
+                <div className="font-mono text-slate-500" style={{ fontSize: '0.55rem', marginTop: '2px' }}>Max: {sMax > 0 ? fmtUsd(sMax) : '---'}</div>
+              </div>
+            </div>
+
+          </div>
+
+          {filteredTrades.length === 0 ? (
+            <div className="hft-empty font-mono">Chưa có lệnh nào khớp với điều kiện lọc...</div>
+          ) : (
+            <div className="whale-table-wrap" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              <table className="liq-table font-mono" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-slate-900)', zIndex: 1 }}>
+                  <tr>
+                    <th style={{ padding: '8px' }}>Thời gian</th>
+                    <th style={{ padding: '8px' }}>Side</th>
+                    <th style={{ padding: '8px' }}>Giá khớp</th>
+                    <th style={{ padding: '8px' }}>Khối lượng (BTC)</th>
+                    <th style={{ padding: '8px' }}>Giá trị (USD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTrades.slice(0, 100).map((t, i) => (
+                    <tr key={t.id || `${t.timestamp}-${t.price}-${t.qty}-${i}`} style={{ borderBottom: '1px solid var(--border-panel)' }}>
+                      <td style={{ color: 'var(--text-slate-400)', padding: '8px' }}>{t.time}</td>
+                      <td style={{ padding: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span className={`liq-side-tag ${t.side === 'BUY' ? 'liq-tag-long' : 'liq-tag-short'}`}>
+                            {t.side}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.45rem',
+                              opacity: 0.6,
+                              border: '1px solid var(--border-panel)',
+                              padding: '1px 3px',
+                              borderRadius: '2px',
+                              background: 'var(--bg-slate-900)',
+                              color: 'var(--text-slate-300)'
+                            }}
+                            title="Binance Futures"
+                          >
+                            BIN-F
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px' }}>{fmtPrice(t.price)}</td>
+                      <td style={{ padding: '8px' }}>{t.qty.toFixed(3)}</td>
+                      <td className={t.usdtVol >= 1e6 ? 'whale-mega' : ''} style={{ color: t.side === 'BUY' ? 'var(--color-emerald-400)' : 'var(--color-rose-400)', padding: '8px' }}>
+                        {fmtUsd(t.usdtVol)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1834,6 +2056,7 @@ function MoveTrackerPanel() {
             <div><span>CƯỜNG ĐỘ</span><strong>{interpretation?.evidence.participation}</strong></div>
             <div><span>NGUỒN DÒNG TIỀN</span><strong>{interpretation?.evidence.flow}</strong></div>
             <div><span>BỐI CẢNH</span><strong>{interpretation?.evidence.timeframe}</strong></div>
+            <div><span>THANH LÝ</span><strong>{interpretation?.evidence.liquidation || 'N/A'}</strong></div>
             <div><span>CHẤT LƯỢNG DỮ LIỆU</span><strong>{interpretation?.evidence.data}</strong></div>
           </div>
 
@@ -1861,6 +2084,15 @@ function MoveTrackerPanel() {
               <div className="move-metric-item"><span className="move-metric-lbl">OI / FUNDING / OBI</span><span className="move-metric-val">{trigger?.externalContext?.status || 'STALE'} · {trigger?.externalContext?.openInterest ?? 'N/A'} / {trigger?.externalContext?.fundingRate ?? 'N/A'} / {trigger?.externalContext?.obiPercent ?? 'N/A'}</span></div>
               <div className="move-metric-item"><span className="move-metric-lbl">CONTEXT 5M / 15M / 1H</span><span className="move-metric-val">{['5m', '15m', '1h'].map((tf) => `${tf} ${displayMove.timeframeContext?.[tf]?.structure || 'N/A'}`).join(' · ')}</span></div>
               <div className="move-metric-item"><span className="move-metric-lbl">FORWARD PATH</span><span className="move-metric-val">{[15, 30, 60, 300, 900].map((h) => `${h < 300 ? `${h}s` : `${h / 60}m`} ${formatBps(displayMove.forwardOutcomes?.[String(h)]?.continuationBps)}`).join(' · ')}</span></div>
+              <div className="move-metric-item"><span className="move-metric-lbl">LIQUIDATIONS (5M / 1H)</span><span className="move-metric-val">{(() => {
+                const liq5m = trigger?.liquidations?.rolling5m || trigger?.liquidations?.liqStats5m;
+                const liq1h = trigger?.liquidations?.rolling1h || trigger?.liquidations?.liqStats1h;
+                if (!liq5m && !liq1h) return 'N/A';
+                const total5m = liq5m?.totalLiqUsd ?? liq5m?.totalUsd ?? 0;
+                const total1h = liq1h?.totalLiqUsd ?? liq1h?.totalUsd ?? 0;
+                const dom = liq5m?.dominanceLabel || (liq5m?.dominantSide === 'SHORT' ? 'SHORT_SQUEEZE' : liq5m?.dominantSide === 'LONG' ? 'LONG_FLUSH' : 'QUIET');
+                return `${fmtUsd(total5m)} (${dom}) · 1h: ${fmtUsd(total1h)}`;
+              })()}</span></div>
             </div>
             <div className="move-window-scores font-mono">{displayMove.detectionScores?.map((score) => <span key={score.windowSec}>{score.windowSec}s: {score.available ? `${Number(score.score).toFixed(2)}×` : 'N/A'}</span>)}</div>
           </details>
@@ -1923,13 +2155,14 @@ const MemoTargetLiquidityPanelWrapper = React.memo(TargetLiquidityPanelWrapper);
 const MemoOrderBookPanel = React.memo(OrderBookPanel);
 const MemoAdvancedChartWrapper = React.memo(AdvancedChartWrapper);
 const MemoWhaleTradesPanel = React.memo(WhaleTradesPanel);
+const MemoMultiExchangeFundingPanel = React.memo(MultiExchangeFundingPanel);
 const MemoMoveTrackerPanel = React.memo(MoveTrackerPanel);
 
 export default function HftRadarTab({
   cvd, sessionCvd, buyVolume, sellVolume, cvdHistory, futuresStream, spotStream,
   cvdHistory24h, cvdHistory7d, cvdHistory30d,
   cvdHistory24hSpot, cvdHistory7dSpot, cvdHistory30dSpot,
-  cvdStatus, livePrice, whaleTrades, theme, volNodes,
+  cvdStatus, livePrice, whaleTrades, liquidations, liqStats5m, liqStats1h, theme, volNodes,
   data, liveVolume, fundingRate, liveChange, liveBasisPct,
   currentLS, lsChartData, oiChartData, getChartOpts,
 }) {
@@ -2131,8 +2364,18 @@ export default function HftRadarTab({
           />
         )}
 
+        {!isModuleHidden('hft_multi_funding') && (
+          <MemoMultiExchangeFundingPanel />
+        )}
+
         {!isModuleHidden('hft_liquidations') && (
-          <MemoWhaleTradesPanel whaleTrades={whaleTrades} volume24h={liveVolume || data?.btc?.volume} />
+          <MemoWhaleTradesPanel
+            whaleTrades={whaleTrades}
+            volume24h={liveVolume || data?.btc?.volume}
+            liquidations={liquidations}
+            liqStats5m={liqStats5m}
+            liqStats1h={liqStats1h}
+          />
         )}
       </div>
     </div>

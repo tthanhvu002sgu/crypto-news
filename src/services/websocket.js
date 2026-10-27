@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { getDailyCVD, getHistoricalFootprintNodes } from './api';
 import { updateBrowserChrome } from '../utils/browserChrome';
+import { parseForceOrderMessage, aggregateLiquidations } from './liquidationEngine';
 
 // ─── Stream URLs ──────────────────────────────────────────────────────────────
 
 const WS_TICKER_URL =
   'wss://fstream.binance.com/market/stream?streams=btcusdt@ticker/btcusdt@markPrice@1s/ethusdt@ticker/solusdt@ticker/linkusdt@ticker';
 
-const WS_AGG_URL = 'wss://fstream.binance.com/market/stream?streams=btcusdt@aggTrade';
+const WS_AGG_URL = 'wss://fstream.binance.com/market/stream?streams=btcusdt@aggTrade/btcusdt@forceOrder';
 
 /** Throttle React state pushes from ticker stream (reduces re-render load). */
 const TICKER_UI_MS = 250;
@@ -20,6 +21,7 @@ const RECONNECT_MS = 4000;
 // Trade subscribers for real-time move tracking
 const tradeSubscribers = new Set();
 const spotTradeSubscribers = new Set();
+const forceOrderSubscribers = new Set();
 
 export function subscribeAggTrades(callback) {
   tradeSubscribers.add(callback);
@@ -29,6 +31,11 @@ export function subscribeAggTrades(callback) {
 export function subscribeSpotAggTrades(callback) {
   spotTradeSubscribers.add(callback);
   return () => spotTradeSubscribers.delete(callback);
+}
+
+export function subscribeForceOrders(callback) {
+  forceOrderSubscribers.add(callback);
+  return () => forceOrderSubscribers.delete(callback);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -342,6 +349,7 @@ export function useCVDStream() {
   const volNodeRefSpot = useRef(loadTodayMap('hft_vol_nodes_spot', 'hft_vol_nodes_spot_date'));
 
   const whaleRef = useRef(loadTodayJson('hft_whale_trades', 'hft_whale_trades_date', []));
+  const liqRef = useRef(loadTodayJson('hft_force_orders', 'hft_force_orders_date', []));
 
   const [cvdHistoryFutures, setCvdHistoryFutures] = useState(historyRefFutures.current);
   const [cvdHistorySpot, setCvdHistorySpot] = useState(historyRefSpot.current);
@@ -353,6 +361,9 @@ export function useCVDStream() {
     Array.from(volNodeRefSpot.current.entries()).map(([p, v]) => ({ price: p, ...v }))
   );
   const [whaleTrades, setWhaleTrades] = useState(whaleRef.current);
+  const [liquidations, setLiquidations] = useState(liqRef.current);
+  const [liqStats5m, setLiqStats5m] = useState(() => aggregateLiquidations(liqRef.current, Date.now(), 300_000));
+  const [liqStats1h, setLiqStats1h] = useState(() => aggregateLiquidations(liqRef.current, Date.now(), 3_600_000));
 
   const mountedRef = useRef(true);
   const throttleRef = useRef(null);
@@ -451,6 +462,7 @@ export function useCVDStream() {
         historyRefSpot.current = [];
 
         whaleRef.current = [];
+        liqRef.current = [];
         volNodeRefFutures.current.clear();
         volNodeRefSpot.current.clear();
         localStorage.removeItem('hft_cvd_history');
@@ -458,6 +470,7 @@ export function useCVDStream() {
         localStorage.removeItem('hft_vol_nodes');
         localStorage.removeItem('hft_vol_nodes_spot');
         localStorage.removeItem('hft_whale_trades');
+        localStorage.removeItem('hft_force_orders');
       }
     };
 
@@ -467,6 +480,23 @@ export function useCVDStream() {
       (msg) => {
         const raw = msg?.data || msg;
         if (!raw) return;
+
+        // Intercept forceOrder liquidation events
+        const isForceOrder = raw.e === 'forceOrder' || raw.o || msg?.stream?.includes('forceOrder');
+        if (isForceOrder) {
+          const parsedLiq = parseForceOrderMessage(msg);
+          if (parsedLiq) {
+            liqRef.current = [parsedLiq, ...liqRef.current].slice(0, 2000);
+            forceOrderSubscribers.forEach((cb) => {
+              try {
+                cb(parsedLiq);
+              } catch {}
+            });
+            triggerThrottle();
+          }
+          return;
+        }
+
         const data = raw.data || raw;
         if (!data.p || !data.q) return;
 
@@ -631,6 +661,11 @@ export function useCVDStream() {
 
             setWhaleTrades([...whaleRef.current]);
 
+            const nowTs = Date.now();
+            setLiquidations([...liqRef.current]);
+            setLiqStats5m(aggregateLiquidations(liqRef.current, nowTs, 300_000));
+            setLiqStats1h(aggregateLiquidations(liqRef.current, nowTs, 3_600_000));
+
             try {
               localStorage.setItem('hft_cvd_history_date', todayRef.current);
               localStorage.setItem('hft_cvd_history', JSON.stringify(historyRefFutures.current));
@@ -642,6 +677,8 @@ export function useCVDStream() {
               localStorage.setItem('hft_vol_nodes_spot', JSON.stringify(Array.from(volNodeRefSpot.current.entries())));
               localStorage.setItem('hft_whale_trades_date', todayRef.current);
               localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
+              localStorage.setItem('hft_force_orders_date', todayRef.current);
+              localStorage.setItem('hft_force_orders', JSON.stringify(liqRef.current.slice(0, 500)));
             } catch (e) {
               console.error('Failed to persist HFT data:', e);
             }
@@ -696,6 +733,9 @@ export function useCVDStream() {
     },
 
     whaleTrades,
+    liquidations,
+    liqStats5m,
+    liqStats1h,
     cvdStatus: cvdStatusFutures === 'connected' && cvdStatusSpot === 'connected'
       ? 'connected'
       : (cvdStatusFutures === 'disconnected' || cvdStatusSpot === 'disconnected') ? 'disconnected' : 'connecting',

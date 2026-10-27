@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { analyzeBtcOptions } from './optionsCalculations.js';
+import { analyzeOptionsChain, analyzeBtcOptions } from './optionsCalculations.js';
 
 // --- Math Helpers ---
 function normalPdf(x) {
@@ -84,7 +84,12 @@ export async function fetchDeribitOptionChain(currency = 'BTC') {
     const summaries = await fetchDeribitBookSummary(currency);
     if (!summaries || !Array.isArray(summaries) || summaries.length === 0) return null;
 
-    const spotPrice = parseFloat(summaries[0].estimated_delivery_price || summaries[0].underlying_price || 0);
+    const validSpotItem = summaries.find(
+      (s) => s && (parseFloat(s.estimated_delivery_price) > 0 || parseFloat(s.underlying_price) > 0)
+    );
+    const spotPrice = validSpotItem
+      ? parseFloat(validSpotItem.estimated_delivery_price || validSpotItem.underlying_price)
+      : 0;
     const nowMs = Date.now();
     const instruments = [];
 
@@ -166,7 +171,7 @@ export async function getDeribitOptionsAnalysis(currency = 'BTC', dteFilter = nu
     const chain = await fetchDeribitOptionChain(currency);
     if (!chain || !chain.instruments) return null;
     
-    const analysis = analyzeBtcOptions(chain.instruments, chain.underlyingPrice, dteFilter);
+    const analysis = analyzeOptionsChain(chain.instruments, chain.underlyingPrice, dteFilter, currency);
     return {
       ...analysis,
       timestamp: Date.now()

@@ -1,3 +1,5 @@
+import { formatLiqUsd } from './liquidationEngine.js';
+
 export const DETECTION_WINDOWS_SEC = [15, 30, 60, 120];
 export const OUTCOME_HORIZONS_SEC = [15, 30, 60, 300, 900];
 export const SMALL_SAMPLE_SIZE = 30;
@@ -160,6 +162,27 @@ function timeframeDescription(direction, timeframeContext = {}) {
   return { aligned1h: false, label: `Cấu trúc 1h đi ngang` };
 }
 
+export function describeLiquidationEvidence(event) {
+  const liqContext = event?.triggerSnapshot?.liquidations || event?.liquidations;
+  if (!liqContext) return null;
+  const rolling5m = liqContext.rolling5m || (liqContext.totalLiqUsd != null || liqContext.totalUsd != null ? liqContext : null);
+  const rolling1h = liqContext.rolling1h;
+  const total5m = Number(rolling5m?.totalLiqUsd ?? rolling5m?.totalUsd ?? 0);
+  const total1h = Number(rolling1h?.totalLiqUsd ?? rolling1h?.totalUsd ?? 0);
+
+  if (!rolling5m || (total5m === 0 && (!rolling1h || total1h === 0))) {
+    return '5m: Không có thanh lý đáng kể';
+  }
+  const domLabel = (rolling5m.dominanceLabel === 'LONG_FLUSH' || rolling5m.dominantSide === 'LONG')
+    ? 'Long bị quét'
+    : (rolling5m.dominanceLabel === 'SHORT_SQUEEZE' || rolling5m.dominantSide === 'SHORT')
+      ? 'Short bị quét'
+      : 'Cân bằng';
+  const val5m = formatLiqUsd(total5m);
+  const val1h = total1h > 0 ? ` · 1h: ${formatLiqUsd(total1h)}` : '';
+  return `5m: ${val5m} (${domLabel})${val1h}`;
+}
+
 /**
  * Converts a research event into decision-friendly, descriptive language.
  * This does not create a trading signal or use any post-event outcome.
@@ -221,6 +244,7 @@ export function describeMoveEvent(event) {
       flow: FLOW_DESCRIPTIONS[flowLabel] ?? flowLabel,
       timeframe: timeframe.label,
       data: dataComplete ? `Đầy đủ · baseline ${baselineSampleCount}` : `Chưa đủ nền · baseline ${baselineSampleCount}`,
+      liquidation: describeLiquidationEvidence(event),
     },
   };
 }

@@ -61,6 +61,8 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
   - *Khối 01: Vĩ mô & Thác Thanh Khoản:* Market Bias Engine, Macro Pulse cards, Lịch kinh tế 7 ngày, và Thác thanh khoản 4 Tiers (`CascadeTab`).
   - *Khối 02: Tổ Chức TradFi & Định Giá Chu Kỳ:* US Spot Bitcoin ETFs (Holdings & Net Flows), CME Futures COT và Macro Valuator PnL Matrix.
   - *Khối 03: Tin Tức & Dự Báo Phi Tập Trung:* News Feed slider và Polymarket Whale Tracker.
+- `SignalScoreboardPanel.jsx`: Component thống kê tự động Hit-rate, Median Forward Return, IQR (P25–P75), Profit Factor cho 4 nhóm tín hiệu (Capital Flow, Bias Regime, Scanner Rank, Move Tracker) không look-ahead bias theo kỳ hạn (+1D, +3D, +7D) dựa trên cơ chế Hybrid walk-forward + live snapshots.
+- `BiasComparisonChart.jsx`: Biểu đồ đối chiếu song song Market Bias Score vs BTC Price (7D/30D/Realtime), tích hợp Return Bars (+1D/+3D/+7D) và chế độ phân phối Forward Return theo 5 Bucket Bias chuẩn (-100..-30 Strong Bear, -30..-10 Bear, -10..+10 Neutral, +10..+30 Bull, +30..+100 Strong Bull).
 - `EconomicCalendarPanel.jsx`: Component Lịch kinh tế 7 ngày trong tuần với 7 ô bento card (nằm trên 1 hàng PC, scroll ngang Mobile), Modal phân tích tác động Crypto và bộ lọc Nhanh (ALL / HIGH / USD / CRYPTO).
 - `MarketBiasCard.jsx`: Component định lượng xu hướng BTC theo mô hình score-first, có sparkline tối đa 30 snapshot realtime chống look-ahead, thanh Gauge Spectrum, 4 bento card trụ cột, thanh tóm tắt 3 tầng Regime và drawer bẻ nhỏ 14+ tín hiệu định lượng.
 - `HftRadarTab.jsx`: Phân hệ `ORDER FLOW` đóng vai trò bàn làm việc vi cấu trúc phái sinh realtime toàn diện:
@@ -97,6 +99,8 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `src/services/googleSheetSync.js` — Client service format payload và gọi webhook trực tiếp từ Web UI.
 - `src/services/biasEngine.js` — Tính toán điểm xu hướng BTC (-100 đến +100) theo 4 pillars với Spot & Futures CVD từ Binance Benchmark Proxy trong 3-layer regime.
 - `src/services/biasEngine.test.js` — Bộ unit test tự động cho toàn bộ logic định lượng, parsing VIX an toàn, MVRV deduplication và trend calculation.
+- `src/services/biasHistoryService.js` & `biasHistoryService.test.js` — Cung cấp chuỗi đối chiếu song song Market Bias Score vs BTC Price, phát hiện phân kỳ Pearson r & Extrema, phân loại 5 Bucket Bias chuẩn và thống kê phân phối Forward Return (+1D, +3D, +7D) no-look-ahead.
+- `src/services/signalScoreboardService.js` & `signalScoreboardService.test.js` — Động cơ tự động backtest định lượng và kiểm chứng "Edge" cho 4 phân hệ (Capital Flow, Bias Regime, Scanner Rank, Move Tracker), tính toán Hit-Rate, Median Forward Return, IQR, Win/Loss Ratio và Profit Factor theo cơ chế Hybrid walk-forward + live provenance.
 - `.github/workflows/sync-sheets.yml` — Workflow GitHub Actions chạy định kỳ 3 phiên theo cron.
 - `services/moveTracker.js` — Điều phối champion detector, shadow flow research, trigger/end/outcome lifecycle và context OI/Funding/OBI.
 - `services/moveTrackerCore.js` — Các phép tính thuần cho detection windows, participation percentile, flow labels, MFE/MAE, recovery và thống kê timeframe.
@@ -106,6 +110,28 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 - `services/websocket.js` — `useBinanceWebSocket` + `useCVDStream`.
 
 ## 4. Các Task đã làm (Completed Tasks)
+
+### [2026-10-27] Nhóm 2: Kiểm chứng "Edge" (Định lượng & Backtest) — Signal Scoreboard ⭐ & Bias History Trang Sâu
+- **Mode / Type / Action / Lane:** FEATURE / QUANT / EXECUTE / FULL
+- **Tóm tắt:** Xây dựng hệ thống tự động kiểm chứng "Edge" định lượng (Signal Scoreboard) và mở rộng biểu đồ đối chiếu Market Bias vs BTC Price với phân phối Forward Return theo 5 Bucket Bias chuẩn (-100..-30 Strong Bear, -30..-10 Bear, -10..+10 Neutral, +10..+30 Bull, +30..+100 Strong Bull). Toàn bộ hệ thống tuân thủ nghiêm ngặt nguyên tắc **No-Look-Ahead** (tín hiệu tại thời điểm $t$ chỉ dùng dữ liệu $\le t$, kiểm chứng kết quả bằng nến tương lai $+1D/+3D/+7D$ sau khi nến đã đóng).
+- **Kiến trúc & Tính năng:**
+  1. `src/services/signalScoreboardService.js` & `signalScoreboardService.test.js`:
+     - Tự động backtest walk-forward 4 phân hệ cốt lõi: Capital Flow (Long/Short build-up, Short covering, Long exit, Spot confluence), Bias Regimes (5 bucket bias & MA50/200 trend), Altcoin Scanner RS Rank, và Move Tracker outcomes (Continuation vs Reversion).
+     - Đo lường đầy đủ metrics định lượng: Hit-rate %, Median Forward Return %, IQR Spread [P25–P75], Min/Max, Profit Factor, và xếp hạng Edge Verdict (`⭐ EDGE XÁC THỰC`, `KHẢ QUAN`, `TRUNG LẬP`, `RỦI RO`).
+     - Cơ chế Hybrid Provenance: tích hợp liền mạch giữa chuỗi klines lịch sử và snapshot thực tế từ IndexedDB/localStorage.
+  2. `src/components/SignalScoreboardPanel.jsx`:
+     - Giao diện Minimalist-UI đặt ngay dưới `MarketBiasCard` trong tab `OVERVIEW` (khối 01).
+     - Dải thẻ Bento KPI tổng quan (Hit-Rate trung bình, Top Edge Signal, Mẫu N, Bảo chứng Zero-Leakage), thanh lọc Category, bộ chuyển đổi kỳ hạn (+1D, +3D, +7D) và bảng dữ liệu mở rộng phân rã đa kỳ hạn.
+  3. `src/services/biasHistoryService.js` & `src/components/BiasComparisonChart.jsx`:
+     - Bổ sung 5 Bucket Bias chuẩn (`STRONG_BEAR`, `BEAR`, `NEUTRAL`, `BULL`, `STRONG_BULL`), tính toán phân vị `calculateQuantiles` và phân phối forward returns `computeBiasBucketDistribution`.
+     - Nâng cấp `BiasComparisonChart` với chế độ chuyển đổi giữa biểu đồ Overlay (BTC Price vs Bias Score + Return Bars) và chế độ trực quan hóa phân phối 5 Bucket Bias cho cả 7D và 30D.
+  4. Cấu hình module `dash_signal_scoreboard` trong `src/config/modulesConfig.js` và bổ sung CSS hoàn chỉnh hỗ trợ Dark/Light mode trong `src/App.css`.
+- **Verify:**
+  - `npm run test:scoreboard`: 10/10 tests pass 100%.
+  - `npm run test:bias`: 38/38 tests pass 100%.
+  - `npm test`: 13/13 test suites pass 100% (Scanner, Move, Macro, Sheets, Bias, CVD, Orderflow, Capitalflow, Summary Layout, COT, Navigation, Options, Export, Scoreboard).
+  - `npm run build`: Vite build thành công (1.21s) không lỗi.
+  - `npx eslint`: 0 lỗi, 0 cảnh báo trên toàn bộ các file mới và chỉnh sửa.
 
 ### [2026-10-03] Module Options Regime & Gamma Exposure (GEX) cho BTC (FULL)
 - **Mode / Type / Action / Lane:** FEATURE / QUANT / EXECUTE / FULL

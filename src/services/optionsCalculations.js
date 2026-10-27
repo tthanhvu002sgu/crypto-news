@@ -367,13 +367,25 @@ export const calculatePCR = (strikeData) => {
  * @param {number|null} val 
  * @returns {string}
  */
+export const formatOptionStrikeLabel = (strike, underlyingPrice) => {
+  if (strike == null || !Number.isFinite(strike)) return '---';
+  const priceRef = Number.isFinite(underlyingPrice) ? underlyingPrice : strike;
+  if (priceRef >= 10000 || strike >= 10000) {
+    return strike % 1000 === 0 ? `${strike / 1000}K` : `${(strike / 1000).toFixed(1)}K`;
+  }
+  if (priceRef >= 1000 || strike >= 1000) {
+    return `$${Math.round(strike).toLocaleString()}`;
+  }
+  return `$${strike}`;
+};
+
 const fmtNarrativeStrike = (val) => {
   if (val == null || !Number.isFinite(val)) return '---';
   return `$${Math.round(val).toLocaleString()}`;
 };
 
 /**
- * Generate concise, professional ASP100 narrative for BTC Options
+ * Generate concise, professional ASP100 narrative for Options Regime (BTC / ETH)
  * (Action - Sentiment - Positioning within ~100 words)
  * @param {Object} params
  * @returns {Object}
@@ -385,7 +397,8 @@ export const generateOptionsAsp100Narrative = ({
   maxPain,
   gexFlipPrice,
   pcr,
-  underlyingPrice
+  underlyingPrice,
+  currency = 'BTC',
 }) => {
   const spot = finite(underlyingPrice);
   const regimeType = gammaRegime?.regime || 'NEUTRAL';
@@ -492,9 +505,10 @@ export const generateOptionsAsp100Narrative = ({
  * @param {Array} instruments 
  * @param {number} underlyingPrice 
  * @param {number|null} dteFilter 
+ * @param {string} [currency='BTC']
  * @returns {Object}
  */
-export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null) => {
+export const analyzeOptionsChain = (instruments, underlyingPrice, dteFilter = null, currency = 'BTC') => {
   if (!Array.isArray(instruments) || finite(underlyingPrice) === null) {
     return {
       strikeDistribution: [], maxPain: null, gexByStrike: [],
@@ -508,9 +522,10 @@ export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null
         maxPain: null,
         gexFlipPrice: null,
         pcr: null,
-        underlyingPrice: null
+        underlyingPrice: null,
+        currency,
       }),
-      meta: { underlyingPrice, dteFilter, instrumentCount: 0, lastUpdated: Date.now() }
+      meta: { currency, underlyingPrice, dteFilter, instrumentCount: 0, lastUpdated: Date.now() }
     };
   }
   
@@ -533,7 +548,8 @@ export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null
     maxPain,
     gexFlipPrice,
     pcr,
-    underlyingPrice
+    underlyingPrice,
+    currency,
   });
   
   return {
@@ -547,10 +563,15 @@ export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null
     pcr,
     narrative,
     meta: {
+      currency,
       underlyingPrice,
       dteFilter,
       instrumentCount: filtered.length,
       lastUpdated: Date.now()
     }
   };
+};
+
+export const analyzeBtcOptions = (instruments, underlyingPrice, dteFilter = null) => {
+  return analyzeOptionsChain(instruments, underlyingPrice, dteFilter, 'BTC');
 };

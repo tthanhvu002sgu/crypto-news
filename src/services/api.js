@@ -12,6 +12,16 @@ import {
   extractCvdNetDelta
 } from './cvdService.js';
 import { processCotData } from './cotEngine.js';
+import {
+  parseBinanceFunding,
+  parseBybitFunding,
+  parseOkxFunding,
+  parseBitgetFunding,
+  analyzeMultiExchangeFunding,
+} from './fundingBasisEngine.js';
+import {
+  buildCorrelationMatrix,
+} from './correlationEngine.js';
 
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -2304,4 +2314,217 @@ export const getPolymarketTopMarkets = async () => {
   }
 
   return [];
+};
+
+// ─── MULTI-EXCHANGE FUNDING & BASIS (BINANCE, BYBIT, OKX, BITGET) ────────────
+
+export const getMultiExchangeFunding = async (symbol = 'BTCUSDT', force = false) => {
+  return fetchCached(
+    `multi_exchange_funding_${symbol.toLowerCase()}_v1`,
+    async () => {
+      const [binanceRes, bybitRes, okxFundingRes, okxTickerRes, okxIndexRes, bitgetRes] = await Promise.allSettled([
+        axios.get(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, { timeout: 4500 }),
+        axios.get(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`, { timeout: 4500 }),
+        axios.get(`https://www.okx.com/api/v5/public/funding-rate?instId=${symbol === 'BTCUSDT' ? 'BTC-USDT-SWAP' : `${symbol}-SWAP`}`, { timeout: 4500 }),
+        axios.get(`https://www.okx.com/api/v5/market/tickers?instType=SWAP&instId=${symbol === 'BTCUSDT' ? 'BTC-USDT-SWAP' : `${symbol}-SWAP`}`, { timeout: 4500 }),
+        axios.get(`https://www.okx.com/api/v5/market/index-tickers?instId=${symbol === 'BTCUSDT' ? 'BTC-USDT' : symbol}`, { timeout: 4500 }),
+        axios.get(`https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES`, { timeout: 4500 }),
+      ]);
+
+      const binance = parseBinanceFunding(binanceRes.status === 'fulfilled' ? binanceRes.value.data : null);
+      const bybit = parseBybitFunding(bybitRes.status === 'fulfilled' ? bybitRes.value.data : null);
+      const okx = parseOkxFunding(
+        okxFundingRes.status === 'fulfilled' ? okxFundingRes.value.data : null,
+        okxTickerRes.status === 'fulfilled' ? okxTickerRes.value.data : null,
+        okxIndexRes.status === 'fulfilled' ? okxIndexRes.value.data : null
+      );
+      const bitget = parseBitgetFunding(bitgetRes.status === 'fulfilled' ? bitgetRes.value.data : null, symbol);
+
+      return analyzeMultiExchangeFunding([binance, bybit, okx, bitget]);
+    },
+    60_000, // 1 min TTL
+    null,
+    null,
+    force
+  );
+};
+
+// ─── YAHOO FINANCE HISTORICAL DAILY CHART ────────────────────────────────────
+
+export const getYahooHistoricalDaily = async (ticker, range = '6mo') => {
+  const isNode = typeof window === 'undefined';
+  const url = isNode
+    ? `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`
+    : `/api-yahoo/v8/finance/chart/${ticker}`;
+  const params = { interval: '1d', range };
+
+  const parseYahooHistory = (data) => {
+    const result = data?.chart?.result?.[0];
+    const timestamps = result?.timestamp;
+    const closes = result?.indicators?.quote?.[0]?.close;
+    if (Array.isArray(timestamps) && Array.isArray(closes) && timestamps.length > 0) {
+      const items = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const close = closes[i];
+        if (close != null && Number.isFinite(close) && close > 0) {
+          const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+          items.push({ date, close });
+        }
+      }
+      return items;
+    }
+    return null;
+  };
+
+  // 1. Direct or dev proxy
+  try {
+    const res = await axios.get(url, {
+      params,
+      headers: isNode ? { 'User-Agent': 'Mozilla/5.0' } : {},
+      timeout: isLocal ? 4500 : 3500,
+    });
+    const parsed = parseYahooHistory(res.data);
+    if (parsed && parsed.length >= 10) return parsed;
+  } catch (e) {
+    // silently failover
+  }
+
+  // 2. Jina Reader fallback
+  try {
+    const targetUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${range}`;
+    const jinaUrl = `https://r.jina.ai/${targetUrl}`;
+    const res = await axios.get(jinaUrl, {
+      headers: { Accept: 'application/json', 'X-Return-Format': 'json' },
+      timeout: 7000,
+    });
+    const content = res.data?.data?.content;
+    if (content) {
+      let clean = content.trim();
+      if (clean.startsWith('```')) {
+        clean = clean.replace(/^```[a-zA-Z]*\n?/, '').replace(/```$/, '').trim();
+      }
+      const data = JSON.parse(clean);
+      const parsed = parseYahooHistory(data);
+      if (parsed && parsed.length >= 10) return parsed;
+    }
+  } catch (e) {
+    // silently failover
+  }
+
+  // 3. Allorigins proxy fallback
+  try {
+    const targetYahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${range}`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetYahooUrl)}`;
+    const res = await axios.get(proxyUrl, { timeout: 5000 });
+    let data = res.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch {}
+    }
+    if (data?.contents) {
+      const parsedData = JSON.parse(data.contents);
+      const parsed = parseYahooHistory(parsedData);
+      if (parsed && parsed.length >= 10) return parsed;
+    }
+  } catch (e) {}
+
+  return [];
+};
+
+// ─── MULTI-ASSET CORRELATION HISTORY ─────────────────────────────────────────
+
+export const getMultiAssetCorrelationHistory = async (force = false) => {
+  return fetchCached(
+    'multi_asset_correlation_history_v2',
+    async () => {
+      // Fetch all 7 assets in parallel with fallbacks
+      const [
+        btcRes,
+        ethRes,
+        solRes,
+        paxgRes,
+        spxRes,
+        dxyRes,
+        goldYahooRes,
+        tnxRes,
+        fredSpxRes,
+        fredDxyRes,
+        fred10yRes,
+      ] = await Promise.allSettled([
+        getBTCKlines('BTCUSDT', '1d', 130),
+        getBTCKlines('ETHUSDT', '1d', 130),
+        getBTCKlines('SOLUSDT', '1d', 130),
+        getBTCKlines('PAXGUSDT', '1d', 130),
+        getYahooHistoricalDaily('^GSPC', '6mo'),
+        getYahooHistoricalDaily('DX-Y.NYB', '6mo'),
+        getYahooHistoricalDaily('GC=F', '6mo'),
+        getYahooHistoricalDaily('^TNX', '6mo'),
+        fetchFredCSVSeries('SP500'),
+        fetchFredCSVSeries('DTWEXBGS'),
+        fetchFredCSVSeries('DGS10'),
+      ]);
+
+      const formatKlines = (res) => {
+        if (res.status !== 'fulfilled' || !Array.isArray(res.value)) return [];
+        return res.value.map((k) => ({
+          date: k.time instanceof Date ? k.time.toISOString().split('T')[0] : new Date(k.time).toISOString().split('T')[0],
+          close: k.close,
+        }));
+      };
+
+      const formatFred = (res) => {
+        if (res.status !== 'fulfilled' || !Array.isArray(res.value)) return [];
+        return res.value
+          .filter((obs) => obs && obs.date && Number.isFinite(obs.value))
+          .map((obs) => ({ date: obs.date, close: obs.value }));
+      };
+
+      const btc = formatKlines(btcRes);
+      const eth = formatKlines(ethRes);
+      const sol = formatKlines(solRes);
+
+      // Gold: prefer PAXG (100% reliable Binance), fallback to Yahoo GC=F
+      const paxg = formatKlines(paxgRes);
+      const goldYahoo = goldYahooRes.status === 'fulfilled' ? goldYahooRes.value : [];
+      const gold = paxg.length >= 20 ? paxg : goldYahoo;
+
+      // SPX: prefer Yahoo ^GSPC, fallback FRED SP500
+      const spxYahoo = spxRes.status === 'fulfilled' ? spxRes.value : [];
+      const spxFred = formatFred(fredSpxRes);
+      const spx = spxYahoo.length >= 20 ? spxYahoo : spxFred;
+
+      // DXY: prefer Yahoo DX-Y.NYB, fallback FRED DTWEXBGS
+      const dxyYahoo = dxyRes.status === 'fulfilled' ? dxyRes.value : [];
+      const dxyFred = formatFred(fredDxyRes);
+      const dxy = dxyYahoo.length >= 20 ? dxyYahoo : dxyFred;
+
+      // US10Y: prefer Yahoo ^TNX, fallback FRED DGS10
+      const us10yYahoo = tnxRes.status === 'fulfilled' ? tnxRes.value : [];
+      const us10yFred = formatFred(fred10yRes);
+      const us10y = us10yYahoo.length >= 20 ? us10yYahoo : us10yFred;
+
+      const seriesMap = {
+        BTC: btc,
+        ETH: eth,
+        SOL: sol,
+        SPX: spx,
+        DXY: dxy,
+        GOLD: gold,
+        US10Y: us10y,
+      };
+
+      const matrix30 = buildCorrelationMatrix(seriesMap, 30);
+      const matrix90 = buildCorrelationMatrix(seriesMap, 90);
+
+      return {
+        seriesMap,
+        matrix30,
+        matrix90,
+        timestamp: Date.now(),
+      };
+    },
+    30 * 60 * 1000, // 30 mins TTL
+    null,
+    null,
+    force
+  );
 };

@@ -3,7 +3,7 @@ import ModuleMenu from './ModuleMenu';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import { fetchCached } from '../utils/cache.js';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService.js';
-import { analyzeBtcOptions } from '../services/optionsCalculations.js';
+import { analyzeOptionsChain, formatOptionStrikeLabel } from '../services/optionsCalculations.js';
 
 const CACHE_KEY = 'deribit_options_btc_v2';
 const CACHE_TTL = 15 * 60 * 1000; // 15 phút (WARM tier)
@@ -21,6 +21,9 @@ const fmtStrike = (value) => {
 
 export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' }) {
   const { isModuleHidden } = useModuleVisibility();
+  const [currency, setCurrency] = useState(() => {
+    return localStorage.getItem('options_regime_currency') || 'BTC';
+  });
   const [chain, setChain] = useState(null);
   const [dteFilter, setDteFilter] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,12 +31,21 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
   const [lastUpdated, setLastUpdated] = useState(null);
   const hasDataRef = useRef(false);
 
+  const handleCurrencyChange = (newCur) => {
+    if (newCur === currency) return;
+    setCurrency(newCur);
+    localStorage.setItem('options_regime_currency', newCur);
+    setChain(null);
+    hasDataRef.current = false;
+  };
+
   const loadData = useCallback(async (force = false) => {
     setLoading(true);
+    const cacheKey = `deribit_options_${currency.toLowerCase()}_v2`;
     try {
       const result = await fetchCached(
-        CACHE_KEY,
-        () => fetchDeribitOptionChain('BTC'),
+        cacheKey,
+        () => fetchDeribitOptionChain(currency),
         CACHE_TTL,
         null,
         null,
@@ -45,17 +57,17 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
         setLastUpdated(result.timestamp || Date.now());
         setError(null);
       } else if (!hasDataRef.current) {
-        setError('Không thể tải dữ liệu Options từ Deribit (API không phản hồi hoặc không có dữ liệu)');
+        setError(`Không thể tải dữ liệu Options ${currency} từ Deribit (API không phản hồi hoặc không có dữ liệu)`);
       }
     } catch (e) {
       console.error('[OptionsRegimePanel]', e.message);
       if (!hasDataRef.current) {
-        setError(e.message || 'Lỗi kết nối Deribit API');
+        setError(e.message || `Lỗi kết nối Deribit API (${currency})`);
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currency]);
 
   useEffect(() => {
     let ignore = false;
@@ -74,8 +86,8 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
   // Re-analyze with current DTE filter whenever chain or filter changes
   const filtered = useMemo(() => {
     if (!chain || !chain.instruments) return null;
-    return analyzeBtcOptions(chain.instruments, chain.underlyingPrice, dteFilter);
-  }, [chain, dteFilter]);
+    return analyzeOptionsChain(chain.instruments, chain.underlyingPrice, dteFilter, currency);
+  }, [chain, dteFilter, currency]);
 
   const strikeDistribution = filtered?.strikeDistribution;
 
@@ -125,11 +137,28 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
   return (
     <div className="glass-panel" style={{ padding: '16px 20px' }}>
       {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: '8px' }}>
         <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
-          <span className="dot dot-emerald" /> OPTIONS REGIME — BTC (DERIBIT)
+          <span className="dot dot-emerald" /> OPTIONS REGIME — {currency} (DERIBIT)
         </h3>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* Asset Toggle (BTC / ETH) */}
+          <div className="etf-chart-toggle font-mono">
+            <button
+              onClick={() => handleCurrencyChange('BTC')}
+              className={`toggle-btn ${currency === 'BTC' ? 'active' : ''}`}
+            >
+              BTC
+            </button>
+            <button
+              onClick={() => handleCurrencyChange('ETH')}
+              className={`toggle-btn ${currency === 'ETH' ? 'active' : ''}`}
+            >
+              ETH
+            </button>
+          </div>
+
+          {/* DTE Toggle */}
           <div className="etf-chart-toggle font-mono">
             {DTE_OPTIONS.map(opt => (
               <button
@@ -217,7 +246,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
                 {filtered.callWall?.strike != null ? fmtStrike(filtered.callWall.strike) : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                {filtered.callWall?.oi != null ? `OI: ${filtered.callWall.oi.toLocaleString()} BTC` : 'N/A'}
+                {filtered.callWall?.oi != null ? `OI: ${filtered.callWall.oi.toLocaleString()} ${currency}` : 'N/A'}
               </div>
             </div>
 
@@ -233,7 +262,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
                 {filtered.putWall?.strike != null ? fmtStrike(filtered.putWall.strike) : '---'}
               </div>
               <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                {filtered.putWall?.oi != null ? `OI: ${filtered.putWall.oi.toLocaleString()} BTC` : 'N/A'}
+                {filtered.putWall?.oi != null ? `OI: ${filtered.putWall.oi.toLocaleString()} ${currency}` : 'N/A'}
               </div>
             </div>
 
@@ -348,7 +377,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
                   </span>
                 </div>
                 <span className="font-mono text-slate-500" style={{ fontSize: '0.55rem' }}>
-                  ~{filtered.narrative.wordCount} từ • Deribit BTC
+                  ~{filtered.narrative.wordCount} từ • Deribit {currency}
                 </span>
               </div>
 
@@ -497,7 +526,7 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
                         textAlign: 'center',
                         whiteSpace: 'nowrap'
                       }}>
-                        {row.strike % 1000 === 0 ? `${row.strike / 1000}K` : `${(row.strike / 1000).toFixed(1)}K`}
+                        {formatOptionStrikeLabel(row.strike, filtered.meta?.underlyingPrice)}
                         {isCurrentPrice && ' <'}
                       </div>
 
