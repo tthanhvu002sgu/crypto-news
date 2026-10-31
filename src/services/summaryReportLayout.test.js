@@ -39,3 +39,25 @@ test('never duplicates a chart when a topic is mentioned in several sections', (
   assert.equal(charts.filter((chart) => chart === 'etf').length, 1);
   assert.equal(charts.filter((chart) => chart === 'cot').length, 1);
 });
+
+test('places liquidation chart in the cross-examination block and options chart in the scenario block', () => {
+  const report = `### 3. SIGNAL CROSS-EXAMINATION & CONFLICT RESOLUTION
+- **Price vs CVD / OBI:** Taker flow divergence.
+- **Liquidation Flow vs Price / CVD:** Forced flow vs demand.
+
+### 4. SCENARIO MATRIX & ACTIVATION TRIGGERS
+| Scenario | Weight (%) | Activation Trigger | Confirming Evidence | Invalidation Level | Expected Route |
+| Base Case | 55 | Trigger | Evidence | Level | Route |
+
+- **Options Positioning Walls:** Call Wall $120k, Put Wall $100k, Max Pain $110k.`;
+
+  const blocks = buildProfessionalReportLayout(report);
+  const chartAnchor = (chart) => blocks.find((block) => block.charts.includes(chart))?.anchor;
+
+  assert.match(chartAnchor('liq'), /Liquidation/i);
+  assert.match(chartAnchor('options'), /Options Positioning Walls/i);
+
+  const charts = blocks.flatMap((block) => block.charts);
+  assert.equal(charts.length, new Set(charts).size);
+  assert.equal(charts.filter((chart) => chart === 'cvd').length, 1);
+});

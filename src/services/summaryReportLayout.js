@@ -7,7 +7,7 @@ const normalizeText = (value = '') => value
 const TOPIC_LABEL = /^\s*[-*]\s+\*\*([^*]+)\**/;
 const MARKDOWN_HEADING = /^\s*#{2,4}\s+(.+)/;
 
-const semanticTopic = /(macro|vi mo|real[- ]?rate|real yield|institutional|dong tien to chuc|etf|cme|cot|on[- ]?chain|dinh gia|derivatives|phai sinh|open interest|\boi\b|cvd|taker flow)/;
+const semanticTopic = /(macro|vi mo|real[- ]?rate|real yield|institutional|dong tien to chuc|etf|cme|cot|on[- ]?chain|dinh gia|derivatives|phai sinh|open interest|\boi\b|cvd|taker flow|liquidation|thanh ly|options|gamma|max pain|call wall|put wall)/;
 
 /**
  * Split a long AI memo at report headings and at bold topic labels. The model's
@@ -78,6 +78,15 @@ const chartRules = {
     [/price vs (?:taker flow|cvd)|gia vs (?:taker flow|cvd)/, 240],
     [/\bcvd\b|taker flow/, 160],
     [/derivatives|phai sinh/, 60],
+  ],
+  liq: [
+    [/liquidation|thanh ly/, 200],
+    [/doi chieu|cross[- ]?exam|conflict/, 120],
+    [/derivatives|phai sinh/, 70],
+  ],
+  options: [
+    [/options|gamma|max pain|call wall|put wall/, 200],
+    [/scenario|kich ban|activation trigger/, 160],
   ],
 };
 

@@ -5,6 +5,10 @@ import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
+import { fetchCached } from '../utils/cache';
+import { fetchDeribitOptionChain } from '../services/deribitOptionsService';
+import { analyzeOptionsChain } from '../services/optionsCalculations';
+import { fetchFuturesFundingHistory } from '../services/scannerDataEngine';
 import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { buildProfessionalReportLayout } from '../services/summaryReportLayout';
 import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBACK_FREE_MODELS } from '../services/openrouter';
@@ -17,7 +21,9 @@ import {
   FundingOiChart, 
   CotChart, 
   OnChainValuationChart, 
-  MacroLiquidityChart 
+  MacroLiquidityChart,
+  LiquidationChart,
+  OptionsStrikeChart
 } from './SummaryCharts';
 
 const renderTextWithTags = (text) => {
@@ -291,11 +297,13 @@ const isCompletedEtfObservation = (value, now = new Date()) => {
 
 export default function SummaryTab({ 
   data, apiKeys, cvd, spotCvd, buyVolume, sellVolume, etfHoldings, etfHistory,
+  liquidations, liqStats5m, liqStats1h,
   aiSummary, setAiSummary, isAiLoading, setIsAiLoading, lastSync,
   btcNupl, ethNupl, btcSupplyProfit, ethSupplyProfit,
   onExportMarkdown, isExportingMd
 }) {
   const [reportCvdData, setReportCvdData] = useState([]);
+  const [reportChartData, setReportChartData] = useState(null);
   const { isModuleHidden, showModule } = useModuleVisibility();
   const isSummaryHidden = isModuleHidden('tab_summary');
   const isAuditorHidden = isModuleHidden('dash_trade_auditor');
@@ -399,6 +407,8 @@ export default function SummaryTab({
     let spotCvd30d = [];
     let latestNews = [];
     let calendarRes = null;
+    let fundingHistory = [];
+    let optionsChain = null;
 
     try {
       [
@@ -414,6 +424,8 @@ export default function SummaryTab({
         spotCvd30d,
         latestNews,
         calendarRes,
+        fundingHistory,
+        optionsChain,
       ] = await Promise.all([
         getOrderBookDepth('BTCUSDT', 100),
         getWhaleWalls(),
@@ -427,6 +439,8 @@ export default function SummaryTab({
         getHistoricalCVD('BTCUSDT', '1d', 30, 'spot'),
         fetchRealtimeFeed(),
         getWeeklyEconomicCalendar().catch(() => null),
+        fetchFuturesFundingHistory('BTCUSDT', Date.now() - 3 * 86400000, Date.now()).catch(() => []),
+        fetchCached('deribit_options_btc_v2', () => fetchDeribitOptionChain('BTC'), 15 * 60 * 1000).catch(() => null),
       ]);
     } catch (error) {
       console.warn('Error fetching data for report:', error);
@@ -461,6 +475,12 @@ export default function SummaryTab({
     if (activeCvd30d.length > 0 || activeCvd7d.length > 0) {
       setReportCvdData(activeCvd30d.length > 0 ? activeCvd30d : activeCvd7d);
     }
+
+    const fundingSettlements = Array.isArray(fundingHistory) ? fundingHistory : [];
+    const optionsAnalysis = optionsChain?.instruments?.length
+      ? analyzeOptionsChain(optionsChain.instruments, optionsChain.underlyingPrice, null, 'BTC')
+      : null;
+    setReportChartData({ fundingHistory: fundingSettlements, options: optionsAnalysis });
     const activeNews = latestNews?.length > 0 ? latestNews : (data.news || []);
     const klines48h = Array.isArray(data.klines) ? data.klines : [];
     const priceNow =
@@ -831,6 +851,68 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
       }).join('\n');
     };
 
+    const formatFundingHistory = (rows) => {
+      if (!Array.isArray(rows) || rows.length === 0) return '  N/A';
+      return rows.slice(-9).map((row) => {
+        const rate = toFiniteNumber(row.fundingRate);
+        const annualized = rate === null ? 'N/A' : formatSigned(rate * 3 * 365 * 100, 2, '%');
+        return (
+          `  - ${safeIsoTime(row.fundingTime)} | ${rate === null ? 'N/A' : formatSigned(rate * 100, 4, '%')}/8h | ` +
+          `Annualized ${annualized}`
+        );
+      }).join('\n');
+    };
+
+    const formatLiqWindow = (label, stats) => {
+      if (!stats) return `- ${label}: N/A`;
+      return (
+        `- ${label}: Long liquidated ${formatSigned(stats.longLiqUsd, 0, ' USD')} (${stats.longLiqCount ?? 'N/A'} events) | ` +
+        `Short liquidated ${formatSigned(stats.shortLiqUsd, 0, ' USD')} (${stats.shortLiqCount ?? 'N/A'} events) | ` +
+        `Net ${formatSigned(stats.netLiqDelta, 0, ' USD')} | Dashboard dominance label: ${stats.dominanceLabel || 'N/A'}`
+      );
+    };
+
+    const liqEventStr = (() => {
+      if (!Array.isArray(liquidations) || liquidations.length === 0) return '  N/A';
+      return [...liquidations]
+        .sort((a, b) => (toFiniteNumber(b.usdValue) || 0) - (toFiniteNumber(a.usdValue) || 0))
+        .slice(0, 5)
+        .map((event) => {
+          const usd = toFiniteNumber(event.usdValue);
+          const price = toFiniteNumber(event.price);
+          return (
+            `  - ${safeIsoTime(event.timestamp)} | ${event.positionSide || 'N/A'} liquidated | ` +
+            `$${formatNumber(usd, 0)} | Price $${formatNumber(price, 0)} | ${formatNumber(event.qty, 3)} BTC`
+          );
+        })
+        .join('\n');
+    })();
+
+    const optionsStr = (() => {
+      if (!optionsAnalysis) return '- Deribit BTC options: N/A';
+      const { callWall, putWall, maxPain, pcr, gammaRegime, gexFlipPrice, strikeDistribution, meta } = optionsAnalysis;
+      const topStrikes = Array.isArray(strikeDistribution)
+        ? [...strikeDistribution]
+            .sort((a, b) => ((toFiniteNumber(b.callOI) || 0) + (toFiniteNumber(b.putOI) || 0)) - ((toFiniteNumber(a.callOI) || 0) + (toFiniteNumber(a.putOI) || 0)))
+            .slice(0, 8)
+        : [];
+      const strikeLines = topStrikes.length > 0
+        ? topStrikes
+            .map((row) => `  - Strike $${formatNumber(row.strike, 0)} | Call OI ${formatNumber(row.callOI, 0)} | Put OI ${formatNumber(row.putOI, 0)}`)
+            .join('\n')
+        : '  N/A';
+      return (
+        `- Underlying spot used: ${meta?.underlyingPrice != null ? '$' + formatNumber(meta.underlyingPrice, 0) : 'N/A'} | Instruments: ${meta?.instrumentCount ?? 'N/A'}\n` +
+        `- Call Wall: ${callWall ? '$' + formatNumber(callWall.strike, 0) + ' (' + formatNumber(callWall.oi, 0) + ' OI)' : 'N/A'}\n` +
+        `- Put Wall: ${putWall ? '$' + formatNumber(putWall.strike, 0) + ' (' + formatNumber(putWall.oi, 0) + ' OI)' : 'N/A'}\n` +
+        `- Max Pain: ${maxPain ? '$' + formatNumber(maxPain.maxPainPrice, 0) : 'N/A'}\n` +
+        `- Put/Call OI Ratio: ${pcr ? formatNumber(pcr.pcr, 2) : 'N/A'} | Total Call OI ${pcr ? formatNumber(pcr.totalCallOI, 0) : 'N/A'} | Total Put OI ${pcr ? formatNumber(pcr.totalPutOI, 0) : 'N/A'}\n` +
+        `- GEX regime: ${gammaRegime?.regime || 'N/A'} (${gammaRegime?.description || 'N/A'}) | Net GEX at spot: ${gammaRegime?.netGexAtPrice != null ? formatNumber(gammaRegime.netGexAtPrice, 0) : 'N/A'} | GEX flip level: ${gexFlipPrice != null ? '$' + formatNumber(gexFlipPrice, 0) : 'N/A'}\n` +
+        `- Provenance: dealer-positioning model assumption, not observed dealer books ([DERIVED]).\n` +
+        `- Top strikes by total OI:\n${strikeLines}`
+      );
+    })();
+
     const promptData = `
 # MARKET ANALYSIS INPUT
 
@@ -839,11 +921,9 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
 - Dashboard last successful sync/fetch: ${safeIsoTime(lastSync)}
 - Coverage summary: ${coverageStr}
 - BTC spot/klines, funding, OI, global L/S accounts, and historical CVD venue: Binance BTCUSDT.
-- CVD venue rule: Spot CVD and Futures CVD are separate taker-flow measurements. Never merge, average, or label one as the other; compare their direction explicitly.
 - OBI and whale-wall scope: multi-exchange aggregation returned by the dashboard; composition is shown where available.
 - Macro observations may have publication lag. The dashboard currently supplies values but not every source observation date.
 - ETF history below contains only the latest seven completed observations strictly before the report's local calendar date. Same-day/future rows are provisional and excluded.
-- ETF CURRENT-DATE HARD RULE: missing, blank, or provisional 0.0 flow for the report date means PENDING/UNKNOWN, never an observed zero. Do not write that ETF flow "slowed/stalled/paused at 0.0M" unless a completed published observation explicitly reports zero.
 - ETF holdings snapshot date is not supplied; freshness is unknown.
 - News is headline/snippet input, not independently verified full-text reporting.
 - Historical CVD is cumulative taker delta rebased at the start of each requested window. Cross-window absolute levels are not comparable.
@@ -942,11 +1022,13 @@ ${cotStr}
 - CME COT open interest: ${data.cotData?.openInterest ?? 'N/A'}
 - COT observation age at report time: ${cotObservationAgeDays === null ? 'N/A' : cotObservationAgeDays + ' days'}
 - COT release caveat: Friday release reflects Tuesday positions, approximately 3-7 days lagged.
-- COT Strategic Synthesis: ${data.cotData?.narrative?.overview || 'N/A'}
+- COT Strategic Synthesis: ${data.cotData?.narrative?.overview || 'N/A'} [DERIVED dashboard heuristic — verify independently]
 
 ## 5. DERIVATIVES
 - BTC 24h price change input for price/OI matrix: ${formatSigned(data.btc?.change, 2, '%')}
 - Current Funding Rate: ${toFiniteNumber(data.fundingRate) === null ? 'N/A' : formatSigned(data.fundingRate * 100, 4, '%')}
+- Funding settlements — Binance BTCUSDT, last 9 (8h intervals):
+${formatFundingHistory(fundingSettlements)}
 - Current Open Interest: ${toFiniteNumber(data.openInterest) === null ? 'N/A' : formatNumber(data.openInterest, 0) + ' BTC'}
 - OI change across supplied history: ${formatSigned(oiChangePct, 2, '%')}
 - OI history:
@@ -959,7 +1041,17 @@ ${lsStr}
 - Intraday CVD — Binance Spot: ${formatSigned(spotCvd, 0, ' USD')}
 - Intraday taker buy volume — Binance Futures: ${formatNumber(buyVolume, 0)} USD
 - Intraday taker sell volume — Binance Futures: ${formatNumber(sellVolume, 0)} USD
-- Required interpretation: state whether Spot and Futures CVD agree or diverge. A futures-only move can reflect leverage; a spot-only move can reflect cash demand. Do not infer aggregate market CVD from either single venue.
+- Venue labels: Binance Spot and Binance Futures CVD are separate measurements, shown above and in Section 6.
+
+### LIQUIDATIONS (BINANCE BTCUSDT WEBSOCKET)
+- Coverage: rolling session window captured by the dashboard WebSocket; single-venue, not full-market history.
+${formatLiqWindow('Last 5 minutes', liqStats5m)}
+${formatLiqWindow('Last 1 hour', liqStats1h)}
+- Largest recent liquidation events by USD:
+${liqEventStr}
+
+### DERIBIT BTC OPTIONS (ALL EXPIRIES)
+${optionsStr}
 
 ## 6. HISTORICAL PRICE / CVD
 ${cvdBlock(activeCvd7d, '7-Day Binance Futures CVD / Price (4h)')}
@@ -976,13 +1068,13 @@ ${compareCvdVenues(activeCvd30d, activeSpotCvd30d, '30-day / 1d')}
 
 ## 7. DISPLAYED LIQUIDITY & ORDER BOOK
 - Aggregated OBI: ${orderBook?.obiPercent !== undefined ? formatSigned(orderBook.obiPercent, 2, '%') : 'N/A'}
-- Dashboard OBI label: ${orderBook?.signal || 'N/A'}
+- Dashboard OBI label: ${orderBook?.signal || 'N/A'} [DERIVED dashboard heuristic — verify independently]
 - OBI exchange breakdown:
 ${orderBook?.exchanges?.length
   ? orderBook.exchanges.map((exchange) => `  - ${exchange.name}: ${formatSigned(exchange.obi, 2, '%')}`).join('\n')
   : '  N/A'}
 - Whale bid share: ${whaleWalls?.bidRatio !== undefined ? formatNumber(whaleWalls.bidRatio * 100, 1) + '%' : 'N/A'}
-- Dashboard whale-wall label: ${whaleWalls?.signal || 'N/A'}
+- Dashboard whale-wall label: ${whaleWalls?.signal || 'N/A'} [DERIVED dashboard heuristic — verify independently]
 
 ### Largest Displayed Bid Walls
 ${formatWalls(whaleWalls?.whaleBids)}
@@ -995,11 +1087,7 @@ ${formatNews(activeNews)}
 
 ## 9. USER INTENDED BIAS & AUDIT REQUEST
 - User Selected Bias: **${selectedUserBias === 'none' ? 'NONE (Objective Evaluation)' : selectedUserBias.toUpperCase()}**
-${
-  selectedUserBias !== 'none'
-    ? `- SPECIAL DIRECTIVE: The user has selected a **${selectedUserBias.toUpperCase()}** bias. You MUST include the USER BIAS AUDIT section in your report. Provide (1) Assessment of whether current data supports or refutes ${selectedUserBias.toUpperCase()}, (2) Actionable risk management advice & entry conditions, and (3) Final verdict on the ${selectedUserBias.toUpperCase()} bias (**CONFIRMED VALID**, **WAIT FOR CONFIRMATION**, or **INVALIDATED**).`
-    : '- Note: User selected Objective Evaluation (No specific bias).'
-}
+${selectedUserBias !== 'none' ? '' : '- Note: User selected Objective Evaluation (No specific bias).'}
 `;
 
     const systemPrompt = getSystemPrompt(selectedStyle, selectedLang, selectedUserBias);
@@ -1683,13 +1771,16 @@ ${promptData}
               const reportBlocks = buildProfessionalReportLayout(aiSummary);
               const cvdSource = reportCvdData?.length > 0 ? reportCvdData : (data.cvdHistory30d?.points || data.cvdHistory30d || data.cvdHistory7d?.points || data.cvdHistory7d || []);
               const oiHistory = Array.isArray(data.oiHistory) ? data.oiHistory : [];
+              const hasLiquidationStats = Boolean(liqStats5m || liqStats1h);
               const chartComponents = {
                 macro: <MacroLiquidityChart key="macro" data={data} />,
                 etf: Array.isArray(etfHistory) && etfHistory.length > 0 ? <EtfChart key="etf" etfHistory={etfHistory} /> : null,
                 cot: data.cotData ? <CotChart key="cot" cotData={data.cotData} /> : null,
-                onchain: <OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} btcPrice={data.btc?.price} productionCost={data.productionCost} />,
-                oi: oiHistory.length > 0 ? <FundingOiChart key="oi" oiHistory={oiHistory} fundingRates={data.fundingRates} /> : null,
+                onchain: <OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} nupl={btcNupl} btcPrice={data.btc?.price} productionCost={data.onChain?.productionCost} />,
+                oi: oiHistory.length > 0 ? <FundingOiChart key="oi" oiHistory={oiHistory} fundingHistory={reportChartData?.fundingHistory} /> : null,
                 cvd: Array.isArray(cvdSource) && cvdSource.length > 0 ? <CvdChart key="cvd" cvdData={cvdSource} /> : null,
+                liq: hasLiquidationStats ? <LiquidationChart key="liq" liqStats5m={liqStats5m} liqStats1h={liqStats1h} /> : null,
+                options: reportChartData?.options ? <OptionsStrikeChart key="options" options={reportChartData.options} /> : null,
               };
 
               return reportBlocks.map((block, index) => {

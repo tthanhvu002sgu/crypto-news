@@ -1867,6 +1867,9 @@ function AppContent() {
                 spotCvd={spot?.cvd}
                 buyVolume={buyVolume}
                 sellVolume={sellVolume}
+                liquidations={liquidations}
+                liqStats5m={liqStats5m}
+                liqStats1h={liqStats1h}
                 etfHoldings={etfHoldings}
                 etfHistory={etfHistory}
                 aiSummary={aiSummary}

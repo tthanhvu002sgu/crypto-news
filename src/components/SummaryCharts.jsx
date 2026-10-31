@@ -149,8 +149,26 @@ export function CvdChart({ cvdData }) {
 }
 
 /** 2. Chart Funding Rate & Open Interest (OI) */
-export function FundingOiChart({ oiHistory, fundingRates }) {
+export function FundingOiChart({ oiHistory, fundingHistory }) {
   if (!oiHistory || oiHistory.length === 0) return null;
+
+  const settlements = Array.isArray(fundingHistory)
+    ? fundingHistory
+        .map((row) => ({ ts: Number(row.fundingTime), rate: parseFloat(row.fundingRate) }))
+        .filter((row) => Number.isFinite(row.ts) && Number.isFinite(row.rate))
+        .sort((a, b) => a.ts - b.ts)
+    : [];
+  const fundingSeries = oiHistory.map((row) => {
+    const ts = new Date(row.timestamp).getTime();
+    let rate = null;
+    for (const settlement of settlements) {
+      if (settlement.ts <= ts) rate = settlement.rate;
+      else break;
+    }
+    return rate === null ? null : rate * 100;
+  });
+  const hasFunding = settlements.length > 0 && fundingSeries.some((value) => value !== null);
+
   const data = {
     labels: oiHistory.map(d => {
       const dt = new Date(d.timestamp);
@@ -168,7 +186,19 @@ export function FundingOiChart({ oiHistory, fundingRates }) {
         fill: true,
         pointRadius: 0,
         tension: 0.1
-      }
+      },
+      ...(hasFunding ? [{
+        type: 'line',
+        label: 'Funding (%/8h)',
+        data: fundingSeries,
+        borderColor: '#f59e0b',
+        backgroundColor: 'transparent',
+        yAxisID: 'yFunding',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        stepped: true,
+        tension: 0
+      }] : [])
     ]
   };
 
@@ -176,7 +206,7 @@ export function FundingOiChart({ oiHistory, fundingRates }) {
     ...commonOptions,
     plugins: {
       ...commonOptions.plugins,
-      title: { display: true, text: '⚡ BIẾN ĐỘNG OPEN INTEREST (OI)', color: '#3b82f6', font: { family: 'monospace', size: 11 } }
+      title: { display: true, text: '⚡ OPEN INTEREST & FUNDING RATE', color: '#3b82f6', font: { family: 'monospace', size: 11 } }
     },
     scales: {
       x: commonOptions.scales.x,
@@ -186,7 +216,16 @@ export function FundingOiChart({ oiHistory, fundingRates }) {
         position: 'left',
         ticks: { color: '#3b82f6', font: { family: 'monospace', size: 10 } },
         grid: { color: 'rgba(51, 65, 85, 0.3)' }
-      }
+      },
+      ...(hasFunding ? {
+        yFunding: {
+          type: 'linear',
+          display: true,
+          position: 'right',
+          ticks: { color: '#f59e0b', font: { family: 'monospace', size: 10 } },
+          grid: { drawOnChartArea: false }
+        }
+      } : {})
     }
   };
 
@@ -296,19 +335,28 @@ export function CotChart({ cotData }) {
   );
 }
 
-/** 5. Chart Định giá On-chain: BTC MVRV & Production Cost */
-export function OnChainValuationChart({ mvrv, btcPrice, productionCost }) {
+/** 5. Chart Định giá On-chain: BTC Price vs Production Cost (cùng đơn vị $) */
+export function OnChainValuationChart({ mvrv, nupl, btcPrice, productionCost }) {
   const mvrvVal = parseFloat(mvrv || 0);
   const priceVal = parseFloat(btcPrice || 0);
+  if (!priceVal) return null;
+
+  const labels = ['BTC Price ($)', 'Cost Low ($)', 'Cost Mid ($)', 'Cost High ($)'];
+  const values = [
+    priceVal,
+    productionCost?.low != null ? parseFloat(productionCost.low) : null,
+    productionCost?.mid != null ? parseFloat(productionCost.mid) : null,
+    productionCost?.high != null ? parseFloat(productionCost.high) : null,
+  ];
 
   const data = {
-    labels: ['BTC Price ($)', 'Production Cost ($k)', 'MVRV Ratio'],
+    labels,
     datasets: [
       {
-        label: 'Chỉ số Định giá On-chain',
-        data: [priceVal, (productionCost?.mid || 65000), mvrvVal * 10000],
-        backgroundColor: ['rgba(245, 158, 11, 0.7)', 'rgba(16, 185, 129, 0.7)', 'rgba(139, 92, 246, 0.7)'],
-        borderColor: ['#f59e0b', '#10b981', '#8b5cf6'],
+        label: 'USD',
+        data: values,
+        backgroundColor: ['rgba(245, 158, 11, 0.7)', 'rgba(16, 185, 129, 0.5)', 'rgba(16, 185, 129, 0.7)', 'rgba(16, 185, 129, 0.4)'],
+        borderColor: ['#f59e0b', '#10b981', '#10b981', '#10b981'],
         borderWidth: 1,
         borderRadius: 4,
       }
@@ -319,7 +367,129 @@ export function OnChainValuationChart({ mvrv, btcPrice, productionCost }) {
     ...commonOptions,
     plugins: {
       ...commonOptions.plugins,
-      title: { display: true, text: `🔗 ON-CHAIN VALUATION (MVRV: ${mvrvVal || 'N/A'})`, color: '#a855f7', font: { family: 'monospace', size: 11 } }
+      legend: { display: false },
+      title: { display: true, text: `🔗 BTC PRICE vs PRODUCTION COST (MVRV: ${mvrvVal || 'N/A'})`, color: '#a855f7', font: { family: 'monospace', size: 11 } }
+    }
+  };
+
+  return (
+    <div className="summary-chart-container" style={{ minHeight: '200px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
+      <div style={{ height: '170px' }}>
+        <Bar data={data} options={options} />
+      </div>
+      <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginTop: '8px', display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
+        <span>MVRV: <strong style={{ color: '#a855f7' }}>{mvrvVal || 'N/A'}</strong></span>
+        <span>NUPL: <strong>{nupl || 'N/A'}</strong></span>
+        <span>Production cost: model estimate</span>
+      </div>
+    </div>
+  );
+}
+
+/** 6. Chart Thanh khoản Vĩ mô (stat tiles đơn vị gốc + % thay đổi ngày) */
+export function MacroLiquidityChart({ data: macroData }) {
+  if (!macroData) return null;
+
+  const tiles = [
+    { label: 'Net Liquidity', value: macroData.netLiquidity != null ? `$${Number(macroData.netLiquidity).toLocaleString('en-US', { maximumFractionDigits: 0 })}B` : 'N/A', color: '#0ea5e9' },
+    { label: 'DXY', value: macroData.dxy != null ? Number(macroData.dxy).toFixed(2) : 'N/A', color: '#f59e0b' },
+    { label: 'S&P 500', value: macroData.sp500?.price != null ? Number(macroData.sp500.price).toFixed(0) : 'N/A', color: '#10b981' },
+    { label: 'VIX', value: macroData.vix?.price != null ? Number(macroData.vix.price).toFixed(2) : 'N/A', color: '#f43f5e' },
+  ];
+
+  const changes = [
+    { label: 'S&P 500', value: parseFloat(macroData.sp500?.changePercent) },
+    { label: 'QQQ', value: parseFloat(macroData.qqq?.changePercent) },
+  ].filter((row) => Number.isFinite(row.value));
+
+  const changeData = {
+    labels: changes.map((row) => row.label),
+    datasets: [
+      {
+        label: 'Daily change (%)',
+        data: changes.map((row) => row.value),
+        backgroundColor: changes.map((row) => row.value >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(244, 63, 94, 0.7)'),
+        borderColor: changes.map((row) => row.value >= 0 ? '#10b981' : '#f43f5e'),
+        borderWidth: 1,
+        borderRadius: 4,
+      }
+    ]
+  };
+
+  const changeOptions = {
+    ...commonOptions,
+    plugins: {
+      ...commonOptions.plugins,
+      legend: { display: false },
+      title: { display: true, text: '📊 EQUITY DAILY CHANGE (%)', color: '#0ea5e9', font: { family: 'monospace', size: 10 } }
+    }
+  };
+
+  return (
+    <div className="summary-chart-container" style={{ minHeight: '210px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
+        {tiles.map((tile) => (
+          <div key={tile.label} style={{ border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '8px', background: 'rgba(15, 23, 42, 0.35)' }}>
+            <div className="font-mono" style={{ fontSize: '0.58rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{tile.label}</div>
+            <div className="font-mono" style={{ fontSize: '0.9rem', fontWeight: 700, color: tile.color }}>{tile.value}</div>
+          </div>
+        ))}
+      </div>
+      {changes.length > 0 && (
+        <div style={{ height: '120px', marginTop: '12px' }}>
+          <Bar data={changeData} options={changeOptions} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 7. Chart Thanh lý Long vs Short (5m & 1h) */
+export function LiquidationChart({ liqStats5m, liqStats1h }) {
+  const windows = [
+    { label: '5m', stats: liqStats5m },
+    { label: '1h', stats: liqStats1h },
+  ].filter((row) => row.stats);
+  if (windows.length === 0) return null;
+
+  const toMillions = (value) => (Number.isFinite(Number(value)) ? Number(value) / 1e6 : 0);
+  const data = {
+    labels: windows.map((row) => row.label),
+    datasets: [
+      {
+        label: 'Long liquidated ($M)',
+        data: windows.map((row) => toMillions(row.stats.longLiqUsd)),
+        backgroundColor: 'rgba(244, 63, 94, 0.7)',
+        borderColor: '#f43f5e',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: 'Short liquidated ($M)',
+        data: windows.map((row) => toMillions(row.stats.shortLiqUsd)),
+        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+        borderColor: '#10b981',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+    ]
+  };
+
+  const options = {
+    ...commonOptions,
+    plugins: {
+      ...commonOptions.plugins,
+      title: { display: true, text: '💥 LIQUIDATIONS — BINANCE BTCUSDT (USD, SESSION WINDOW)', color: '#f43f5e', font: { family: 'monospace', size: 11 } },
+      tooltip: {
+        ...commonOptions.plugins.tooltip,
+        callbacks: {
+          afterLabel: (ctx) => {
+            const stats = windows[ctx.dataIndex]?.stats;
+            if (!stats) return '';
+            return ` Events: ${ctx.datasetIndex === 0 ? stats.longLiqCount ?? 'N/A' : stats.shortLiqCount ?? 'N/A'} | Dominance: ${stats.dominanceLabel || 'N/A'}`;
+          }
+        }
+      }
     }
   };
 
@@ -330,42 +500,63 @@ export function OnChainValuationChart({ mvrv, btcPrice, productionCost }) {
   );
 }
 
-/** 6. Chart Thanh khoản Vĩ mô (US Net Liquidity vs DXY/VIX) */
-export function MacroLiquidityChart({ data: macroData }) {
-  if (!macroData) return null;
+/** 8. Chart Deribit Options — Call/Put OI theo strike, highlight Max Pain */
+export function OptionsStrikeChart({ options }) {
+  const distribution = options?.strikeDistribution;
+  if (!Array.isArray(distribution) || distribution.length === 0) return null;
 
-  const metrics = [
-    { label: 'Net Liquidity ($B)', value: parseFloat(macroData.netLiquidity || 0) },
-    { label: 'DXY Index (*10)', value: parseFloat(macroData.dxy || 0) * 10 },
-    { label: 'S&P 500 (*1)', value: parseFloat(macroData.sp500?.price || 0) },
-    { label: 'VIX (*100)', value: parseFloat(macroData.vix?.price || 0) * 100 },
-  ];
+  const spot = Number(options?.meta?.underlyingPrice) || null;
+  const inRange = spot
+    ? distribution.filter((row) => Math.abs(row.strike - spot) / spot <= 0.2)
+    : distribution;
+  const strikes = (inRange.length > 0 ? inRange : distribution)
+    .slice()
+    .sort((a, b) => (b.callOI + b.putOI) - (a.callOI + a.putOI))
+    .slice(0, 8)
+    .sort((a, b) => a.strike - b.strike);
 
-  const chartData = {
-    labels: metrics.map(m => m.label),
+  const maxPainStrike = options?.maxPain?.maxPainPrice ?? null;
+  const formatStrike = (value) => `$${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`;
+
+  const data = {
+    labels: strikes.map((row) => formatStrike(row.strike)),
     datasets: [
       {
-        label: 'Các chỉ số Vĩ mô Toàn cầu',
-        data: metrics.map(m => m.value),
-        backgroundColor: 'rgba(14, 165, 233, 0.6)',
-        borderColor: '#0ea5e9',
+        label: 'Call OI',
+        data: strikes.map((row) => row.callOI),
+        backgroundColor: strikes.map((row) => row.strike === maxPainStrike ? 'rgba(245, 158, 11, 0.95)' : 'rgba(16, 185, 129, 0.7)'),
+        borderColor: strikes.map((row) => row.strike === maxPainStrike ? '#f59e0b' : '#10b981'),
         borderWidth: 1,
         borderRadius: 4,
-      }
+      },
+      {
+        label: 'Put OI',
+        data: strikes.map((row) => row.putOI),
+        backgroundColor: 'rgba(244, 63, 94, 0.65)',
+        borderColor: '#f43f5e',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
     ]
   };
 
-  const options = {
+  const wallText = [
+    options?.callWall?.strike != null ? `CALL WALL $${Number(options.callWall.strike).toLocaleString('en-US')}` : null,
+    options?.putWall?.strike != null ? `PUT WALL $${Number(options.putWall.strike).toLocaleString('en-US')}` : null,
+    maxPainStrike != null ? `MAX PAIN $${Number(maxPainStrike).toLocaleString('en-US')}` : null,
+  ].filter(Boolean).join(' · ');
+
+  const options_ = {
     ...commonOptions,
     plugins: {
       ...commonOptions.plugins,
-      title: { display: true, text: '🌍 BỐI CẢNH THANH KHOẢN VĨ MÔ TOÀN CẦU', color: '#0ea5e9', font: { family: 'monospace', size: 11 } }
+      title: { display: true, text: `🎯 DERIBIT BTC OPTIONS — ${wallText || 'STRIKE OPEN INTEREST'}`, color: '#8b5cf6', font: { family: 'monospace', size: 10 } }
     }
   };
 
   return (
-    <div className="summary-chart-container" style={{ height: '210px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
-      <Bar data={chartData} options={options} />
+    <div className="summary-chart-container" style={{ height: '220px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
+      <Bar data={data} options={options_} />
     </div>
   );
 }
