@@ -1,9 +1,20 @@
 {
   "schemaVersion": "v9.0.0",
   "modelVersion": "v1.0.0",
-  "latestDate": "2026-10-30",
-  "updatedAt": "2026-10-30T07:05:11.797Z",
+  "latestDate": "2026-10-31",
+  "updatedAt": "2026-10-31T06:58:42.758Z",
   "snapshots": [
+    {
+      "date": "2026-10-31",
+      "file": "2026-10-31.json",
+      "revision": 1,
+      "asOf": "2026-10-31T00:00:00.000Z",
+      "generatedAt": "2026-10-31T06:57:54.616Z",
+      "assetCount": 50,
+      "completeCount": 0,
+      "schemaVersion": "v9.0.0",
+      "modelVersion": "v1.0.0"
+    },
     {
       "date": "2026-10-30",
       "file": "2026-10-30.json",
