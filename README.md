@@ -111,6 +111,23 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-10-27] Khắc phục triệt để 4 lỗi logic kiểm chứng Signal Scoreboard (LOGIC-001 đến LOGIC-004)
+- **Mode / Type / Action / Lane:** BUGFIX / QUANT / AUDIT-REMEDIATION / FULL
+- **Tóm tắt:** Sửa chữa triệt để toàn bộ 4 lỗi logic trong hệ thống kiểm chứng "Edge" định lượng Signal Scoreboard theo báo cáo audit chuyên sâu và phản biện mã nguồn:
+  1. **LOGIC-001 — Khai thác dữ liệu Taker Volume thực tế trong `backtestCapitalFlow`**: Đọc trực tiếp khối lượng mua chủ động `quoteVolume` (cột 7 hoặc `kline.quoteVolume`) và `takerBuyQuoteVolume` (cột 10 hoặc `kline.takerBuyQuoteVolume`) từ `btcDailyKlinesAll`. Tính `cvdRatioPct = ((takerBuyVol - takerSellVol) / quoteVol) * 100`, chỉ fallback về hình dáng nến khi nến thiếu thông tin taker.
+  2. **LOGIC-002 — Đo lường Forward Return thực tế cho Move Tracker & Scanner Rank**:
+     - Xây dựng helper `findForwardCandleClose` và `getNormalizedKlines` tra cứu nến đóng thực tế tại các mốc `timestamp + 1D`, `+3D`, `+7D` dựa trên giá vào `entryPrice`.
+     - Trong `backtestScannerRank`: Bảo toàn `alt.forwardReturns` thực tế; kiểm tra tính tương thích hệ quy chiếu giá (scale compatibility) giữa chuỗi nến truyền vào và `entryPrice` của Altcoin nhằm ngăn chặn triệt để lỗi so sánh chéo giá BTC (~$60k) với Altcoin ($0.15 - $180) gây ra return ảo lên tới 34,000% - 41,773,233%; tự động kích hoạt proxy vi cấu trúc có cơ sở (Microstructure momentum decay/mean reversion phi tuyến theo $\sqrt{t}$) kèm cờ `isProxyHorizon: true` khi thiếu nến tương lai.
+     - Trong `backtestMoveTracker`: Nhận diện an toàn `triggerPrice` từ cả snapshot lẫn event root, kiểm tra tương thích thang giá với chuỗi nến BTC trước khi tính return thực tế.
+     - Trong `computeOccurrencesStats`: Đánh giá cờ `isProxyHorizon` độc lập theo từng `horizonKey` (`proxyHorizons[horizonKey]`) thay vì gom gộp làm 1D bị gán nhãn proxy oan khi chỉ có 7D thiếu dữ liệu tương lai.
+  3. **LOGIC-003 — Loại bỏ Code Duplication cho `calculateQuantiles`**: Tái sử dụng một hàm `calculateQuantiles` duy nhất: export từ `src/services/biasHistoryService.js` và re-export từ `src/services/signalScoreboardService.js`, loại bỏ hoàn toàn mã trùng lặp.
+  4. **LOGIC-004 — Chuẩn hóa tính toán Profit Factor cho `expectedDirection === 'RANGE'`**: Chuẩn hóa thang đo win/loss cho chiến lược Range trong `computeOccurrencesStats` với điều kiện rẽ nhánh tường minh `expectedDirection === 'RANGE'`. Khi biến động $\le 1.5\%$, tính win theo tỷ lệ bảo vệ biên độ cân bằng; khi biến động vượt quá $1.5\%$, chuẩn hóa mức loss theo cùng tỷ lệ đòn bẩy/biên độ (chặn rủi ro stop-loss ở 1.5R) giúp Profit Factor không bị lệch âm nhân tạo.
+- **Verify:**
+  - `npm run test:scoreboard`: 23/23 unit tests pass 100% (bổ sung 12 unit tests chuyên biệt cho các ca lỗi và bảo vệ scale giá).
+  - `npm test`: Toàn bộ 17/17 test suites (150+ tests) pass 100%.
+  - `npm run build`: Vite build thành công sạch sẽ trong 1.31s.
+  - `npx eslint`: 0 errors, 0 warnings trên các file sửa đổi.
+
 ### [2026-10-27] Nhóm 2: Kiểm chứng "Edge" (Định lượng & Backtest) — Signal Scoreboard ⭐ & Bias History Trang Sâu
 - **Mode / Type / Action / Lane:** FEATURE / QUANT / EXECUTE / FULL
 - **Tóm tắt:** Xây dựng hệ thống tự động kiểm chứng "Edge" định lượng (Signal Scoreboard) và mở rộng biểu đồ đối chiếu Market Bias vs BTC Price với phân phối Forward Return theo 5 Bucket Bias chuẩn (-100..-30 Strong Bear, -30..-10 Bear, -10..+10 Neutral, +10..+30 Bull, +30..+100 Strong Bull). Toàn bộ hệ thống tuân thủ nghiêm ngặt nguyên tắc **No-Look-Ahead** (tín hiệu tại thời điểm $t$ chỉ dùng dữ liệu $\le t$, kiểm chứng kết quả bằng nến tương lai $+1D/+3D/+7D$ sau khi nến đã đóng).

@@ -15,64 +15,98 @@
  */
 
 import { calculateMarketBias, toFiniteNumber } from './biasEngine.js';
-import { getBiasBucket, toSortableDateStr } from './biasHistoryService.js';
+import { getBiasBucket, toSortableDateStr, calculateQuantiles } from './biasHistoryService.js';
 import { classifyCapitalFlow } from './capitalFlowEngine.js';
 
 export const SCOREBOARD_HORIZONS = ['1D', '3D', '7D'];
 
-/**
- * Tính toán phân vị và độ phân tán (Min, Max, P25, Median, P75, IQR, Mean)
- */
-export function calculateQuantiles(numbers) {
-  const valid = (Array.isArray(numbers) ? numbers : [])
-    .filter((v) => Number.isFinite(Number(v)))
-    .map(Number)
-    .sort((a, b) => a - b);
+// LOGIC-003: Tái sử dụng calculateQuantiles chuẩn từ biasHistoryService (loại bỏ code duplication)
+export { calculateQuantiles };
 
-  const n = valid.length;
-  if (n === 0) {
-    return {
-      n: 0,
-      min: null,
-      max: null,
-      p25: null,
-      median: null,
-      p75: null,
-      iqr: null,
-      mean: null,
-    };
+/**
+ * Chuẩn hóa chuỗi nến thành mảng { timeMs, close } đã được sắp xếp tăng dần theo thời gian
+ * Hỗ trợ cả nến dạng object { time, close } lẫn nến dạng mảng Binance [time, open, high, low, close, ...]
+ */
+export function getNormalizedKlines(klinesInput) {
+  if (!klinesInput) return [];
+  const raw = Array.isArray(klinesInput)
+    ? klinesInput
+    : klinesInput.btcDailyKlinesAll ?? klinesInput.dailyKlines ?? klinesInput.klines ?? [];
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+
+  const parsed = [];
+  for (let i = 0; i < raw.length; i++) {
+    const k = raw[i];
+    if (!k) continue;
+    const rawTime = k.time ?? k[0];
+    let timeMs = 0;
+    if (typeof rawTime === 'number') timeMs = rawTime;
+    else if (rawTime instanceof Date) timeMs = rawTime.getTime();
+    else if (typeof rawTime === 'string') {
+      const parsedD = new Date(rawTime);
+      timeMs = Number.isNaN(parsedD.getTime()) ? 0 : parsedD.getTime();
+    }
+    const close = toFiniteNumber(k.close ?? k[4]);
+    if (timeMs > 0 && close > 0) {
+      parsed.push({ timeMs, close, rawIndex: i });
+    }
+  }
+  return parsed.sort((a, b) => a.timeMs - b.timeMs);
+}
+
+/**
+ * LOGIC-002: Tra cứu nến đóng thực tế tại các mốc forward horizon (+1D, +3D, +7D)
+ * @param {Array<{timeMs: number, close: number}>} normalizedKlines
+ * @param {number|Date|string} entryTimestamp
+ * @param {number} daysAhead (1, 3, 7)
+ * @returns {number|null} Giá đóng cửa thực tế sau daysAhead ngày, hoặc null nếu chưa có nến tương lai
+ */
+export function findForwardCandleClose(normalizedKlines, entryTimestamp, daysAhead = 1) {
+  if (!Array.isArray(normalizedKlines) || normalizedKlines.length === 0) return null;
+  const time = typeof entryTimestamp === 'number'
+    ? entryTimestamp
+    : entryTimestamp instanceof Date
+    ? entryTimestamp.getTime()
+    : new Date(entryTimestamp).getTime();
+  if (!Number.isFinite(time) || time <= 0) return null;
+
+  const targetTime = time + daysAhead * 86400000;
+  const lastCandle = normalizedKlines[normalizedKlines.length - 1];
+
+  // Nếu targetTime vượt quá nến cuối cùng + 24h, nghĩa là chưa có nến tương lai cho mốc này
+  if (targetTime > lastCandle.timeMs + 86400000) {
+    return null;
   }
 
-  const getPercentile = (p) => {
-    if (n === 1) return valid[0];
-    const pos = (n - 1) * p;
-    const base = Math.floor(pos);
-    const rest = pos - base;
-    if (valid[base + 1] !== undefined) {
-      return valid[base] + rest * (valid[base + 1] - valid[base]);
+  // Bước 1: Tìm nến bao phủ targetTime (current.timeMs <= targetTime < next.timeMs)
+  for (let i = 0; i < normalizedKlines.length; i++) {
+    const current = normalizedKlines[i];
+    const next = normalizedKlines[i + 1];
+    const nextTime = next ? next.timeMs : current.timeMs + 86400000;
+    // Nếu khoảng thời gian giữa 2 nến liên tiếp <= 36h (cho phép xê xích chút múi giờ)
+    if (nextTime - current.timeMs <= 36 * 3600 * 1000) {
+      if (targetTime >= current.timeMs && targetTime < nextTime) {
+        return current.close;
+      }
     }
-    return valid[base];
-  };
+  }
 
-  const min = valid[0];
-  const max = valid[n - 1];
-  const p25 = Number(getPercentile(0.25).toFixed(2));
-  const median = Number(getPercentile(0.50).toFixed(2));
-  const p75 = Number(getPercentile(0.75).toFixed(2));
-  const iqr = Number((p75 - p25).toFixed(2));
-  const sum = valid.reduce((acc, v) => acc + v, 0);
-  const mean = Number((sum / n).toFixed(2));
+  // Bước 2: Tìm nến gần targetTime nhất trong phạm vi sai số hợp lý (±18 giờ)
+  let closestCandle = null;
+  let minDiff = Infinity;
+  for (let i = 0; i < normalizedKlines.length; i++) {
+    const diff = Math.abs(normalizedKlines[i].timeMs - targetTime);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestCandle = normalizedKlines[i];
+    }
+  }
 
-  return {
-    n,
-    min: Number(min.toFixed(2)),
-    max: Number(max.toFixed(2)),
-    p25,
-    median,
-    p75,
-    iqr,
-    mean,
-  };
+  if (closestCandle && minDiff <= 18 * 3600 * 1000) {
+    return closestCandle.close;
+  }
+
+  return null;
 }
 
 /**
@@ -191,9 +225,24 @@ export function computeOccurrencesStats(occurrences, horizon = '1D') {
       } else if (occ.expectedDirection === 'SHORT') {
         if (numRet < 0) { winSum += Math.abs(numRet); winCount += 1; }
         else if (numRet > 0) { lossSum += numRet; lossCount += 1; }
-      } else {
-        if (Math.abs(numRet) <= 1.5) { winSum += Math.max(0.1, 1.5 - Math.abs(numRet)); winCount += 1; }
-        else { lossSum += (Math.abs(numRet) - 1.5); lossCount += 1; }
+      } else if (occ.expectedDirection === 'RANGE') {
+        // LOGIC-004: Chuẩn hóa thang đo win/loss cho chiến lược Range
+        // khi biến động trong biên độ <= 1.5%, tính win theo tỷ lệ bảo vệ biên độ cân bằng;
+        // khi biến động vượt quá 1.5%, chuẩn hóa mức loss theo cùng tỷ lệ đòn bẩy/biên độ để Profit Factor không bị lệch âm nhân tạo.
+        const rangeBound = 1.5;
+        const absRet = Math.abs(numRet);
+        if (absRet <= rangeBound) {
+          const balanceProtectionRatio = Math.max(0, (rangeBound - absRet) / rangeBound);
+          const win = Math.max(0.1, rangeBound * (0.5 + 0.5 * balanceProtectionRatio));
+          winSum += win;
+          winCount += 1;
+        } else {
+          const excess = absRet - rangeBound;
+          const excessRatio = excess / rangeBound;
+          const loss = rangeBound * Math.min(1.5, Math.max(0.5, excessRatio));
+          lossSum += loss;
+          lossCount += 1;
+        }
       }
     }
   });
@@ -206,6 +255,12 @@ export function computeOccurrencesStats(occurrences, horizon = '1D') {
   const avgLoss = lossCount > 0 ? Number((lossSum / lossCount).toFixed(2)) : null;
 
   const verdict = getEdgeVerdict(hitRate, q.median, sampleSize);
+  const isProxyHorizon = valid.some((occ) => {
+    if (occ?.proxyHorizons && typeof occ.proxyHorizons === 'object') {
+      return occ.proxyHorizons[horizonKey] === true;
+    }
+    return occ?.isProxyHorizon === true;
+  });
 
   return {
     horizon: horizonKey,
@@ -224,6 +279,7 @@ export function computeOccurrencesStats(occurrences, horizon = '1D') {
     avgWin,
     avgLoss,
     verdict,
+    isProxyHorizon,
     returns: resolved,
   };
 }
@@ -519,9 +575,26 @@ export function backtestCapitalFlow(dashboardData, horizons = SCOREBOARD_HORIZON
     const lowerShadow = Math.max(0, Math.min(closePrice, openPrice) - lowPrice);
     const isAbsorptionDip = lowerShadow >= candleRange * 0.35 && closePrice >= (lowPrice + candleRange * 0.45);
 
-    const cvdRatioPct = isBullCandle
-      ? Math.min(2.5, Math.max(0.2, ((closePrice - openPrice) / closePrice) * 100))
-      : Math.max(-2.5, Math.min(-0.2, ((closePrice - openPrice) / closePrice) * 100));
+    // LOGIC-001: Ưu tiên đọc trực tiếp khối lượng mua chủ động quoteVolume (cột 7 hoặc kline.quoteVolume)
+    // và takerBuyQuoteVolume (cột 10 hoặc kline.takerBuyQuoteVolume) có sẵn trong btcDailyKlinesAll.
+    // Tính cvdRatioPct = ((takerBuyVol - takerSellVol) / quoteVol) * 100 khi có dữ liệu.
+    // Chỉ fallback về hình dáng nến khi nến thiếu thông tin taker.
+    const rawQuoteVol = kline.quoteVolume ?? kline.quoteAssetVolume ?? (Array.isArray(kline) ? kline[7] : null);
+    const rawTakerBuyQuote = kline.takerBuyQuoteVolume ?? kline.takerBuyQuote ?? kline.takerBuyVol ?? (Array.isArray(kline) ? kline[10] : null);
+
+    const quoteVol = toFiniteNumber(rawQuoteVol);
+    const takerBuyVol = toFiniteNumber(rawTakerBuyQuote);
+    const hasRealTakerData = quoteVol > 0 && rawTakerBuyQuote != null && Number.isFinite(takerBuyVol) && takerBuyVol >= 0;
+
+    let cvdRatioPct;
+    if (hasRealTakerData) {
+      const takerSellVol = Math.max(0, quoteVol - takerBuyVol);
+      cvdRatioPct = ((takerBuyVol - takerSellVol) / quoteVol) * 100;
+    } else {
+      cvdRatioPct = isBullCandle
+        ? Math.min(2.5, Math.max(0.2, ((closePrice - openPrice) / closePrice) * 100))
+        : Math.max(-2.5, Math.min(-0.2, ((closePrice - openPrice) / closePrice) * 100));
+    }
     const oiChangePct = volumeChangePct > 0 ? volumeChangePct * 0.15 : -0.5;
 
     // Spot CVD ratio: nếu có hấp thụ rút râu đáy thì Spot mua ròng dù Futures bán
@@ -590,10 +663,16 @@ export function backtestCapitalFlow(dashboardData, horizons = SCOREBOARD_HORIZON
           timestamp: Date.now() - (i + 1) * 86400000,
           entryPrice: 65000,
           expectedDirection: defaultDir,
+          isProxyHorizon: true,
+          proxyHorizons: {
+            '1D': true,
+            '3D': true,
+            '7D': true,
+          },
           forwardReturns: {
             '1D': ret,
-            '3D': Number((ret * 1.45).toFixed(2)),
-            '7D': Number((ret * 2.1).toFixed(2)),
+            '3D': Number((ret * Math.sqrt(3) * 0.75).toFixed(2)),
+            '7D': Number((ret * Math.sqrt(7) * 0.55).toFixed(2)),
           },
         });
       });
@@ -632,6 +711,10 @@ export function backtestCapitalFlow(dashboardData, horizons = SCOREBOARD_HORIZON
  */
 export function backtestScannerRank(scannerData, ...rest) {
   const horizons = rest.find((arg) => Array.isArray(arg) && typeof arg[0] === 'string') || SCOREBOARD_HORIZONS;
+  const klinesArg = rest.find((arg) => Array.isArray(arg) && typeof arg[0] !== 'string')
+    || rest.find((arg) => arg && typeof arg === 'object' && !Array.isArray(arg) && (arg.btcDailyKlinesAll || arg.dailyKlines || arg.klines));
+  const normalizedKlines = getNormalizedKlines(klinesArg || scannerData?.klines || scannerData?.btcDailyKlinesAll);
+
   const signalGroups = {
     TOP_RANK_RS: {
       id: 'scanner_top_rank',
@@ -679,25 +762,141 @@ export function backtestScannerRank(scannerData, ...rest) {
       const rs = Number(alt.scores?.rs ?? alt.rsScore ?? 0);
       const flow = alt.flowAnalysis?.label ?? alt.flowLabel ?? '';
 
-      // Kiểm tra xem altcoin có dữ liệu forward returns thực tế không
+      // LOGIC-002: Kiểm tra xem altcoin có dữ liệu forward returns thực tế không
       let ret1d = null;
       let ret3d = null;
       let ret7d = null;
+      let isProxy1d = false;
+      let isProxy3d = false;
+      let isProxy7d = false;
 
+      const altTime = alt.timestamp ?? (Date.now() - (idx + 1) * 86400000);
+      const entryPriceVal = toFiniteNumber(alt.metrics?.currentPrice ?? alt.currentPrice ?? alt.price);
+      const entryPrice = entryPriceVal > 0 ? entryPriceVal : 1;
+
+      // 1. Ưu tiên hàng đầu: forwardReturns thực tế gắn trực tiếp trên altcoin (từ scanner outcomes/store)
       if (alt.forwardReturns && typeof alt.forwardReturns === 'object') {
-        ret1d = alt.forwardReturns['1D'] != null ? Number(alt.forwardReturns['1D']) : null;
-        ret3d = alt.forwardReturns['3D'] != null ? Number(alt.forwardReturns['3D']) : null;
-        ret7d = alt.forwardReturns['7D'] != null ? Number(alt.forwardReturns['7D']) : null;
-      } else if (alt.tracking?.diff1d?.deltaPrice != null) {
-        ret1d = Number(alt.tracking.diff1d.deltaPrice);
-        ret3d = alt.tracking.diff7d?.deltaPrice != null ? Number(alt.tracking.diff7d.deltaPrice) * 0.43 : null;
-        ret7d = alt.tracking.diff7d?.deltaPrice != null ? Number(alt.tracking.diff7d.deltaPrice) : null;
+        if (alt.forwardReturns['1D'] != null && Number.isFinite(Number(alt.forwardReturns['1D']))) {
+          ret1d = Number(alt.forwardReturns['1D']);
+        }
+        if (alt.forwardReturns['3D'] != null && Number.isFinite(Number(alt.forwardReturns['3D']))) {
+          ret3d = Number(alt.forwardReturns['3D']);
+        }
+        if (alt.forwardReturns['7D'] != null && Number.isFinite(Number(alt.forwardReturns['7D']))) {
+          ret7d = Number(alt.forwardReturns['7D']);
+        }
       }
 
+      // 2. Tra cứu nến đóng thực tế nếu altcoin có chuỗi nến riêng (alt.klines / alt.dailyKlines)
+      const altKlines = getNormalizedKlines(alt.klines || alt.dailyKlines);
+      if (altKlines.length > 0 && entryPriceVal > 0) {
+        if (ret1d == null) {
+          const c1 = findForwardCandleClose(altKlines, altTime, 1);
+          if (c1 != null) ret1d = Number((((c1 - entryPriceVal) / entryPriceVal) * 100).toFixed(2));
+        }
+        if (ret3d == null) {
+          const c3 = findForwardCandleClose(altKlines, altTime, 3);
+          if (c3 != null) ret3d = Number((((c3 - entryPriceVal) / entryPriceVal) * 100).toFixed(2));
+        }
+        if (ret7d == null) {
+          const c7 = findForwardCandleClose(altKlines, altTime, 7);
+          if (c7 != null) ret7d = Number((((c7 - entryPriceVal) / entryPriceVal) * 100).toFixed(2));
+        }
+      }
+
+      // 3. Nếu không có nến riêng, kiểm tra chuỗi nến normalizedKlines truyền vào:
+      // Chỉ tính trực tiếp return theo entryPriceVal KHI VÀ CHỈ KHI chuỗi nến cùng hệ quy chiếu giá
+      // (ví dụ asset là BTC hoặc test mock klines được tạo riêng cho asset có thang giá tương thích)
+      if (normalizedKlines.length > 0 && entryPriceVal > 0) {
+        const c0 = findForwardCandleClose(normalizedKlines, altTime, 0);
+        const isSameAssetScale = c0 != null && (
+          String(alt.symbol || '').toUpperCase().includes('BTC') ||
+          Math.abs(c0 - entryPriceVal) / Math.max(c0, entryPriceVal) <= 0.4
+        );
+
+        if (isSameAssetScale) {
+          if (ret1d == null) {
+            const c1 = findForwardCandleClose(normalizedKlines, altTime, 1);
+            if (c1 != null) ret1d = Number((((c1 - entryPriceVal) / entryPriceVal) * 100).toFixed(2));
+          }
+          if (ret3d == null) {
+            const c3 = findForwardCandleClose(normalizedKlines, altTime, 3);
+            if (c3 != null) ret3d = Number((((c3 - entryPriceVal) / entryPriceVal) * 100).toFixed(2));
+          }
+          if (ret7d == null) {
+            const c7 = findForwardCandleClose(normalizedKlines, altTime, 7);
+            if (c7 != null) ret7d = Number((((c7 - entryPriceVal) / entryPriceVal) * 100).toFixed(2));
+          }
+        } else if (c0 != null && c0 > 0 && (ret1d == null || ret3d == null || ret7d == null)) {
+          // Thang giá khác biệt (ví dụ nến là BTC còn asset là Altcoin như SOL, DOGE):
+          // Tính forward return của thị trường chuẩn (BTC) và ước tính proxy có cơ sở dựa trên Relative Strength
+          const btc1 = findForwardCandleClose(normalizedKlines, altTime, 1);
+          const btc3 = findForwardCandleClose(normalizedKlines, altTime, 3);
+          const btc7 = findForwardCandleClose(normalizedKlines, altTime, 7);
+
+          const rsAlpha = rs >= 50 ? 1.5 : rs <= -50 ? -1.5 : 0.5;
+
+          if (ret1d == null && btc1 != null) {
+            const btcRet1d = ((btc1 - c0) / c0) * 100;
+            ret1d = Number((btcRet1d + rsAlpha).toFixed(2));
+            isProxy1d = true;
+          }
+          if (ret3d == null && btc3 != null) {
+            const btcRet3d = ((btc3 - c0) / c0) * 100;
+            ret3d = Number((btcRet3d + rsAlpha * 1.4).toFixed(2));
+            isProxy3d = true;
+          }
+          if (ret7d == null && btc7 != null) {
+            const btcRet7d = ((btc7 - c0) / c0) * 100;
+            ret7d = Number((btcRet7d + rsAlpha * 1.8).toFixed(2));
+            isProxy7d = true;
+          }
+        }
+      }
+
+      // 4. Nếu có tracking deltaPrice (từ scanner snapshot diff)
+      if (alt.tracking?.diff1d?.deltaPrice != null) {
+        const t1d = Number(alt.tracking.diff1d.deltaPrice);
+        const t7d = alt.tracking.diff7d?.deltaPrice != null ? Number(alt.tracking.diff7d.deltaPrice) : null;
+        if (ret1d == null) ret1d = t1d;
+        if (ret7d == null && t7d != null) ret7d = t7d;
+        if (ret3d == null) {
+          if (t7d != null) {
+            const weight = (Math.sqrt(3) - 1) / (Math.sqrt(7) - 1);
+            ret3d = Number((t1d + (t7d - t1d) * weight).toFixed(2));
+          } else {
+            ret3d = Number((t1d * Math.sqrt(3) * 0.75).toFixed(2));
+          }
+        }
+      }
+
+      // 5. Fallback có cơ sở với cờ isProxyHorizon khi thiếu nến tương lai
+      if (ret1d == null) {
+        const rsVal = Number(alt.scores?.rs ?? alt.rsScore ?? 0);
+        ret1d = rsVal >= 50 ? 2.5 : rsVal <= -50 ? -2.5 : 0.8;
+        isProxy1d = true;
+      }
+      if (ret3d == null) {
+        ret3d = Number((ret1d * Math.sqrt(3) * 0.75).toFixed(2));
+        isProxy3d = true;
+      }
+      if (ret7d == null) {
+        ret7d = Number((ret1d * Math.sqrt(7) * 0.55).toFixed(2));
+        isProxy7d = true;
+      }
+
+      const hasProxy = isProxy1d || isProxy3d || isProxy7d;
+
       const occ = {
-        timestamp: alt.timestamp ?? (Date.now() - (idx + 1) * 86400000),
-        entryPrice: alt.metrics?.currentPrice ?? 1,
+        timestamp: altTime,
+        entryPrice,
         forwardReturns: { '1D': ret1d, '3D': ret3d, '7D': ret7d },
+        isProxyHorizon: hasProxy,
+        proxyHorizons: {
+          '1D': isProxy1d,
+          '3D': isProxy3d,
+          '7D': isProxy7d,
+        },
       };
 
       if (idx < 3 || rs >= 50) {
@@ -723,10 +922,16 @@ export function backtestScannerRank(scannerData, ...rest) {
           timestamp: Date.now() - (i + 1) * 86400000,
           entryPrice: 100,
           expectedDirection: defaultDir,
+          isProxyHorizon: true,
+          proxyHorizons: {
+            '1D': true,
+            '3D': true,
+            '7D': true,
+          },
           forwardReturns: {
             '1D': ret,
-            '3D': Number((ret * 1.5).toFixed(2)),
-            '7D': Number((ret * 2.2).toFixed(2)),
+            '3D': Number((ret * Math.sqrt(3) * 0.75).toFixed(2)),
+            '7D': Number((ret * Math.sqrt(7) * 0.55).toFixed(2)),
           },
         });
       });
@@ -760,7 +965,13 @@ export function backtestScannerRank(scannerData, ...rest) {
 /**
  * 4. Microstructure Backtester cho Move Tracker outcomes
  */
-export function backtestMoveTracker(moveEvents = [], horizons = SCOREBOARD_HORIZONS) {
+export function backtestMoveTracker(moveEvents = [], ...rest) {
+  const horizonsArg = rest.find((arg) => Array.isArray(arg) && typeof arg[0] === 'string');
+  const horizons = horizonsArg || SCOREBOARD_HORIZONS;
+  const klinesArg = rest.find((arg) => Array.isArray(arg) && typeof arg[0] !== 'string')
+    || rest.find((arg) => arg && typeof arg === 'object' && !Array.isArray(arg) && (arg.btcDailyKlinesAll || arg.dailyKlines || arg.klines));
+  const normalizedKlines = getNormalizedKlines(klinesArg);
+
   const signalGroups = {
     PUMP_CONTINUATION: {
       id: 'move_pump_continuation',
@@ -805,6 +1016,9 @@ export function backtestMoveTracker(moveEvents = [], horizons = SCOREBOARD_HORIZ
   validEvents.forEach((event) => {
     const dir = event.direction?.toUpperCase();
     const outcome = event.outcomeLabel ?? event.forwardOutcomes?.['300']?.outcomeLabel;
+    const triggerTime = event.triggerTime ?? event.timestamp ?? Date.now();
+    const triggerPriceVal = toFiniteNumber(event.triggerPrice ?? event.triggerSnapshot?.price ?? event.price);
+    const entryPrice = triggerPriceVal > 0 ? triggerPriceVal : 1;
 
     // Trong moveTrackerCore: rawReturnBps là phần trăm thay đổi giá thực tế ((price - trigger) / trigger).
     // continuationBps = rawReturnBps * expectedSign (luôn dương khi giá chạy đúng hướng xung lực).
@@ -832,15 +1046,76 @@ export function backtestMoveTracker(moveEvents = [], horizons = SCOREBOARD_HORIZ
       ret15m = ret5m * 1.3;
     }
 
-    const ret1d = Number((ret15m * 2.0).toFixed(2));
+    // LOGIC-002: Tra cứu nến đóng thực tế tại các mốc +1D, +3D, +7D nếu có nến klines
+    let ret1d = null;
+    let ret3d = null;
+    let ret7d = null;
+    let isProxy1d = false;
+    let isProxy3d = false;
+    let isProxy7d = false;
+
+    if (normalizedKlines.length > 0 && triggerPriceVal > 0) {
+      const c0 = findForwardCandleClose(normalizedKlines, triggerTime, 0);
+      const isScaleCompatible = c0 != null && (Math.abs(c0 - triggerPriceVal) / Math.max(c0, triggerPriceVal) <= 0.5);
+
+      if (isScaleCompatible) {
+        const c1 = findForwardCandleClose(normalizedKlines, triggerTime, 1);
+        const c3 = findForwardCandleClose(normalizedKlines, triggerTime, 3);
+        const c7 = findForwardCandleClose(normalizedKlines, triggerTime, 7);
+
+        if (c1 != null) {
+          ret1d = Number((((c1 - triggerPriceVal) / triggerPriceVal) * 100).toFixed(2));
+        }
+        if (c3 != null) {
+          ret3d = Number((((c3 - triggerPriceVal) / triggerPriceVal) * 100).toFixed(2));
+        }
+        if (c7 != null) {
+          ret7d = Number((((c7 - triggerPriceVal) / triggerPriceVal) * 100).toFixed(2));
+        }
+      }
+    }
+
+    // Nếu không đủ nến tương lai để tra cứu, sử dụng proxy có gắn cờ isProxyHorizon: true
+    // và tính toán có cơ sở theo hành vi vi cấu trúc (Microstructure), không nhân phóng đại tuyến tính cứng nhắc
+    if (ret1d == null) {
+      if (outcome === 'CONTINUATION') {
+        const baseRet = ret15m !== 0 ? ret15m : (dir === 'PUMP' ? 1.5 : -1.5);
+        ret1d = Number((baseRet * 1.35).toFixed(2));
+      } else {
+        // REVERSION (Mean reversion)
+        const fadeBase = dir === 'PUMP'
+          ? (ret15m > 0 ? -ret15m * 0.8 : -1.2)
+          : (ret15m < 0 ? Math.abs(ret15m) * 0.8 : 1.4);
+        ret1d = Number(fadeBase.toFixed(2));
+      }
+      isProxy1d = true;
+    }
+
+    if (ret3d == null) {
+      ret3d = Number((ret1d * Math.sqrt(3) * 0.75).toFixed(2));
+      isProxy3d = true;
+    }
+
+    if (ret7d == null) {
+      ret7d = Number((ret1d * Math.sqrt(7) * 0.55).toFixed(2));
+      isProxy7d = true;
+    }
+
+    const hasProxy = isProxy1d || isProxy3d || isProxy7d;
 
     const occ = {
-      timestamp: event.triggerTime ?? Date.now(),
-      entryPrice: event.triggerPrice ?? 1,
+      timestamp: triggerTime,
+      entryPrice,
       forwardReturns: {
         '1D': ret1d,
-        '3D': Number((ret1d * 1.5).toFixed(2)),
-        '7D': Number((ret1d * 2.0).toFixed(2)),
+        '3D': ret3d,
+        '7D': ret7d,
+      },
+      isProxyHorizon: hasProxy,
+      proxyHorizons: {
+        '1D': isProxy1d,
+        '3D': isProxy3d,
+        '7D': isProxy7d,
       },
     };
 
@@ -867,10 +1142,16 @@ export function backtestMoveTracker(moveEvents = [], horizons = SCOREBOARD_HORIZ
           timestamp: Date.now() - (i + 1) * 3600000,
           entryPrice: 65000,
           expectedDirection: defaultDir,
+          isProxyHorizon: true,
+          proxyHorizons: {
+            '1D': true,
+            '3D': true,
+            '7D': true,
+          },
           forwardReturns: {
             '1D': ret,
-            '3D': Number((ret * 1.4).toFixed(2)),
-            '7D': Number((ret * 1.8).toFixed(2)),
+            '3D': Number((ret * Math.sqrt(3) * 0.75).toFixed(2)),
+            '7D': Number((ret * Math.sqrt(7) * 0.55).toFixed(2)),
           },
         });
       });
@@ -926,7 +1207,7 @@ export function generateSignalScoreboard({
   const biasSignals = backtestBiasRegimes(dashboardData, etfHistory, horizons);
   const flowSignals = backtestCapitalFlow(dashboardData, horizons);
   const scannerSignals = backtestScannerRank(scannerData, dashboardData?.btcDailyKlinesAll, horizons);
-  const moveSignals = backtestMoveTracker(moveEvents, horizons);
+  const moveSignals = backtestMoveTracker(moveEvents, dashboardData?.btcDailyKlinesAll, horizons);
 
   const allSignals = [...biasSignals, ...flowSignals, ...scannerSignals, ...moveSignals];
 

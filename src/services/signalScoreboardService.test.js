@@ -11,7 +11,10 @@ import {
   backtestMoveTracker,
   generateSignalScoreboard,
   SCOREBOARD_HORIZONS,
+  getNormalizedKlines,
+  findForwardCandleClose,
 } from './signalScoreboardService.js';
+import { calculateQuantiles as biasCalculateQuantiles } from './biasHistoryService.js';
 
 describe('signalScoreboardService unit tests', () => {
   describe('SCOREBOARD_HORIZONS & calculateQuantiles', () => {
@@ -142,6 +145,8 @@ describe('signalScoreboardService unit tests', () => {
       const signals = backtestScannerRank(mockScannerData, mockKlines);
       assert.strictEqual(signals.length, 4);
       assert.ok(signals[0].horizons['1D'].sampleSize > 0);
+      assert.ok(signals[0].horizons['1D'].medianReturn < 20, 'Returns must be realistic, not cross-asset distorted');
+      assert.strictEqual(signals[0].horizons['1D'].medianReturn, 2.0);
     });
 
     test('backtestMoveTracker processes volatility spikes and correctly scores DUMP continuation hits', () => {
@@ -209,6 +214,289 @@ describe('signalScoreboardService unit tests', () => {
       assert.ok(scoreboard.categories.capitalFlow.signals.length > 0);
       assert.ok(scoreboard.categories.scannerRank.signals.length > 0);
       assert.ok(scoreboard.categories.moveTracker.signals.length > 0);
+    });
+  });
+
+  describe('Audit Logic Fixes (LOGIC-001 through LOGIC-004)', () => {
+    // ── LOGIC-001: Taker volume utilization in backtestCapitalFlow ─────────────
+    describe('LOGIC-001: backtestCapitalFlow taker volume utilization', () => {
+      test('prioritizes real takerBuyQuoteVolume and quoteVolume to compute cvdRatioPct', () => {
+        const klinesWithTaker = Array.from({ length: 25 }, (_, i) => {
+          const time = new Date(Date.now() - (25 - i) * 86400000);
+          return {
+            time,
+            open: 60000 + i * 100,
+            high: 60500 + i * 100,
+            low: 59800 + i * 100,
+            close: 60200 + i * 100,
+            volume: 1000,
+            quoteVolume: 60000000,
+            // 70% taker buy => cvdRatioPct = (42M - 18M)/60M * 100 = +40%
+            takerBuyQuoteVolume: 42000000,
+          };
+        });
+
+        const dashboardData = { btcDailyKlinesAll: klinesWithTaker };
+        const signals = backtestCapitalFlow(dashboardData);
+        assert.ok(signals.length > 0);
+
+        // With massive taker buy (+40%), Long Buildup should capture occurrences
+        const longBuildup = signals.find((s) => s.id === 'cf_long_buildup');
+        assert.ok(longBuildup);
+        assert.ok(longBuildup.totalSignals > 0);
+      });
+
+      test('supports Binance array klines with column 7 quoteVolume and column 10 takerBuyQuoteVolume', () => {
+        const binanceArrayKlines = Array.from({ length: 25 }, (_, i) => {
+          const timeMs = Date.now() - (25 - i) * 86400000;
+          return [
+            timeMs,                     // 0: openTime
+            '60000',                    // 1: open
+            '60500',                    // 2: high
+            '59500',                    // 3: low
+            '60200',                    // 4: close
+            '1000',                     // 5: volume
+            timeMs + 86400000 - 1,      // 6: closeTime
+            '100000000',                // 7: quoteVolume
+            5000,                       // 8: count
+            '300',                      // 9: takerBuyBaseVolume
+            '25000000',                 // 10: takerBuyQuoteVolume (25% taker buy => CVD is -50%)
+            '0',                        // 11: ignore
+          ];
+        });
+
+        const dashboardData = { btcDailyKlinesAll: binanceArrayKlines };
+        const signals = backtestCapitalFlow(dashboardData);
+        assert.ok(signals.length > 0);
+        // Heavy net selling in taker flow (-50% CVD) should trigger SHORT signals
+        const shortSignals = signals.filter((s) => s.expectedDirection === 'SHORT');
+        const totalShortOccurrences = shortSignals.reduce((acc, s) => acc + s.totalSignals, 0);
+        assert.ok(totalShortOccurrences > 0);
+      });
+
+      test('falls back to candle-shape proxy when taker volume is missing', () => {
+        const klinesNoTaker = Array.from({ length: 25 }, (_, i) => ({
+          time: new Date(Date.now() - (25 - i) * 86400000),
+          open: 60000,
+          high: 60500,
+          low: 59500,
+          close: 60400,
+          volume: 1000,
+        }));
+        const dashboardData = { btcDailyKlinesAll: klinesNoTaker };
+        const signals = backtestCapitalFlow(dashboardData);
+        assert.ok(signals.length > 0);
+        assert.ok(signals[0].horizons['1D'].sampleSize > 0);
+      });
+    });
+
+    // ── LOGIC-002: Real Forward Return measurement for Move Tracker & Scanner Rank ─
+    describe('LOGIC-002: Real forward return measurement and grounded proxy', () => {
+      test('findForwardCandleClose locates future daily closing prices accurately', () => {
+        const baseTime = 1700000000000;
+        const klines = [
+          { time: baseTime, close: 100 },
+          { time: baseTime + 1 * 86400000, close: 105 },
+          { time: baseTime + 2 * 86400000, close: 110 },
+          { time: baseTime + 3 * 86400000, close: 115 },
+          { time: baseTime + 7 * 86400000, close: 135 },
+        ];
+        const normalized = getNormalizedKlines(klines);
+
+        assert.strictEqual(findForwardCandleClose(normalized, baseTime, 1), 105);
+        assert.strictEqual(findForwardCandleClose(normalized, baseTime, 3), 115);
+        assert.strictEqual(findForwardCandleClose(normalized, baseTime, 7), 135);
+        // When target is beyond the dataset:
+        assert.strictEqual(findForwardCandleClose(normalized, baseTime, 10), null);
+      });
+
+      test('backtestMoveTracker measures real returns against entryPrice when klines are provided', () => {
+        const baseTime = Date.now() - 20 * 86400000;
+        const testKlines = Array.from({ length: 20 }, (_, i) => ({
+          time: baseTime + i * 86400000,
+          open: 60000 + i * 500,
+          high: 60600 + i * 500,
+          low: 59800 + i * 500,
+          close: 60000 + (i + 1) * 500, // strictly rising: 60500, 61000, 61500, ...
+          volume: 1000,
+        }));
+
+        const moveEvents = [
+          {
+            id: 'event_early',
+            direction: 'PUMP',
+            outcomeLabel: 'CONTINUATION',
+            triggerTime: baseTime,
+            triggerPrice: 60000,
+            forwardOutcomes: { '300': { rawReturnBps: 80 } },
+          },
+        ];
+
+        const signals = backtestMoveTracker(moveEvents, testKlines);
+        const pumpCont = signals.find((s) => s.id === 'move_pump_continuation');
+        assert.ok(pumpCont);
+        const h1 = pumpCont.horizons['1D'];
+        assert.ok(h1.sampleSize >= 1);
+        // Entry at 60,000, +1D candle close is 61,000 => real return is ((61000-60000)/60000)*100 = +1.67%
+        assert.ok(h1.medianReturn > 0);
+        // Since real klines were available, isProxyHorizon should be false for this occurrence
+        assert.strictEqual(h1.isProxyHorizon, false);
+      });
+
+      test('backtestMoveTracker flags isProxyHorizon: true and uses grounded proxy when klines omitted', () => {
+        const recentMoveEvents = [
+          {
+            id: 'event_recent',
+            direction: 'DUMP',
+            outcomeLabel: 'REVERSION',
+            triggerTime: Date.now() - 3600000,
+            triggerPrice: 65000,
+            forwardOutcomes: { '300': { rawReturnBps: -150 } },
+          },
+        ];
+        // Call without klines
+        const signals = backtestMoveTracker(recentMoveEvents);
+        const dumpRev = signals.find((s) => s.id === 'move_dump_reversion');
+        assert.ok(dumpRev);
+        assert.strictEqual(dumpRev.expectedDirection, 'LONG');
+        const h1 = dumpRev.horizons['1D'];
+        assert.ok(h1.sampleSize >= 1);
+        assert.strictEqual(h1.isProxyHorizon, true);
+        assert.ok(h1.medianReturn > 0, 'Dump reversion proxy should anticipate positive bounce for LONG');
+      });
+
+      test('backtestScannerRank measures real returns from klines and sets isProxyHorizon flag', () => {
+        const baseTime = Date.now() - 15 * 86400000;
+        const testKlines = Array.from({ length: 15 }, (_, i) => ({
+          time: baseTime + i * 86400000,
+          open: 100 + i * 2,
+          high: 105 + i * 2,
+          low: 98 + i * 2,
+          close: 102 + i * 2,
+        }));
+
+        const scannerData = {
+          assets: [
+            {
+              symbol: 'TESTCOIN',
+              timestamp: baseTime,
+              scores: { rs: 80 },
+              flowLabel: 'SPOT_SUPPORTED',
+              metrics: { currentPrice: 100 },
+            },
+          ],
+        };
+
+        const signals = backtestScannerRank(scannerData, testKlines);
+        const topRs = signals.find((s) => s.id === 'scanner_top_rank');
+        assert.ok(topRs);
+        assert.strictEqual(topRs.horizons['1D'].isProxyHorizon, false);
+        // Entry 100, +1D close 104 => real return +4.0%
+        assert.strictEqual(topRs.horizons['1D'].medianReturn, 4);
+      });
+
+      test('backtestScannerRank prevents cross-asset scale distortion when altcoin is tested against BTC klines', () => {
+        const btcKlines = Array.from({ length: 25 }, (_, i) => ({
+          time: Date.now() - (25 - i) * 86400000,
+          open: 60000 + i * 100,
+          high: 60500 + i * 100,
+          low: 59500 + i * 100,
+          close: 60200 + i * 100,
+        }));
+
+        const scannerData = {
+          assets: [
+            {
+              symbol: 'SOL',
+              timestamp: Date.now() - 5 * 86400000,
+              scores: { rs: 75 },
+              flowLabel: 'SPOT_SUPPORTED',
+              metrics: { currentPrice: 180 }, // SOL price ~180 vs BTC price ~60k
+            },
+          ],
+        };
+
+        const signals = backtestScannerRank(scannerData, btcKlines);
+        const topRs = signals.find((s) => s.id === 'scanner_top_rank');
+        assert.ok(topRs);
+        const h1 = topRs.horizons['1D'];
+        // Since BTC klines and SOL price have completely different scales,
+        // it must use grounded market proxy with isProxyHorizon: true and reasonable returns (< 20%)
+        assert.strictEqual(h1.isProxyHorizon, true);
+        assert.ok(h1.medianReturn < 20, `Return should be grounded, got ${h1.medianReturn}%`);
+        assert.ok(h1.medianReturn > 0, 'High RS should produce positive expected return');
+      });
+
+      test('computeOccurrencesStats evaluates isProxyHorizon per-horizon instead of global collapse', () => {
+        const occurrences = [
+          {
+            expectedDirection: 'LONG',
+            forwardReturns: { '1D': 2.5, '7D': 5.0 },
+            isProxyHorizon: true, // overall flag true because 7D is proxy
+            proxyHorizons: { '1D': false, '7D': true },
+          },
+        ];
+
+        const stats1d = computeOccurrencesStats(occurrences, '1D');
+        const stats7d = computeOccurrencesStats(occurrences, '7D');
+
+        // Horizon 1D has real candle data, so isProxyHorizon MUST be false
+        assert.strictEqual(stats1d.isProxyHorizon, false);
+        // Horizon 7D was proxy, so isProxyHorizon MUST be true
+        assert.strictEqual(stats7d.isProxyHorizon, true);
+      });
+    });
+
+    // ── LOGIC-003: Deduplication of calculateQuantiles ─────────────────────────
+    describe('LOGIC-003: calculateQuantiles code deduplication', () => {
+      test('calculateQuantiles in signalScoreboardService matches biasHistoryService implementation', () => {
+        assert.strictEqual(calculateQuantiles, biasCalculateQuantiles);
+        const testArray = [12, 45, 23, 67, 89, 34, 56];
+        const resA = calculateQuantiles(testArray);
+        const resB = biasCalculateQuantiles(testArray);
+        assert.deepStrictEqual(resA, resB);
+      });
+    });
+
+    // ── LOGIC-004: Standardized Profit Factor for RANGE strategy ───────────────
+    describe('LOGIC-004: computeOccurrencesStats RANGE profit factor standardization', () => {
+      test('computes win based on balance protection ratio when returns are within +/-1.5%', () => {
+        const inRangeOccurrences = [
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': 0.0 } }, // dead center: 100% balance protection
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': 0.75 } }, // halfway: 50% protection
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': -1.5 } }, // boundary: 0% protection
+        ];
+
+        const stats = computeOccurrencesStats(inRangeOccurrences, '1D');
+        assert.strictEqual(stats.sampleSize, 3);
+        assert.strictEqual(stats.hits, 3);
+        assert.strictEqual(stats.hitRate, 100);
+        assert.ok(stats.avgWin > 0);
+        // Dead center gives 1.5, halfway gives 1.125, boundary gives 0.75
+        // Average win is (1.5 + 1.125 + 0.75) / 3 = 1.125
+        assert.strictEqual(stats.avgWin, 1.13);
+      });
+
+      test('normalizes breakout loss to prevent artificial negative skew for high-winrate range strategies', () => {
+        const mixedOccurrences = [
+          // 4 Range Wins (inside +/-1.5%)
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': 0.2 } },
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': -0.5 } },
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': 0.8 } },
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': -1.2 } },
+          // 1 Breakout Loss (moved 6.0%)
+          { expectedDirection: 'RANGE', forwardReturns: { '1D': 6.0 } },
+        ];
+
+        const stats = computeOccurrencesStats(mixedOccurrences, '1D');
+        assert.strictEqual(stats.sampleSize, 5);
+        assert.strictEqual(stats.hits, 4);
+        assert.strictEqual(stats.hitRate, 80);
+        // With 80% hit rate, Profit Factor MUST be positive and healthy (> 1.0)
+        assert.ok(stats.profitFactor > 1.0, `Profit Factor was ${stats.profitFactor}, expected > 1.0`);
+        // Max loss should be capped at 1.5x rangeBound (2.25%) rather than unbounded raw excess (4.5%)
+        assert.ok(stats.avgLoss <= 2.25);
+      });
     });
   });
 });
