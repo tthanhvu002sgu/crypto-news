@@ -1,9 +1,10 @@
 # Hướng dẫn cài đặt báo cáo Telegram định kỳ
 
-Hệ thống gửi tóm tắt thị trường (giá BTC/ETH, Market Bias, funding, Fear & Greed, cảnh báo) tới Telegram **mỗi 4 giờ** qua GitHub Actions — không cần mở trình duyệt.
+Hệ thống **mỗi 4 giờ** sẽ: thu thập đầy đủ dữ liệu thị trường → tính Market Bias → **AI tạo báo cáo Investment Committee đầy đủ** (Gemini, tự fallback sang OpenRouter) → gửi qua Telegram dưới dạng tin nhắn tóm tắt + báo cáo full chia thành nhiều tin nhắn (mỗi tin ≤4096 ký tự). Không cần mở trình duyệt.
 
 - Script: `scripts/sendTelegramReport.mjs`
 - Workflow: `.github/workflows/telegram-report.yml` (cron `0 */4 * * *` UTC = 07:00, 11:00, 15:00, 19:00, 23:00, 03:00 giờ VN)
+- Nếu cả 2 AI đều lỗi/chưa có key: vẫn gửi tin nhắn tóm tắt compact kèm cảnh báo.
 
 ## Bước 1 — Tạo bot Telegram
 
@@ -31,8 +32,18 @@ Hệ thống gửi tóm tắt thị trường (giá BTC/ETH, Market Bias, fundin
 
 1. Vào repo GitHub → **Settings** → **Secrets and variables** → **Actions**.
 2. Bấm **New repository secret**, tạo lần lượt:
-   - `TELEGRAM_BOT_TOKEN` = token từ BotFather
-   - `TELEGRAM_CHAT_ID` = chat ID lấy ở Bước 2
+
+| Secret | Bắt buộc | Giá trị |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | Có | Token từ BotFather |
+| `TELEGRAM_CHAT_ID` | Có | Chat ID lấy ở Bước 2 |
+| `GEMINI_API_KEY` | Nên có | API key Google AI Studio (aistudio.google.com) — cùng key bạn dùng trong app |
+| `OPENROUTER_API_KEY` | Nên có | API key OpenRouter (openrouter.ai) — dùng làm fallback khi Gemini lỗi |
+| `FRED_API_KEY` | Tùy chọn | API key FRED để có thêm dữ liệu vĩ mô Mỹ trong báo cáo |
+
+Có thể chỉ thêm 1 trong 2 key AI; script tự dùng cái có sẵn. Không có key AI nào thì chỉ nhận tóm tắt compact.
+
+Tùy chỉnh qua secret/env (không bắt buộc): `GEMINI_MODEL` (mặc định `gemma-4-31b-it`), `OPENROUTER_MODEL` (mặc định `deepseek/deepseek-r1:free`), `REPORT_LANG` (`vi` mặc định, hoặc `en`).
 
 ## Bước 4 — Kiểm tra
 
@@ -76,6 +87,8 @@ node scripts/sendTelegramReport.mjs
 
 ## Ghi chú kỹ thuật
 
-- Script chỉ fetch subset nhẹ (~11 nguồn: tickers, klines daily, funding/OI/long-short, CVD 24h, Fear & Greed, ETF flow) để an toàn rate limit với 6 lần chạy/ngày. Không fetch vĩ mô FRED/Yahoo/COT/on-chain — `calculateMarketBias` tự chuẩn hóa trọng số theo dữ liệu sẵn có nên score vẫn hợp lệ, kèm `confidence` phản ánh độ đầy đủ.
-- Tin nhắn dùng `parse_mode: HTML` (an toàn với ký tự đặc biệt), tự cắt gọn nếu vượt giới hạn 4096 ký tự của Telegram.
+- Script dùng chung hàm `collectFullMarketData()` với worker Google Sheets (`scripts/syncGoogleSheet.mjs`) — cùng bộ dữ liệu đầy đủ: tickers, klines, CVD đa khung, phái sinh, Fear & Greed, stablecoin, on-chain, vĩ mô FRED/Yahoo, ETF, COT, lịch sự kiện.
+- Báo cáo AI dùng chung system prompt Investment Committee (`src/services/aiPrompts.js`) và ngữ cảnh dữ liệu `ai_summary_md` từ `buildGoogleSheetPayload` — cùng chất lượng với tab Summary trong app.
+- Lưu ý: trên GitHub Actions (IP Mỹ), các API phái sinh Binance bị chặn (HTTP 451) nên funding/OI/long-short sẽ là `N/A` và confidence thấp hơn; chạy local ở VN thì đầy đủ.
+- Tin nhắn báo cáo full gửi dạng plain text (không parse HTML) để tránh lỗi ký tự đặc biệt từ markdown AI; tin tóm tắt đầu tiên dùng HTML.
 - Dữ liệu WebSocket-only (liquidation realtime, HFT) không có trong báo cáo headless này.

@@ -12,9 +12,9 @@ concurrency:
 
 jobs:
   report:
-    name: Fetch Market Data & Send Telegram Summary
+    name: Fetch Market Data & Send Telegram AI Report
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout Codebase
         uses: actions/checkout@v4
@@ -32,4 +32,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: node scripts/sendTelegramReport.mjs

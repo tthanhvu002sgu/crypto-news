@@ -13,6 +13,7 @@
  */
 
 import axios from 'axios';
+import { pathToFileURL } from 'node:url';
 import { buildGoogleSheetPayload, getCurrentSessionVN, validateExportReadiness } from '../src/services/googleSheetSync.js';
 import { calculateMarketBias } from '../src/services/biasEngine.js';
 import {
@@ -174,16 +175,7 @@ async function fetchEconomicCalendar() {
 
 // ─── MAIN BUILDER & DISPATCHER ────────────────────────────────────────────────
 
-async function main() {
-  const session = getCurrentSessionVN();
-  const timestampVn = new Date(Date.now() + 7 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19) + ' (GMT+7)';
-
-  console.log(`\n======================================================`);
-  console.log(`  CRYPTO NEWS & METRICS STANDALONE AGGREGATOR`);
-  console.log(`  Phiên: ${session.name}`);
-  console.log(`  Thời gian: ${timestampVn}`);
-  console.log(`======================================================\n`);
-
+export async function collectFullMarketData(fredApiKey = '') {
   console.log('[1/5] Đang lấy Tickers, Klines, CVD Đa khung & Phái sinh từ Binance...');
   const [tickers, dailyKlines, derivatives, cvdData, orderBookDepth, whaleWalls] = await Promise.all([
     fetchTickers(),
@@ -224,13 +216,13 @@ async function main() {
     etfFlowLive,
     cotDataLive
   ] = await Promise.all([
-    FRED_API_KEY ? getFredAPIMetric('FEDFUNDS', FRED_API_KEY) : Promise.resolve(null),
-    FRED_API_KEY ? getUSCPIInflationYoY(FRED_API_KEY) : Promise.resolve(null),
-    FRED_API_KEY ? getFredAPIMetric('DGS10', FRED_API_KEY) : Promise.resolve(null),
-    FRED_API_KEY ? getFredAPIMetric('UNRATE', FRED_API_KEY) : Promise.resolve(null),
-    FRED_API_KEY ? getFredAPIMetric('BAMLH0A0HYM2EY', FRED_API_KEY) : Promise.resolve(null),
-    FRED_API_KEY ? getFredAPIMetric('M2SL', FRED_API_KEY) : Promise.resolve(null),
-    FRED_API_KEY ? getUSNetLiquidityData(FRED_API_KEY) : Promise.resolve(null),
+    fredApiKey ? getFredAPIMetric('FEDFUNDS', fredApiKey) : Promise.resolve(null),
+    fredApiKey ? getUSCPIInflationYoY(fredApiKey) : Promise.resolve(null),
+    fredApiKey ? getFredAPIMetric('DGS10', fredApiKey) : Promise.resolve(null),
+    fredApiKey ? getFredAPIMetric('UNRATE', fredApiKey) : Promise.resolve(null),
+    fredApiKey ? getFredAPIMetric('BAMLH0A0HYM2EY', fredApiKey) : Promise.resolve(null),
+    fredApiKey ? getFredAPIMetric('M2SL', fredApiKey) : Promise.resolve(null),
+    fredApiKey ? getUSNetLiquidityData(fredApiKey) : Promise.resolve(null),
     getDXYQuote(),
     getYahooStockQuote('^VIX'),
     getYahooStockQuote('^GSPC'),
@@ -296,6 +288,21 @@ async function main() {
     }))
   };
 
+  return { dashboardData, etfHoldingsLive, etfFlowLive, calendarEvents };
+}
+
+async function main() {
+  const session = getCurrentSessionVN();
+  const timestampVn = new Date(Date.now() + 7 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19) + ' (GMT+7)';
+
+  console.log(`\n======================================================`);
+  console.log(`  CRYPTO NEWS & METRICS STANDALONE AGGREGATOR`);
+  console.log(`  Phiên: ${session.name}`);
+  console.log(`  Thời gian: ${timestampVn}`);
+  console.log(`======================================================\n`);
+
+  const { dashboardData, etfHoldingsLive, etfFlowLive, calendarEvents } = await collectFullMarketData(FRED_API_KEY);
+
   console.log('[4/5] Đang tính toán Market Bias Engine chuẩn hóa...');
   const biasData = calculateMarketBias(dashboardData, etfFlowLive || []);
   biasData.upcomingEvents = calendarEvents;
@@ -346,8 +353,11 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('Lỗi nghiêm trọng:', err);
-  process.exit(1);
-});
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectRun) {
+  main().catch(err => {
+    console.error('Lỗi nghiêm trọng:', err);
+    process.exit(1);
+  });
+}
 
