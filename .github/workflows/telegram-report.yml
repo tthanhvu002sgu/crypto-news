@@ -1,0 +1,35 @@
+name: Telegram Market Report
+
+on:
+  schedule:
+    # Mỗi 4 giờ: 00/04/08/12/16/20 UTC = 07/11/15/19/23/03 giờ GMT+7
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Cho phép bấm nút gửi báo cáo thủ công trên GitHub
+
+concurrency:
+  group: telegram-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Fetch Market Data & Send Telegram Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Send Telegram Report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/sendTelegramReport.mjs
