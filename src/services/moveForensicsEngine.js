@@ -37,6 +37,29 @@ const formatIsoVn = (ms) => {
   return vnDate.toISOString().replace('T', ' ').substring(0, 16) + ' (GMT+7)';
 };
 
+export const formatDisplayDateVn = (ms) => {
+  const t = toTimeMs(ms);
+  if (t == null) return 'N/A';
+  const vnDate = new Date(t + 7 * 3600 * 1000);
+  const iso = vnDate.toISOString();
+  const day = iso.substring(8, 10);
+  const month = iso.substring(5, 7);
+  const time = iso.substring(11, 16);
+  return `${day}/${month} ${time}`;
+};
+
+export const formatFullDateVn = (ms) => {
+  const t = toTimeMs(ms);
+  if (t == null) return 'N/A';
+  const vnDate = new Date(t + 7 * 3600 * 1000);
+  const iso = vnDate.toISOString();
+  const year = iso.substring(0, 4);
+  const month = iso.substring(5, 7);
+  const day = iso.substring(8, 10);
+  const time = iso.substring(11, 16);
+  return `Ngày ${day}/${month}/${year} lúc ${time} (GMT+7)`;
+};
+
 export const formatUsd = (num, decimals = 1) => {
   const n = toFiniteNumber(num);
   if (n == null) return 'N/A';
@@ -506,11 +529,18 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
       confidence = 'HIGH';
     }
 
+    const startTimeVn = formatIsoVn(startTime);
+    const endTimeVn = formatIsoVn(endTime);
+    const displayTimeVn = formatDisplayDateVn(startTime);
+    const fullTimeVn = formatFullDateVn(startTime);
+
     return {
       ...move,
       rank: rankIndex + 1,
-      startTimeVn: formatIsoVn(startTime),
-      endTimeVn: formatIsoVn(endTime),
+      startTimeVn,
+      endTimeVn,
+      displayTimeVn,
+      fullTimeVn,
       oiBefore,
       oiAfter,
       oiDelta,
@@ -543,10 +573,11 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
 
   // 1. TOP 3 TRONG 24H
   parts.push(`### 1. TOP 3 ĐỢT BIẾN ĐỘNG GIÁ MẠNH NHẤT TRONG 24H QUA (NẾN 15M)`);
+  parts.push(`*QUY TẮC PHÂN TÍCH: BẮT BUỘC sắp xếp và phân tích theo đúng trình tự thời gian (Chronological order) từ cũ đến mới. Khi đề cập từng đợt, BẮT BUỘC ghi rõ CẢ NGÀY VÀ GIỜ (ví dụ: "Ngày 04/11 lúc 09:15 GMT+7"), TUYỆT ĐỐI KHÔNG chỉ ghi mỗi giờ ("lúc 09:15") để người đọc nắm bắt được diễn biến theo từng ngày.*`);
   if (!moves24h || moves24h.length === 0) {
     parts.push(`- *Không ghi nhận biến động đột biến nào vượt ngưỡng trong 24h qua.*`);
   } else {
-    parts.push(`| # | Thời gian (GMT+7) | Hướng | Giá Bắt Đầu -> Đích | Biên Độ | Taker CVD Delta | Δ OI | L/S | Cơ Chế Giả Thuyết |`);
+    parts.push(`| # | Ngày & Giờ (GMT+7) | Hướng | Giá Bắt Đầu -> Đích | Biên Độ | Taker CVD Delta | Δ OI | L/S | Cơ Chế Giả Thuyết |`);
     parts.push(`|---|---|---|---|---|---|---|---|---|`);
 
     moves24h.forEach((m, idx) => {
@@ -556,13 +587,14 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
       const cvdStr = formatCompactUsd(m.takerCvdDelta);
       const oiStr = m.oiDeltaPercent != null ? `${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%` : 'N/A';
       const lsStr = m.lsRatio != null ? m.lsRatio.toFixed(2) : 'N/A';
-      parts.push(`| ${idx + 1} | ${m.startTimeVn} | ${dirIcon} | ${rangeStr} | **${pctStr}** | ${cvdStr} | ${oiStr} | ${lsStr} | **${m.mechanismHypothesis}** |`);
+      const timeDisplay = m.fullTimeVn || m.startTimeVn;
+      parts.push(`| ${idx + 1} | ${timeDisplay} | ${dirIcon} | ${rangeStr} | **${pctStr}** | ${cvdStr} | ${oiStr} | ${lsStr} | **${m.mechanismHypothesis}** |`);
     });
 
     parts.push('');
-    parts.push(`**Chi tiết vi cấu trúc từng cú giật 24h:**`);
+    parts.push(`**Chi tiết vi cấu trúc từng cú giật 24h (theo trình tự thời gian):**`);
     moves24h.forEach((m, idx) => {
-      parts.push(`- **Cú giật #${idx + 1} (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%):**`);
+      parts.push(`- **Cú giật #${idx + 1} [${m.fullTimeVn || m.startTimeVn}] (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%):**`);
       parts.push(`  - *Thời điểm diễn ra:* Từ ${m.startTimeVn} đến ${m.endTimeVn} (${m.candleCount} nến 15m).`);
       parts.push(`  - *Biên độ giá:* Bắt đầu tại ${formatUsd(m.startPrice)}, chạm cực đại ${formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice)}, kết thúc tại ${formatUsd(m.endPrice)}.`);
       parts.push(`  - *Khối lượng & Dòng lệnh:* Quote Vol: ${formatCompactUsd(m.quoteVolume)} | Taker CVD Delta: **${formatCompactUsd(m.takerCvdDelta)}**.`);
@@ -579,10 +611,11 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
 
   // 2. TOP 5 TRONG 7D
   parts.push(`### 2. TOP 5 ĐỢT BIẾN ĐỘNG GIÁ MẠNH NHẤT TRONG 7 NGÀY QUA (NẾN 1H)`);
+  parts.push(`*QUY TẮC PHÂN TÍCH: BẮT BUỘC sắp xếp và phân tích theo đúng trình tự thời gian (Chronological order) từ đầu tuần đến nay. Khi đề cập từng đợt, BẮT BUỘC ghi rõ CẢ NGÀY VÀ GIỜ (ví dụ: "Ngày 02/11 lúc 08:00 GMT+7"), TUYỆT ĐỐI KHÔNG chỉ ghi mỗi giờ ("lúc 08:00") để người đọc nắm bắt được diễn biến theo từng ngày.*`);
   if (!moves7d || moves7d.length === 0) {
     parts.push(`- *Không ghi nhận biến động đột biến nào trong 7 ngày qua.*`);
   } else {
-    parts.push(`| # | Thời gian (GMT+7) | Hướng | Giá Bắt Đầu -> Đích | Biên Độ | Taker CVD Delta | Δ OI | L/S | Phản Ứng Sau Đợt | Cơ Chế Giả Thuyết |`);
+    parts.push(`| # | Ngày & Giờ (GMT+7) | Hướng | Giá Bắt Đầu -> Đích | Biên Độ | Taker CVD Delta | Δ OI | L/S | Phản Ứng Sau Đợt | Cơ Chế Giả Thuyết |`);
     parts.push(`|---|---|---|---|---|---|---|---|---|---|`);
 
     moves7d.forEach((m, idx) => {
@@ -593,13 +626,14 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
       const oiStr = m.oiDeltaPercent != null ? `${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%` : 'N/A';
       const lsStr = m.lsRatio != null ? m.lsRatio.toFixed(2) : 'N/A';
       const reactStr = m.forwardReactions?.trendContinuation || 'N/A';
-      parts.push(`| ${idx + 1} | ${m.startTimeVn} | ${dirIcon} | ${rangeStr} | **${pctStr}** | ${cvdStr} | ${oiStr} | ${lsStr} | ${reactStr} | **${m.mechanismHypothesis}** |`);
+      const timeDisplay = m.fullTimeVn || m.startTimeVn;
+      parts.push(`| ${idx + 1} | ${timeDisplay} | ${dirIcon} | ${rangeStr} | **${pctStr}** | ${cvdStr} | ${oiStr} | ${lsStr} | ${reactStr} | **${m.mechanismHypothesis}** |`);
     });
 
     parts.push('');
-    parts.push(`**Chi tiết vi cấu trúc từng cú giật 7d:**`);
+    parts.push(`**Chi tiết vi cấu trúc từng cú giật 7d (theo trình tự thời gian):**`);
     moves7d.forEach((m, idx) => {
-      parts.push(`- **Đợt biến động #${idx + 1} (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%):**`);
+      parts.push(`- **Đợt biến động #${idx + 1} [${m.fullTimeVn || m.startTimeVn}] (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%):**`);
       parts.push(`  - *Thời điểm:* Từ ${m.startTimeVn} đến ${m.endTimeVn} (${m.candleCount} nến 1h).`);
       parts.push(`  - *Biên độ giá:* ${formatUsd(m.startPrice)} -> ${formatUsd(m.endPrice)} (Cao nhất: ${formatUsd(m.highPrice)} | Thấp nhất: ${formatUsd(m.lowPrice)}).`);
       parts.push(`  - *Taker CVD:* ${formatCompactUsd(m.takerCvdDelta)} | *Quote Vol:* ${formatCompactUsd(m.quoteVolume)}.`);

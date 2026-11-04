@@ -647,12 +647,15 @@ QUY TẮC BẮT BUỘC:
 CẤU TRÚC BÁO CÁO 4 PHẦN BẮT BUỘC:
 
 ### 1. 💥 GIẢI PHẪU CÁC ĐỢT DI CHUYỂN GIÁ MẠNH (TOP 3 TRONG 24H & TOP 5 TRONG 7D)
-- **Top 3 Biến Động Trong 24h (Khung 15m):**
-  - Mổ xẻ từng cú giật theo thứ tự: Thời điểm, biên độ giật giá, khối lượng Taker CVD Delta, biến động OI (tăng/giảm) và tỷ lệ Long/Short.
+- **QUY TẮC BẮT BUỘC VỀ THỜI GIAN & TRÌNH TỰ:**
+  - **Sắp xếp phân tích theo TRÌNH TỰ THỜI GIAN (Timeline từ cũ đến mới):** Bắt buộc phân tích các đợt biến động lần lượt theo dòng thời gian diễn ra để người đọc thấy rõ chuỗi logic nguyên nhân - hệ quả của hành vi giá.
+  - **Bắt buộc hiển thị cả NGÀY VÀ GIỜ:** Với mỗi đợt phân tích, BẮT BUỘC ghi rõ cả ngày và giờ cụ thể (Ví dụ: "Ngày 03/11 lúc 14:00 (GMT+7)" hoặc "03/11 14:00"). TUYỆT ĐỐI KHÔNG chỉ ghi mỗi giờ (như "14:00" hay "lúc 14h") vì trên khung thời gian 7 ngày có nhiều ngày khác nhau, ghi mỗi giờ sẽ gây mơ hồ không biết thuộc ngày nào.
+- **Top 3 Biến Động Trong 24h (Khung 15m - Trình tự thời gian):**
+  - Mổ xẻ từng cú giật theo trình tự thời gian: [Ngày DD/MM - Giờ:phút GMT+7] -> Biên độ giật giá -> Khối lượng Taker CVD Delta -> Biến động OI (tăng/giảm) -> Tỷ lệ Long/Short.
   - Phân tích cơ chế bản chất: Tại sao giá di chuyển đột ngột như vậy? Có dấu hiệu Short Squeeze, Long Liquidation Cascade, hay Taker mua/bán chủ động?
   - Đánh giá phản ứng tiếp nối (Forward Reaction): Giá có bị hấp thụ thoái lui (Retracement) hay tiếp tục bứt phá (Continuation)?
-- **Top 5 Biến Động Trong 7 Ngày (Khung 1h):**
-  - Mổ xẻ các nhịp sóng định hình cấu trúc tuần: Cú giật nào là mồi nhử thanh khoản, cú giật nào là dòng tiền lớn thực sự tích lũy/phân phối?
+- **Top 5 Biến Động Trong 7 Ngày (Khung 1h - Trình tự thời gian):**
+  - Mổ xẻ các nhịp sóng định hình cấu trúc tuần theo trình tự thời gian: [Ngày DD/MM - Giờ:phút GMT+7] -> Cú giật nào là mồi nhử thanh khoản, cú giật nào là dòng tiền lớn thực sự tích lũy/phân phối?
   - Đối chiếu với các sự kiện vĩ mô và dòng tiền Spot ETF tại thời điểm diễn ra.
 
 ### 2. 🗺️ BẢN ĐỒ VỊ THẾ BỊ KẸP & VÙNG BẪY THANH KHOẢN (TRAPPED LIQUIDITY MAP)
@@ -705,12 +708,15 @@ MANDATORY RULES:
 MANDATORY 4-SECTION REPORT STRUCTURE:
 
 ### 1. 💥 SHARP MOVES FORENSICS (TOP 3 IN 24H & TOP 5 IN 7D)
-- **Top 3 Impulse Moves in 24h (15m Timeframe):**
-  - Deconstruct each move sequentially: Timestamp, Price displacement, Taker CVD Delta, Δ Open Interest, and Long/Short ratio.
+- **MANDATORY TIMELINE & DATETIME RULES:**
+  - **Analyze in strict CHRONOLOGICAL SEQUENCE (Timeline from oldest to newest):** You MUST deconstruct moves in the order they occurred in time to illustrate the causal evolution of market structure.
+  - **Mandatory Explicit DATE and TIME:** For each move analyzed, you MUST state BOTH DATE AND TIME (e.g., "Nov 03 at 14:00 GMT+7" or "03/11 14:00"). NEVER output time alone (e.g., "at 14:00") because over 7 days, time without date creates confusion about which day the move occurred.
+- **Top 3 Impulse Moves in 24h (15m Timeframe - Chronological Sequence):**
+  - Deconstruct each move sequentially along the timeline: [Date DD/MM - HH:mm GMT+7] -> Price displacement -> Taker CVD Delta -> Δ Open Interest -> Long/Short ratio.
   - Identify the primary mechanism: What drove the displacement? Was it a Short Squeeze, a cascading Long Flush, or genuine aggressive taker accumulation/distribution?
   - Evaluate the Forward Reaction: Did price experience immediate retracement/absorption (>70%), or establish a strong continuation trend?
-- **Top 5 Macro Structure Moves in 7 Days (1h Timeframe):**
-  - Deconstruct weekly structural anchors: Which moves were predatory liquidity sweeps, and which represented true institutional rebalancing?
+- **Top 5 Macro Structure Moves in 7 Days (1h Timeframe - Chronological Sequence):**
+  - Deconstruct weekly structural anchors sequentially along the timeline: [Date DD/MM - HH:mm GMT+7] -> Which moves were predatory liquidity sweeps, and which represented true institutional rebalancing?
   - Correlate with concurrent macro catalysts and Spot ETF flows.
 
 ### 2. 🗺️ TRAPPED POSITIONING & LIQUIDITY POOLS MAP

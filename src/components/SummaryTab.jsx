@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
@@ -12,7 +12,7 @@ import { fetchFuturesFundingHistory } from '../services/scannerDataEngine';
 import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { buildProfessionalReportLayout } from '../services/summaryReportLayout';
 import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBACK_FREE_MODELS } from '../services/openrouter';
-import { detectTopImpulseMoves, enrichMoveWithMicrostructure, formatForensicsPayloadForAi, formatCompactUsd, formatUsd } from '../services/moveForensicsEngine';
+import { detectTopImpulseMoves, enrichMoveWithMicrostructure, formatForensicsPayloadForAi, formatCompactUsd, formatUsd, formatDisplayDateVn } from '../services/moveForensicsEngine';
 import { loadMovePreview } from '../services/moveEventStore';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
@@ -356,6 +356,23 @@ export default function SummaryTab({
   const [forensicsMoves24h, setForensicsMoves24h] = useState([]);
   const [forensicsMoves7d, setForensicsMoves7d] = useState([]);
   const [isForensicsLoading, setIsForensicsLoading] = useState(false);
+  const [forensicsSortBy, setForensicsSortBy] = useState('time'); // 'time' | 'magnitude'
+
+  const sortedMoves24h = useMemo(() => {
+    const list = [...forensicsMoves24h];
+    if (forensicsSortBy === 'magnitude') {
+      return list.sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent));
+    }
+    return list.sort((a, b) => a.startTime - b.startTime);
+  }, [forensicsMoves24h, forensicsSortBy]);
+
+  const sortedMoves7d = useMemo(() => {
+    const list = [...forensicsMoves7d];
+    if (forensicsSortBy === 'magnitude') {
+      return list.sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent));
+    }
+    return list.sort((a, b) => a.startTime - b.startTime);
+  }, [forensicsMoves7d, forensicsSortBy]);
 
   const fetchAndEnrichForensics = async (force = false) => {
     if (!force && forensicsMoves24h.length > 0 && forensicsMoves7d.length > 0) {
@@ -1815,14 +1832,15 @@ ${promptData}
         <div
           className="forensics-timeline-card font-mono"
           style={{
-            background: 'var(--bg-slate-900)',
+            background: 'var(--bg-panel-solid, var(--bg-slate-900))',
             border: '1px solid var(--border-panel)',
             borderRadius: '8px',
             padding: '16px',
             marginBottom: '16px',
+            boxShadow: 'var(--shadow-panel)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-contrast)' }}>
                 <span>💥</span>
@@ -1835,84 +1853,158 @@ ${promptData}
                   : 'Microstructure reconstructed at the moment of impulse: Taker CVD Delta, Δ Open Interest, L/S Ratio & Macro events.'}
               </div>
             </div>
-            <button
-              onClick={() => fetchAndEnrichForensics(true)}
-              disabled={isForensicsLoading}
-              style={{
-                background: 'rgba(56, 189, 248, 0.1)',
-                border: '1px solid var(--color-primary)',
-                color: 'var(--color-primary)',
-                padding: '4px 10px',
-                borderRadius: '4px',
-                fontSize: '0.65rem',
-                cursor: isForensicsLoading ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {isForensicsLoading ? (isVi ? 'ĐANG QUÉT...' : 'SCANNING...') : (isVi ? '🔄 QUÉT LẠI' : '🔄 RESCAN')}
-            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-active-tab)', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '2px', fontSize: '0.65rem' }}>
+                <span style={{ padding: '2px 6px', color: 'var(--text-slate-400)', fontWeight: 500 }}>
+                  {isVi ? 'Sắp xếp:' : 'Sort:'}
+                </span>
+                <button
+                  onClick={() => setForensicsSortBy('time')}
+                  style={{
+                    background: forensicsSortBy === 'time' ? 'var(--bg-panel-solid, var(--bg-slate-900))' : 'transparent',
+                    border: 'none',
+                    borderRadius: '3px',
+                    padding: '3px 8px',
+                    fontSize: '0.65rem',
+                    cursor: 'pointer',
+                    fontWeight: forensicsSortBy === 'time' ? 'bold' : 'normal',
+                    color: forensicsSortBy === 'time' ? 'var(--text-contrast)' : 'var(--text-slate-400)',
+                    boxShadow: forensicsSortBy === 'time' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                  title={isVi ? 'Sắp xếp theo dòng thời gian từ cũ đến mới' : 'Sort chronologically from oldest to newest'}
+                >
+                  ⏱️ {isVi ? 'Thời gian' : 'Time'}
+                </button>
+                <button
+                  onClick={() => setForensicsSortBy('magnitude')}
+                  style={{
+                    background: forensicsSortBy === 'magnitude' ? 'var(--bg-panel-solid, var(--bg-slate-900))' : 'transparent',
+                    border: 'none',
+                    borderRadius: '3px',
+                    padding: '3px 8px',
+                    fontSize: '0.65rem',
+                    cursor: 'pointer',
+                    fontWeight: forensicsSortBy === 'magnitude' ? 'bold' : 'normal',
+                    color: forensicsSortBy === 'magnitude' ? 'var(--text-contrast)' : 'var(--text-slate-400)',
+                    boxShadow: forensicsSortBy === 'magnitude' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                  title={isVi ? 'Sắp xếp theo biên độ biến động % mạnh nhất' : 'Sort by price change % magnitude'}
+                >
+                  💥 {isVi ? 'Biên độ %' : 'Magnitude'}
+                </button>
+              </div>
+
+              <button
+                onClick={() => fetchAndEnrichForensics(true)}
+                disabled={isForensicsLoading}
+                style={{
+                  background: 'var(--bg-badge-api)',
+                  border: '1px solid var(--border-badge-api)',
+                  color: 'var(--color-badge-api)',
+                  padding: '5px 12px',
+                  borderRadius: '4px',
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  cursor: isForensicsLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                {isForensicsLoading ? (isVi ? 'ĐANG QUÉT...' : 'SCANNING...') : (isVi ? '🔄 QUÉT LẠI' : '🔄 RESCAN')}
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
             {/* 24h Column */}
-            <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '12px' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-sky-400)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>⚡</span>
-                <span>{isVi ? 'TOP 3 TRONG 24 GIỜ QUA (NẾN 15M)' : 'TOP 3 IN 24 HOURS (15M CANDLES)'}</span>
+            <div style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '12px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-cyan-500, #0891b2)', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>⚡</span>
+                  <span>{isVi ? 'TOP 3 TRONG 24 GIỜ QUA (NẾN 15M)' : 'TOP 3 IN 24 HOURS (15M CANDLES)'}</span>
+                </div>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-slate-400)', fontWeight: 'normal' }}>
+                  {forensicsSortBy === 'time' ? (isVi ? '⏱️ Theo thời gian' : '⏱️ Chronological') : (isVi ? '💥 Theo biên độ' : '💥 By magnitude')}
+                </span>
               </div>
-              {forensicsMoves24h.length === 0 ? (
+              {sortedMoves24h.length === 0 ? (
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', padding: '8px 0' }}>
                   {isForensicsLoading ? (isVi ? 'Đang tải nến 15m...' : 'Loading 15m candles...') : (isVi ? 'Chưa phát hiện biến động đột biến trong 24h.' : 'No major impulse moves detected in 24h.')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {forensicsMoves24h.map((m, idx) => (
+                  {sortedMoves24h.map((m, idx) => (
                     <div
                       key={idx}
                       style={{
-                        background: m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(244, 63, 94, 0.06)',
-                        border: `1px solid ${m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)'}`,
-                        borderRadius: '4px',
-                        padding: '8px 10px',
+                        background: m.direction === 'PUMP' ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
+                        border: `1px solid ${m.direction === 'PUMP' ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
+                        borderRadius: '6px',
+                        padding: '10px 12px',
                         fontSize: '0.7rem',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-300)' }}>#{idx + 1}</span>
+                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-400)' }}>#{idx + 1}</span>
                           <span style={{
                             fontWeight: 'bold',
-                            color: m.direction === 'PUMP' ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                            color: m.direction === 'PUMP' ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
                           }}>
                             {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
                           </span>
                           <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 15m)</span>
                         </div>
-                        <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>{m.startTimeVn}</span>
+                        <div
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 600,
+                            color: 'var(--text-contrast)',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={m.fullTimeVn || m.startTimeVn}
+                        >
+                          <span>📅</span>
+                          <span>{m.displayTimeVn || m.startTimeVn}</span>
+                        </div>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '4px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
                         <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
-                        <span style={{ color: 'var(--text-slate-400)' }}>Đỉnh/Đáy: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
+                        <span style={{ color: 'var(--text-slate-400)' }}>{isVi ? 'Đỉnh/Đáy' : 'Extremum'}: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
                       </div>
 
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
                         <span style={{
-                          padding: '1px 5px',
+                          padding: '2px 6px',
                           borderRadius: '3px',
                           fontSize: '0.62rem',
-                          background: (m.takerCvdDelta || 0) >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                          fontWeight: 500,
+                          background: (m.takerCvdDelta || 0) >= 0 ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
+                          border: `1px solid ${(m.takerCvdDelta || 0) >= 0 ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
+                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
                         }}>
                           CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
                         </span>
 
                         {m.oiDeltaPercent != null && (
                           <span style={{
-                            padding: '1px 5px',
+                            padding: '2px 6px',
                             borderRadius: '3px',
                             fontSize: '0.62rem',
-                            background: 'rgba(245, 158, 11, 0.15)',
-                            color: 'var(--color-amber-400)',
+                            fontWeight: 500,
+                            background: 'var(--bg-amber-badge)',
+                            border: '1px solid var(--border-badge-warn)',
+                            color: 'var(--color-amber-500)',
                           }}>
                             ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
                           </span>
@@ -1920,22 +2012,24 @@ ${promptData}
 
                         {m.lsRatio != null && (
                           <span style={{
-                            padding: '1px 5px',
+                            padding: '2px 6px',
                             borderRadius: '3px',
                             fontSize: '0.62rem',
-                            background: 'rgba(148, 163, 184, 0.15)',
-                            color: 'var(--text-slate-300)',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            color: 'var(--text-slate-200)',
                           }}>
                             L/S: {m.lsRatio.toFixed(2)}
                           </span>
                         )}
 
                         <span style={{
-                          padding: '1px 5px',
+                          padding: '2px 6px',
                           borderRadius: '3px',
                           fontSize: '0.62rem',
-                          background: 'rgba(99, 102, 241, 0.15)',
-                          color: 'var(--color-indigo-400)',
+                          background: 'var(--bg-badge-api)',
+                          border: '1px solid var(--border-badge-api)',
+                          color: 'var(--color-badge-api)',
                           fontWeight: 'bold',
                         }}>
                           {m.mechanismHypothesis}
@@ -1943,7 +2037,7 @@ ${promptData}
                       </div>
 
                       {m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0 && (
-                        <div style={{ fontSize: '0.62rem', color: 'var(--color-amber-400)', marginTop: '4px' }}>
+                        <div style={{ fontSize: '0.62rem', color: 'var(--color-amber-500)', marginTop: '6px' }}>
                           ⚠️ {m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title}`).join(', ')}
                         </div>
                       )}
@@ -1954,64 +2048,90 @@ ${promptData}
             </div>
 
             {/* 7d Column */}
-            <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '12px' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-amber-400)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>📅</span>
-                <span>{isVi ? 'TOP 5 TRONG 7 NGÀY QUA (NẾN 1H)' : 'TOP 5 IN 7 DAYS (1H CANDLES)'}</span>
+            <div style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '12px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-amber-500, #d97706)', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📅</span>
+                  <span>{isVi ? 'TOP 5 TRONG 7 NGÀY QUA (NẾN 1H)' : 'TOP 5 IN 7 DAYS (1H CANDLES)'}</span>
+                </div>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-slate-400)', fontWeight: 'normal' }}>
+                  {forensicsSortBy === 'time' ? (isVi ? '⏱️ Theo thời gian' : '⏱️ Chronological') : (isVi ? '💥 Theo biên độ' : '💥 By magnitude')}
+                </span>
               </div>
-              {forensicsMoves7d.length === 0 ? (
+              {sortedMoves7d.length === 0 ? (
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', padding: '8px 0' }}>
                   {isForensicsLoading ? (isVi ? 'Đang tải nến 1h...' : 'Loading 1h candles...') : (isVi ? 'Chưa phát hiện biến động đột biến trong 7d.' : 'No major impulse moves detected in 7d.')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {forensicsMoves7d.map((m, idx) => (
+                  {sortedMoves7d.map((m, idx) => (
                     <div
                       key={idx}
                       style={{
-                        background: m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(244, 63, 94, 0.06)',
-                        border: `1px solid ${m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)'}`,
-                        borderRadius: '4px',
-                        padding: '8px 10px',
+                        background: m.direction === 'PUMP' ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
+                        border: `1px solid ${m.direction === 'PUMP' ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
+                        borderRadius: '6px',
+                        padding: '10px 12px',
                         fontSize: '0.7rem',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-300)' }}>#{idx + 1}</span>
+                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-400)' }}>#{idx + 1}</span>
                           <span style={{
                             fontWeight: 'bold',
-                            color: m.direction === 'PUMP' ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                            color: m.direction === 'PUMP' ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
                           }}>
                             {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
                           </span>
                           <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 1h)</span>
                         </div>
-                        <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>{m.startTimeVn}</span>
+                        <div
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 600,
+                            color: 'var(--text-contrast)',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={m.fullTimeVn || m.startTimeVn}
+                        >
+                          <span>📅</span>
+                          <span>{m.displayTimeVn || m.startTimeVn}</span>
+                        </div>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '4px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
                         <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
-                        <span style={{ color: 'var(--text-slate-400)' }}>Đỉnh/Đáy: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
+                        <span style={{ color: 'var(--text-slate-400)' }}>{isVi ? 'Đỉnh/Đáy' : 'Extremum'}: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
                       </div>
 
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
                         <span style={{
-                          padding: '1px 5px',
+                          padding: '2px 6px',
                           borderRadius: '3px',
                           fontSize: '0.62rem',
-                          background: (m.takerCvdDelta || 0) >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                          fontWeight: 500,
+                          background: (m.takerCvdDelta || 0) >= 0 ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
+                          border: `1px solid ${(m.takerCvdDelta || 0) >= 0 ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
+                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
                         }}>
                           CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
                         </span>
 
                         <span style={{
-                          padding: '1px 5px',
+                          padding: '2px 6px',
                           borderRadius: '3px',
                           fontSize: '0.62rem',
-                          background: 'rgba(99, 102, 241, 0.15)',
-                          color: 'var(--color-indigo-400)',
+                          background: 'var(--bg-badge-api)',
+                          border: '1px solid var(--border-badge-api)',
+                          color: 'var(--color-badge-api)',
                           fontWeight: 'bold',
                         }}>
                           {m.mechanismHypothesis}
@@ -2019,13 +2139,14 @@ ${promptData}
 
                         {m.forwardReactions?.retracementPercent != null && (
                           <span style={{
-                            padding: '1px 5px',
+                            padding: '2px 6px',
                             borderRadius: '3px',
                             fontSize: '0.62rem',
-                            background: 'rgba(148, 163, 184, 0.15)',
-                            color: 'var(--text-slate-300)',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            color: 'var(--text-slate-200)',
                           }}>
-                            Thoái lui: {m.forwardReactions.retracementPercent.toFixed(0)}%
+                            {isVi ? 'Thoái lui' : 'Retrace'}: {m.forwardReactions.retracementPercent.toFixed(0)}%
                           </span>
                         )}
                       </div>
