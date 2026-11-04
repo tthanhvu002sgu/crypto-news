@@ -6,6 +6,7 @@
  */
 
 import { extractCvdNetDelta } from './cvdService.js';
+import { detectTopImpulseMoves } from './moveForensicsEngine.js';
 
 // ─── HELPER FORMATTERS ────────────────────────────────────────────────────────
 const toFiniteNumber = (value) => {
@@ -606,7 +607,7 @@ ${latest7Flows.length > 0 ? latest7Flows.map(f => `  - Ngày ${f.date || '---'}:
 ---
 
 ## 8. NGUYÊN TẮC PHÂN TÍCH DÀNH CHO AI (ANTI-HALLUCINATION CONTRACT)
-1. **Tuyệt đối tuân thủ bằng chứng:** Chỉ sử dụng và trích dẫn các số liệu thực tế có mặt trực tiếp trong 7 phần phía trên. Bất kỳ chỉ số nào mang giá trị 'N/A' hoặc 'UNKNOWN' phải được gắn thẻ [CHƯA BIẾT].
+1. **Tuyệt đối tuân thủ bằng chứng:** Chỉ sử dụng và trích dẫn các số liệu thực tế có mặt trực tiếp trong 7 phần phía trên. Bất kỳ chỉ số nào mang giá trị 'N/A' hoặc 'UNKNOWN' phải được ghi rõ là N/A hoặc "thiếu dữ liệu", không tự suy đoán hay lấp số.
 2. **Đối chiếu mâu thuẫn tín hiệu:** Phân tích rõ phân kỳ giữa Giá vs CVD, Spot vs Futures, Dòng tiền tổ chức ETF vs Vị thế đòn bẩy phái sinh.
 3. **Phân định rõ khung thời gian:** 
    - 0-24h (Chiến thuật): Ưu tiên Funding, CVD, OBI, Whale Walls.
@@ -614,6 +615,43 @@ ${latest7Flows.length > 0 ? latest7Flows.map(f => `  - Ngày ${f.date || '---'}:
    - 2-12w (Vị thế): Ưu tiên Vĩ mô, MVRV, Lãi suất thực, CME COT.
 4. **Quy tắc Quản trị Rủi ro:** Chỉ đề xuất setup khi tỷ lệ R:R >= 1.8 và có điều kiện kích hoạt/vô hiệu hóa rõ ràng. Nếu tín hiệu mâu thuẫn hoặc chưa đủ xác nhận, ghi rõ **KHÔNG GIAO DỊCH (NO TRADE)**.
 `.trim();
+
+  // ── 8. MOVES HISTORY LOG ROW (LƯU NỐI TIẾP VĨNH VIỄN) ────────────────────
+  let topMove24hSummary = options?.topMoveSummary || null;
+  if (!topMove24hSummary) {
+    const klinesToScan = options?.klines15m || data?.klines15m || options?.klines || data?.klines;
+    if (Array.isArray(klinesToScan) && klinesToScan.length > 0) {
+      try {
+        const topMoves = detectTopImpulseMoves(klinesToScan, 1);
+        if (topMoves.length > 0) {
+          const m = topMoves[0];
+          topMove24hSummary = `${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}% ($${Math.round(m.startPrice)} -> $${Math.round(m.endPrice)})`;
+        }
+      } catch {
+        // ignore scan error
+      }
+    }
+  }
+  if (!topMove24hSummary) {
+    topMove24hSummary = btcChange != null ? `Biến động 24h: ${btcChange >= 0 ? '+' : ''}${btcChange.toFixed(2)}%` : '---';
+  }
+
+  const history_log_row = [
+    timestampVn,
+    timestampUtc,
+    session.name,
+    btcPrice != null ? `$${fmt(btcPrice, 0)}` : '---',
+    btcChange != null ? `${btcChange >= 0 ? '+' : ''}${fmt(btcChange, 2)}%` : '---',
+    fmtB(globalData.totalMarketCap),
+    openInterest != null ? `${fmt(openInterest, 0)} BTC` : '---',
+    fundingRate != null ? `${(fundingRate * 100).toFixed(4)}%` : '---',
+    `${biasTotal > 0 ? '+' : ''}${biasTotal}`,
+    biasLabel,
+    fmtCompactUsd(spotCvd24),
+    fmtCompactUsd(futCvd24),
+    topMove24hSummary,
+    options?.source || 'Web Client'
+  ];
 
   return {
     sessionName: session.name,
@@ -625,7 +663,8 @@ ${latest7Flows.length > 0 ? latest7Flows.map(f => `  - Ngày ${f.date || '---'}:
     derivatives,
     etf_onchain,
     macro,
-    ai_summary_md
+    ai_summary_md,
+    history_log_row
   };
 }
 

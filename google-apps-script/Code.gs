@@ -60,12 +60,17 @@ function doPost(e) {
       writeMarkdownSummarySheet(ss, "AI_PROMPT_SUMMARY", payload.ai_summary_md, payload.sessionName || "SESSION UPDATE", payload.timestamp);
     }
 
+    // 6. Tab: MOVES_HISTORY_LOG (Append time-series permanent log)
+    if (payload.history_log_row && Array.isArray(payload.history_log_row)) {
+      appendHistoryLogRow(ss, "MOVES_HISTORY_LOG", payload.history_log_row);
+    }
+
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
       timestamp: new Date().toISOString(),
       session: payload.sessionName || "UNKNOWN",
       completeness: payload.validation ? payload.validation.completenessScore : 100,
-      message: "Data synced successfully to 5 sheets in Google Spreadsheets!"
+      message: "Data synced successfully to Google Spreadsheets (including MOVES_HISTORY_LOG)!"
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
@@ -193,4 +198,72 @@ function writeMarkdownSummarySheet(ss, sheetName, markdownText, sessionName, tim
   contentCell.setVerticalAlignment("top");
   sheet.setRowHeight(4, 800);
 }
+
+/**
+ * Append row vào Sheet MOVES_HISTORY_LOG mà không xóa dữ liệu cũ (lưu trữ nối tiếp vĩnh viễn)
+ */
+function appendHistoryLogRow(ss, sheetName, rowData) {
+  if (!rowData || rowData.length === 0) return;
+
+  var sheet = ss.getSheetByName(sheetName);
+  var isNewSheet = false;
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    isNewSheet = true;
+  }
+
+  // Nếu sheet mới tạo hoặc trống rỗng (getLastRow() === 0), tạo hàng tiêu đề (Headers)
+  if (isNewSheet || sheet.getLastRow() === 0) {
+    var headers = [
+      "Thời Gian (GMT+7)",
+      "Thời Gian (UTC)",
+      "Phiên Giao Dịch",
+      "Giá BTC (USD)",
+      "Biến Động 24h (%)",
+      "Tổng Vốn Hóa (Total Cap)",
+      "Open Interest (BTC)",
+      "Funding Rate 8h (%)",
+      "Bias Total Score",
+      "Bias Label",
+      "CVD Spot 24h",
+      "CVD Futures 24h",
+      "Tóm Tắt Cú Giật 24h Mạnh Nhất",
+      "Nguồn Đồng Bộ"
+    ];
+    sheet.appendRow(headers);
+
+    var numCols = headers.length;
+    var headerRange = sheet.getRange(1, 1, 1, numCols);
+    headerRange.setBackground("#0f172a");
+    headerRange.setFontColor("#ffffff");
+    headerRange.setFontWeight("bold");
+    headerRange.setFontFamily("Roboto Mono");
+    headerRange.setFontSize(10);
+    headerRange.setHorizontalAlignment("center");
+    headerRange.setVerticalAlignment("middle");
+    sheet.setRowHeight(1, 35);
+    sheet.setFrozenRows(1);
+
+    for (var col = 1; col <= numCols; col++) {
+      sheet.autoResizeColumn(col);
+      var width = sheet.getColumnWidth(col);
+      sheet.setColumnWidth(col, Math.max(width + 25, 130));
+    }
+  }
+
+  // Append row mới
+  sheet.appendRow(rowData);
+  var newRowNum = sheet.getLastRow();
+  sheet.setRowHeight(newRowNum, 26);
+  var rowRange = sheet.getRange(newRowNum, 1, 1, rowData.length);
+  rowRange.setFontFamily("Roboto Mono");
+  rowRange.setFontSize(9);
+  rowRange.setVerticalAlignment("middle");
+  if (newRowNum % 2 === 0) {
+    rowRange.setBackground("#f8fafc");
+  } else {
+    rowRange.setBackground("#ffffff");
+  }
+}
+
 

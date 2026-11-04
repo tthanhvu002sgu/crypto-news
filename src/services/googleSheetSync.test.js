@@ -214,4 +214,43 @@ test('buildGoogleSheetPayload formats 5 distinct sheets with complete real value
   assert.match(payload.ai_summary_md, /ETH\/USDT/);
   assert.match(payload.ai_summary_md, /MVRV/);
   assert.match(payload.ai_summary_md, /ANTI-HALLUCINATION/);
+
+  // History log row (for MOVES_HISTORY_LOG)
+  assert.ok(Array.isArray(payload.history_log_row));
+  assert.equal(payload.history_log_row.length, 14);
+  assert.match(payload.history_log_row[3], /\$95,000/);
+  assert.match(payload.history_log_row[4], /\+3.50%/);
+  assert.equal(payload.history_log_row[8], '+35');
+  assert.equal(payload.history_log_row[9], 'BULLISH MẠNH (STRONG BUY)');
 });
+
+test('buildGoogleSheetPayload detects and extracts strongest 24h move into history_log_row', () => {
+  const baseTime = Date.now();
+  const mockKlines15m = [
+    { time: baseTime, open: 90000, high: 90200, low: 89900, close: 90100, volume: 10, quoteVolume: 900000 },
+    { time: baseTime + 900000, open: 90100, high: 94000, low: 90000, close: 93800, volume: 50, quoteVolume: 4600000, takerBuyQuoteVolume: 4000000 },
+    { time: baseTime + 1800000, open: 93800, high: 94100, low: 93500, close: 93900, volume: 15, quoteVolume: 1400000 }
+  ];
+
+  const mockData = {
+    btc: { price: 93900, change: 4.2 },
+    fundingRate: 0.0001,
+    openInterest: 110000
+  };
+
+  const payload = buildGoogleSheetPayload(
+    mockData,
+    { score: 25, label: 'BULLISH' },
+    null,
+    null,
+    { klines15m: mockKlines15m, source: 'Automated Test' }
+  );
+
+  assert.ok(Array.isArray(payload.history_log_row));
+  assert.equal(payload.history_log_row[13], 'Automated Test');
+  // Row 12 (index 12) is topMoveSummary24h
+  assert.match(payload.history_log_row[12], /PUMP/);
+  assert.match(payload.history_log_row[12], /90000/);
+  assert.match(payload.history_log_row[12], /93900/);
+});
+

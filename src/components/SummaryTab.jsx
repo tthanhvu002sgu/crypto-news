@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
 import Tooltip from './Tooltip';
-import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { fetchCached } from '../utils/cache';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService';
@@ -12,6 +12,8 @@ import { fetchFuturesFundingHistory } from '../services/scannerDataEngine';
 import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { buildProfessionalReportLayout } from '../services/summaryReportLayout';
 import { fetchTop10FreeUniqueProviderModels, streamOpenRouterCompletion, FALLBACK_FREE_MODELS } from '../services/openrouter';
+import { detectTopImpulseMoves, enrichMoveWithMicrostructure, formatForensicsPayloadForAi, formatCompactUsd, formatUsd } from '../services/moveForensicsEngine';
+import { loadMovePreview } from '../services/moveEventStore';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import TradePlanAuditor from './TradePlanAuditor';
@@ -29,27 +31,13 @@ import {
 const renderTextWithTags = (text) => {
   if (typeof text !== 'string') return text;
 
-  // Match evidence tags, dollar amounts ($92,450, $83.06B), percentages (+1.5%, -3.2%, 100%), ratios (1.8x, 2.5x)
-  const combinedRegex = /(\[(?:QUAN SÁT|OBSERVED|SUY DẪN|DERIVED|GIẢ THUYẾT|INFERENCE|CHƯA BIẾT|UNKNOWN)\]|\$[0-9.,]+[KMBkmb]?|[+-][0-9.,]+%|[0-9.,]+%|[0-9.]+(?:x|X)\b)/g;
+  // Match dollar amounts ($92,450, $83.06B), percentages (+1.5%, -3.2%, 100%), ratios (1.8x, 2.5x)
+  const combinedRegex = /(\$[0-9.,]+[KMBkmb]?|[+-][0-9.,]+%|[0-9.,]+%|[0-9.]+(?:x|X)\b)/g;
   const parts = text.split(combinedRegex);
   if (parts.length === 1) return text;
 
   return parts.map((part, i) => {
-    // 1. Evidence Tags
-    if (part === '[QUAN SÁT]' || part === '[OBSERVED]') {
-      return <span key={i} className="data-tag tag-observed">{part}</span>;
-    }
-    if (part === '[SUY DẪN]' || part === '[DERIVED]') {
-      return <span key={i} className="data-tag tag-derived">{part}</span>;
-    }
-    if (part === '[GIẢ THUYẾT]' || part === '[INFERENCE]') {
-      return <span key={i} className="data-tag tag-inference">{part}</span>;
-    }
-    if (part === '[CHƯA BIẾT]' || part === '[UNKNOWN]') {
-      return <span key={i} className="data-tag tag-unknown">{part}</span>;
-    }
-
-    // 2. Positive & Negative Percentages
+    // 1. Positive & Negative Percentages
     if (part.startsWith('+')) {
       return <span key={i} className="num-highlight positive">{part}</span>;
     }
@@ -57,7 +45,7 @@ const renderTextWithTags = (text) => {
       return <span key={i} className="num-highlight negative">{part}</span>;
     }
 
-    // 3. Currencies, Ratios & Plain Percentages
+    // 2. Currencies, Ratios & Plain Percentages
     if (part.startsWith('$') || part.endsWith('%') || part.toLowerCase().endsWith('x')) {
       return <span key={i} className="num-highlight">{part}</span>;
     }
@@ -362,13 +350,78 @@ export default function SummaryTab({
 
   const [selectedStyle, setSelectedStyle] = useState(() => {
     const saved = localStorage.getItem('ai-analysis-style');
-    return saved === 'professional' || saved === 'compact' ? saved : 'compact';
+    return saved === 'professional' || saved === 'compact' || saved === 'forensics' ? saved : 'compact';
   });
+
+  const [forensicsMoves24h, setForensicsMoves24h] = useState([]);
+  const [forensicsMoves7d, setForensicsMoves7d] = useState([]);
+  const [isForensicsLoading, setIsForensicsLoading] = useState(false);
+
+  const fetchAndEnrichForensics = async (force = false) => {
+    if (!force && forensicsMoves24h.length > 0 && forensicsMoves7d.length > 0) {
+      return { enr24h: forensicsMoves24h, enr7d: forensicsMoves7d };
+    }
+
+    setIsForensicsLoading(true);
+    try {
+      const [k15m, k1h, calRes, oi168, ls168] = await Promise.all([
+        getBTCKlines('BTCUSDT', '15m', 96),
+        getBTCKlines('BTCUSDT', '1h', 168),
+        getWeeklyEconomicCalendar().catch(() => null),
+        getOIHistory('BTCUSDT', '1h', 168).catch(() => []),
+        getLongShortRatio('BTCUSDT', '1h', 168).catch(() => []),
+      ]);
+      const localEvents = loadMovePreview();
+      const raw24h = detectTopImpulseMoves(k15m, 3);
+      const raw7d = detectTopImpulseMoves(k1h, 5);
+
+      const activeOiHistory = (Array.isArray(oi168) && oi168.length > 0)
+        ? oi168
+        : (data?.oiHistory || []);
+      const activeLsHistory = (Array.isArray(ls168) && ls168.length > 0)
+        ? ls168
+        : (data?.lsHistory || []);
+      const activeCalendarEvents = calRes?.events || data?.calendarEvents || [];
+
+      const enr24h = enrichMoveWithMicrostructure(raw24h, {
+        oiHistory: activeOiHistory,
+        lsHistory: activeLsHistory,
+        calendarEvents: activeCalendarEvents,
+        localMoveStore: localEvents,
+        klines: k15m,
+      });
+      const enr7d = enrichMoveWithMicrostructure(raw7d, {
+        oiHistory: activeOiHistory,
+        lsHistory: activeLsHistory,
+        calendarEvents: activeCalendarEvents,
+        localMoveStore: localEvents,
+        klines: k1h,
+      });
+
+      setForensicsMoves24h(enr24h);
+      setForensicsMoves7d(enr7d);
+      return { k15m, k1h, enr24h, enr7d };
+    } catch (err) {
+      console.warn('Failed to load move forensics:', err);
+      return { k15m: [], k1h: [], enr24h: [], enr7d: [] };
+    } finally {
+      setIsForensicsLoading(false);
+    }
+  };
 
   const handleStyleChange = (newStyle) => {
     setSelectedStyle(newStyle);
     localStorage.setItem('ai-analysis-style', newStyle);
+    if (newStyle === 'forensics' && forensicsMoves24h.length === 0) {
+      fetchAndEnrichForensics();
+    }
   };
+
+  useEffect(() => {
+    if (selectedStyle === 'forensics' && forensicsMoves24h.length === 0) {
+      fetchAndEnrichForensics();
+    }
+  }, [selectedStyle]);
 
   /** User bias: none | long | short — persists across reloads */
   const [selectedUserBias, setSelectedUserBias] = useState(() => {
@@ -908,7 +961,7 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
         `- Max Pain: ${maxPain ? '$' + formatNumber(maxPain.maxPainPrice, 0) : 'N/A'}\n` +
         `- Put/Call OI Ratio: ${pcr ? formatNumber(pcr.pcr, 2) : 'N/A'} | Total Call OI ${pcr ? formatNumber(pcr.totalCallOI, 0) : 'N/A'} | Total Put OI ${pcr ? formatNumber(pcr.totalPutOI, 0) : 'N/A'}\n` +
         `- GEX regime: ${gammaRegime?.regime || 'N/A'} (${gammaRegime?.description || 'N/A'}) | Net GEX at spot: ${gammaRegime?.netGexAtPrice != null ? formatNumber(gammaRegime.netGexAtPrice, 0) : 'N/A'} | GEX flip level: ${gexFlipPrice != null ? '$' + formatNumber(gexFlipPrice, 0) : 'N/A'}\n` +
-        `- Provenance: dealer-positioning model assumption, not observed dealer books ([DERIVED]).\n` +
+        `- Provenance: dealer-positioning model assumption, not observed dealer books (dashboard-derived estimate).\n` +
         `- Top strikes by total OI:\n${strikeLines}`
       );
     })();
@@ -1022,7 +1075,7 @@ ${cotStr}
 - CME COT open interest: ${data.cotData?.openInterest ?? 'N/A'}
 - COT observation age at report time: ${cotObservationAgeDays === null ? 'N/A' : cotObservationAgeDays + ' days'}
 - COT release caveat: Friday release reflects Tuesday positions, approximately 3-7 days lagged.
-- COT Strategic Synthesis: ${data.cotData?.narrative?.overview || 'N/A'} [DERIVED dashboard heuristic — verify independently]
+- COT Strategic Synthesis: ${data.cotData?.narrative?.overview || 'N/A'} (dashboard heuristic — verify independently)
 
 ## 5. DERIVATIVES
 - BTC 24h price change input for price/OI matrix: ${formatSigned(data.btc?.change, 2, '%')}
@@ -1068,13 +1121,13 @@ ${compareCvdVenues(activeCvd30d, activeSpotCvd30d, '30-day / 1d')}
 
 ## 7. DISPLAYED LIQUIDITY & ORDER BOOK
 - Aggregated OBI: ${orderBook?.obiPercent !== undefined ? formatSigned(orderBook.obiPercent, 2, '%') : 'N/A'}
-- Dashboard OBI label: ${orderBook?.signal || 'N/A'} [DERIVED dashboard heuristic — verify independently]
+- Dashboard OBI label: ${orderBook?.signal || 'N/A'} (dashboard heuristic — verify independently)
 - OBI exchange breakdown:
 ${orderBook?.exchanges?.length
   ? orderBook.exchanges.map((exchange) => `  - ${exchange.name}: ${formatSigned(exchange.obi, 2, '%')}`).join('\n')
   : '  N/A'}
 - Whale bid share: ${whaleWalls?.bidRatio !== undefined ? formatNumber(whaleWalls.bidRatio * 100, 1) + '%' : 'N/A'}
-- Dashboard whale-wall label: ${whaleWalls?.signal || 'N/A'} [DERIVED dashboard heuristic — verify independently]
+- Dashboard whale-wall label: ${whaleWalls?.signal || 'N/A'} (dashboard heuristic — verify independently)
 
 ### Largest Displayed Bid Walls
 ${formatWalls(whaleWalls?.whaleBids)}
@@ -1088,6 +1141,16 @@ ${formatNews(activeNews)}
 ## 9. USER INTENDED BIAS & AUDIT REQUEST
 - User Selected Bias: **${selectedUserBias === 'none' ? 'NONE (Objective Evaluation)' : selectedUserBias.toUpperCase()}**
 ${selectedUserBias !== 'none' ? '' : '- Note: User selected Objective Evaluation (No specific bias).'}
+
+${await (async () => {
+  try {
+    const fRes = await fetchAndEnrichForensics();
+    return formatForensicsPayloadForAi(fRes.enr24h, fRes.enr7d);
+  } catch (err) {
+    console.warn('Failed to embed forensics payload:', err);
+    return '';
+  }
+})()}
 `;
 
     const systemPrompt = getSystemPrompt(selectedStyle, selectedLang, selectedUserBias);
@@ -1482,6 +1545,7 @@ ${promptData}
             >
               <option value="compact">{styleLabels.compact}</option>
               <option value="professional">{styleLabels.professional}</option>
+              <option value="forensics">{styleLabels.forensics}</option>
             </select>
           </div>
 
@@ -1722,12 +1786,12 @@ ${promptData}
               >
                 {isAiLoading ? <Loader2 size={14} className="spinning" /> : <Sparkles size={14} />}
                 {isAiLoading
-                  ? isVi
-                    ? 'ĐANG KIỂM ĐỊNH...'
-                    : 'TESTING THESIS...'
-                  : isVi
-                    ? 'PHÂN TÍCH & RA QUYẾT ĐỊNH'
-                    : 'ANALYZE & DECIDE'}
+                  ? selectedStyle === 'forensics'
+                    ? (isVi ? '💥 ĐANG GIẢI PHẪU...' : '💥 ANALYZING FORENSICS...')
+                    : (isVi ? 'ĐANG KIỂM ĐỊNH...' : 'TESTING THESIS...')
+                  : selectedStyle === 'forensics'
+                    ? (isVi ? '💥 GIẢI PHẪU BIẾN ĐỘNG & DỰ PHÓNG' : '💥 FORENSICS & FORECAST')
+                    : (isVi ? 'PHÂN TÍCH & RA QUYẾT ĐỊNH' : 'ANALYZE & DECIDE')}
               </button>
             </Tooltip>
             <ModuleMenu moduleId="tab_summary" />
@@ -1744,6 +1808,233 @@ ${promptData}
       {aiProvider === 'openrouter' && !apiKeys?.openrouter && (
         <div className="font-mono" style={{ background: 'var(--bg-amber-badge)', border: '1px solid var(--border-badge-warn)', color: 'var(--color-amber-400)', padding: '10px 14px', borderRadius: '6px', fontSize: '0.75rem', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span>⚠️ {isVi ? 'Chưa nhập OpenRouter API Key. Vui lòng bấm biểu tượng ⚙️ Cài đặt ở thanh Header để nhập API Key.' : 'OpenRouter API Key missing. Please click the ⚙️ Settings icon in the top header to configure your API key.'}</span>
+        </div>
+      )}
+
+      {selectedStyle === 'forensics' && (
+        <div
+          className="forensics-timeline-card font-mono"
+          style={{
+            background: 'var(--bg-slate-900)',
+            border: '1px solid var(--border-panel)',
+            borderRadius: '8px',
+            padding: '16px',
+            marginBottom: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-contrast)' }}>
+                <span>💥</span>
+                <span>{isVi ? 'BẢNG CÁC ĐỢT GIẬT GIÁ ĐÃ NHẬN DIỆN (TOP 3 TRONG 24H & TOP 5 TRONG 7D)' : 'DETECTED SHARP IMPULSE MOVES (TOP 3 IN 24H & TOP 5 IN 7D)'}</span>
+                {isForensicsLoading && <Loader2 size={13} className="spinning" style={{ color: 'var(--color-primary)' }} />}
+              </div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-slate-400)', marginTop: '2px' }}>
+                {isVi
+                  ? 'Tái dựng vi cấu trúc tại thời điểm nến giật: Taker CVD Delta, Δ Open Interest, Long/Short và sự kiện vĩ mô.'
+                  : 'Microstructure reconstructed at the moment of impulse: Taker CVD Delta, Δ Open Interest, L/S Ratio & Macro events.'}
+              </div>
+            </div>
+            <button
+              onClick={() => fetchAndEnrichForensics(true)}
+              disabled={isForensicsLoading}
+              style={{
+                background: 'rgba(56, 189, 248, 0.1)',
+                border: '1px solid var(--color-primary)',
+                color: 'var(--color-primary)',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                cursor: isForensicsLoading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isForensicsLoading ? (isVi ? 'ĐANG QUÉT...' : 'SCANNING...') : (isVi ? '🔄 QUÉT LẠI' : '🔄 RESCAN')}
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
+            {/* 24h Column */}
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '12px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-sky-400)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>⚡</span>
+                <span>{isVi ? 'TOP 3 TRONG 24 GIỜ QUA (NẾN 15M)' : 'TOP 3 IN 24 HOURS (15M CANDLES)'}</span>
+              </div>
+              {forensicsMoves24h.length === 0 ? (
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', padding: '8px 0' }}>
+                  {isForensicsLoading ? (isVi ? 'Đang tải nến 15m...' : 'Loading 15m candles...') : (isVi ? 'Chưa phát hiện biến động đột biến trong 24h.' : 'No major impulse moves detected in 24h.')}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {forensicsMoves24h.map((m, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(244, 63, 94, 0.06)',
+                        border: `1px solid ${m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)'}`,
+                        borderRadius: '4px',
+                        padding: '8px 10px',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-300)' }}>#{idx + 1}</span>
+                          <span style={{
+                            fontWeight: 'bold',
+                            color: m.direction === 'PUMP' ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                          }}>
+                            {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
+                          </span>
+                          <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 15m)</span>
+                        </div>
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>{m.startTimeVn}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '4px 0' }}>
+                        <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
+                        <span style={{ color: 'var(--text-slate-400)' }}>Đỉnh/Đáy: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                        <span style={{
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          fontSize: '0.62rem',
+                          background: (m.takerCvdDelta || 0) >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                        }}>
+                          CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
+                        </span>
+
+                        {m.oiDeltaPercent != null && (
+                          <span style={{
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: 'var(--color-amber-400)',
+                          }}>
+                            ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
+                          </span>
+                        )}
+
+                        {m.lsRatio != null && (
+                          <span style={{
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'rgba(148, 163, 184, 0.15)',
+                            color: 'var(--text-slate-300)',
+                          }}>
+                            L/S: {m.lsRatio.toFixed(2)}
+                          </span>
+                        )}
+
+                        <span style={{
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          fontSize: '0.62rem',
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          color: 'var(--color-indigo-400)',
+                          fontWeight: 'bold',
+                        }}>
+                          {m.mechanismHypothesis}
+                        </span>
+                      </div>
+
+                      {m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0 && (
+                        <div style={{ fontSize: '0.62rem', color: 'var(--color-amber-400)', marginTop: '4px' }}>
+                          ⚠️ {m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title}`).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 7d Column */}
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '12px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-amber-400)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>📅</span>
+                <span>{isVi ? 'TOP 5 TRONG 7 NGÀY QUA (NẾN 1H)' : 'TOP 5 IN 7 DAYS (1H CANDLES)'}</span>
+              </div>
+              {forensicsMoves7d.length === 0 ? (
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', padding: '8px 0' }}>
+                  {isForensicsLoading ? (isVi ? 'Đang tải nến 1h...' : 'Loading 1h candles...') : (isVi ? 'Chưa phát hiện biến động đột biến trong 7d.' : 'No major impulse moves detected in 7d.')}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {forensicsMoves7d.map((m, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.06)' : 'rgba(244, 63, 94, 0.06)',
+                        border: `1px solid ${m.direction === 'PUMP' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)'}`,
+                        borderRadius: '4px',
+                        padding: '8px 10px',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-300)' }}>#{idx + 1}</span>
+                          <span style={{
+                            fontWeight: 'bold',
+                            color: m.direction === 'PUMP' ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                          }}>
+                            {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
+                          </span>
+                          <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 1h)</span>
+                        </div>
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>{m.startTimeVn}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '4px 0' }}>
+                        <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
+                        <span style={{ color: 'var(--text-slate-400)' }}>Đỉnh/Đáy: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                        <span style={{
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          fontSize: '0.62rem',
+                          background: (m.takerCvdDelta || 0) >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
+                        }}>
+                          CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
+                        </span>
+
+                        <span style={{
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          fontSize: '0.62rem',
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          color: 'var(--color-indigo-400)',
+                          fontWeight: 'bold',
+                        }}>
+                          {m.mechanismHypothesis}
+                        </span>
+
+                        {m.forwardReactions?.retracementPercent != null && (
+                          <span style={{
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'rgba(148, 163, 184, 0.15)',
+                            color: 'var(--text-slate-300)',
+                          }}>
+                            Thoái lui: {m.forwardReactions.retracementPercent.toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

@@ -73,7 +73,7 @@ export default function TradePlanAuditor({
 Nhiệm vụ: Kiểm định TRỰC TIẾP setup lệnh [${tradeDirection}] tại giá spot hiện tại (${formattedSpotPrice}) dựa trên dữ liệu vi cấu trúc 0-24h thực tế.
 
 ⚠️ HỢP ĐỒNG DỮ LIỆU & CHỐNG HALLUCINATION:
-- Chỉ sử dụng dữ liệu được cung cấp trực tiếp trong input. Nếu một chỉ số không có trong dữ liệu hoặc hiển thị N/A, BẮT BUỘC ghi rõ '[CHƯA BIẾT]' thay vì tự suy đoán con số cụ thể.
+- Chỉ sử dụng dữ liệu được cung cấp trực tiếp trong input. Nếu một chỉ số không có trong dữ liệu hoặc hiển thị N/A, phải ghi rõ 'N/A' hoặc 'thiếu dữ liệu' thay vì tự suy đoán con số cụ thể.
 
 ⚠️ QUY TRÌNH TƯ DUY BẮT BUỘC (REASONING-FIRST):
 - Trước khi sinh ra phán quyết ở Mục 1, bạn BẮT BUỘC phải thực hiện đánh giá và đối chiếu đầy đủ dữ liệu vi cấu trúc ở Mục 2 và Mục 3 trong tư duy/quá trình suy luận nội bộ. Chỉ tổng hợp phán quyết vào Mục 1 sau khi đã hoàn thành xong bước lập luận.
@@ -116,7 +116,7 @@ CẤU TRÚC BÁO CÁO KIỂM ĐỊNH YÊU CẦU (Luôn giữ 1 dòng trống gi�
 Your mission: Directly audit a [${tradeDirection}] trade setup at current price (${formattedSpotPrice}) using real-time 0-24h microstructure data.
 
 ⚠️ DATA CONTRACT & ANTI-HALLUCINATION:
-- Use ONLY data explicitly provided in the input. If a metric is unprovided or missing (N/A), explicitly state '[UNKNOWN]' instead of speculating or inventing numbers.
+- Use ONLY data explicitly provided in the input. If a metric is unprovided or missing (N/A), explicitly state 'N/A' or 'not provided' instead of speculating or inventing numbers.
 
 ⚠️ MANDATORY REASONING ORDER (REASONING-FIRST):
 - Before rendering the verdict in Section 1, you MUST complete full evaluation and cross-examination of Section 2 and Section 3 microstructure data in your internal reasoning process. Only synthesize the final verdict into Section 1 after completing data cross-examination.
