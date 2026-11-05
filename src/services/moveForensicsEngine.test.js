@@ -382,3 +382,92 @@ test('enrichMoveWithMicrostructure rejects OI data outside the timestamp coverag
   assert.equal(enriched[0].oiAfter, null);
 });
 
+test('detectTopImpulseMoves captures liquidity sweep wicks (Stop Hunts) even with small candle body', () => {
+  const baseTime = 1700000000000;
+  const klines = [
+    // 5 flat bars
+    { time: baseTime, open: 10000, high: 10020, low: 9980, close: 10005, volume: 10 },
+    { time: baseTime + 900000, open: 10005, high: 10025, low: 9985, close: 10010, volume: 10 },
+    // Bar 2: Huge lower wick sweep: open 10010, crashed to 9500 (-5.1%), but closed back up at 10020 (+0.1% body)
+    {
+      time: baseTime + 2 * 900000,
+      open: 10010,
+      high: 10030,
+      low: 9500,
+      close: 10020,
+      volume: 120,
+      quoteVolume: 1200000,
+      takerBuyQuoteVolume: 800000
+    },
+    // Another flat bar
+    { time: baseTime + 3 * 900000, open: 10020, high: 10035, low: 10010, close: 10025, volume: 10 },
+  ];
+
+  const top1 = detectTopImpulseMoves(klines, 1);
+  assert.equal(top1.length, 1);
+  const sweepMove = top1[0];
+  assert.equal(sweepMove.startIndex, 2);
+  assert.equal(sweepMove.moveType, 'LIQUIDITY_SWEEP_LOW');
+  assert.ok(sweepMove.rangePercent > 5.0, 'Range percent should exceed 5%');
+  assert.ok(sweepMove.lowerWickRatio > 0.5, 'Lower wick should dominate the candle');
+});
+
+test('detectTopImpulseMoves smart clusters impulse moves with a small pause/pullback candle', () => {
+  const baseTime = 1700000000000;
+  const klines = [
+    { time: baseTime, open: 10000, high: 10020, low: 9980, close: 10000, volume: 10 },
+    // Bar 1: Strong pump +2% (10000 -> 10200)
+    { time: baseTime + 900000, open: 10000, high: 10210, low: 9990, close: 10200, volume: 50 },
+    // Bar 2: Small pause/inside bar -0.15% (10200 -> 10185)
+    { time: baseTime + 2 * 900000, open: 10200, high: 10210, low: 10175, close: 10185, volume: 15 },
+    // Bar 3: Continuation pump +2.5% (10185 -> 10440)
+    { time: baseTime + 3 * 900000, open: 10185, high: 10450, low: 10180, close: 10440, volume: 60 },
+    { time: baseTime + 4 * 900000, open: 10440, high: 10450, low: 10430, close: 10440, volume: 10 },
+  ];
+
+  const top = detectTopImpulseMoves(klines, 1, { maxClusterLength: 4 });
+  assert.equal(top.length, 1);
+  const clusteredMove = top[0];
+  assert.equal(clusteredMove.candleCount, 3, 'Should cluster all 3 bars including the pause candle');
+  assert.equal(clusteredMove.startPrice, 10000);
+  assert.equal(clusteredMove.endPrice, 10440);
+  assert.ok(clusteredMove.priceChangePercent > 4.0);
+});
+
+test('enrichMoveWithMicrostructure identifies SWEEP_AND_RECLAIM_LOW and incorporates HFT liquidations', () => {
+  const baseTime = 1700000000000;
+  const sweepMove = [{
+    startIndex: 1,
+    endIndex: 1,
+    candleCount: 1,
+    startTime: baseTime,
+    endTime: baseTime + 900000,
+    startPrice: 90000,
+    endPrice: 90100,
+    highPrice: 90200,
+    lowPrice: 86000,
+    priceChange: 100,
+    priceChangePercent: 0.11,
+    rangePercent: 4.88,
+    moveType: 'LIQUIDITY_SWEEP_LOW',
+    direction: 'PUMP',
+    lowerWickRatio: 0.85,
+    intracandleRetracePercent: 97.0
+  }];
+
+  const localMoveStore = [{
+    triggerTime: baseTime + 60000,
+    qualityTier: 'TIER_A',
+    flowLabel: 'SWEEP_DUMP_REVERSED',
+    liqLongUsd: 2500000, // 2.5M Long liquidation
+    liqShortUsd: 100000
+  }];
+
+  const enriched = enrichMoveWithMicrostructure(sweepMove, { localMoveStore });
+  assert.equal(enriched.length, 1);
+  assert.equal(enriched[0].mechanismHypothesis, 'SWEEP_AND_RECLAIM_LOW');
+  assert.ok(enriched[0].localTrackerMatch != null);
+  assert.equal(enriched[0].localTrackerMatch.liqLongUsd, 2500000);
+});
+
+

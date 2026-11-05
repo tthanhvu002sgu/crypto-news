@@ -61,3 +61,49 @@ test('places liquidation chart in the cross-examination block and options chart 
   assert.equal(charts.length, new Set(charts).size);
   assert.equal(charts.filter((chart) => chart === 'cvd').length, 1);
 });
+
+test('places charts accurately with H2 section and H3 subsection hierarchy', () => {
+  const report = `## 1. GLOBAL MACRO & INSTITUTIONAL LIQUIDITY ANALYSIS
+Executive overview of macro and institutional flows.
+
+### 1.1. Macro & Real-Rate Proxy
+- Ex-post real rate proxy and liquidity.
+
+### 1.2. Institutional Flows (ETF & CME COT)
+- Spot ETF flow persistence and CME positioning.
+
+## 2. TECHNICAL, ON-CHAIN & DERIVATIVES MICROSTRUCTURE ANALYSIS
+### 2.1. Technical Structure
+- Multi-timeframe trend.
+
+### 2.2. On-Chain Valuation
+- BTC Production cost and MVRV ratio.
+
+### 2.3. Derivatives & Microstructure
+- Open interest and funding rates.
+
+## 3. SIGNAL CROSS-EXAMINATION & CONFLICT RESOLUTION
+### 3.1. Price vs CVD / OBI
+- Taker flow divergence.
+
+### 3.2. Liquidation Flow vs Price / CVD
+- Liquidation cascade analysis.
+
+## 4. SCENARIO MATRIX & ACTIVATION TRIGGERS
+| Scenario | Weight (%) | Trigger |
+| Base | 60 | $90k |
+### 4.1. Options Positioning Walls
+- Call wall and gamma regime.`;
+
+  const blocks = buildProfessionalReportLayout(report);
+  const chartAnchor = (chart) => blocks.find((block) => block.charts.includes(chart))?.anchor;
+
+  assert.match(chartAnchor('macro'), /1\.1\. Macro & Real-Rate Proxy/);
+  assert.match(chartAnchor('etf'), /1\.2\. Institutional Flows/);
+  assert.match(chartAnchor('cot'), /1\.2\. Institutional Flows/);
+  assert.match(chartAnchor('onchain'), /2\.2\. On-Chain Valuation/);
+  assert.match(chartAnchor('oi'), /2\.3\. Derivatives & Microstructure/);
+  assert.match(chartAnchor('cvd'), /3\.1\. Price vs CVD/);
+  assert.match(chartAnchor('liq'), /3\.2\. Liquidation Flow/);
+  assert.match(chartAnchor('options'), /4\.1\. Options Positioning Walls/);
+});

@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
 import Tooltip from './Tooltip';
-import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getBTCFuturesKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { fetchCached } from '../utils/cache';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService';
@@ -64,8 +64,10 @@ const markdownComponents = {
   li: ({ children }) => <li>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</li>,
   td: ({ children }) => <td>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</td>,
   strong: ({ children }) => <strong>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</strong>,
+  h1: ({ children }) => <h1>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h1>,
   h2: ({ children }) => <h2>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h2>,
   h3: ({ children }) => <h3>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h3>,
+  h4: ({ children }) => <h4>{React.Children.map(children, child => typeof child === 'string' ? renderTextWithTags(child) : child)}</h4>,
 };
 
 /**
@@ -181,6 +183,10 @@ export const cleanLatex = (text) => {
       // Skip empty lines and headings
       if (!trimmed || /^#{1,4}\s/.test(trimmed)) return line;
 
+      // Extract leading indentation to preserve sub-bullet hierarchy
+      const indentMatch = line.match(/^(\s*)/);
+      const indent = indentMatch ? indentMatch[1] : '';
+
       // Process bullet lines (starting with - or •)
       if (/^[-•]\s/.test(trimmed)) {
         // Parse: "- [**]Label:[**] Content"
@@ -191,12 +197,13 @@ export const cleanLatex = (text) => {
           const label = rawLabel.replace(/\*{1,2}/g, '').trim();
           // Clean content: use context-aware orphan bold stripper
           content = stripOrphanedBold(content);
-          return `${prefix}**${label}** ${content}`.trimEnd();
+          return `${indent}${prefix}**${label}** ${content}`.trimEnd();
         }
+        return `${indent}${stripOrphanedBold(trimmed)}`;
       }
 
-      // Non-bullet lines: strip orphaned bold
-      return stripOrphanedBold(line);
+      // Non-bullet lines: strip orphaned bold, preserving any indentation
+      return `${indent}${stripOrphanedBold(trimmed)}`;
     })
     .join('\n');
 
@@ -206,9 +213,9 @@ export const cleanLatex = (text) => {
     .replace(/([a-zA-Zà-ỹÀ-Ỹ])(\$[0-9])/g, '$1 $2')
     // Fix missing space after ) before words
     .replace(/([\)])([a-zA-Zà-ỹÀ-Ỹ])/g, '$1 $2')
-    // Ensure space after bullet hyphen
-    .replace(/^-\s*([^\s])/gm, '- $1')
-    // Prevent 4-space indent from creating code blocks
+    // Ensure space after bullet hyphen (both top-level and indented sub-bullets)
+    .replace(/^(\s*)-\s*([^\s])/gm, '$1- $2')
+    // Prevent excessive 4+ space indent from creating code blocks, keep 2-space sub-bullet indent
     .replace(/^ {4,}([-*+]|\d+\.) /gm, '  $1 ')
     // ── Tilde / strikethrough prevention ────────────────────────────
     // remark-gfm treats ~~text~~ as strikethrough and ~text~ as subscript.
@@ -381,35 +388,45 @@ export default function SummaryTab({
 
     setIsForensicsLoading(true);
     try {
-      const [k15m, k1h, calRes, oi168, ls168] = await Promise.all([
-        getBTCKlines('BTCUSDT', '15m', 96),
-        getBTCKlines('BTCUSDT', '1h', 168),
+      const [k15m, k1h, calRes, oi96_15m, ls96_15m, oi168_1h, ls168_1h] = await Promise.all([
+        getBTCFuturesKlines('BTCUSDT', '15m', 96),
+        getBTCFuturesKlines('BTCUSDT', '1h', 168),
         getWeeklyEconomicCalendar().catch(() => null),
+        getOIHistory('BTCUSDT', '15m', 96).catch(() => []),
+        getLongShortRatio('BTCUSDT', '15m', 96).catch(() => []),
         getOIHistory('BTCUSDT', '1h', 168).catch(() => []),
         getLongShortRatio('BTCUSDT', '1h', 168).catch(() => []),
       ]);
       const localEvents = loadMovePreview();
-      const raw24h = detectTopImpulseMoves(k15m, 3);
-      const raw7d = detectTopImpulseMoves(k1h, 5);
+      const raw24h = detectTopImpulseMoves(k15m, 3, { maxClusterLength: 8 });
+      const raw7d = detectTopImpulseMoves(k1h, 5, { maxClusterLength: 6 });
 
-      const activeOiHistory = (Array.isArray(oi168) && oi168.length > 0)
-        ? oi168
+      const activeOi24h = (Array.isArray(oi96_15m) && oi96_15m.length > 0)
+        ? oi96_15m
+        : ((Array.isArray(oi168_1h) && oi168_1h.length > 0) ? oi168_1h : (data?.oiHistory || []));
+      const activeLs24h = (Array.isArray(ls96_15m) && ls96_15m.length > 0)
+        ? ls96_15m
+        : ((Array.isArray(ls168_1h) && ls168_1h.length > 0) ? ls168_1h : (data?.lsHistory || []));
+
+      const activeOi7d = (Array.isArray(oi168_1h) && oi168_1h.length > 0)
+        ? oi168_1h
         : (data?.oiHistory || []);
-      const activeLsHistory = (Array.isArray(ls168) && ls168.length > 0)
-        ? ls168
+      const activeLs7d = (Array.isArray(ls168_1h) && ls168_1h.length > 0)
+        ? ls168_1h
         : (data?.lsHistory || []);
+
       const activeCalendarEvents = calRes?.events || data?.calendarEvents || [];
 
       const enr24h = enrichMoveWithMicrostructure(raw24h, {
-        oiHistory: activeOiHistory,
-        lsHistory: activeLsHistory,
+        oiHistory: activeOi24h,
+        lsHistory: activeLs24h,
         calendarEvents: activeCalendarEvents,
         localMoveStore: localEvents,
         klines: k15m,
       });
       const enr7d = enrichMoveWithMicrostructure(raw7d, {
-        oiHistory: activeOiHistory,
-        lsHistory: activeLsHistory,
+        oiHistory: activeOi7d,
+        lsHistory: activeLs7d,
         calendarEvents: activeCalendarEvents,
         localMoveStore: localEvents,
         klines: k1h,
@@ -1956,6 +1973,21 @@ ${promptData}
                             {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
                           </span>
                           <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 15m)</span>
+                          {m.moveType === 'LIQUIDITY_SWEEP_LOW' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(16,185,129,0.18)', color: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              🎯 {isVi ? 'SWEEP ĐÁY' : 'SWEEP LOW'}
+                            </span>
+                          )}
+                          {m.moveType === 'LIQUIDITY_SWEEP_HIGH' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(244,63,94,0.18)', color: 'var(--color-rose-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              ⚡ {isVi ? 'SWEEP ĐỈNH' : 'SWEEP HIGH'}
+                            </span>
+                          )}
+                          {m.moveType === 'TWO_WAY_VOLATILITY' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.18)', color: 'var(--color-amber-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              ⚔️ {isVi ? 'QUÉT 2 ĐẦU' : '2-WAY SWEEP'}
+                            </span>
+                          )}
                         </div>
                         <div
                           style={{
@@ -1980,7 +2012,9 @@ ${promptData}
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
                         <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
-                        <span style={{ color: 'var(--text-slate-400)' }}>{isVi ? 'Đỉnh/Đáy' : 'Extremum'}: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
+                        <span style={{ color: 'var(--text-slate-400)' }}>
+                          {isVi ? 'Râu quét' : 'Range'}: <strong style={{ color: 'var(--color-amber-400)' }}>{m.rangePercent != null ? `${m.rangePercent.toFixed(1)}%` : 'N/A'}</strong> ({formatUsd(m.lowPrice, 0)} - {formatUsd(m.highPrice, 0)})
+                        </span>
                       </div>
 
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
@@ -2020,6 +2054,32 @@ ${promptData}
                             color: 'var(--text-slate-200)',
                           }}>
                             L/S: {m.lsRatio.toFixed(2)}
+                          </span>
+                        )}
+
+                        {m.localTrackerMatch?.liqLongUsd > 0 && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-rose-badge)',
+                            border: '1px solid var(--border-rose-500)',
+                            color: 'var(--color-rose-400)',
+                          }}>
+                            🔥 Liq Long: {formatCompactUsd(m.localTrackerMatch.liqLongUsd)}
+                          </span>
+                        )}
+
+                        {m.localTrackerMatch?.liqShortUsd > 0 && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-emerald-badge)',
+                            border: '1px solid var(--border-emerald-500)',
+                            color: 'var(--color-emerald-400)',
+                          }}>
+                            🔥 Liq Short: {formatCompactUsd(m.localTrackerMatch.liqShortUsd)}
                           </span>
                         )}
 
@@ -2085,6 +2145,21 @@ ${promptData}
                             {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
                           </span>
                           <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 1h)</span>
+                          {m.moveType === 'LIQUIDITY_SWEEP_LOW' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(16,185,129,0.18)', color: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              🎯 {isVi ? 'SWEEP ĐÁY' : 'SWEEP LOW'}
+                            </span>
+                          )}
+                          {m.moveType === 'LIQUIDITY_SWEEP_HIGH' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(244,63,94,0.18)', color: 'var(--color-rose-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              ⚡ {isVi ? 'SWEEP ĐỈNH' : 'SWEEP HIGH'}
+                            </span>
+                          )}
+                          {m.moveType === 'TWO_WAY_VOLATILITY' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.18)', color: 'var(--color-amber-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              ⚔️ {isVi ? 'QUÉT 2 ĐẦU' : '2-WAY SWEEP'}
+                            </span>
+                          )}
                         </div>
                         <div
                           style={{
@@ -2109,7 +2184,9 @@ ${promptData}
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
                         <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
-                        <span style={{ color: 'var(--text-slate-400)' }}>{isVi ? 'Đỉnh/Đáy' : 'Extremum'}: {formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice, 0)}</span>
+                        <span style={{ color: 'var(--text-slate-400)' }}>
+                          {isVi ? 'Râu quét' : 'Range'}: <strong style={{ color: 'var(--color-amber-400)' }}>{m.rangePercent != null ? `${m.rangePercent.toFixed(1)}%` : 'N/A'}</strong> ({formatUsd(m.lowPrice, 0)} - {formatUsd(m.highPrice, 0)})
+                        </span>
                       </div>
 
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
@@ -2124,6 +2201,59 @@ ${promptData}
                         }}>
                           CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
                         </span>
+
+                        {m.oiDeltaPercent != null && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            fontWeight: 500,
+                            background: 'var(--bg-amber-badge)',
+                            border: '1px solid var(--border-badge-warn)',
+                            color: 'var(--color-amber-500)',
+                          }}>
+                            ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
+                          </span>
+                        )}
+
+                        {m.lsRatio != null && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            color: 'var(--text-slate-200)',
+                          }}>
+                            L/S: {m.lsRatio.toFixed(2)}
+                          </span>
+                        )}
+
+                        {m.localTrackerMatch?.liqLongUsd > 0 && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-rose-badge)',
+                            border: '1px solid var(--border-rose-500)',
+                            color: 'var(--color-rose-400)',
+                          }}>
+                            🔥 Liq Long: {formatCompactUsd(m.localTrackerMatch.liqLongUsd)}
+                          </span>
+                        )}
+
+                        {m.localTrackerMatch?.liqShortUsd > 0 && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-emerald-badge)',
+                            border: '1px solid var(--border-emerald-500)',
+                            color: 'var(--color-emerald-400)',
+                          }}>
+                            🔥 Liq Short: {formatCompactUsd(m.localTrackerMatch.liqShortUsd)}
+                          </span>
+                        )}
 
                         <span style={{
                           padding: '2px 6px',

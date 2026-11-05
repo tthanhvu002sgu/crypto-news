@@ -78,9 +78,9 @@ export const formatCompactUsd = (num) => {
 };
 
 /**
- * Phát hiện Top N đợt di chuyển giá mạnh nhất (sharp impulse moves)
- * Gom các cụm nến cùng hướng biến động liên tiếp (consecutive impulse clustering)
- * và sắp xếp theo biên độ tuyệt đối giảm dần.
+ * Phát hiện Top N đợt di chuyển giá mạnh nhất (sharp impulse moves & liquidity sweeps)
+ * Hỗ trợ nhận diện cả thân nến lớn lẫn râu quét cực mạnh (Stop Hunts / Bart Patterns),
+ * gom các cụm nến có xu hướng kèm dung sai nến nghỉ, và sắp xếp theo độ lớn hiệu dụng.
  *
  * @param {Array<Object>} klines Mảng nến OHLCV
  * @param {number} count Số đợt muốn trích xuất (mặc định 3 cho 24h, 5 cho 7d)
@@ -92,7 +92,8 @@ export function detectTopImpulseMoves(klines = [], count = 3, options = {}) {
     return [];
   }
 
-  const maxClusterLength = options.maxClusterLength || 4;
+  // Tăng độ dài cụm tối đa (mặc định 6, có thể mở rộng tới 8 cho nến 15m)
+  const maxClusterLength = options.maxClusterLength || 6;
   const candidates = [];
 
   // Chuẩn hóa và làm sạch nến
@@ -106,8 +107,6 @@ export function detectTopImpulseMoves(klines = [], count = 3, options = {}) {
     const takerBuyQuoteVolume = toFiniteNumber(k.takerBuyQuoteVolume);
     
     // CVD delta: Taker Mua - Taker Bán (Quote Volume)
-    // Taker Sell Quote Vol = quoteVolume - takerBuyQuoteVolume
-    // CVD Delta = takerBuyQuoteVolume - takerSellQuoteVolume = 2 * takerBuyQuoteVolume - quoteVolume
     let takerCvdDelta = 0;
     if (takerBuyQuoteVolume != null && quoteVolume > 0) {
       takerCvdDelta = (2 * takerBuyQuoteVolume) - quoteVolume;
@@ -116,6 +115,8 @@ export function detectTopImpulseMoves(klines = [], count = 3, options = {}) {
     const timeMs = toTimeMs(k.time);
     const change = (open != null && close != null && open > 0) ? (close - open) : 0;
     const changePercent = (open != null && close != null && open > 0) ? ((close - open) / open) * 100 : 0;
+    const range = (high != null && low != null && low > 0) ? (high - low) : 0;
+    const rangePercent = (low != null && low > 0) ? (range / low) * 100 : 0;
     const direction = changePercent > 0.02 ? 'PUMP' : (changePercent < -0.02 ? 'DUMP' : 'FLAT');
 
     return {
@@ -130,6 +131,8 @@ export function detectTopImpulseMoves(klines = [], count = 3, options = {}) {
       takerCvdDelta,
       change,
       changePercent,
+      range,
+      rangePercent,
       direction,
       raw: k
     };
@@ -147,76 +150,131 @@ export function detectTopImpulseMoves(klines = [], count = 3, options = {}) {
   }
   const candleDuration = options.candleDurationMs || defaultDuration;
 
-  // Tạo candidate từ từng nến đơn lẻ
-  for (let i = 0; i < validBars.length; i++) {
-    const bar = validBars[i];
-    const priceChange = bar.close - bar.open;
-    const priceChangePercent = bar.open > 0 ? (priceChange / bar.open) * 100 : 0;
-    candidates.push({
-      startIndex: i,
-      endIndex: i,
-      candleCount: 1,
-      startTime: bar.timeMs,
-      endTime: bar.timeMs + candleDuration,
-      startPrice: bar.open,
-      endPrice: bar.close,
-      highPrice: bar.high,
-      lowPrice: bar.low,
+  // Helper hàm khởi tạo và chấm điểm một ứng viên (single bar hoặc cluster)
+  const buildCandidate = (startIndex, endIndex, bars) => {
+    const firstBar = bars[0];
+    const lastBar = bars[bars.length - 1];
+    const startPrice = firstBar.open;
+    const endPrice = lastBar.close;
+    const highPrice = Math.max(...bars.map(b => b.high));
+    const lowPrice = Math.min(...bars.map(b => b.low));
+    const priceChange = endPrice - startPrice;
+    const priceChangePercent = startPrice > 0 ? (priceChange / startPrice) * 100 : 0;
+    const totalRange = highPrice - lowPrice;
+    const rangePercent = lowPrice > 0 ? (totalRange / lowPrice) * 100 : 0;
+
+    // Phân tích cấu trúc râu nến (wicks) và thân nến (body)
+    const upperWick = highPrice - Math.max(startPrice, endPrice);
+    const lowerWick = Math.min(startPrice, endPrice) - lowPrice;
+    const upperWickRatio = totalRange > 0 ? upperWick / totalRange : 0;
+    const lowerWickRatio = totalRange > 0 ? lowerWick / totalRange : 0;
+    const bodyRatio = totalRange > 0 ? Math.abs(priceChange) / totalRange : 0;
+
+    // Tỷ lệ thoái lui trong nội bộ nến/cụm nến (Intracandle Retracement)
+    let intracandleRetracePercent = 0;
+    if (priceChange >= 0 && highPrice > startPrice) {
+      intracandleRetracePercent = ((highPrice - endPrice) / (highPrice - startPrice)) * 100;
+    } else if (priceChange < 0 && startPrice > lowPrice) {
+      intracandleRetracePercent = ((endPrice - lowPrice) / (startPrice - lowPrice)) * 100;
+    }
+
+    // Phân loại kiểu biến động (Move Type)
+    let moveType = 'DIRECTIONAL_IMPULSE';
+    let direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
+
+    if (upperWickRatio >= 0.50 && rangePercent >= 0.5) {
+      moveType = 'LIQUIDITY_SWEEP_HIGH'; // Quét thanh lý đỉnh / Râu trên dài
+      direction = 'DUMP'; // Phản xạ xả sau quét đỉnh
+    } else if (lowerWickRatio >= 0.50 && rangePercent >= 0.5) {
+      moveType = 'LIQUIDITY_SWEEP_LOW'; // Quét thanh lý đáy / Rút chân mạnh
+      direction = 'PUMP'; // Phản xạ bật tăng sau quét đáy
+    } else if (upperWickRatio >= 0.35 && lowerWickRatio >= 0.35 && rangePercent >= 0.8) {
+      moveType = 'TWO_WAY_VOLATILITY'; // Biến động giật 2 đầu
+      direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
+    } else {
+      moveType = priceChangePercent >= 0 ? 'DIRECTIONAL_PUMP' : 'DIRECTIONAL_DUMP';
+      direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
+    }
+
+    // Độ lớn biến động hiệu dụng (Effective Magnitude):
+    // Cân đối giữa biên độ thân (close-open) và biên độ râu quét (high-low).
+    // Giúp các cú Stop Hunt quét râu lớn nhưng đóng nến doji không bị lọt khỏi radar.
+    const effectiveMagnitude = Math.max(Math.abs(priceChangePercent), rangePercent * 0.75);
+
+    const totalVolume = bars.reduce((acc, b) => acc + b.volume, 0);
+    const totalQuoteVolume = bars.reduce((acc, b) => acc + b.quoteVolume, 0);
+    const totalTakerCvdDelta = bars.reduce((acc, b) => acc + b.takerCvdDelta, 0);
+
+    return {
+      startIndex,
+      endIndex,
+      candleCount: bars.length,
+      startTime: firstBar.timeMs,
+      endTime: lastBar.timeMs + candleDuration,
+      startPrice,
+      endPrice,
+      highPrice,
+      lowPrice,
       priceChange,
       priceChangePercent,
-      direction: bar.close >= bar.open ? 'PUMP' : 'DUMP',
-      volume: bar.volume,
-      quoteVolume: bar.quoteVolume,
-      takerCvdDelta: bar.takerCvdDelta
-    });
+      rangePercent,
+      effectiveMagnitude,
+      moveType,
+      upperWickRatio,
+      lowerWickRatio,
+      bodyRatio,
+      intracandleRetracePercent,
+      direction,
+      volume: totalVolume,
+      quoteVolume: totalQuoteVolume,
+      takerCvdDelta: totalTakerCvdDelta
+    };
+  };
+
+  // 1. Tạo candidate từ từng nến đơn lẻ
+  for (let i = 0; i < validBars.length; i++) {
+    candidates.push(buildCandidate(i, i, [validBars[i]]));
   }
 
-  // Tạo candidate từ các cụm nến liên tiếp cùng hướng (2 đến maxClusterLength nến)
+  // 2. Tạo candidate từ các cụm nến (Smart Clustering)
+  // Gom cả cụm thuần (pure impulse) VÀ cụm có tối đa 1 nến nghỉ / pullback nhỏ
   for (let len = 2; len <= maxClusterLength; len++) {
     for (let i = 0; i <= validBars.length - len; i++) {
       const windowBars = validBars.slice(i, i + len);
       const firstBar = windowBars[0];
       const lastBar = windowBars[windowBars.length - 1];
 
-      // Kiểm tra tính đồng nhất của xu hướng trong cụm
+      // A. Cụm đồng nhất 100% cùng chiều
       const isConsistentPump = windowBars.every(b => b.close >= b.open);
       const isConsistentDump = windowBars.every(b => b.close <= b.open);
 
       if (isConsistentPump || isConsistentDump) {
-        const startPrice = firstBar.open;
-        const endPrice = lastBar.close;
-        const highPrice = Math.max(...windowBars.map(b => b.high));
-        const lowPrice = Math.min(...windowBars.map(b => b.low));
-        const priceChange = endPrice - startPrice;
-        const priceChangePercent = startPrice > 0 ? (priceChange / startPrice) * 100 : 0;
-        const direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
-        const totalVolume = windowBars.reduce((acc, b) => acc + b.volume, 0);
-        const totalQuoteVolume = windowBars.reduce((acc, b) => acc + b.quoteVolume, 0);
-        const totalTakerCvdDelta = windowBars.reduce((acc, b) => acc + b.takerCvdDelta, 0);
+        candidates.push(buildCandidate(i, i + len - 1, windowBars));
+        continue;
+      }
 
-        candidates.push({
-          startIndex: i,
-          endIndex: i + len - 1,
-          candleCount: len,
-          startTime: firstBar.timeMs,
-          endTime: lastBar.timeMs + candleDuration,
-          startPrice,
-          endPrice,
-          highPrice,
-          lowPrice,
-          priceChange,
-          priceChangePercent,
-          direction,
-          volume: totalVolume,
-          quoteVolume: totalQuoteVolume,
-          takerCvdDelta: totalTakerCvdDelta
-        });
+      // B. Cụm xu hướng có 1 nến nghỉ / pullback nhỏ (<= 25% biên độ tích lũy)
+      const redBars = windowBars.filter(b => b.close < b.open);
+      const greenBars = windowBars.filter(b => b.close > b.open);
+
+      if (redBars.length === 1 && firstBar.close >= firstBar.open && lastBar.close > firstBar.open) {
+        const netPump = lastBar.close - firstBar.open;
+        const redPullback = redBars[0].open - redBars[0].close;
+        if (netPump > 0 && (redPullback / netPump) <= 0.25) {
+          candidates.push(buildCandidate(i, i + len - 1, windowBars));
+        }
+      } else if (greenBars.length === 1 && firstBar.close <= firstBar.open && lastBar.close < firstBar.open) {
+        const netDump = firstBar.open - lastBar.close;
+        const greenPullback = greenBars[0].close - greenBars[0].open;
+        if (netDump > 0 && (greenPullback / netDump) <= 0.25) {
+          candidates.push(buildCandidate(i, i + len - 1, windowBars));
+        }
       }
     }
   }
 
-  // Sắp xếp các ứng viên theo độ dịch chuyển giá tuyệt đối giảm dần
-  candidates.sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent));
+  // Sắp xếp các ứng viên theo độ lớn biến động hiệu dụng (effectiveMagnitude) giảm dần
+  candidates.sort((a, b) => b.effectiveMagnitude - a.effectiveMagnitude);
 
   // Lọc non-overlapping intervals tham lam (greedy)
   const selected = [];
@@ -278,7 +336,7 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
     .sort((a, b) => a.timeMs - b.timeMs);
 
   return moves.map((move, rankIndex) => {
-    const { startTime, endTime, startPrice, endPrice, direction, priceChangePercent } = move;
+    const { startTime, endTime, startPrice, endPrice, direction, priceChangePercent, moveType, intracandleRetracePercent } = move;
 
     // 1. Tìm Δ OI tại thời điểm cú giật
     let oiBefore = null;
@@ -400,7 +458,7 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
       }
     }
 
-    // 4. Khớp dữ liệu thực tế từ MoveTrackerResearch (IndexedDB) nếu có lưu
+    // 4. Khớp dữ liệu thực tế từ MoveTrackerResearch (IndexedDB / LocalStorage) nếu có lưu
     let localTrackerMatch = null;
     if (Array.isArray(localMoveStore) && localMoveStore.length > 0) {
       let bestLocalDiff = Infinity;
@@ -453,8 +511,6 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
           }
         }
 
-        // Bắt buộc nến phải nằm trong phạm vi dung sai thời gian hợp lý
-        // Nếu dataset chưa chạm tới thời điểm này, trả về null
         if (best != null && minDiff <= maxToleranceMs) {
           return best.close;
         }
@@ -470,10 +526,8 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
       if (latestPostPrice != null && startPrice !== endPrice) {
         const totalImpulse = endPrice - startPrice;
         if (direction === 'PUMP') {
-          // Thoái lui của PUMP = (endPrice - latestPostPrice) / (endPrice - startPrice) * 100
           forwardReactions.retracementPercent = ((endPrice - latestPostPrice) / totalImpulse) * 100;
         } else {
-          // Thoái lui của DUMP = (latestPostPrice - endPrice) / (startPrice - endPrice) * 100
           forwardReactions.retracementPercent = ((latestPostPrice - endPrice) / Math.abs(totalImpulse)) * 100;
         }
 
@@ -498,26 +552,41 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
     const hasMacro = matchingCalendarEvents.some(e => e.impact === 'HIGH');
     const isOiDecreasing = oiDeltaPercent != null && oiDeltaPercent < -0.8;
     const isOiIncreasing = oiDeltaPercent != null && oiDeltaPercent > 0.8;
-    const isHeavyRetracement = forwardReactions.retracementPercent != null && forwardReactions.retracementPercent > 70;
+    const isHeavyPostRetracement = forwardReactions.retracementPercent != null && forwardReactions.retracementPercent > 70;
+    const isIntracandleSweepTrap = (intracandleRetracePercent != null && intracandleRetracePercent >= 65) || moveType === 'LIQUIDITY_SWEEP_HIGH' || moveType === 'LIQUIDITY_SWEEP_LOW';
+    const hasMajorShortLiq = localTrackerMatch?.liqShortUsd != null && localTrackerMatch.liqShortUsd > 1000000;
+    const hasMajorLongLiq = localTrackerMatch?.liqLongUsd != null && localTrackerMatch.liqLongUsd > 1000000;
 
     if (hasMacro) {
       mechanismHypothesis = 'MACRO_NEWS_REACTION';
       const ev = matchingCalendarEvents.find(e => e.impact === 'HIGH') || matchingCalendarEvents[0];
       mechanismExplanation = `Phản ứng dữ dội trước tin tức/sự kiện vĩ mô: "${ev.title}".`;
       confidence = 'HIGH';
-    } else if (isHeavyRetracement) {
+    } else if (moveType === 'LIQUIDITY_SWEEP_HIGH' || (direction === 'DUMP' && isIntracandleSweepTrap)) {
+      mechanismHypothesis = 'SWEEP_AND_REJECT_HIGH';
+      mechanismExplanation = 'Quét thanh lý đỉnh (Buy-side Liquidity Grab) với râu trên dài rồi bị xả ngược trở lại.';
+      confidence = 'HIGH';
+    } else if (moveType === 'LIQUIDITY_SWEEP_LOW' || (direction === 'PUMP' && isIntracandleSweepTrap)) {
+      mechanismHypothesis = 'SWEEP_AND_RECLAIM_LOW';
+      mechanismExplanation = 'Quét thanh lý đáy (Sell-side Liquidity Grab) với râu dưới dài rồi được hấp thụ rút chân gom hàng.';
+      confidence = 'HIGH';
+    } else if (isHeavyPostRetracement) {
       mechanismHypothesis = 'ABSORPTION_TRAP';
       mechanismExplanation = direction === 'PUMP'
         ? 'Bẫy tăng giá (Bull Trap) - Lực mua bị chặn bởi tường xả Limit Sell, giá bị kéo ngược > 70%.'
         : 'Bẫy giảm giá (Bear Trap) - Quét thanh lý đáy rồi được hấp thụ gom hàng ngược lại.';
       confidence = 'HIGH';
-    } else if (direction === 'PUMP' && isOiDecreasing) {
+    } else if ((direction === 'PUMP' && isOiDecreasing) || hasMajorShortLiq) {
       mechanismHypothesis = 'SHORT_SQUEEZE';
-      mechanismExplanation = 'Phe Short bị ép thanh lý hoặc cắt lỗ hàng loạt khiến OI sụt giảm mạnh trong khi giá giật tăng dựng đứng.';
+      mechanismExplanation = hasMajorShortLiq
+        ? `Phe Short bị thanh lý cưỡng bức lớn (${formatCompactUsd(localTrackerMatch.liqShortUsd)}) đẩy giá bật tăng mạnh.`
+        : 'Phe Short bị ép thanh lý hoặc cắt lỗ hàng loạt khiến OI sụt giảm mạnh trong khi giá giật tăng dựng đứng.';
       confidence = 'HIGH';
-    } else if (direction === 'DUMP' && isOiDecreasing) {
+    } else if ((direction === 'DUMP' && isOiDecreasing) || hasMajorLongLiq) {
       mechanismHypothesis = 'LONG_LIQUIDATION_CASCADE';
-      mechanismExplanation = 'Thanh lý dây chuyền các vị thế Long đòn bẩy cao, khiến OI bốc hơi nhanh chóng cùng nhịp rơi giá.';
+      mechanismExplanation = hasMajorLongLiq
+        ? `Thanh lý dây chuyền các vị thế Long lớn (${formatCompactUsd(localTrackerMatch.liqLongUsd)}) kích hoạt đà rơi giá.`
+        : 'Thanh lý dây chuyền các vị thế Long đòn bẩy cao, khiến OI bốc hơi nhanh chóng cùng nhịp rơi giá.';
       confidence = 'HIGH';
     } else if (direction === 'PUMP' && isOiIncreasing && (move.takerCvdDelta > 0 || move.takerCvdDelta == null)) {
       mechanismHypothesis = 'AGGRESSIVE_TAKER_BUYING';
@@ -568,7 +637,7 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
   const parts = [];
 
   parts.push(`## DỮ LIỆU GIẢI PHẪU BIẾN ĐỘNG GIÁ (MOVE FORENSICS & MICROSTRUCTURE DATA)`);
-  parts.push(`*Dữ liệu ghi nhận từ Binance Klines (15m cho 24h, 1h cho 7d), kết hợp Taker CVD, Open Interest, L/S Ratio và sự kiện vĩ mô.*`);
+  parts.push(`*Dữ liệu ghi nhận từ Binance Klines (15m cho 24h, 1h cho 7d), kết hợp Taker CVD, Open Interest, L/S Ratio, thanh lý HFT và sự kiện vĩ mô.*`);
   parts.push('');
 
   // 1. TOP 3 TRONG 24H
@@ -577,29 +646,39 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
   if (!moves24h || moves24h.length === 0) {
     parts.push(`- *Không ghi nhận biến động đột biến nào vượt ngưỡng trong 24h qua.*`);
   } else {
-    parts.push(`| # | Ngày & Giờ (GMT+7) | Hướng | Giá Bắt Đầu -> Đích | Biên Độ | Taker CVD Delta | Δ OI | L/S | Cơ Chế Giả Thuyết |`);
-    parts.push(`|---|---|---|---|---|---|---|---|---|`);
+    parts.push(`| # | Ngày & Giờ (GMT+7) | Loại Biến Động | Hướng | Bắt Đầu -> Đích (Biên Độ) | Quét Đỉnh-Đáy (Range) | Taker CVD Delta | Δ OI | L/S | Cơ Chế Giả Thuyết |`);
+    parts.push(`|---|---|---|---|---|---|---|---|---|---|`);
 
     moves24h.forEach((m, idx) => {
       const dirIcon = m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP';
       const rangeStr = `${formatUsd(m.startPrice, 0)} -> ${formatUsd(m.endPrice, 0)}`;
       const pctStr = `${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%`;
+      const sweepRangeStr = m.rangePercent != null ? `${m.rangePercent.toFixed(2)}% (${formatUsd(m.lowPrice, 0)} - ${formatUsd(m.highPrice, 0)})` : 'N/A';
       const cvdStr = formatCompactUsd(m.takerCvdDelta);
       const oiStr = m.oiDeltaPercent != null ? `${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%` : 'N/A';
       const lsStr = m.lsRatio != null ? m.lsRatio.toFixed(2) : 'N/A';
+      const typeDisplay = m.moveType || 'DIRECTIONAL';
       const timeDisplay = m.fullTimeVn || m.startTimeVn;
-      parts.push(`| ${idx + 1} | ${timeDisplay} | ${dirIcon} | ${rangeStr} | **${pctStr}** | ${cvdStr} | ${oiStr} | ${lsStr} | **${m.mechanismHypothesis}** |`);
+      parts.push(`| ${idx + 1} | ${timeDisplay} | \`${typeDisplay}\` | ${dirIcon} | ${rangeStr} (**${pctStr}**) | ${sweepRangeStr} | ${cvdStr} | ${oiStr} | ${lsStr} | **${m.mechanismHypothesis}** |`);
     });
 
     parts.push('');
     parts.push(`**Chi tiết vi cấu trúc từng cú giật 24h (theo trình tự thời gian):**`);
     moves24h.forEach((m, idx) => {
-      parts.push(`- **Cú giật #${idx + 1} [${m.fullTimeVn || m.startTimeVn}] (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%):**`);
-      parts.push(`  - *Thời điểm diễn ra:* Từ ${m.startTimeVn} đến ${m.endTimeVn} (${m.candleCount} nến 15m).`);
+      parts.push(`- **Cú giật #${idx + 1} [${m.fullTimeVn || m.startTimeVn}] (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}% | Quét râu: ${m.rangePercent != null ? m.rangePercent.toFixed(2) : 'N/A'}%):**`);
+      parts.push(`  - *Thời điểm diễn ra:* Từ ${m.startTimeVn} đến ${m.endTimeVn} (${m.candleCount} nến 15m). Kiểu: \`${m.moveType || 'DIRECTIONAL'}\`.`);
       parts.push(`  - *Biên độ giá:* Bắt đầu tại ${formatUsd(m.startPrice)}, chạm cực đại ${formatUsd(m.direction === 'PUMP' ? m.highPrice : m.lowPrice)}, kết thúc tại ${formatUsd(m.endPrice)}.`);
       parts.push(`  - *Khối lượng & Dòng lệnh:* Quote Vol: ${formatCompactUsd(m.quoteVolume)} | Taker CVD Delta: **${formatCompactUsd(m.takerCvdDelta)}**.`);
       parts.push(`  - *Biến động Open Interest:* ${m.oiBefore != null ? `${m.oiBefore.toLocaleString()} -> ${m.oiAfter.toLocaleString()} BTC (${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%)` : 'Chưa có chuỗi lịch sử OI'}.`);
       parts.push(`  - *Phản ứng sau cú giật:* Sau 1h: ${formatUsd(m.forwardReactions?.price1h)} | Sau 4h: ${formatUsd(m.forwardReactions?.price4h)} | Tỷ lệ thoái lui (Retracement): **${m.forwardReactions?.retracementPercent != null ? `${m.forwardReactions.retracementPercent.toFixed(1)}%` : 'N/A'}** (${m.forwardReactions?.trendContinuation || 'N/A'}).`);
+      if (m.localTrackerMatch) {
+        const liqL = m.localTrackerMatch.liqLongUsd ? `Long liq: ${formatCompactUsd(m.localTrackerMatch.liqLongUsd)}` : null;
+        const liqS = m.localTrackerMatch.liqShortUsd ? `Short liq: ${formatCompactUsd(m.localTrackerMatch.liqShortUsd)}` : null;
+        const liqInfo = [liqL, liqS].filter(Boolean).join(' | ');
+        if (liqInfo) {
+          parts.push(`  - *Thanh lý HFT khớp thời điểm:* ${liqInfo} (Flow: ${m.localTrackerMatch.flowLabel || 'N/A'}).`);
+        }
+      }
       if (m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0) {
         parts.push(`  - *Sự kiện vĩ mô trùng khớp:* ${m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title} (${e.country})`).join('; ')}.`);
       }
@@ -615,26 +694,28 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
   if (!moves7d || moves7d.length === 0) {
     parts.push(`- *Không ghi nhận biến động đột biến nào trong 7 ngày qua.*`);
   } else {
-    parts.push(`| # | Ngày & Giờ (GMT+7) | Hướng | Giá Bắt Đầu -> Đích | Biên Độ | Taker CVD Delta | Δ OI | L/S | Phản Ứng Sau Đợt | Cơ Chế Giả Thuyết |`);
-    parts.push(`|---|---|---|---|---|---|---|---|---|---|`);
+    parts.push(`| # | Ngày & Giờ (GMT+7) | Loại Biến Động | Hướng | Bắt Đầu -> Đích (Biên Độ) | Quét Đỉnh-Đáy (Range) | Taker CVD Delta | Δ OI | L/S | Phản Ứng Sau Đợt | Cơ Chế Giả Thuyết |`);
+    parts.push(`|---|---|---|---|---|---|---|---|---|---|---|`);
 
     moves7d.forEach((m, idx) => {
       const dirIcon = m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP';
       const rangeStr = `${formatUsd(m.startPrice, 0)} -> ${formatUsd(m.endPrice, 0)}`;
       const pctStr = `${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%`;
+      const sweepRangeStr = m.rangePercent != null ? `${m.rangePercent.toFixed(2)}% (${formatUsd(m.lowPrice, 0)} - ${formatUsd(m.highPrice, 0)})` : 'N/A';
       const cvdStr = formatCompactUsd(m.takerCvdDelta);
       const oiStr = m.oiDeltaPercent != null ? `${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%` : 'N/A';
       const lsStr = m.lsRatio != null ? m.lsRatio.toFixed(2) : 'N/A';
       const reactStr = m.forwardReactions?.trendContinuation || 'N/A';
+      const typeDisplay = m.moveType || 'DIRECTIONAL';
       const timeDisplay = m.fullTimeVn || m.startTimeVn;
-      parts.push(`| ${idx + 1} | ${timeDisplay} | ${dirIcon} | ${rangeStr} | **${pctStr}** | ${cvdStr} | ${oiStr} | ${lsStr} | ${reactStr} | **${m.mechanismHypothesis}** |`);
+      parts.push(`| ${idx + 1} | ${timeDisplay} | \`${typeDisplay}\` | ${dirIcon} | ${rangeStr} (**${pctStr}**) | ${sweepRangeStr} | ${cvdStr} | ${oiStr} | ${lsStr} | ${reactStr} | **${m.mechanismHypothesis}** |`);
     });
 
     parts.push('');
     parts.push(`**Chi tiết vi cấu trúc từng cú giật 7d (theo trình tự thời gian):**`);
     moves7d.forEach((m, idx) => {
-      parts.push(`- **Đợt biến động #${idx + 1} [${m.fullTimeVn || m.startTimeVn}] (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%):**`);
-      parts.push(`  - *Thời điểm:* Từ ${m.startTimeVn} đến ${m.endTimeVn} (${m.candleCount} nến 1h).`);
+      parts.push(`- **Đợt biến động #${idx + 1} [${m.fullTimeVn || m.startTimeVn}] (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}% | Quét râu: ${m.rangePercent != null ? m.rangePercent.toFixed(2) : 'N/A'}%):**`);
+      parts.push(`  - *Thời điểm:* Từ ${m.startTimeVn} đến ${m.endTimeVn} (${m.candleCount} nến 1h). Kiểu: \`${m.moveType || 'DIRECTIONAL'}\`.`);
       parts.push(`  - *Biên độ giá:* ${formatUsd(m.startPrice)} -> ${formatUsd(m.endPrice)} (Cao nhất: ${formatUsd(m.highPrice)} | Thấp nhất: ${formatUsd(m.lowPrice)}).`);
       parts.push(`  - *Taker CVD:* ${formatCompactUsd(m.takerCvdDelta)} | *Quote Vol:* ${formatCompactUsd(m.quoteVolume)}.`);
       if (m.oiDeltaPercent != null) {
@@ -644,6 +725,14 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
         parts.push(`  - *Long/Short Ratio:* ${m.lsRatio.toFixed(2)}.`);
       }
       parts.push(`  - *Phản ứng sau cú giật (Retracement):* ${m.forwardReactions?.retracementPercent != null ? `${m.forwardReactions.retracementPercent.toFixed(1)}%` : 'N/A'} -> ${m.forwardReactions?.trendContinuation || 'N/A'}.`);
+      if (m.localTrackerMatch) {
+        const liqL = m.localTrackerMatch.liqLongUsd ? `Long liq: ${formatCompactUsd(m.localTrackerMatch.liqLongUsd)}` : null;
+        const liqS = m.localTrackerMatch.liqShortUsd ? `Short liq: ${formatCompactUsd(m.localTrackerMatch.liqShortUsd)}` : null;
+        const liqInfo = [liqL, liqS].filter(Boolean).join(' | ');
+        if (liqInfo) {
+          parts.push(`  - *Thanh lý HFT khớp thời điểm:* ${liqInfo} (Flow: ${m.localTrackerMatch.flowLabel || 'N/A'}).`);
+        }
+      }
       parts.push(`  - *Cơ chế chủ đạo:* **${m.mechanismHypothesis}** — ${m.mechanismExplanation}`);
     });
   }

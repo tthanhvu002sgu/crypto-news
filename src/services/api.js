@@ -73,6 +73,34 @@ export const getBTCKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 
 };
 
 /**
+ * BTC Futures OHLCV candlestick data (Binance USD-M Futures).
+ * Phản ánh chính xác các pha quét râu thanh lý (Liquidation Wicks) và dòng Taker Volume phái sinh.
+ * Tự động fallback về Spot REST nếu kết nối Futures gặp sự cố.
+ */
+export const getBTCFuturesKlines = async (symbol = 'BTCUSDT', interval = '1h', limit = 48) => {
+  try {
+    const res = await axios.get('https://fapi.binance.com/fapi/v1/klines', {
+      params: { symbol, interval, limit },
+    });
+    return res.data.map(k => ({
+      time: new Date(k[0]),
+      open: parseFloat(k[1]),
+      high: parseFloat(k[2]),
+      low: parseFloat(k[3]),
+      close: parseFloat(k[4]),
+      volume: parseFloat(k[5]),
+      quoteVolume: parseFloat(k[7]),
+      takerBuyQuoteVolume: parseFloat(k[10]),
+      isClosed: true,
+      market: 'futures',
+    }));
+  } catch (e) {
+    console.warn('[API] Futures Klines error, fallback to Spot Klines:', e.message);
+    return getBTCKlines(symbol, interval, limit);
+  }
+};
+
+/**
  * Long locked-timeframe history for Macro Dashboard v2.
  * Binance caps one kline request at 1,000 rows, so requests are paged backwards.
  * The final row may be the currently-forming D/W/M candle, matching TradingView W0.

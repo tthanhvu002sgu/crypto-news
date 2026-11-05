@@ -5,14 +5,14 @@ const normalizeText = (value = '') => value
   .toLowerCase();
 
 const TOPIC_LABEL = /^\s*[-*]\s+\*\*([^*]+)\**/;
-const MARKDOWN_HEADING = /^\s*#{2,4}\s+(.+)/;
+const MARKDOWN_HEADING = /^\s*(#{2,4})\s+(.+)/;
 
 const semanticTopic = /(macro|vi mo|real[- ]?rate|real yield|institutional|dong tien to chuc|etf|cme|cot|on[- ]?chain|dinh gia|derivatives|phai sinh|open interest|\boi\b|cvd|taker flow|liquidation|thanh ly|options|gamma|max pain|call wall|put wall)/;
 
 /**
  * Split a long AI memo at report headings and at bold topic labels. The model's
- * professional format puts several unrelated topics below the same `###`
- * heading, so heading-only chunks are too coarse for chart placement.
+ * professional format puts several unrelated topics below the same heading,
+ * so heading and topic boundaries allow precise evidence-chart placement.
  */
 export function splitReportIntoEvidenceBlocks(markdown = '') {
   const lines = String(markdown).split('\n');
@@ -20,11 +20,12 @@ export function splitReportIntoEvidenceBlocks(markdown = '') {
   let current = [];
   let anchor = '';
   let anchorType = 'body';
+  let anchorLevel = 0;
 
   const pushCurrent = () => {
     const markdownBlock = current.join('\n').trim();
     if (!markdownBlock) return;
-    blocks.push({ markdown: markdownBlock, anchor, anchorType, charts: [] });
+    blocks.push({ markdown: markdownBlock, anchor, anchorType, anchorLevel, charts: [] });
   };
 
   lines.forEach((line) => {
@@ -39,11 +40,13 @@ export function splitReportIntoEvidenceBlocks(markdown = '') {
     }
 
     if (headingMatch) {
-      anchor = headingMatch[1];
+      anchor = headingMatch[2];
       anchorType = 'heading';
+      anchorLevel = headingMatch[1].length;
     } else if (isTopicBoundary) {
       anchor = topicLabel;
       anchorType = 'topic';
+      anchorLevel = 0;
     }
 
     current.push(line);
@@ -96,8 +99,15 @@ const scoreBlock = (block, rules) => {
   rules.forEach(([pattern, weight]) => {
     if (pattern.test(anchor)) score = Math.max(score, weight);
   });
-  // Prefer a precise bold subtopic over a broad section heading on equal text.
-  if (score && block.anchorType === 'topic') score += 20;
+  // Prefer specific subtopics (topic label or H3/H4 subsection) over broad H2 section headings.
+  if (score) {
+    if (block.anchorType === 'topic') {
+      score += 20;
+    } else if (block.anchorType === 'heading') {
+      if (block.anchorLevel >= 4) score += 15;
+      else if (block.anchorLevel === 3) score += 10;
+    }
+  }
   return score;
 };
 
