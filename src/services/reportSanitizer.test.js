@@ -1,0 +1,70 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import { cleanReportMarkdown } from './reportSanitizer.js';
+
+describe('reportSanitizer & cleanReportMarkdown', () => {
+  it('1. Truncates raw pre-text, persona monologue, and input bullets before official Heading 1', () => {
+    const rawMonologue = `Buy-side Crypto Research Head. Global macro, liquidity, on-chain, institutional flows, derivatives, market microstructure. Disciplined skepticism, evidence-based, anti-hallucination, clear formatting. Vietnamese. No LaTeX, bold key metrics, specific Markdown list format, separate macro/technical/on-chain/derivatives, chronological analysis of price moves. 4 mandatory sections: (1) Move Forensics, (2) Trapped Liquidity Map, (3) Future Forecast/Scenarios, (4) Execution Playbook.
+
+- Macro:
+- Net Liquidity: $5,586.90B .
+- Real Rate Proxy: +0.16% (Fed Funds 3.88% - CPI 3.72% ).
+- Upcoming: FOMC Decision (04/11). Wait, the report date is 2026-11-07...
+
+## 1. 💥 GIẢI PHẪU CÁC ĐỢT DI CHUYỂN GIÁ MẠNH (TOP 3 TRONG 24H & TOP 5 TRONG 7D)
+### 1.1. Top 3 Biến Động Trong 24h
+- Ngày 04/11 lúc 14:00 (GMT+7) -> Biên độ: -4.96% -> CVD Delta âm.`;
+
+    const cleaned = cleanReportMarkdown(rawMonologue);
+    assert.strictEqual(cleaned.includes('Buy-side Crypto Research Head'), false);
+    assert.strictEqual(cleaned.includes('Net Liquidity: $5,586.90B'), false);
+    assert.strictEqual(cleaned.includes('Wait, the report date is'), false);
+    assert.strictEqual(cleaned.startsWith('## 1. 💥 GIẢI PHẪU CÁC ĐỢT DI CHUYỂN GIÁ MẠNH'), true);
+  });
+
+  it('2. Strips self-verification checklist items at the end of the report', () => {
+    const rawReportWithChecklist = `## 4. 🎯 KẾ HOẠCH HÀNH ĐỘNG CHIẾN THUẬT (EXECUTION PLAYBOOK)
+- **Chiến lược cho Swing:** CHỜ / KHÔNG VÀO LỆNH.
+
+**TÍN HIỆU THEN CHỐT ĐẦU TIÊN BUỘC PHẢI THAY ĐỔI GÓC NHÌN:** Đóng nến 4h vượt $76,325.
+
+- Check: No LaTeX? Yes.
+- Check: Bold key metrics? Yes.
+- Check: Chronological order with Date/Time? Yes.
+- Check: Separate Spot/Futures CVD? Yes.
+- Check: No hallucinated indicators (RSI/MACD)? Yes.
+- Check: R:R > 1.8 for recommendations? Yes.`;
+
+    const cleaned = cleanReportMarkdown(rawReportWithChecklist);
+    assert.strictEqual(cleaned.includes('Check: No LaTeX?'), false);
+    assert.strictEqual(cleaned.includes('Check: Bold key metrics?'), false);
+    assert.strictEqual(cleaned.includes('Check: R:R > 1.8'), false);
+    assert.strictEqual(cleaned.includes('TÍN HIỆU THEN CHỐT ĐẦU TIÊN BUỘC PHẢI THAY ĐỔI GÓC NHÌN'), true);
+  });
+
+  it('3. Fixes bullet hierarchy between group headers and nested content items', () => {
+    const unindentedBullets = `## 2. 🗺️ BẢN ĐỒ VỊ THẾ BỊ KẸP & VÙNG BẪY THANH KHOẢN (TRAPPED LIQUIDITY MAP)
+- Phe Long bị kẹp (Trapped Longs):
+  - Vùng tập trung lớn nhất: $80,000 - $84,000. Đây là vùng đỉnh ngắn hạn.
+    - Các vị thế Long mở trong nhịp Pump ngày 04/11.
+    - Tỷ lệ L/S Account cực cao (3.097).
+- Phe Short bị kẹp (Trapped Shorts):
+- Vùng kẹp ngắn hạn: $75,700 - $76,500. Những người Short đuổi theo cú Dump.
+- Điểm kích nổ Short Squeeze: Nếu giá đóng nến 4h trên $76,325.
+- Bể thanh khoản & Tường lệnh (Liquidity Pools):
+- Buy-side Liquidity: Tập trung dày đặc tại $80,000 và $84,000.
+- Sell-side Liquidity: Vùng hỗ trợ tâm lý tại $74,800.
+- Vi cấu trúc sổ lệnh: OBI tổng hợp +5.10%.`;
+
+    const cleaned = cleanReportMarkdown(unindentedBullets);
+    
+    // Check that Phe Short group children are properly indented
+    assert.strictEqual(cleaned.includes('  - **Vùng kẹp ngắn hạn:** $75,700'), true);
+    assert.strictEqual(cleaned.includes('  - **Điểm kích nổ Short Squeeze:** Nếu giá'), true);
+
+    // Check that Liquidity Pools group children are properly indented
+    assert.strictEqual(cleaned.includes('  - **Buy-side Liquidity:** Tập trung'), true);
+    assert.strictEqual(cleaned.includes('  - **Sell-side Liquidity:** Vùng hỗ trợ'), true);
+    assert.strictEqual(cleaned.includes('  - **Vi cấu trúc sổ lệnh:** OBI tổng hợp'), true);
+  });
+});

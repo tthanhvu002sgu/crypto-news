@@ -111,6 +111,22 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-11-07] Chuẩn hóa hiển thị output Giải phẫu biến động & dự phóng (Lọc thông tin thô & Phân cấp bullet)
+- **Mode / Type / Action / Lane:** BUGFIX / UI / LLM-SANITIZER / FULL
+- **Tóm tắt:** Khắc phục triệt để 2 lỗi hiển thị trong báo cáo AI "Giải phẫu biến động & dự phóng" (Move Forensics & Forecast):
+  1. **Khắc phục lỗi hiển thị thông tin thô (Lỗi 1):**
+     - Xây dựng module `src/services/reportSanitizer.js`: Cắt bỏ tự động toàn bộ phần suy nghĩ nội bộ (chain-of-thought, `<think>`, internal monologue, persona) và các bullet tóm tắt thô dữ liệu đầu vào (`- Macro:`, `- Net Liquidity:`, tự thoại ngày tháng...) xuất hiện trước tiêu đề chính thức đầu tiên `## 1. 💥 GIẢI PHẪU CÁC ĐỢT DI CHUYỂN GIÁ MẠNH`.
+     - Cắt bỏ triệt để các khối checklist tự kiểm tra (`- Check: No LaTeX? Yes`, `- Check: Bold key metrics? Yes`...) ở cuối báo cáo sau câu kết luận then chốt.
+     - Bổ sung `QUY TẮC BẮT BUỘC VỀ ĐẦU RA (OUTPUT INTEGRITY)` vào `FORENSICS_VI` & `FORENSICS_EN` trong `src/services/aiPrompts.js` nhằm ngăn chặn model xuất ra scratchpad hoặc checklist.
+  2. **Khắc phục lỗi bullet chưa có phân cấp giữa tiêu đề và nội dung (Lỗi 2):**
+     - Nâng cấp `cleanReportMarkdown` với thuật toán tự động nhận diện **Group Header Bullets** (tiêu đề nhóm kết thúc bằng dấu `:` không có nội dung phía sau) và tự động thụt lề 2 khoảng trắng (`  - `) cho tất cả các bullet nội dung chi tiết theo sau (như "Vùng kẹp ngắn hạn", "Điểm kích nổ Short Squeeze", "Buy-side Liquidity"...).
+     - Đồng bộ cấu trúc mẫu thụt lề danh sách chuẩn mực trong System Prompt cho Phần 2 (Trapped Liquidity Map), Phần 3 (Scenarios) và Phần 4 (Playbook).
+     - Bổ sung CSS trong `src/App.css` cho `.markdown-body`: Tạo độ tương phản phân cấp thị giác vượt trội giữa Tiêu đề nhóm (`li:has(> ul)`) với màu xanh dương `#38bdf8`, font-weight 600, margin thoáng đãng và các mục nội dung con thụt lề với marker `circle`.
+- **Verify:**
+  - `npm run test:sanitizer`: 3/3 tests pass 100%.
+  - `npm test`: 18/18 test suites pass 100%.
+  - `npm run build`: Vite build thành công sạch sẽ trong 2.24s.
+
 ### [2026-10-27] Khắc phục triệt để 4 lỗi logic kiểm chứng Signal Scoreboard (LOGIC-001 đến LOGIC-004)
 - **Mode / Type / Action / Lane:** BUGFIX / QUANT / AUDIT-REMEDIATION / FULL
 - **Tóm tắt:** Sửa chữa triệt để toàn bộ 4 lỗi logic trong hệ thống kiểm chứng "Edge" định lượng Signal Scoreboard theo báo cáo audit chuyên sâu và phản biện mã nguồn:

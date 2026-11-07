@@ -2521,6 +2521,31 @@
   font-weight: bold;
 }
 
+/* Group Header Bullets (Parent items containing nested sub-lists) */
+.markdown-body > ul > li:has(> ul),
+.markdown-body .summary-chunk > ul > li:has(> ul) {
+  margin-top: 1.1em;
+  margin-bottom: 0.85em;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.markdown-body > ul > li:has(> ul) > strong:first-child,
+.markdown-body .summary-chunk > ul > li:has(> ul) > strong:first-child {
+  color: #38bdf8;
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+}
+
+/* Reset normal typography for nested child list items */
+.markdown-body ul ul > li,
+.markdown-body ol ul > li {
+  font-weight: normal;
+  color: #cbd5e1;
+  margin-top: 0.4em;
+  margin-bottom: 0.45em;
+}
+
 /* Sub-bullet marker */
 .markdown-body ul ul > li::marker,
 .markdown-body ol ul > li::marker {
@@ -2729,6 +2754,21 @@
 [data-theme='light'] .markdown-body > ul > li::marker,
 [data-theme='light'] .markdown-body .summary-chunk > ul > li::marker {
   color: #059669;
+}
+
+[data-theme='light'] .markdown-body > ul > li:has(> ul),
+[data-theme='light'] .markdown-body .summary-chunk > ul > li:has(> ul) {
+  color: #0f172a;
+}
+
+[data-theme='light'] .markdown-body > ul > li:has(> ul) > strong:first-child,
+[data-theme='light'] .markdown-body .summary-chunk > ul > li:has(> ul) > strong:first-child {
+  color: #0284c7;
+}
+
+[data-theme='light'] .markdown-body ul ul > li,
+[data-theme='light'] .markdown-body ol ul > li {
+  color: #334155;
 }
 
 [data-theme='light'] .markdown-body ul ul > li::marker,
