@@ -67,4 +67,25 @@ describe('reportSanitizer & cleanReportMarkdown', () => {
     assert.strictEqual(cleaned.includes('  - **Sell-side Liquidity:** Vùng hỗ trợ'), true);
     assert.strictEqual(cleaned.includes('  - **Vi cấu trúc sổ lệnh:** OBI tổng hợp'), true);
   });
+
+  it('4. Preserves headings with hyphens in parentheses and handles embedded bullets', () => {
+    // 4a. Standalone heading with hyphen inside parentheses
+    const headingOnly = `### 1.2. Top 5 Biến Động Trong 7 Ngày (Khung 1h - Trình tự thời gian)\n- Đợt biến động #1 [Ngày 02/11/2026 lúc 21:00 (GMT+7)] (DUMP -1.07% | Quét râu: 1.90%):`;
+    const cleaned4a = cleanReportMarkdown(headingOnly);
+    assert.strictEqual(cleaned4a.includes('### 1.2. Top 5 Biến Động Trong 7 Ngày (Khung 1h - Trình tự thời gian)'), true);
+    assert.strictEqual(cleaned4a.includes('### 1.2. Top 5 Biến Động Trong 7 Ngày (Khung 1h\n'), false);
+
+    // 4b. Heading concatenated with bullet on same line without space or with space
+    const inlineHeadingAndBullet = `### 1.2. Top 5 Biến Động Trong 7 Ngày (Khung 1h - Trình tự thời gian)- Đợt biến động #1 [Ngày 02/11/2026 lúc 21:00 (GMT+7)] (DUMP -1.07% | Quét râu: 1.90%):
+- Biên độ giá: $77,904 -> $77,069 ( -1.07% ).`;
+    const cleaned4b = cleanReportMarkdown(inlineHeadingAndBullet);
+    assert.strictEqual(cleaned4b.includes('### 1.2. Top 5 Biến Động Trong 7 Ngày (Khung 1h - Trình tự thời gian)'), true);
+    assert.strictEqual(cleaned4b.includes('Trình tự thời gian)-'), false);
+    // Timestamp 21:00 must remain intact, not broken into lúc 21:** 00
+    assert.strictEqual(cleaned4b.includes('21:00'), true);
+    assert.strictEqual(cleaned4b.includes('21:** 00'), false);
+    assert.strictEqual(cleaned4b.includes('lúc 21: 00'), false);
+    // Child bullet must be properly indented under group header
+    assert.strictEqual(cleaned4b.includes('  - **Biên độ giá:** $77,904'), true);
+  });
 });

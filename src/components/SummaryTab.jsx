@@ -205,6 +205,7 @@ export default function SummaryTab({
 
   const [forensicsMoves24h, setForensicsMoves24h] = useState([]);
   const [forensicsMoves7d, setForensicsMoves7d] = useState([]);
+  const [forensicsMovesH4, setForensicsMovesH4] = useState([]);
   const [isForensicsLoading, setIsForensicsLoading] = useState(false);
   const [forensicsSortBy, setForensicsSortBy] = useState('time'); // 'time' | 'magnitude'
 
@@ -224,25 +225,37 @@ export default function SummaryTab({
     return list.sort((a, b) => a.startTime - b.startTime);
   }, [forensicsMoves7d, forensicsSortBy]);
 
+  const sortedMovesH4 = useMemo(() => {
+    const list = [...forensicsMovesH4];
+    if (forensicsSortBy === 'magnitude') {
+      return list.sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent));
+    }
+    return list.sort((a, b) => a.startTime - b.startTime);
+  }, [forensicsMovesH4, forensicsSortBy]);
+
   const fetchAndEnrichForensics = async (force = false) => {
-    if (!force && forensicsMoves24h.length > 0 && forensicsMoves7d.length > 0) {
-      return { enr24h: forensicsMoves24h, enr7d: forensicsMoves7d };
+    if (!force && forensicsMoves24h.length > 0 && forensicsMoves7d.length > 0 && forensicsMovesH4.length > 0) {
+      return { enr24h: forensicsMoves24h, enr7d: forensicsMoves7d, enrH4: forensicsMovesH4 };
     }
 
     setIsForensicsLoading(true);
     try {
-      const [k15m, k1h, calRes, oi96_15m, ls96_15m, oi168_1h, ls168_1h] = await Promise.all([
+      const [k15m, k1h, k4h, calRes, oi96_15m, ls96_15m, oi168_1h, ls168_1h, oi120_4h, ls120_4h] = await Promise.all([
         getBTCFuturesKlines('BTCUSDT', '15m', 96),
         getBTCFuturesKlines('BTCUSDT', '1h', 168),
+        getBTCFuturesKlines('BTCUSDT', '4h', 120),
         getWeeklyEconomicCalendar().catch(() => null),
         getOIHistory('BTCUSDT', '15m', 96).catch(() => []),
         getLongShortRatio('BTCUSDT', '15m', 96).catch(() => []),
         getOIHistory('BTCUSDT', '1h', 168).catch(() => []),
         getLongShortRatio('BTCUSDT', '1h', 168).catch(() => []),
+        getOIHistory('BTCUSDT', '4h', 120).catch(() => []),
+        getLongShortRatio('BTCUSDT', '4h', 120).catch(() => []),
       ]);
       const localEvents = loadMovePreview();
       const raw24h = detectTopImpulseMoves(k15m, 3, { maxClusterLength: 8 });
       const raw7d = detectTopImpulseMoves(k1h, 5, { maxClusterLength: 6 });
+      const rawH4 = detectTopImpulseMoves(k4h, 5, { maxClusterLength: 4, candleDurationMs: 4 * 3600 * 1000 });
 
       const activeOi24h = (Array.isArray(oi96_15m) && oi96_15m.length > 0)
         ? oi96_15m
@@ -257,6 +270,13 @@ export default function SummaryTab({
       const activeLs7d = (Array.isArray(ls168_1h) && ls168_1h.length > 0)
         ? ls168_1h
         : (data?.lsHistory || []);
+
+      const activeOiH4 = (Array.isArray(oi120_4h) && oi120_4h.length > 0)
+        ? oi120_4h
+        : ((Array.isArray(oi168_1h) && oi168_1h.length > 0) ? oi168_1h : (data?.oiHistory || []));
+      const activeLsH4 = (Array.isArray(ls120_4h) && ls120_4h.length > 0)
+        ? ls120_4h
+        : ((Array.isArray(ls168_1h) && ls168_1h.length > 0) ? ls168_1h : (data?.lsHistory || []));
 
       const activeCalendarEvents = calRes?.events || data?.calendarEvents || [];
 
@@ -274,13 +294,21 @@ export default function SummaryTab({
         localMoveStore: localEvents,
         klines: k1h,
       });
+      const enrH4 = enrichMoveWithMicrostructure(rawH4, {
+        oiHistory: activeOiH4,
+        lsHistory: activeLsH4,
+        calendarEvents: activeCalendarEvents,
+        localMoveStore: localEvents,
+        klines: k4h,
+      });
 
       setForensicsMoves24h(enr24h);
       setForensicsMoves7d(enr7d);
-      return { k15m, k1h, enr24h, enr7d };
+      setForensicsMovesH4(enrH4);
+      return { k15m, k1h, k4h, enr24h, enr7d, enrH4 };
     } catch (err) {
       console.warn('Failed to load move forensics:', err);
-      return { k15m: [], k1h: [], enr24h: [], enr7d: [] };
+      return { k15m: [], k1h: [], k4h: [], enr24h: [], enr7d: [], enrH4: [] };
     } finally {
       setIsForensicsLoading(false);
     }
@@ -289,13 +317,13 @@ export default function SummaryTab({
   const handleStyleChange = (newStyle) => {
     setSelectedStyle(newStyle);
     localStorage.setItem('ai-analysis-style', newStyle);
-    if (newStyle === 'forensics' && forensicsMoves24h.length === 0) {
+    if (newStyle === 'forensics' && (forensicsMoves24h.length === 0 || forensicsMoves7d.length === 0 || forensicsMovesH4.length === 0)) {
       fetchAndEnrichForensics();
     }
   };
 
   useEffect(() => {
-    if (selectedStyle === 'forensics' && forensicsMoves24h.length === 0) {
+    if (selectedStyle === 'forensics' && (forensicsMoves24h.length === 0 || forensicsMoves7d.length === 0 || forensicsMovesH4.length === 0)) {
       fetchAndEnrichForensics();
     }
   }, [selectedStyle]);
@@ -1022,7 +1050,7 @@ ${selectedUserBias !== 'none' ? '' : '- Note: User selected Objective Evaluation
 ${await (async () => {
   try {
     const fRes = await fetchAndEnrichForensics();
-    return formatForensicsPayloadForAi(fRes.enr24h, fRes.enr7d);
+    return formatForensicsPayloadForAi(fRes.enr24h, fRes.enr7d, fRes.enrH4);
   } catch (err) {
     console.warn('Failed to embed forensics payload:', err);
     return '';
@@ -1777,7 +1805,7 @@ ${promptData}
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px' }}>
             {/* 24h Column */}
             <div style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '12px' }}>
               <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-cyan-500, #0891b2)', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -2123,6 +2151,191 @@ ${promptData}
                           </span>
                         )}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* H4 Structural Column */}
+            <div style={{ background: 'var(--bg-slate-950)', border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '12px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-indigo-400, #818cf8)', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🏛️</span>
+                  <span>{isVi ? 'TOP 5 TRONG 20 NGÀY QUA (NẾN 4H)' : 'TOP 5 IN 20 DAYS (4H CANDLES)'}</span>
+                </div>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-slate-400)', fontWeight: 'normal' }}>
+                  {forensicsSortBy === 'time' ? (isVi ? '⏱️ Theo thời gian' : '⏱️ Chronological') : (isVi ? '💥 Theo biên độ' : '💥 By magnitude')}
+                </span>
+              </div>
+              {sortedMovesH4.length === 0 ? (
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-slate-400)', padding: '8px 0' }}>
+                  {isForensicsLoading ? (isVi ? 'Đang tải nến 4h...' : 'Loading 4h candles...') : (isVi ? 'Chưa phát hiện biến động cấu trúc trong 20 ngày.' : 'No major structural moves detected in 20 days.')}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {sortedMovesH4.map((m, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: m.direction === 'PUMP' ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
+                        border: `1px solid ${m.direction === 'PUMP' ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
+                        borderRadius: '6px',
+                        padding: '10px 12px',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-400)' }}>#{idx + 1}</span>
+                          <span style={{
+                            fontWeight: 'bold',
+                            color: m.direction === 'PUMP' ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
+                          }}>
+                            {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
+                          </span>
+                          <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 4h)</span>
+                          {m.moveType === 'LIQUIDITY_SWEEP_LOW' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(16,185,129,0.18)', color: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              🎯 {isVi ? 'SWEEP ĐÁY' : 'SWEEP LOW'}
+                            </span>
+                          )}
+                          {m.moveType === 'LIQUIDITY_SWEEP_HIGH' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(244,63,94,0.18)', color: 'var(--color-rose-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              ⚡ {isVi ? 'SWEEP ĐỈNH' : 'SWEEP HIGH'}
+                            </span>
+                          )}
+                          {m.moveType === 'TWO_WAY_VOLATILITY' && (
+                            <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.18)', color: 'var(--color-amber-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
+                              ⚔️ {isVi ? 'QUÉT 2 ĐẦU' : '2-WAY SWEEP'}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 600,
+                            color: 'var(--text-contrast)',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={m.fullTimeVn || m.startTimeVn}
+                        >
+                          <span>📅</span>
+                          <span>{m.displayTimeVn || m.startTimeVn}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
+                        <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
+                        <span style={{ color: 'var(--text-slate-400)' }}>
+                          {isVi ? 'Râu quét' : 'Range'}: <strong style={{ color: 'var(--color-amber-400)' }}>{m.rangePercent != null ? `${m.rangePercent.toFixed(1)}%` : 'N/A'}</strong> ({formatUsd(m.lowPrice, 0)} - {formatUsd(m.highPrice, 0)})
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                        <span style={{
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          fontSize: '0.62rem',
+                          fontWeight: 500,
+                          background: (m.takerCvdDelta || 0) >= 0 ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
+                          border: `1px solid ${(m.takerCvdDelta || 0) >= 0 ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
+                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
+                        }}>
+                          CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
+                        </span>
+
+                        {m.oiDeltaPercent != null && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            fontWeight: 500,
+                            background: 'var(--bg-amber-badge)',
+                            border: '1px solid var(--border-badge-warn)',
+                            color: 'var(--color-amber-500)',
+                          }}>
+                            ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
+                          </span>
+                        )}
+
+                        {m.lsRatio != null && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            color: 'var(--text-slate-200)',
+                          }}>
+                            L/S: {m.lsRatio.toFixed(2)}
+                          </span>
+                        )}
+
+                        {m.localTrackerMatch?.liqLongUsd > 0 && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-rose-badge)',
+                            border: '1px solid var(--border-rose-500)',
+                            color: 'var(--color-rose-400)',
+                          }}>
+                            🔥 Liq Long: {formatCompactUsd(m.localTrackerMatch.liqLongUsd)}
+                          </span>
+                        )}
+
+                        {m.localTrackerMatch?.liqShortUsd > 0 && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-emerald-badge)',
+                            border: '1px solid var(--border-emerald-500)',
+                            color: 'var(--color-emerald-400)',
+                          }}>
+                            🔥 Liq Short: {formatCompactUsd(m.localTrackerMatch.liqShortUsd)}
+                          </span>
+                        )}
+
+                        <span style={{
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          fontSize: '0.62rem',
+                          background: 'var(--bg-badge-api)',
+                          border: '1px solid var(--border-badge-api)',
+                          color: 'var(--color-badge-api)',
+                          fontWeight: 'bold',
+                        }}>
+                          {m.mechanismHypothesis}
+                        </span>
+
+                        {m.forwardReactions?.retracementPercent != null && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '0.62rem',
+                            background: 'var(--bg-active-tab)',
+                            border: '1px solid var(--border-panel)',
+                            color: 'var(--text-slate-200)',
+                          }}>
+                            {isVi ? 'Thoái lui' : 'Retrace'}: {m.forwardReactions.retracementPercent.toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+
+                      {m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0 && (
+                        <div style={{ fontSize: '0.62rem', color: 'var(--color-amber-500)', marginTop: '6px' }}>
+                          ⚠️ {m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title}`).join(', ')}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -132,22 +132,56 @@ export function cleanReportMarkdown(text) {
     .split('\n')
     .flatMap((line) => {
       const trimmed = line.trim();
-      if (/^#{1,4}\s/.test(trimmed)) {
-        const idx = trimmed.search(/\s+-\s+(?:\*{0,2}\s*)?(?=\p{L})/u);
-        if (idx > 0) {
-          const heading = trimmed.substring(0, idx);
-          const rest = trimmed.substring(idx).replace(/^\s+-\s*\*{0,2}\s*/, '');
-          return [heading, '- ' + rest];
+      const m = trimmed.match(/^(#{1,4}\s+)(.*)$/);
+      if (!m) return [line];
+
+      const prefix = m[1];
+      const content = m[2];
+
+      let parenDepth = 0;
+      let bracketDepth = 0;
+      let splitIdx = -1;
+
+      for (let i = 0; i < content.length; i++) {
+        const ch = content[i];
+        if (ch === '(') parenDepth++;
+        else if (ch === ')') parenDepth = Math.max(0, parenDepth - 1);
+        else if (ch === '[') bracketDepth++;
+        else if (ch === ']') bracketDepth = Math.max(0, bracketDepth - 1);
+
+        if (parenDepth === 0 && bracketDepth === 0) {
+          const remainder = content.substring(i);
+          const bulletMatch = remainder.match(/^(\s*-\s*)(.*)$/);
+          if (bulletMatch && i > 0) {
+            const afterHyphen = bulletMatch[2];
+            const isBullet =
+              /^\*{0,2}(?:Đợt\s+biến\s+động|Cú\s+giật|Đợt\s+sóng|Phe\s+|Bể\s+|Vùng\s+|Biên\s+độ|Dòng\s+lệnh|Biến\s+động|Phản\s+ứng|Cơ\s+chế|Kiểu|Move|Impulse|Wave|Trapped|Liquidity)/i.test(afterHyphen) ||
+              /^\*{1,2}[^*]+?\*{1,2}\s*:/i.test(afterHyphen) ||
+              /^[^:\n]{2,60}:(?:\s+|$)/i.test(afterHyphen) ||
+              /^-\s+/.test(afterHyphen);
+
+            if (isBullet) {
+              splitIdx = i;
+              break;
+            }
+          }
         }
       }
+
+      if (splitIdx > 0) {
+        const heading = (prefix + content.substring(0, splitIdx)).trim();
+        const rest = content.substring(splitIdx).replace(/^\s*-\s*/, '');
+        return [heading, '- ' + rest];
+      }
+
       return [line];
     })
     .join('\n');
 
   // Force bullet points onto separate lines (only when preceded by non-newline and not already indented)
   cleaned = cleaned.replace(
-    /([^\n\s])\s+-\s*\*{0,2}\s*(?=\*{0,2}\s*\p{L}[\p{L}\s/&(),'0-9@$]{1,70}?:\s*)/gu,
-    '$1\n- '
+    /(?:([^\n\s])\s+-\s*|([)\]])\s*-\s+)(?=\*{0,2}\s*\p{L}[\p{L}\s/&(),'0-9@$]{1,70}?:\s*)/gu,
+    (match, p1, p2) => (p1 || p2) + '\n- '
   );
 
   // ── Phase 7: Hierarchical Bullet Indentation & Formatting ──
@@ -185,7 +219,7 @@ export function cleanReportMarkdown(text) {
 
       // Check if this bullet line is a pure Group Header
       // E.g. ends with ":" or ":**" and has NO long description body after the colon
-      const isGroupHeader = /^(\*{0,2})[^:\n]{2,70}:(\*{0,2})$/.test(contentAfterBullet.trim());
+      const isGroupHeader = /:\s*\*{0,2}$/.test(contentAfterBullet.trim());
 
       if (isGroupHeader) {
         // This is a parent category bullet
@@ -213,7 +247,8 @@ export function cleanReportMarkdown(text) {
       }
 
       // Parse bullet content: "- [**]Label:[**] Content"
-      const m = contentAfterBullet.match(/^\*{0,2}\s*(.+?:)\s*\*{0,2}\s*(.*)/);
+      // Ensure colon is not part of a timestamp (e.g. 21:00)
+      const m = contentAfterBullet.match(/^\*{0,2}\s*([^:\n]{1,60}?(?<!\d):(?!\d))\s*\*{0,2}\s*(.*)/);
       if (m) {
         let [, rawLabel, content] = m;
         const label = rawLabel.replace(/\*{1,2}/g, '').trim();

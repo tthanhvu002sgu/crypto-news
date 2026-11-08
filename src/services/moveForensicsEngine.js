@@ -180,20 +180,16 @@ export function detectTopImpulseMoves(klines = [], count = 3, options = {}) {
 
     // Phân loại kiểu biến động (Move Type)
     let moveType = 'DIRECTIONAL_IMPULSE';
-    let direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
+    const direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
 
     if (upperWickRatio >= 0.50 && rangePercent >= 0.5) {
       moveType = 'LIQUIDITY_SWEEP_HIGH'; // Quét thanh lý đỉnh / Râu trên dài
-      direction = 'DUMP'; // Phản xạ xả sau quét đỉnh
     } else if (lowerWickRatio >= 0.50 && rangePercent >= 0.5) {
       moveType = 'LIQUIDITY_SWEEP_LOW'; // Quét thanh lý đáy / Rút chân mạnh
-      direction = 'PUMP'; // Phản xạ bật tăng sau quét đáy
     } else if (upperWickRatio >= 0.35 && lowerWickRatio >= 0.35 && rangePercent >= 0.8) {
       moveType = 'TWO_WAY_VOLATILITY'; // Biến động giật 2 đầu
-      direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
     } else {
       moveType = priceChangePercent >= 0 ? 'DIRECTIONAL_PUMP' : 'DIRECTIONAL_DUMP';
-      direction = priceChangePercent >= 0 ? 'PUMP' : 'DUMP';
     }
 
     // Độ lớn biến động hiệu dụng (Effective Magnitude):
@@ -356,10 +352,11 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
       if (sortedOi.length > 0) {
         const oiStartLimit = sortedOi[0].timeMs;
         const oiEndLimit = sortedOi[sortedOi.length - 1].timeMs;
-        const THREE_HOURS_MS = 3 * 3600 * 1000;
+        const candleDuration = move.candleCount > 0 ? (endTime - startTime) / move.candleCount : 3600 * 1000;
+        const oiToleranceMs = Math.max(3 * 3600 * 1000, Math.round(candleDuration * 1.5));
 
-        // Chỉ xử lý OI khi khoảng thời gian cú giật nằm trong phạm vi dữ liệu OI có thật (±3h)
-        if (startTime >= oiStartLimit - THREE_HOURS_MS && endTime <= oiEndLimit + THREE_HOURS_MS) {
+        // Chỉ xử lý OI khi khoảng thời gian cú giật nằm trong phạm vi dữ liệu OI có thật (± tolerance)
+        if (startTime >= oiStartLimit - oiToleranceMs && endTime <= oiEndLimit + oiToleranceMs) {
           // Tìm điểm OI gần nhất tại hoặc trước startTime
           let beforeIdx = -1;
           let minBeforeDiff = Infinity;
@@ -373,7 +370,7 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
           if (beforeIdx === -1) {
             for (let i = 0; i < sortedOi.length; i++) {
               const diff = Math.abs(sortedOi[i].timeMs - startTime);
-              if (diff < minBeforeDiff && diff <= THREE_HOURS_MS) {
+              if (diff < minBeforeDiff && diff <= oiToleranceMs) {
                 minBeforeDiff = diff;
                 beforeIdx = i;
               }
@@ -393,7 +390,7 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
           if (afterIdx === -1) {
             for (let i = sortedOi.length - 1; i >= 0; i--) {
               const diff = Math.abs(sortedOi[i].timeMs - endTime);
-              if (diff < minAfterDiff && diff <= THREE_HOURS_MS) {
+              if (diff < minAfterDiff && diff <= oiToleranceMs) {
                 minAfterDiff = diff;
                 afterIdx = i;
               }
@@ -402,9 +399,9 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
 
           if (beforeIdx !== -1 && afterIdx !== -1) {
             if (beforeIdx === afterIdx) {
-              if (afterIdx < sortedOi.length - 1 && Math.abs(sortedOi[afterIdx + 1].timeMs - endTime) <= THREE_HOURS_MS) {
+              if (afterIdx < sortedOi.length - 1 && Math.abs(sortedOi[afterIdx + 1].timeMs - endTime) <= oiToleranceMs) {
                 afterIdx = beforeIdx + 1;
-              } else if (beforeIdx > 0 && Math.abs(sortedOi[beforeIdx - 1].timeMs - startTime) <= THREE_HOURS_MS) {
+              } else if (beforeIdx > 0 && Math.abs(sortedOi[beforeIdx - 1].timeMs - startTime) <= oiToleranceMs) {
                 beforeIdx = afterIdx - 1;
               }
             }
@@ -423,13 +420,15 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
     // 2. Tìm Long/Short Ratio tại thời điểm
     let matchingLsRatio = null;
     if (Array.isArray(lsHistory) && lsHistory.length > 0) {
+      const candleDuration = move.candleCount > 0 ? (endTime - startTime) / move.candleCount : 3600 * 1000;
+      const lsToleranceMs = Math.max(3 * 3600 * 1000, Math.round(candleDuration * 1.5));
       let bestLsDiff = Infinity;
       for (const row of lsHistory) {
         const t = toTimeMs(row.timestamp || row.time);
         const ratio = toFiniteNumber(row.longShortRatio);
         if (t == null || ratio == null) continue;
         const diff = Math.abs(t - endTime);
-        if (diff < bestLsDiff && diff <= 3 * 3600 * 1000) { // Trong vòng 3h
+        if (diff < bestLsDiff && diff <= lsToleranceMs) {
           bestLsDiff = diff;
           matchingLsRatio = ratio;
         }
@@ -461,30 +460,38 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
     // 4. Khớp dữ liệu thực tế từ MoveTrackerResearch (IndexedDB / LocalStorage) nếu có lưu
     let localTrackerMatch = null;
     if (Array.isArray(localMoveStore) && localMoveStore.length > 0) {
+      const candleDuration = move.candleCount > 0 ? (endTime - startTime) / move.candleCount : 3600 * 1000;
+      const localToleranceMs = Math.max(30 * 60 * 1000, Math.round(candleDuration * 0.5));
+      const moveMidTime = (startTime + endTime) / 2;
       let bestLocalDiff = Infinity;
+
       for (const ev of localMoveStore) {
         const t = ev.triggerTime ?? ev.startTime;
         if (t == null) continue;
-        const diff = Math.abs(t - startTime);
-        if (diff < bestLocalDiff && diff <= 45 * 60 * 1000) { // Trong vòng 45 phút
-          bestLocalDiff = diff;
-          localTrackerMatch = {
-            id: ev.id,
-            qualityTier: ev.qualityTier,
-            flowLabel: ev.flowLabel,
-            outcomeLabel: ev.outcomeLabel,
-            liqLongUsd: toFiniteNumber(ev.liqLongUsd ?? ev.triggerSnapshot?.liqLongUsd),
-            liqShortUsd: toFiniteNumber(ev.liqShortUsd ?? ev.triggerSnapshot?.liqShortUsd)
-          };
+        // Kiểm tra xem sự kiện có diễn ra trong khoảng thời gian diễn ra đợt sóng hay không
+        if (t >= startTime - localToleranceMs && t <= endTime + localToleranceMs) {
+          const diff = Math.abs(t - moveMidTime);
+          if (diff < bestLocalDiff) {
+            bestLocalDiff = diff;
+            localTrackerMatch = {
+              id: ev.id,
+              qualityTier: ev.qualityTier,
+              flowLabel: ev.flowLabel,
+              outcomeLabel: ev.outcomeLabel,
+              liqLongUsd: toFiniteNumber(ev.liqLongUsd ?? ev.triggerSnapshot?.liqLongUsd),
+              liqShortUsd: toFiniteNumber(ev.liqShortUsd ?? ev.triggerSnapshot?.liqShortUsd)
+            };
+          }
         }
       }
     }
 
-    // 5. Phản ứng giá sau cú giật (Forward Reaction 1h, 4h, 12h)
+    // 5. Phản ứng giá sau cú giật (Forward Reaction 1h, 4h, 12h, 24h)
     const forwardReactions = {
       price1h: null,
       price4h: null,
       price12h: null,
+      price24h: null,
       retracementPercent: null,
       trendContinuation: null
     };
@@ -493,6 +500,7 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
       const ONE_HOUR = 3600 * 1000;
       const FOUR_HOURS = 4 * 3600 * 1000;
       const TWELVE_HOURS = 12 * 3600 * 1000;
+      const TWENTY_FOUR_HOURS = 24 * 3600 * 1000;
 
       // Tìm nến diễn ra sau khi cú giật kết thúc
       const candidatesAfter = sortedKlines.filter(k => k.timeMs >= endTime);
@@ -520,18 +528,19 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
       forwardReactions.price1h = findPriceAtTime(endTime + ONE_HOUR, 45 * 60 * 1000);
       forwardReactions.price4h = findPriceAtTime(endTime + FOUR_HOURS, 90 * 60 * 1000);
       forwardReactions.price12h = findPriceAtTime(endTime + TWELVE_HOURS, 3 * 3600 * 1000);
+      forwardReactions.price24h = findPriceAtTime(endTime + TWENTY_FOUR_HOURS, 6 * 3600 * 1000);
 
-      // Tính tỷ lệ thoái lui (Retracement %) dựa trên giá nến mới nhất có được sau cú giật
-      const latestPostPrice = forwardReactions.price4h ?? forwardReactions.price1h;
-      if (latestPostPrice != null && startPrice !== endPrice) {
+      // Tính tỷ lệ thoái lui (Retracement %) dựa trên giá nến sau cú giật (ưu tiên price4h -> price1h -> price12h -> price24h)
+      const postPrice = forwardReactions.price4h ?? forwardReactions.price1h ?? forwardReactions.price12h ?? forwardReactions.price24h;
+      if (postPrice != null && startPrice !== endPrice) {
         const totalImpulse = endPrice - startPrice;
         if (direction === 'PUMP') {
-          forwardReactions.retracementPercent = ((endPrice - latestPostPrice) / totalImpulse) * 100;
+          forwardReactions.retracementPercent = ((endPrice - postPrice) / totalImpulse) * 100;
         } else {
-          forwardReactions.retracementPercent = ((latestPostPrice - endPrice) / Math.abs(totalImpulse)) * 100;
+          forwardReactions.retracementPercent = ((postPrice - endPrice) / Math.abs(totalImpulse)) * 100;
         }
 
-        // Đánh giá xu hướng tiếp diễn: thoái lui < 35% -> Tiếp diễn (Continuation); > 65% -> Đảo chiều/Hấp thụ (Reversal/Trap)
+        // Đánh giá xu hướng tiếp diễn: thoái lui <= 35% -> Tiếp diễn (Continuation); >= 70% -> Đảo chiều/Hấp thụ (Reversal/Trap)
         if (forwardReactions.retracementPercent <= 35) {
           forwardReactions.trendContinuation = 'CONTINUATION_CONFIRMED';
         } else if (forwardReactions.retracementPercent >= 70) {
@@ -539,7 +548,7 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
         } else {
           forwardReactions.trendContinuation = 'CONSOLIDATION';
         }
-      } else if (candidatesAfter.length > 0) {
+      } else {
         forwardReactions.trendContinuation = 'DEVELOPING_IN_PROGRESS';
       }
     }
@@ -630,14 +639,27 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
  *
  * @param {Array<Object>} moves24h Top 3 đợt giật giá trong 24h
  * @param {Array<Object>} moves7d Top 5 đợt giật giá trong 7d
- * @param {Object} context Bối cảnh bổ sung
+ * @param {Array<Object>|Object} movesH4OrContext Top 5 đợt biến động cấu trúc khung H4 hoặc bối cảnh bổ sung
+ * @param {Object} maybeContext Bối cảnh bổ sung khi movesH4 được truyền
  * @returns {string} Chuỗi Markdown chi tiết cho AI
  */
-export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context = {}) {
+export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], movesH4OrContext = null, maybeContext = {}) {
+  let movesH4 = [];
+  let context = {};
+  const hasExplicitH4Param = Array.isArray(movesH4OrContext);
+
+  if (hasExplicitH4Param) {
+    movesH4 = movesH4OrContext;
+    context = maybeContext && typeof maybeContext === 'object' ? maybeContext : {};
+  } else if (movesH4OrContext && typeof movesH4OrContext === 'object') {
+    context = movesH4OrContext;
+    movesH4 = [];
+  }
+
   const parts = [];
 
   parts.push(`## DỮ LIỆU GIẢI PHẪU BIẾN ĐỘNG GIÁ (MOVE FORENSICS & MICROSTRUCTURE DATA)`);
-  parts.push(`*Dữ liệu ghi nhận từ Binance Klines (15m cho 24h, 1h cho 7d), kết hợp Taker CVD, Open Interest, L/S Ratio, thanh lý HFT và sự kiện vĩ mô.*`);
+  parts.push(`*Dữ liệu ghi nhận từ Binance Klines (15m cho 24h, 1h cho 7d, 4h cho cấu trúc vĩ mô), kết hợp Taker CVD, Open Interest, L/S Ratio, thanh lý HFT và sự kiện vĩ mô.*`);
   parts.push('');
 
   // 1. TOP 3 TRONG 24H
@@ -646,8 +668,8 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
   if (!moves24h || moves24h.length === 0) {
     parts.push(`- *Không ghi nhận biến động đột biến nào vượt ngưỡng trong 24h qua.*`);
   } else {
-    parts.push(`| # | Ngày & Giờ (GMT+7) | Loại Biến Động | Hướng | Bắt Đầu -> Đích (Biên Độ) | Quét Đỉnh-Đáy (Range) | Taker CVD Delta | Δ OI | L/S | Cơ Chế Giả Thuyết |`);
-    parts.push(`|---|---|---|---|---|---|---|---|---|---|`);
+    parts.push(`| # | Ngày & Giờ (GMT+7) | Loại Biến Động | Hướng | Bắt Đầu -> Đích (Biên Độ) | Quét Đỉnh-Đáy (Range) | Taker CVD Delta | Δ OI | L/S | Phản Ứng Sau Đợt | Cơ Chế Giả Thuyết |`);
+    parts.push(`|---|---|---|---|---|---|---|---|---|---|---|`);
 
     moves24h.forEach((m, idx) => {
       const dirIcon = m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP';
@@ -657,9 +679,10 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
       const cvdStr = formatCompactUsd(m.takerCvdDelta);
       const oiStr = m.oiDeltaPercent != null ? `${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%` : 'N/A';
       const lsStr = m.lsRatio != null ? m.lsRatio.toFixed(2) : 'N/A';
+      const reactStr = m.forwardReactions?.trendContinuation || 'N/A';
       const typeDisplay = m.moveType || 'DIRECTIONAL';
       const timeDisplay = m.fullTimeVn || m.startTimeVn;
-      parts.push(`| ${idx + 1} | ${timeDisplay} | \`${typeDisplay}\` | ${dirIcon} | ${rangeStr} (**${pctStr}**) | ${sweepRangeStr} | ${cvdStr} | ${oiStr} | ${lsStr} | **${m.mechanismHypothesis}** |`);
+      parts.push(`| ${idx + 1} | ${timeDisplay} | \`${typeDisplay}\` | ${dirIcon} | ${rangeStr} (**${pctStr}**) | ${sweepRangeStr} | ${cvdStr} | ${oiStr} | ${lsStr} | ${reactStr} | **${m.mechanismHypothesis}** |`);
     });
 
     parts.push('');
@@ -733,8 +756,67 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], context
           parts.push(`  - *Thanh lý HFT khớp thời điểm:* ${liqInfo} (Flow: ${m.localTrackerMatch.flowLabel || 'N/A'}).`);
         }
       }
+      if (m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0) {
+        parts.push(`  - *Sự kiện vĩ mô trùng khớp:* ${m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title} (${e.country})`).join('; ')}.`);
+      }
       parts.push(`  - *Cơ chế chủ đạo:* **${m.mechanismHypothesis}** — ${m.mechanismExplanation}`);
     });
+  }
+
+  // 3. TOP 5 TRONG H4 (H4 STRUCTURAL WAVES)
+  // Chỉ xuất hiện khi người gọi truyền mảng H4 (kể cả mảng rỗng để ghi nhận không có biến động)
+  if (hasExplicitH4Param) {
+    parts.push('');
+    parts.push(`### 3. TOP 5 ĐỢT BIẾN ĐỘNG CẤU TRÚC KHUNG 4H (H4 STRUCTURAL WAVES)`);
+    parts.push(`*QUY TẮC PHÂN TÍCH: BẮT BUỘC sắp xếp và phân tích theo đúng trình tự thời gian (Chronological order) trong ~20 ngày qua. Khung 4H phản ánh các bước dịch chuyển cấu trúc vĩ mô (Market Structure Shifts / BOS / CHoCH) mà trên khung 1H chỉ là các chuỗi nến nhỏ nối tiếp nhau.*`);
+    if (movesH4.length === 0) {
+      parts.push(`- *Không ghi nhận biến động đột biến nào trên khung 4h.*`);
+    } else {
+      parts.push(`| # | Ngày & Giờ (GMT+7) | Loại Biến Động | Hướng | Bắt Đầu -> Đích (Biên Độ) | Quét Đỉnh-Đáy (Range) | Taker CVD Delta | Δ OI | L/S | Phản Ứng Sau Đợt | Cơ Chế Giả Thuyết |`);
+      parts.push(`|---|---|---|---|---|---|---|---|---|---|---|`);
+
+      movesH4.forEach((m, idx) => {
+        const dirIcon = m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP';
+        const rangeStr = `${formatUsd(m.startPrice, 0)} -> ${formatUsd(m.endPrice, 0)}`;
+        const pctStr = `${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}%`;
+        const sweepRangeStr = m.rangePercent != null ? `${m.rangePercent.toFixed(2)}% (${formatUsd(m.lowPrice, 0)} - ${formatUsd(m.highPrice, 0)})` : 'N/A';
+        const cvdStr = formatCompactUsd(m.takerCvdDelta);
+        const oiStr = m.oiDeltaPercent != null ? `${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%` : 'N/A';
+        const lsStr = m.lsRatio != null ? m.lsRatio.toFixed(2) : 'N/A';
+        const reactStr = m.forwardReactions?.trendContinuation || 'N/A';
+        const typeDisplay = m.moveType || 'DIRECTIONAL';
+        const timeDisplay = m.fullTimeVn || m.startTimeVn;
+        parts.push(`| ${idx + 1} | ${timeDisplay} | \`${typeDisplay}\` | ${dirIcon} | ${rangeStr} (**${pctStr}**) | ${sweepRangeStr} | ${cvdStr} | ${oiStr} | ${lsStr} | ${reactStr} | **${m.mechanismHypothesis}** |`);
+      });
+
+      parts.push('');
+      parts.push(`**Chi tiết vi cấu trúc từng đợt sóng cấu trúc 4h (theo trình tự thời gian):**`);
+      movesH4.forEach((m, idx) => {
+        parts.push(`- **Đợt cấu trúc #${idx + 1} [${m.fullTimeVn || m.startTimeVn}] (${m.direction} ${m.priceChangePercent >= 0 ? '+' : ''}${m.priceChangePercent.toFixed(2)}% | Quét râu: ${m.rangePercent != null ? m.rangePercent.toFixed(2) : 'N/A'}%):**`);
+        parts.push(`  - *Thời điểm:* Từ ${m.startTimeVn} đến ${m.endTimeVn} (${m.candleCount} nến 4h). Kiểu: \`${m.moveType || 'DIRECTIONAL'}\`.`);
+        parts.push(`  - *Biên độ giá:* ${formatUsd(m.startPrice)} -> ${formatUsd(m.endPrice)} (Cao nhất: ${formatUsd(m.highPrice)} | Thấp nhất: ${formatUsd(m.lowPrice)}).`);
+        parts.push(`  - *Taker CVD:* ${formatCompactUsd(m.takerCvdDelta)} | *Quote Vol:* ${formatCompactUsd(m.quoteVolume)}.`);
+        if (m.oiDeltaPercent != null) {
+          parts.push(`  - *Biến động Open Interest:* ${m.oiBefore != null ? `${m.oiBefore.toLocaleString()} -> ${m.oiAfter.toLocaleString()} BTC (${m.oiDeltaPercent >= 0 ? '+' : ''}${m.oiDeltaPercent.toFixed(2)}%)` : 'N/A'}.`);
+        }
+        if (m.lsRatio != null) {
+          parts.push(`  - *Long/Short Ratio:* ${m.lsRatio.toFixed(2)}.`);
+        }
+        parts.push(`  - *Phản ứng sau cú giật (Retracement):* ${m.forwardReactions?.retracementPercent != null ? `${m.forwardReactions.retracementPercent.toFixed(1)}%` : 'N/A'} -> ${m.forwardReactions?.trendContinuation || 'N/A'}.`);
+        if (m.localTrackerMatch) {
+          const liqL = m.localTrackerMatch.liqLongUsd ? `Long liq: ${formatCompactUsd(m.localTrackerMatch.liqLongUsd)}` : null;
+          const liqS = m.localTrackerMatch.liqShortUsd ? `Short liq: ${formatCompactUsd(m.localTrackerMatch.liqShortUsd)}` : null;
+          const liqInfo = [liqL, liqS].filter(Boolean).join(' | ');
+          if (liqInfo) {
+            parts.push(`  - *Thanh lý HFT khớp thời điểm:* ${liqInfo} (Flow: ${m.localTrackerMatch.flowLabel || 'N/A'}).`);
+          }
+        }
+        if (m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0) {
+          parts.push(`  - *Sự kiện vĩ mô trùng khớp:* ${m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title} (${e.country})`).join('; ')}.`);
+        }
+        parts.push(`  - *Cơ chế chủ đạo:* **${m.mechanismHypothesis}** — ${m.mechanismExplanation}`);
+      });
+    }
   }
 
   parts.push('');

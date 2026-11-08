@@ -111,6 +111,21 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-11-08] Khắc phục triệt để lỗi ngắt dòng sai tại tiêu đề biến động & bảo toàn định dạng thời gian
+- **Mode / Type / Action / Lane:** BUGFIX / UI / LLM-SANITIZER / EXE
+- **Tóm tắt:** Sửa lỗi tiêu đề báo cáo biến động giá bị ngắt dòng giữa chừng tại các cặp ngoặc đơn chứa dấu gạch nối (ví dụ: `1.2. Top 5 Biến Động Trong 7 Ngày (Khung 1h` bị rớt `Trình tự thời gian)- Đợt biến động #1...` xuống dòng kế tiếp làm bullet):
+  1. **Khắc phục lỗi chẻ đôi tiêu đề (Heading Split):**
+     - Nâng cấp bộ tách tiêu đề trong `src/services/reportSanitizer.js`: Theo dõi độ sâu ngoặc đơn `parenDepth` và ngoặc vuông `bracketDepth`. Tuyệt đối không cho phép tách tại các dấu gạch nối nằm bên trong ngoặc `(...)` hoặc `[...]` của tiêu đề (như `(Khung 1h - Trình tự thời gian)`).
+     - Chỉ tách dòng khi phát hiện dấu hiệu gạch đầu dòng bullet thực sự tại `depth = 0` (bắt đầu bằng các từ khóa đợt biến động, cú giật, phe, vùng, hoặc nhãn bold kết thúc bằng dấu hai chấm).
+  2. **Bảo toàn định dạng chuỗi thời gian & Nhận diện Group Header cho đợt biến động:**
+     - Cho phép nhận diện dòng bullet tiêu đề đợt biến động (kết thúc bằng dấu hai chấm `:`) làm Group Header hợp lệ dù có chứa chuỗi thời gian (như `21:00`, `05:00`).
+     - Tinh chỉnh regex trích xuất nhãn bullet: Sử dụng `(?<!\d):(?!\d)` nhằm ngăn chặn dấu hai chấm trong mốc giờ phút (`HH:mm`) bị chẻ nhầm thành nhãn bold (`21:** 00`).
+     - Tự động thụt lề 2 khoảng trắng (`  - `) cho toàn bộ các thông số vi cấu trúc con bên dưới mỗi đợt biến động.
+- **Verify:**
+  - `npm run test:sanitizer`: 4/4 tests pass 100% (bổ sung test case kiểm chứng tiêu đề có ngoặc gạch nối và bullet nối liền).
+  - `npm test`: Toàn bộ 19 test suites pass 100% không hồi quy.
+  - `npm run build`: Vite build thành công sạch sẽ trong 2.40s.
+
 ### [2026-11-07] Chuẩn hóa hiển thị output Giải phẫu biến động & dự phóng (Lọc thông tin thô & Phân cấp bullet)
 - **Mode / Type / Action / Lane:** BUGFIX / UI / LLM-SANITIZER / FULL
 - **Tóm tắt:** Khắc phục triệt để 2 lỗi hiển thị trong báo cáo AI "Giải phẫu biến động & dự phóng" (Move Forensics & Forecast):
