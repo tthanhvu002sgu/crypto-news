@@ -133,6 +133,143 @@ const isCompletedEtfObservation = (value, now = new Date()) => {
   return observationDate.getTime() < localReportDay;
 };
 
+const FORENSICS_PILL_STYLE = {
+  padding: '2px 6px',
+  borderRadius: '3px',
+  fontSize: '0.62rem',
+  fontWeight: 500,
+  background: 'var(--bg-active-tab)',
+  border: '1px solid var(--border-panel)',
+};
+
+const SWEEP_TAG_STYLE = {
+  fontSize: '0.6rem',
+  background: 'var(--bg-active-tab)',
+  border: '1px solid var(--border-panel)',
+  padding: '1px 5px',
+  borderRadius: '3px',
+  fontWeight: 600,
+};
+
+const ForensicsMoveCard = ({ move: m, idx, candleUnit, isVi, showRetracement = false, showCalendarEvents = true }) => {
+  const isPump = m.direction === 'PUMP';
+  const isCvdPositive = (m.takerCvdDelta || 0) >= 0;
+
+  return (
+    <div
+      style={{
+        background: 'var(--bg-active-tab)',
+        border: '1px solid var(--border-panel)',
+        borderRadius: '6px',
+        padding: '10px 12px',
+        fontSize: '0.7rem',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-400)' }}>#{idx + 1}</span>
+          <span style={{
+            fontWeight: 'bold',
+            color: isPump ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
+          }}>
+            {isPump ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
+          </span>
+          <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x {candleUnit})</span>
+          {m.moveType === 'LIQUIDITY_SWEEP_LOW' && (
+            <span style={{ ...SWEEP_TAG_STYLE, color: 'var(--color-emerald-500)' }}>
+              {isVi ? 'SWEEP ĐÁY' : 'SWEEP LOW'}
+            </span>
+          )}
+          {m.moveType === 'LIQUIDITY_SWEEP_HIGH' && (
+            <span style={{ ...SWEEP_TAG_STYLE, color: 'var(--color-rose-500)' }}>
+              {isVi ? 'SWEEP ĐỈNH' : 'SWEEP HIGH'}
+            </span>
+          )}
+          {m.moveType === 'TWO_WAY_VOLATILITY' && (
+            <span style={{ ...SWEEP_TAG_STYLE, color: 'var(--color-amber-500)' }}>
+              {isVi ? 'QUÉT 2 ĐẦU' : '2-WAY SWEEP'}
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            color: 'var(--text-slate-300, var(--text-contrast))',
+            background: 'transparent',
+            border: '1px solid var(--border-panel)',
+            padding: '2px 7px',
+            borderRadius: '4px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            whiteSpace: 'nowrap',
+          }}
+          title={m.fullTimeVn || m.startTimeVn}
+        >
+          <span>{m.displayTimeVn || m.startTimeVn}</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
+        <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
+        <span style={{ color: 'var(--text-slate-400)' }}>
+          {isVi ? 'Râu quét' : 'Range'}: <strong style={{ color: 'var(--text-contrast)' }}>{m.rangePercent != null ? `${m.rangePercent.toFixed(1)}%` : 'N/A'}</strong> ({formatUsd(m.lowPrice, 0)} - {formatUsd(m.highPrice, 0)})
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+        <span style={{
+          ...FORENSICS_PILL_STYLE,
+          color: isCvdPositive ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
+        }}>
+          CVD: {isCvdPositive ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
+        </span>
+
+        {m.oiDeltaPercent != null && (
+          <span style={{ ...FORENSICS_PILL_STYLE, color: 'var(--text-slate-200, var(--text-contrast))' }}>
+            ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
+          </span>
+        )}
+
+        {m.lsRatio != null && (
+          <span style={{ ...FORENSICS_PILL_STYLE, color: 'var(--text-slate-200, var(--text-contrast))' }}>
+            L/S: {m.lsRatio.toFixed(2)}
+          </span>
+        )}
+
+        {m.localTrackerMatch?.liqLongUsd > 0 && (
+          <span style={{ ...FORENSICS_PILL_STYLE, color: 'var(--color-rose-500)' }}>
+            Liq Long: {formatCompactUsd(m.localTrackerMatch.liqLongUsd)}
+          </span>
+        )}
+
+        {m.localTrackerMatch?.liqShortUsd > 0 && (
+          <span style={{ ...FORENSICS_PILL_STYLE, color: 'var(--color-emerald-500)' }}>
+            Liq Short: {formatCompactUsd(m.localTrackerMatch.liqShortUsd)}
+          </span>
+        )}
+
+        <span style={{ ...FORENSICS_PILL_STYLE, color: 'var(--text-slate-200, var(--text-contrast))', fontWeight: 600 }}>
+          {m.mechanismHypothesis}
+        </span>
+
+        {showRetracement && m.forwardReactions?.retracementPercent != null && (
+          <span style={{ ...FORENSICS_PILL_STYLE, color: 'var(--text-slate-200, var(--text-contrast))' }}>
+            {isVi ? 'Thoái lui' : 'Retrace'}: {m.forwardReactions.retracementPercent.toFixed(0)}%
+          </span>
+        )}
+      </div>
+
+      {showCalendarEvents && m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0 && (
+        <div style={{ fontSize: '0.62rem', color: 'var(--color-amber-500)', marginTop: '6px' }}>
+          ⚠️ {m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title}`).join(', ')}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function SummaryTab({ 
   data, apiKeys, cvd, spotCvd, buyVolume, sellVolume, etfHoldings, etfHistory,
   liquidations, liqStats5m, liqStats1h,
@@ -1805,9 +1942,9 @@ ${promptData}
                 onClick={() => fetchAndEnrichForensics(true)}
                 disabled={isForensicsLoading}
                 style={{
-                  background: 'var(--bg-badge-api)',
-                  border: '1px solid var(--border-badge-api)',
-                  color: 'var(--color-badge-api)',
+                  background: 'var(--bg-active-tab)',
+                  border: '1px solid var(--border-panel)',
+                  color: 'var(--text-contrast)',
                   padding: '5px 12px',
                   borderRadius: '4px',
                   fontSize: '0.65rem',
@@ -1842,155 +1979,7 @@ ${promptData}
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {sortedMoves24h.map((m, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        background: m.direction === 'PUMP' ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
-                        border: `1px solid ${m.direction === 'PUMP' ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        fontSize: '0.7rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-400)' }}>#{idx + 1}</span>
-                          <span style={{
-                            fontWeight: 'bold',
-                            color: m.direction === 'PUMP' ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
-                          }}>
-                            {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
-                          </span>
-                          <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 15m)</span>
-                          {m.moveType === 'LIQUIDITY_SWEEP_LOW' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(16,185,129,0.18)', color: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              🎯 {isVi ? 'SWEEP ĐÁY' : 'SWEEP LOW'}
-                            </span>
-                          )}
-                          {m.moveType === 'LIQUIDITY_SWEEP_HIGH' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(244,63,94,0.18)', color: 'var(--color-rose-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              ⚡ {isVi ? 'SWEEP ĐỈNH' : 'SWEEP HIGH'}
-                            </span>
-                          )}
-                          {m.moveType === 'TWO_WAY_VOLATILITY' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.18)', color: 'var(--color-amber-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              ⚔️ {isVi ? 'QUÉT 2 ĐẦU' : '2-WAY SWEEP'}
-                            </span>
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '0.65rem',
-                            fontWeight: 600,
-                            color: 'var(--text-contrast)',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            whiteSpace: 'nowrap',
-                          }}
-                          title={m.fullTimeVn || m.startTimeVn}
-                        >
-                          <span>📅</span>
-                          <span>{m.displayTimeVn || m.startTimeVn}</span>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
-                        <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
-                        <span style={{ color: 'var(--text-slate-400)' }}>
-                          {isVi ? 'Râu quét' : 'Range'}: <strong style={{ color: 'var(--color-amber-400)' }}>{m.rangePercent != null ? `${m.rangePercent.toFixed(1)}%` : 'N/A'}</strong> ({formatUsd(m.lowPrice, 0)} - {formatUsd(m.highPrice, 0)})
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          fontSize: '0.62rem',
-                          fontWeight: 500,
-                          background: (m.takerCvdDelta || 0) >= 0 ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
-                          border: `1px solid ${(m.takerCvdDelta || 0) >= 0 ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
-                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
-                        }}>
-                          CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
-                        </span>
-
-                        {m.oiDeltaPercent != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            fontWeight: 500,
-                            background: 'var(--bg-amber-badge)',
-                            border: '1px solid var(--border-badge-warn)',
-                            color: 'var(--color-amber-500)',
-                          }}>
-                            ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
-                          </span>
-                        )}
-
-                        {m.lsRatio != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            color: 'var(--text-slate-200)',
-                          }}>
-                            L/S: {m.lsRatio.toFixed(2)}
-                          </span>
-                        )}
-
-                        {m.localTrackerMatch?.liqLongUsd > 0 && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-rose-badge)',
-                            border: '1px solid var(--border-rose-500)',
-                            color: 'var(--color-rose-400)',
-                          }}>
-                            🔥 Liq Long: {formatCompactUsd(m.localTrackerMatch.liqLongUsd)}
-                          </span>
-                        )}
-
-                        {m.localTrackerMatch?.liqShortUsd > 0 && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-emerald-badge)',
-                            border: '1px solid var(--border-emerald-500)',
-                            color: 'var(--color-emerald-400)',
-                          }}>
-                            🔥 Liq Short: {formatCompactUsd(m.localTrackerMatch.liqShortUsd)}
-                          </span>
-                        )}
-
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          fontSize: '0.62rem',
-                          background: 'var(--bg-badge-api)',
-                          border: '1px solid var(--border-badge-api)',
-                          color: 'var(--color-badge-api)',
-                          fontWeight: 'bold',
-                        }}>
-                          {m.mechanismHypothesis}
-                        </span>
-                      </div>
-
-                      {m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0 && (
-                        <div style={{ fontSize: '0.62rem', color: 'var(--color-amber-500)', marginTop: '6px' }}>
-                          ⚠️ {m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title}`).join(', ')}
-                        </div>
-                      )}
-                    </div>
+                    <ForensicsMoveCard key={idx} move={m} idx={idx} candleUnit="15m" isVi={isVi} />
                   ))}
                 </div>
               )}
@@ -2014,162 +2003,7 @@ ${promptData}
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {sortedMoves7d.map((m, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        background: m.direction === 'PUMP' ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
-                        border: `1px solid ${m.direction === 'PUMP' ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        fontSize: '0.7rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-400)' }}>#{idx + 1}</span>
-                          <span style={{
-                            fontWeight: 'bold',
-                            color: m.direction === 'PUMP' ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
-                          }}>
-                            {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
-                          </span>
-                          <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 1h)</span>
-                          {m.moveType === 'LIQUIDITY_SWEEP_LOW' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(16,185,129,0.18)', color: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              🎯 {isVi ? 'SWEEP ĐÁY' : 'SWEEP LOW'}
-                            </span>
-                          )}
-                          {m.moveType === 'LIQUIDITY_SWEEP_HIGH' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(244,63,94,0.18)', color: 'var(--color-rose-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              ⚡ {isVi ? 'SWEEP ĐỈNH' : 'SWEEP HIGH'}
-                            </span>
-                          )}
-                          {m.moveType === 'TWO_WAY_VOLATILITY' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.18)', color: 'var(--color-amber-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              ⚔️ {isVi ? 'QUÉT 2 ĐẦU' : '2-WAY SWEEP'}
-                            </span>
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '0.65rem',
-                            fontWeight: 600,
-                            color: 'var(--text-contrast)',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            whiteSpace: 'nowrap',
-                          }}
-                          title={m.fullTimeVn || m.startTimeVn}
-                        >
-                          <span>📅</span>
-                          <span>{m.displayTimeVn || m.startTimeVn}</span>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
-                        <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
-                        <span style={{ color: 'var(--text-slate-400)' }}>
-                          {isVi ? 'Râu quét' : 'Range'}: <strong style={{ color: 'var(--color-amber-400)' }}>{m.rangePercent != null ? `${m.rangePercent.toFixed(1)}%` : 'N/A'}</strong> ({formatUsd(m.lowPrice, 0)} - {formatUsd(m.highPrice, 0)})
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          fontSize: '0.62rem',
-                          fontWeight: 500,
-                          background: (m.takerCvdDelta || 0) >= 0 ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
-                          border: `1px solid ${(m.takerCvdDelta || 0) >= 0 ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
-                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
-                        }}>
-                          CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
-                        </span>
-
-                        {m.oiDeltaPercent != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            fontWeight: 500,
-                            background: 'var(--bg-amber-badge)',
-                            border: '1px solid var(--border-badge-warn)',
-                            color: 'var(--color-amber-500)',
-                          }}>
-                            ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
-                          </span>
-                        )}
-
-                        {m.lsRatio != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            color: 'var(--text-slate-200)',
-                          }}>
-                            L/S: {m.lsRatio.toFixed(2)}
-                          </span>
-                        )}
-
-                        {m.localTrackerMatch?.liqLongUsd > 0 && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-rose-badge)',
-                            border: '1px solid var(--border-rose-500)',
-                            color: 'var(--color-rose-400)',
-                          }}>
-                            🔥 Liq Long: {formatCompactUsd(m.localTrackerMatch.liqLongUsd)}
-                          </span>
-                        )}
-
-                        {m.localTrackerMatch?.liqShortUsd > 0 && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-emerald-badge)',
-                            border: '1px solid var(--border-emerald-500)',
-                            color: 'var(--color-emerald-400)',
-                          }}>
-                            🔥 Liq Short: {formatCompactUsd(m.localTrackerMatch.liqShortUsd)}
-                          </span>
-                        )}
-
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          fontSize: '0.62rem',
-                          background: 'var(--bg-badge-api)',
-                          border: '1px solid var(--border-badge-api)',
-                          color: 'var(--color-badge-api)',
-                          fontWeight: 'bold',
-                        }}>
-                          {m.mechanismHypothesis}
-                        </span>
-
-                        {m.forwardReactions?.retracementPercent != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            color: 'var(--text-slate-200)',
-                          }}>
-                            {isVi ? 'Thoái lui' : 'Retrace'}: {m.forwardReactions.retracementPercent.toFixed(0)}%
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <ForensicsMoveCard key={idx} move={m} idx={idx} candleUnit="1h" isVi={isVi} showRetracement showCalendarEvents={false} />
                   ))}
                 </div>
               )}
@@ -2193,168 +2027,7 @@ ${promptData}
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {sortedMovesH4.map((m, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        background: m.direction === 'PUMP' ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
-                        border: `1px solid ${m.direction === 'PUMP' ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
-                        borderRadius: '6px',
-                        padding: '10px 12px',
-                        fontSize: '0.7rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontWeight: 'bold', color: 'var(--text-slate-400)' }}>#{idx + 1}</span>
-                          <span style={{
-                            fontWeight: 'bold',
-                            color: m.direction === 'PUMP' ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
-                          }}>
-                            {m.direction === 'PUMP' ? '🟢 PUMP' : '🔴 DUMP'} {m.priceChangePercent >= 0 ? '+' : ''}{m.priceChangePercent.toFixed(2)}%
-                          </span>
-                          <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>({m.candleCount}x 4h)</span>
-                          {m.moveType === 'LIQUIDITY_SWEEP_LOW' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(16,185,129,0.18)', color: 'var(--color-emerald-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              🎯 {isVi ? 'SWEEP ĐÁY' : 'SWEEP LOW'}
-                            </span>
-                          )}
-                          {m.moveType === 'LIQUIDITY_SWEEP_HIGH' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(244,63,94,0.18)', color: 'var(--color-rose-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              ⚡ {isVi ? 'SWEEP ĐỈNH' : 'SWEEP HIGH'}
-                            </span>
-                          )}
-                          {m.moveType === 'TWO_WAY_VOLATILITY' && (
-                            <span style={{ fontSize: '0.6rem', background: 'rgba(245,158,11,0.18)', color: 'var(--color-amber-400)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>
-                              ⚔️ {isVi ? 'QUÉT 2 ĐẦU' : '2-WAY SWEEP'}
-                            </span>
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '0.65rem',
-                            fontWeight: 600,
-                            color: 'var(--text-contrast)',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            whiteSpace: 'nowrap',
-                          }}
-                          title={m.fullTimeVn || m.startTimeVn}
-                        >
-                          <span>📅</span>
-                          <span>{m.displayTimeVn || m.startTimeVn}</span>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-contrast)', fontSize: '0.68rem', margin: '6px 0' }}>
-                        <span>{formatUsd(m.startPrice, 0)} → <strong>{formatUsd(m.endPrice, 0)}</strong></span>
-                        <span style={{ color: 'var(--text-slate-400)' }}>
-                          {isVi ? 'Râu quét' : 'Range'}: <strong style={{ color: 'var(--color-amber-400)' }}>{m.rangePercent != null ? `${m.rangePercent.toFixed(1)}%` : 'N/A'}</strong> ({formatUsd(m.lowPrice, 0)} - {formatUsd(m.highPrice, 0)})
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          fontSize: '0.62rem',
-                          fontWeight: 500,
-                          background: (m.takerCvdDelta || 0) >= 0 ? 'var(--bg-emerald-badge)' : 'var(--bg-rose-badge)',
-                          border: `1px solid ${(m.takerCvdDelta || 0) >= 0 ? 'var(--border-emerald-500)' : 'var(--border-rose-500)'}`,
-                          color: (m.takerCvdDelta || 0) >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)',
-                        }}>
-                          CVD: {(m.takerCvdDelta || 0) >= 0 ? '+' : ''}{formatCompactUsd(m.takerCvdDelta)}
-                        </span>
-
-                        {m.oiDeltaPercent != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            fontWeight: 500,
-                            background: 'var(--bg-amber-badge)',
-                            border: '1px solid var(--border-badge-warn)',
-                            color: 'var(--color-amber-500)',
-                          }}>
-                            ΔOI: {m.oiDeltaPercent >= 0 ? '+' : ''}{m.oiDeltaPercent.toFixed(1)}%
-                          </span>
-                        )}
-
-                        {m.lsRatio != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            color: 'var(--text-slate-200)',
-                          }}>
-                            L/S: {m.lsRatio.toFixed(2)}
-                          </span>
-                        )}
-
-                        {m.localTrackerMatch?.liqLongUsd > 0 && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-rose-badge)',
-                            border: '1px solid var(--border-rose-500)',
-                            color: 'var(--color-rose-400)',
-                          }}>
-                            🔥 Liq Long: {formatCompactUsd(m.localTrackerMatch.liqLongUsd)}
-                          </span>
-                        )}
-
-                        {m.localTrackerMatch?.liqShortUsd > 0 && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-emerald-badge)',
-                            border: '1px solid var(--border-emerald-500)',
-                            color: 'var(--color-emerald-400)',
-                          }}>
-                            🔥 Liq Short: {formatCompactUsd(m.localTrackerMatch.liqShortUsd)}
-                          </span>
-                        )}
-
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          fontSize: '0.62rem',
-                          background: 'var(--bg-badge-api)',
-                          border: '1px solid var(--border-badge-api)',
-                          color: 'var(--color-badge-api)',
-                          fontWeight: 'bold',
-                        }}>
-                          {m.mechanismHypothesis}
-                        </span>
-
-                        {m.forwardReactions?.retracementPercent != null && (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            fontSize: '0.62rem',
-                            background: 'var(--bg-active-tab)',
-                            border: '1px solid var(--border-panel)',
-                            color: 'var(--text-slate-200)',
-                          }}>
-                            {isVi ? 'Thoái lui' : 'Retrace'}: {m.forwardReactions.retracementPercent.toFixed(0)}%
-                          </span>
-                        )}
-                      </div>
-
-                      {m.matchingCalendarEvents && m.matchingCalendarEvents.length > 0 && (
-                        <div style={{ fontSize: '0.62rem', color: 'var(--color-amber-500)', marginTop: '6px' }}>
-                          ⚠️ {m.matchingCalendarEvents.map(e => `[${e.impact}] ${e.title}`).join(', ')}
-                        </div>
-                      )}
-                    </div>
+                    <ForensicsMoveCard key={idx} move={m} idx={idx} candleUnit="4h" isVi={isVi} showRetracement />
                   ))}
                 </div>
               )}
