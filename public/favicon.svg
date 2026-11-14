@@ -1,30 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <style>
-    :root {
-      --bg: #111111;
-      --icon: #f7f6f3;
-      --border: rgba(0, 0, 0, 0.1);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #ffffff;
-        --icon: #0a0a0c;
-        --border: rgba(255, 255, 255, 0.15);
-      }
-    }
-    .bg-rect {
-      fill: var(--bg);
-      stroke: var(--border);
-      stroke-width: 16;
-    }
-    .icon-polyline {
-      stroke: var(--icon);
-      stroke-width: 26;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      fill: none;
-    }
-  </style>
-  <rect class="bg-rect" x="16" y="16" width="480" height="480" rx="80" ry="80" />
-  <polyline class="icon-polyline" points="136 256 184 256 220 148 292 364 328 256 376 256" />
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#070a12" />
+    </linearGradient>
+    <linearGradient id="btcGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffb84d" />
+      <stop offset="55%" stop-color="#f7931a" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+
+  <!-- Terminal squircle base -->
+  <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bg1)" stroke="#f7931a" stroke-opacity="0.35" stroke-width="14" />
+
+  <!-- Subtle outer coin ring -->
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#btcGold)" stroke-width="16" stroke-opacity="0.22" />
+
+  <!-- Bold geometric Bitcoin (₿) path (no font dependency) -->
+  <!-- Vertical bars -->
+  <rect x="206" y="96" width="32" height="52" rx="10" fill="url(#btcGold)" />
+  <rect x="268" y="96" width="32" height="52" rx="10" fill="url(#btcGold)" />
+  <rect x="206" y="364" width="32" height="52" rx="10" fill="url(#btcGold)" />
+  <rect x="268" y="364" width="32" height="52" rx="10" fill="url(#btcGold)" />
+
+  <!-- Main B body -->
+  <path
+    d="M174 140 H282 C332 140 364 166 364 204 C364 230 348 248 326 256 C356 264 374 286 374 316 C374 358 338 384 286 384 H174 Z
+       M226 184 V238 H278 C300 238 314 226 314 211 C314 196 300 184 278 184 Z
+       M226 278 V340 H284 C308 340 324 328 324 309 C324 290 308 278 284 278 Z"
+    fill="url(#btcGold)"
+    fill-rule="evenodd"
+  />
 </svg>

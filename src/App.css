@@ -65,19 +65,11 @@
 
 .logo-box {
   width: 34px; height: 34px;
-  border-radius: 6px;
-  background: var(--text-contrast);
+  border-radius: 8px;
+  background: transparent;
   display: flex; align-items: center; justify-content: center;
-  border: 1px solid var(--border-panel);
   flex-shrink: 0;
   position: relative;
-}
-
-.logo-icon {
-  color: var(--bg-slate-950);
-  width: 18px; height: 18px;
-  position: relative;
-  z-index: 1;
 }
 
 .title-group { display: flex; align-items: center; gap: 10px; }

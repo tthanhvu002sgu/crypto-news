@@ -15,7 +15,7 @@ import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import { processCotData } from './services/cotEngine';
 import {
-  Activity, RefreshCw, BarChart2, BookOpen, Layers,
+  RefreshCw, BarChart2, BookOpen, Layers,
   Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
   ChevronDown, ChevronRight, FileSpreadsheet, FileDown, PanelLeftClose, PanelLeftOpen,
   LayoutGrid, RotateCcw, Check
@@ -1485,8 +1485,31 @@ function AppContent() {
           >
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
-          <div className="logo-box">
-            <Activity className="logo-icon" />
+          <div className="logo-box" aria-hidden="true">
+            <svg viewBox="0 0 512 512" width="100%" height="100%">
+              <defs>
+                <linearGradient id="sovereignLogoBg" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#0f172a" />
+                  <stop offset="100%" stopColor="#070a12" />
+                </linearGradient>
+                <linearGradient id="sovereignLogoGold" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#ffb84d" />
+                  <stop offset="55%" stopColor="#f7931a" />
+                  <stop offset="100%" stopColor="#d97706" />
+                </linearGradient>
+              </defs>
+              <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#sovereignLogoBg)" stroke="#f7931a" strokeOpacity="0.35" strokeWidth="14" />
+              <circle cx="256" cy="256" r="176" fill="none" stroke="url(#sovereignLogoGold)" strokeWidth="16" strokeOpacity="0.22" />
+              <rect x="206" y="96" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+              <rect x="268" y="96" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+              <rect x="206" y="364" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+              <rect x="268" y="364" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+              <path
+                d="M174 140 H282 C332 140 364 166 364 204 C364 230 348 248 326 256 C356 264 374 286 374 316 C374 358 338 384 286 384 H174 Z M226 184 V238 H278 C300 238 314 226 314 211 C314 196 300 184 278 184 Z M226 278 V340 H284 C308 340 324 328 324 309 C324 290 308 278 284 278 Z"
+                fill="url(#sovereignLogoGold)"
+                fillRule="evenodd"
+              />
+            </svg>
           </div>
           <div>
             <div className="title-group">
