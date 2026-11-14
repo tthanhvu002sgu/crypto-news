@@ -206,9 +206,9 @@ export default function CapitalFlowPanel({
           <div className="capital-flow-status-group">
             <span
               className={`capital-flow-state-badge font-mono tone-${verdict.tone || 'neutral'}`}
-              title={verdict.label ? `${verdict.label} — ${verdict.detail}` : verdict.detail}
+              title={verdict.actionBadge ? `${verdict.actionBadge} — ${verdict.detail}` : verdict.detail}
             >
-              {verdict.actionBadge || verdict.flow}
+              {verdict.label}
             </span>
             {(showAlertSpot || showAlertCrowding || showAlertQuality) && (
               <div className="capital-flow-alerts font-mono">
