@@ -173,7 +173,7 @@ export default function CapitalFlowPanel({
     inputs.spotNetDelta,
   ]);
 
-  const showAlertSpot = verdict.spotAlignment?.state === 'SPOT_DIVERGENCE' || verdict.spotAlignment?.state === 'SPOT_CONFLUENCE';
+  const showAlertSpot = verdict.spotAlignment?.state === 'SPOT_DIVERGENCE';
   const showAlertCrowding = verdict.crowding?.state === 'CROWDED_LONGS' || verdict.crowding?.state === 'CROWDED_SHORTS';
   const showAlertQuality = verdict.quality?.level === 'INSUFFICIENT' || verdict.quality?.level === 'DEGRADED';
 
@@ -204,33 +204,32 @@ export default function CapitalFlowPanel({
             />
           </div>
           <div className="capital-flow-status-group">
-            <span className={`capital-flow-state-badge font-mono tone-${verdict.tone || 'neutral'}`}>
+            <span
+              className={`capital-flow-state-badge font-mono tone-${verdict.tone || 'neutral'}`}
+              title={verdict.label ? `${verdict.label} — ${verdict.detail}` : verdict.detail}
+            >
               {verdict.actionBadge || verdict.flow}
             </span>
-            <strong className="capital-flow-label font-mono" title={verdict.detail}>
-              {verdict.label}
-            </strong>
+            {(showAlertSpot || showAlertCrowding || showAlertQuality) && (
+              <div className="capital-flow-alerts font-mono">
+                {showAlertSpot && (
+                  <span className={`capital-flow-alert-pill tone-${verdict.spotAlignment.tone}`} title={verdict.spotAlignment.detail}>
+                    {verdict.spotAlignment.label}
+                  </span>
+                )}
+                {showAlertCrowding && (
+                  <span className={`capital-flow-alert-pill tone-${verdict.crowding.tone}`} title={verdict.crowding.detail}>
+                    {verdict.crowding.label}
+                  </span>
+                )}
+                {showAlertQuality && (
+                  <span className="capital-flow-alert-pill tone-warning" title={verdict.quality.detail}>
+                    {verdict.quality.label}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-
-          {(showAlertSpot || showAlertCrowding || showAlertQuality) && (
-            <div className="capital-flow-alerts font-mono">
-              {showAlertSpot && (
-                <span className={`capital-flow-alert-pill tone-${verdict.spotAlignment.tone}`} title={verdict.spotAlignment.detail}>
-                  {verdict.spotAlignment.label}
-                </span>
-              )}
-              {showAlertCrowding && (
-                <span className={`capital-flow-alert-pill tone-${verdict.crowding.tone}`} title={verdict.crowding.detail}>
-                  {verdict.crowding.label}
-                </span>
-              )}
-              {showAlertQuality && (
-                <span className="capital-flow-alert-pill tone-warning" title={verdict.quality.detail}>
-                  {verdict.quality.label}
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Center/Right: Core 4 Metrics Strip */}
