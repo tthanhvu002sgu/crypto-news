@@ -870,6 +870,28 @@ const cleanNewsSnippet = (str, title = '') => {
   return text;
 };
 
+export const fetchEconomicCalendarRaw = async () => {
+  const calendarUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+  const candidates = [
+    ...(typeof window !== 'undefined' ? ['/api-calendar/ff_calendar_thisweek.json'] : []),
+    calendarUrl,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(calendarUrl)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(calendarUrl)}`,
+  ];
+
+  let lastError = null;
+  for (const url of candidates) {
+    try {
+      const res = await axios.get(url, { timeout: 8000 });
+      const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      if (Array.isArray(parsed)) return parsed;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('Economic calendar unavailable');
+};
+
 export const fetchRealtimeFeed = async () => {
   const now = new Date();
 
@@ -877,15 +899,7 @@ export const fetchRealtimeFeed = async () => {
   const fetchCalendar = async () => {
     const items = [];
     try {
-      const calendarUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
-      let events = null;
-      try {
-        const res = await axios.get(`https://corsproxy.io/?${encodeURIComponent(calendarUrl)}`, { timeout: 6000 });
-        events = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-      } catch {
-        const res2 = await axios.get(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(calendarUrl)}`, { timeout: 6000 });
-        events = typeof res2.data === 'string' ? JSON.parse(res2.data) : res2.data;
-      }
+      const events = await fetchEconomicCalendarRaw();
 
       if (events && Array.isArray(events)) {
         events.forEach(e => {
@@ -2339,22 +2353,25 @@ export const getPolymarketTopMarkets = async () => {
     });
   };
 
-  try {
-    const res = await axios.get(targetUrl, { timeout: 8000 });
-    const parsed = parseMarkets(res.data);
-    if (parsed && parsed.length > 0) return parsed;
-  } catch (e) {
-    console.warn('[API] Polymarket direct fetch error:', e.message);
-  }
+  const proxyPath = '/api-polymarket/markets?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
+  const candidates = [
+    ...(typeof window !== 'undefined' ? [proxyPath] : []),
+    targetUrl,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+  ];
 
-  // Try public proxy if direct connection is blocked by DNS/ISP
-  try {
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-    const res = await axios.get(proxyUrl, { timeout: 8000 });
-    const parsed = parseMarkets(res.data);
-    if (parsed && parsed.length > 0) return parsed;
-  } catch (e2) {
-    console.warn('[API] Polymarket proxy fetch error:', e2.message);
+  for (const url of candidates) {
+    try {
+      const res = await axios.get(url, { timeout: 8000 });
+      const raw = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      const parsed = parseMarkets(raw);
+      if (parsed && parsed.length > 0) return parsed;
+    } catch (err) {
+      if (url === candidates[candidates.length - 1]) {
+        console.warn('[API] Polymarket fetch error:', err.message);
+      }
+    }
   }
 
   return [];

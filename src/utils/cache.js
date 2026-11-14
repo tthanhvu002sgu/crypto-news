@@ -1,22 +1,149 @@
 /**
- * localStorage cache helpers for REST sync.
+ * localStorage + in-memory cache helpers for REST sync.
  * Key format: cache_<cacheKey> → { val, time }
  */
+
+const CACHE_PREFIX = 'cache_';
+const DEFAULT_MAX_STALE_MS = 7 * 24 * 3600 * 1000;
+const MAX_LOCAL_STORAGE_ITEM_CHARS = 450_000;
+const ROTATING_DATE_PREFIXES = ['cache_etfFlowHistory_', 'cache_cmeCot_v2_'];
+
+const memoryCache = new Map();
+
+const hasLocalStorage = () => typeof localStorage !== 'undefined';
+
+const isQuotaError = (err) => (
+  err?.name === 'QuotaExceededError'
+  || err?.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+  || err?.code === 22
+  || err?.code === 1014
+);
+
+function parseStoredEntry(raw) {
+  if (!raw) return null;
+  const parsed = JSON.parse(raw);
+  if (parsed == null || !('val' in parsed)) return null;
+  return parsed;
+}
+
+function safeRemoveStorageKey(fullKey) {
+  try {
+    localStorage.removeItem(fullKey);
+  } catch {
+    /* ignore storage cleanup failure */
+  }
+}
+
+function evictStaleCacheEntries(excludeFullKey, maxStaleAgeMs = DEFAULT_MAX_STALE_MS) {
+  if (!hasLocalStorage()) return [];
+  const now = Date.now();
+  const candidates = [];
+
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(CACHE_PREFIX)) keys.push(k);
+  }
+
+  for (const fullKey of keys) {
+    if (fullKey === excludeFullKey) continue;
+
+    // Remove superseded daily snapshots immediately (keep only the newest key being written)
+    const isSupersededDated = ROTATING_DATE_PREFIXES.some(
+      (prefix) => excludeFullKey.startsWith(prefix) && fullKey.startsWith(prefix)
+    );
+    if (isSupersededDated) {
+      safeRemoveStorageKey(fullKey);
+      continue;
+    }
+
+    try {
+      const raw = localStorage.getItem(fullKey);
+      const parsed = parseStoredEntry(raw);
+      const ts = typeof parsed?.time === 'number' ? parsed.time : 0;
+      if (!parsed || (ts > 0 && now - ts > maxStaleAgeMs)) {
+        safeRemoveStorageKey(fullKey);
+      } else {
+        candidates.push({ fullKey, time: ts, size: raw ? raw.length : 0 });
+      }
+    } catch {
+      safeRemoveStorageKey(fullKey);
+    }
+  }
+
+  // Sort oldest-first; break ties by largest size so big feeds free quota fastest
+  candidates.sort((a, b) => (a.time - b.time) || (b.size - a.size));
+  return candidates;
+}
+
+function persistCacheEntry(cacheKey, entry, maxStaleAgeMs = DEFAULT_MAX_STALE_MS) {
+  memoryCache.set(cacheKey, entry);
+  if (!hasLocalStorage()) return;
+
+  const fullKey = `${CACHE_PREFIX}${cacheKey}`;
+  let serialized;
+  try {
+    serialized = JSON.stringify(entry);
+  } catch {
+    return;
+  }
+
+  // Oversized payloads stay in memoryCache so they never starve localStorage quota
+  if (serialized.length > MAX_LOCAL_STORAGE_ITEM_CHARS) {
+    safeRemoveStorageKey(fullKey);
+    return;
+  }
+
+  try {
+    localStorage.setItem(fullKey, serialized);
+    return;
+  } catch (e) {
+    if (!isQuotaError(e)) {
+      console.warn(`Lỗi ghi cache cho ${cacheKey}:`, e);
+      return;
+    }
+  }
+
+  // Quota exceeded: purge expired/superseded entries first, then evict oldest cache_* entries
+  const remaining = evictStaleCacheEntries(fullKey, maxStaleAgeMs);
+  try {
+    localStorage.setItem(fullKey, serialized);
+    return;
+  } catch (e2) {
+    if (!isQuotaError(e2)) return;
+  }
+
+  for (const item of remaining) {
+    safeRemoveStorageKey(item.fullKey);
+    try {
+      localStorage.setItem(fullKey, serialized);
+      return;
+    } catch (e3) {
+      if (!isQuotaError(e3)) return;
+    }
+  }
+}
 
 /**
  * Read a cached value if still within expiry (or return stale for fallback).
  * @returns {{ val: any, time: number } | null}
  */
 export function readCacheEntry(cacheKey) {
-  try {
-    const raw = localStorage.getItem(`cache_${cacheKey}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed == null || !('val' in parsed)) return null;
-    return parsed;
-  } catch {
-    return null;
+  const mem = memoryCache.get(cacheKey) || null;
+  let stored = null;
+
+  if (hasLocalStorage()) {
+    try {
+      stored = parseStoredEntry(localStorage.getItem(`${CACHE_PREFIX}${cacheKey}`));
+    } catch {
+      stored = null;
+    }
   }
+
+  if (mem && stored) {
+    return (mem.time ?? 0) >= (stored.time ?? 0) ? mem : stored;
+  }
+  return mem || stored;
 }
 
 /** True if cache exists and is younger than expiryMs. */
@@ -31,7 +158,7 @@ export function readCacheValue(cacheKey, fallback = null) {
   try {
     const entry = readCacheEntry(cacheKey);
     if (entry && entry.val !== undefined && entry.val !== null) return entry.val;
-    if (typeof localStorage !== 'undefined') {
+    if (hasLocalStorage()) {
       const raw = localStorage.getItem(cacheKey);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -39,7 +166,9 @@ export function readCacheValue(cacheKey, fallback = null) {
         if (val !== null && val !== undefined) return val;
       }
     }
-  } catch {}
+  } catch {
+    /* ignore malformed cache payload */
+  }
   return fallback;
 }
 
@@ -61,44 +190,28 @@ export function getCacheMetadata(cacheKey, expiryMs = 3600000) {
 }
 
 /**
- * Fetch with localStorage TTL cache.
- * - Fresh cache + !force → return cache (no network)
- * - Network fail + cache within maxStaleAge → return stale cache tagged with isStale
- * - Network fail + expired cache → return null (prevents infinite stale fallback)
- * - force → always network
+ * Fetch with localStorage + in-memory TTL cache and automatic LRU/stale eviction on quota overflow.
  */
-export async function fetchCached(cacheKey, fetchFn, expiryMs, addLog, label, force = false, maxStaleAgeMs = 7 * 24 * 3600 * 1000) {
+export async function fetchCached(cacheKey, fetchFn, expiryMs, addLog, label, force = false, maxStaleAgeMs = DEFAULT_MAX_STALE_MS) {
   let cachedVal = null;
   let cachedTime = null;
   let hasCached = false;
 
-  try {
-    const cached = localStorage.getItem(`cache_${cacheKey}`);
-    if (cached) {
-      const { val, time } = JSON.parse(cached);
-      cachedVal = val;
-      cachedTime = time;
-      hasCached = true;
-      if (!force && Date.now() - time < expiryMs) {
-        if (addLog && label) addLog(`✓ ${label} (Dữ liệu cache)`, 'ok');
-        return val;
-      }
+  const entry = readCacheEntry(cacheKey);
+  if (entry) {
+    cachedVal = entry.val;
+    cachedTime = entry.time;
+    hasCached = true;
+    if (!force && cachedTime != null && Date.now() - cachedTime < expiryMs) {
+      if (addLog && label) addLog(`✓ ${label} (Dữ liệu cache)`, 'ok');
+      return cachedVal;
     }
-  } catch (e) {
-    console.warn(`Lỗi đọc cache cho ${cacheKey}:`, e);
   }
 
   try {
     const freshVal = await fetchFn();
     if (freshVal !== null && freshVal !== undefined) {
-      try {
-        localStorage.setItem(
-          `cache_${cacheKey}`,
-          JSON.stringify({ val: freshVal, time: Date.now() })
-        );
-      } catch (e) {
-        console.warn(`Lỗi ghi cache cho ${cacheKey}:`, e);
-      }
+      persistCacheEntry(cacheKey, { val: freshVal, time: Date.now() }, maxStaleAgeMs);
       if (addLog && label) addLog(`✓ ${label}`, 'ok');
       return freshVal;
     }

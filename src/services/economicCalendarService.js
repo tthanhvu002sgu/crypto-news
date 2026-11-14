@@ -6,6 +6,7 @@
 
 import axios from 'axios';
 import { readCacheEntry } from '../utils/cache.js';
+import { fetchEconomicCalendarRaw } from './api.js';
 
 // Cache in memory and localStorage for 30 minutes
 let cachedEvents = null;
@@ -308,14 +309,7 @@ export async function getWeeklyEconomicCalendar(forceRefresh = false) {
   let rawEvents = null;
 
   try {
-    const calendarUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
-    try {
-      const res = await axios.get(`https://corsproxy.io/?${encodeURIComponent(calendarUrl)}`, { timeout: 6000 });
-      rawEvents = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-    } catch {
-      const res2 = await axios.get(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(calendarUrl)}`, { timeout: 6000 });
-      rawEvents = typeof res2.data === 'string' ? JSON.parse(res2.data) : res2.data;
-    }
+    rawEvents = await fetchEconomicCalendarRaw();
   } catch (err) {
     console.warn('[EconomicCalendar] API fetch failed, using curated fallback:', err?.message);
   }

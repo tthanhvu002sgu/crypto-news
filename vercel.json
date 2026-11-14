@@ -30,6 +30,14 @@
       "destination": "https://api.exchange.coinbase.com/:path*"
     },
     {
+      "source": "/api-polymarket/:path*",
+      "destination": "https://gamma-api.polymarket.com/:path*"
+    },
+    {
+      "source": "/api-calendar/:path*",
+      "destination": "https://nfs.faireconomy.media/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
