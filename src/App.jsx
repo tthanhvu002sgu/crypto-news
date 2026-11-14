@@ -17,7 +17,7 @@ import { processCotData } from './services/cotEngine';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
   Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
-  ChevronDown, ChevronRight, FileSpreadsheet, FileDown
+  ChevronDown, ChevronRight, FileSpreadsheet, FileDown, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { calculateMarketBias } from './services/biasEngine';
 import { syncToGoogleSheetsFromBrowser, validateExportReadiness } from './services/googleSheetSync';
@@ -771,7 +771,91 @@ function AppContent() {
     };
   }, [showSettings]);
 
-  // ── Sidebar Accordion State ────────────────────────────────────────────────
+  // ── Sidebar Accordion, Collapse & Resize State ─────────────────────────────
+  const SIDEBAR_DEFAULT_WIDTH = 310;
+  const SIDEBAR_MIN_WIDTH = 240;
+  const SIDEBAR_MAX_WIDTH = 600;
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const saved = parseInt(localStorage.getItem('sidebar_width'), 10);
+      if (!Number.isNaN(saved) && saved >= SIDEBAR_MIN_WIDTH && saved <= SIDEBAR_MAX_WIDTH) {
+        return saved;
+      }
+      return SIDEBAR_DEFAULT_WIDTH;
+    } catch {
+      return SIDEBAR_DEFAULT_WIDTH;
+    }
+  });
+
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('sidebar_collapsed', String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleSidebarResizeStart = useCallback((e) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    const maxAllowed = Math.min(SIDEBAR_MAX_WIDTH, Math.floor(window.innerWidth * 0.55));
+    setIsResizingSidebar(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    let latestWidth = startWidth;
+    const onPointerMove = (moveEvent) => {
+      const delta = moveEvent.clientX - startX;
+      latestWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(maxAllowed, startWidth + delta));
+      setSidebarWidth(latestWidth);
+    };
+
+    const onPointerUp = () => {
+      setIsResizingSidebar(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try { localStorage.setItem('sidebar_width', String(latestWidth)); } catch {}
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+  }, [sidebarWidth]);
+
+  const handleSidebarResizeReset = useCallback(() => {
+    setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+    try { localStorage.setItem('sidebar_width', String(SIDEBAR_DEFAULT_WIDTH)); } catch {}
+  }, []);
+
+  const handleSidebarResizeKeyDown = useCallback((e) => {
+    const maxAllowed = Math.min(SIDEBAR_MAX_WIDTH, Math.floor(window.innerWidth * 0.55));
+    let next = null;
+    if (e.key === 'ArrowLeft') next = Math.max(SIDEBAR_MIN_WIDTH, sidebarWidth - 16);
+    else if (e.key === 'ArrowRight') next = Math.min(maxAllowed, sidebarWidth + 16);
+    else if (e.key === 'Home') next = SIDEBAR_DEFAULT_WIDTH;
+    if (next !== null) {
+      e.preventDefault();
+      setSidebarWidth(next);
+      try { localStorage.setItem('sidebar_width', String(next)); } catch {}
+    }
+  }, [sidebarWidth]);
+
   const [accordionOpen, setAccordionOpen] = useState(() => {
     try {
       const saved = localStorage.getItem('sidebar_accordion');
@@ -1379,6 +1463,15 @@ function AppContent() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="header">
         <div className="header-left">
+          <button
+            className="btn-icon btn-sidebar-toggle"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? 'Hiện Sidebar' : 'Ẩn Sidebar'}
+            aria-label={sidebarCollapsed ? 'Hiện Sidebar' : 'Ẩn Sidebar'}
+            aria-expanded={!sidebarCollapsed}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
           <div className="logo-box">
             <Activity className="logo-icon" />
           </div>
@@ -1435,6 +1528,11 @@ function AppContent() {
       {/* ── Body ───────────────────────────────────────────────────────────── */}
       <div className="main-content">
         {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+        {!sidebarCollapsed && (
+        <div
+          className={`sidebar-wrapper${isResizingSidebar ? ' is-resizing' : ''}`}
+          style={{ width: `${sidebarWidth}px` }}
+        >
         <aside className="sidebar glass-panel">
           <div className="sidebar-inner">
 
@@ -1791,6 +1889,24 @@ function AppContent() {
 
           </div>
         </aside>
+        <div
+          className="sidebar-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Điều chỉnh chiều rộng sidebar (nhấn đúp để đặt lại)"
+          aria-valuemin={SIDEBAR_MIN_WIDTH}
+          aria-valuemax={SIDEBAR_MAX_WIDTH}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          title="Kéo để chỉnh chiều rộng • Nhấn đúp để đặt lại mặc định"
+          onPointerDown={handleSidebarResizeStart}
+          onDoubleClick={handleSidebarResizeReset}
+          onKeyDown={handleSidebarResizeKeyDown}
+        >
+          <span className="sidebar-resizer-pill" />
+        </div>
+        </div>
+        )}
 
         {/* ── Main Content Area ─────────────────────────────────────────────── */}
         <main className="content-area">
