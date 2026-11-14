@@ -4,6 +4,9 @@ import {
   parseForceOrderMessage,
   aggregateLiquidations,
   formatLiqUsd,
+  parseCoinalyzeLiquidationHistory,
+  summarizeHistoricalLiquidations,
+  bucketHistoricalLiquidations,
 } from './liquidationEngine.js';
 import { describeLiquidationEvidence } from './moveTrackerCore.js';
 
@@ -215,6 +218,84 @@ describe('liquidationEngine', () => {
       const text = describeLiquidationEvidence(event);
       assert.match(text, /5m: \$3\.50M \(Short bị quét\)/);
       assert.match(text, /1h: \$12\.00M/);
+    });
+  });
+
+  describe('Coinalyze historical liquidation helpers', () => {
+    const nowMs = Date.UTC(2026, 10, 14, 12, 0, 0);
+    const nowSec = Math.floor(nowMs / 1000);
+
+    it('parses Coinalyze liquidation-history payload and sorts ascending', () => {
+      const payload = [
+        {
+          symbol: 'BTCUSDT_PERP.A',
+          history: [
+            { t: nowSec - 3600, l: 250_000, s: 100_000 },
+            { t: nowSec - 7200, l: 50_000, s: 400_000 },
+          ],
+        },
+      ];
+      const parsed = parseCoinalyzeLiquidationHistory(payload);
+      assert.equal(parsed.symbol, 'BTCUSDT_PERP.A');
+      assert.equal(parsed.history.length, 2);
+      assert.equal(parsed.history[0].timestamp, (nowSec - 7200) * 1000);
+      assert.equal(parsed.history[0].longUsd, 50_000);
+      assert.equal(parsed.history[0].shortUsd, 400_000);
+      assert.equal(parsed.history[0].totalUsd, 450_000);
+      assert.equal(parsed.history[0].netDelta, 350_000);
+    });
+
+    it('summarizes 24h, 7d, and 30d rolling windows accurately', () => {
+      const DAY = 86400;
+      const payload = [
+        {
+          symbol: 'BTCUSDT_PERP.A',
+          history: [
+            { t: nowSec - 2 * 3600, l: 1_000_000, s: 200_000 }, // within 24h
+            { t: nowSec - 3 * DAY, l: 500_000, s: 2_000_000 }, // within 7d
+            { t: nowSec - 15 * DAY, l: 3_000_000, s: 1_000_000 }, // within 30d
+            { t: nowSec - 35 * DAY, l: 9_999_999, s: 9_999_999 }, // outside 30d
+          ],
+        },
+      ];
+      const { history } = parseCoinalyzeLiquidationHistory(payload);
+      const summary = summarizeHistoricalLiquidations(history, nowMs);
+
+      assert.equal(summary.h24.longUsd, 1_000_000);
+      assert.equal(summary.h24.shortUsd, 200_000);
+      assert.equal(summary.h24.totalUsd, 1_200_000);
+      assert.equal(summary.h24.dominanceLabel, 'LONG_FLUSH');
+
+      assert.equal(summary.d7.longUsd, 1_500_000);
+      assert.equal(summary.d7.shortUsd, 2_200_000);
+      assert.equal(summary.d7.totalUsd, 3_700_000);
+      assert.equal(summary.d7.dominanceLabel, 'BALANCED');
+
+      assert.equal(summary.d30.longUsd, 4_500_000);
+      assert.equal(summary.d30.shortUsd, 3_200_000);
+      assert.equal(summary.d30.totalUsd, 7_700_000);
+    });
+
+    it('buckets 7d/30d history by UTC day and 24h by hour', () => {
+      const DAY = 86400;
+      const payload = [
+        {
+          symbol: 'BTCUSDT_PERP.A',
+          history: [
+            { t: nowSec - 2 * 3600, l: 100_000, s: 50_000 },
+            { t: nowSec - 1 * 3600, l: 200_000, s: 100_000 },
+            { t: nowSec - 2 * DAY, l: 400_000, s: 300_000 },
+          ],
+        },
+      ];
+      const { history } = parseCoinalyzeLiquidationHistory(payload);
+      const buckets24h = bucketHistoricalLiquidations(history, '24h', nowMs);
+      assert.equal(buckets24h.length, 2);
+
+      const buckets7d = bucketHistoricalLiquidations(history, '7d', nowMs);
+      assert.equal(buckets7d.length, 2); // 2 distinct UTC days
+      assert.equal(buckets7d[1].longUsd, 300_000);
+      assert.equal(buckets7d[1].shortUsd, 150_000);
     });
   });
 });

@@ -42,6 +42,10 @@
       "destination": "https://min-api.cryptocompare.com/:path*"
     },
     {
+      "source": "/api-coinalyze/:path*",
+      "destination": "https://api.coinalyze.net/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

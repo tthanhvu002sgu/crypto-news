@@ -632,11 +632,11 @@ function AppContent() {
       const saved = localStorage.getItem('app-api-keys');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { fred: '', alphaVantage: '', gemini: '', openrouter: '', googleSheetsWebhook: '', ...parsed };
+        return { fred: '', alphaVantage: '', coinalyze: '', gemini: '', openrouter: '', googleSheetsWebhook: '', ...parsed };
       }
-      return { fred: '', alphaVantage: '', gemini: '', openrouter: '', googleSheetsWebhook: '' };
+      return { fred: '', alphaVantage: '', coinalyze: '', gemini: '', openrouter: '', googleSheetsWebhook: '' };
     } catch {
-      return { fred: '', alphaVantage: '', gemini: '', openrouter: '', googleSheetsWebhook: '' };
+      return { fred: '', alphaVantage: '', coinalyze: '', gemini: '', openrouter: '', googleSheetsWebhook: '' };
     }
   });
   const [showSettings, setShowSettings] = useState(false);
@@ -1977,6 +1977,8 @@ function AppContent() {
                 liveMarkPrice={liveMarkPrice} liveIndexPrice={liveIndexPrice} liveBasisPct={liveBasisPct}
                 liveVolume={liveVolume} liveEthPrice={liveEthPrice} liveSolPrice={liveSolPrice}
                 currentLS={currentLS} lsChartData={lsChartData} oiChartData={oiChartData} getChartOpts={getChartOpts}
+                apiKeys={apiKeys}
+                onOpenSettings={() => setShowSettings(true)}
               />
             </div>
 
@@ -2122,6 +2124,20 @@ function AppContent() {
                 />
                 <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
                   Lấy miễn phí tại: <a href="https://www.alphavantage.co/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>alphavantage.co</a>
+                </span>
+              </div>
+
+              <div className="settings-modal-input-group">
+                <label className="text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>COINALYZE API KEY (LỊCH SỬ THANH LÝ 24H/7D/30D)</label>
+                <input
+                  type="password"
+                  className="settings-modal-input"
+                  placeholder="Nhập Coinalyze API key..."
+                  value={apiKeys.coinalyze || ''}
+                  onChange={(e) => setApiKeys(p => ({ ...p, coinalyze: e.target.value }))}
+                />
+                <span className="text-slate-500" style={{ fontSize: '0.5rem' }}>
+                  Lấy miễn phí tại: <a href="https://coinalyze.net/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>coinalyze.net</a> (Account → API)
                 </span>
               </div>
 

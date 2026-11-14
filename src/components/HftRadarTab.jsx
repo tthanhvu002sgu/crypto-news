@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 
-import { getCompletedHourCVD, getOrderBookDepth, getSpotOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
+import { getCompletedHourCVD, getOrderBookDepth, getSpotOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe, getCoinalyzeLiquidationHistory } from '../services/api';
+import { bucketHistoricalLiquidations } from '../services/liquidationEngine';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 import AdvancedChart from './AdvancedChart';
@@ -1583,10 +1584,98 @@ function OrderBookPanel({ orderBook, spotOrderBook, depthLimit, setDepthLimit })
 
 // ─── PANEL 4: Whale Trades ───────────────────────────────────────────────────
 
-function WhaleTradesPanel({ whaleTrades, volume24h, liquidations = [], liqStats5m, liqStats1h }) {
+function WhaleTradesPanel({ whaleTrades, volume24h, liquidations = [], liqStats5m, liqStats1h, apiKeys, onOpenSettings }) {
   const [feedTab, setFeedTab] = useState(() => {
     return localStorage.getItem('hft_trade_feed_mode') || 'liquidations';
   });
+
+  const [coinalyzeData, setCoinalyzeData] = useState(null);
+  const [coinalyzeLoading, setCoinalyzeLoading] = useState(false);
+  const [histTimeframe, setHistTimeframe] = useState('24h');
+
+  const coinalyzeKey = apiKeys?.coinalyze || '';
+
+  useEffect(() => {
+    if (feedTab !== 'liquidations') return;
+    let cancelled = false;
+
+    const loadCoinalyze = async () => {
+      setCoinalyzeLoading(true);
+      const res = await getCoinalyzeLiquidationHistory({ apiKey: coinalyzeKey });
+      if (!cancelled) {
+        setCoinalyzeData(res);
+        setCoinalyzeLoading(false);
+      }
+    };
+
+    loadCoinalyze();
+    return () => {
+      cancelled = true;
+    };
+  }, [feedTab, coinalyzeKey]);
+
+  const handleRefreshCoinalyze = async () => {
+    setCoinalyzeLoading(true);
+    const res = await getCoinalyzeLiquidationHistory({ apiKey: coinalyzeKey, force: true });
+    setCoinalyzeData(res);
+    setCoinalyzeLoading(false);
+  };
+
+  const histBuckets = useMemo(() => {
+    if (!coinalyzeData?.ok || !Array.isArray(coinalyzeData.history)) return [];
+    return bucketHistoricalLiquidations(coinalyzeData.history, histTimeframe);
+  }, [coinalyzeData, histTimeframe]);
+
+  const histChartData = useMemo(() => ({
+    labels: histBuckets.map((b) => b.label),
+    datasets: [
+      {
+        label: 'Long Liq (USD)',
+        data: histBuckets.map((b) => b.longUsd),
+        backgroundColor: 'rgba(251, 113, 133, 0.78)',
+        borderRadius: 2,
+      },
+      {
+        label: 'Short Liq (USD)',
+        data: histBuckets.map((b) => b.shortUsd),
+        backgroundColor: 'rgba(52, 211, 153, 0.78)',
+        borderRadius: 2,
+      },
+    ],
+  }), [histBuckets]);
+
+  const histChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        labels: { color: '#94a3b8', font: { size: 10, family: 'monospace' }, boxWidth: 10 },
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${fmtUsd(ctx.parsed.y)}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        stacked: true,
+        ticks: { color: '#64748b', font: { size: 9, family: 'monospace' }, maxTicksLimit: 10 },
+        grid: { display: false },
+      },
+      y: {
+        stacked: true,
+        ticks: {
+          color: '#64748b',
+          font: { size: 9, family: 'monospace' },
+          callback: (v) => fmtUsd(v),
+        },
+        grid: { color: 'rgba(148, 163, 184, 0.08)' },
+      },
+    },
+  }), []);
 
   const handleTabChange = (mode) => {
     setFeedTab(mode);
@@ -1809,6 +1898,139 @@ function WhaleTradesPanel({ whaleTrades, volume24h, liquidations = [], liqStats5
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Historical Liquidations (Coinalyze API: 24h / 7d / 30d) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px', background: 'var(--bg-slate-950)', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span className="font-mono text-slate-300" style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em' }}>
+                  📊 LỊCH SỬ THANH LÝ (24H · 7D · 30D)
+                </span>
+                <DataOriginBadge
+                  origin="api"
+                  label="COINALYZE API"
+                  title="Dữ liệu lịch sử thanh lý BTCUSDT Perpetual trên Binance tổng hợp theo giờ từ Coinalyze API (cache 10 phút)."
+                  compact
+                />
+              </div>
+              {coinalyzeData?.ok && (
+                <button
+                  type="button"
+                  onClick={handleRefreshCoinalyze}
+                  disabled={coinalyzeLoading}
+                  className="font-mono text-slate-300"
+                  style={{
+                    fontSize: '0.6rem',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-panel)',
+                    background: 'var(--bg-slate-900)',
+                    cursor: coinalyzeLoading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {coinalyzeLoading ? 'Đang tải...' : '↻ Làm mới'}
+                </button>
+              )}
+            </div>
+
+            {(!coinalyzeData || coinalyzeData.reason === 'MISSING_API_KEY') ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', padding: '8px 10px', borderRadius: '4px', background: 'rgba(15, 23, 42, 0.6)', border: '1px dashed var(--border-panel)' }}>
+                <div className="font-mono text-slate-400" style={{ fontSize: '0.64rem', lineHeight: 1.5 }}>
+                  Nhập <strong className="text-slate-200">Coinalyze API Key</strong> (miễn phí tại{' '}
+                  <a href="https://coinalyze.net/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>coinalyze.net</a>
+                  ) để xem tổng hợp &amp; biểu đồ thanh lý 24h, 7d, 30d.
+                </div>
+                {onOpenSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="font-mono"
+                    style={{
+                      fontSize: '0.62rem',
+                      fontWeight: 700,
+                      padding: '5px 10px',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#34d399',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ⚙️ Nhập Coinalyze Key
+                  </button>
+                )}
+              </div>
+            ) : !coinalyzeData.ok ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', padding: '8px 10px', borderRadius: '4px', background: 'rgba(244, 63, 94, 0.08)', border: '1px solid rgba(244, 63, 94, 0.25)' }}>
+                <span className="font-mono text-rose" style={{ fontSize: '0.64rem' }}>
+                  {coinalyzeData.reason === 'INVALID_API_KEY'
+                    ? 'Coinalyze API Key không hợp lệ hoặc đã hết hạn.'
+                    : coinalyzeData.reason === 'RATE_LIMITED'
+                    ? 'Đã chạm giới hạn 40 req/phút của Coinalyze. Vui lòng thử lại sau 1 phút.'
+                    : `Không tải được dữ liệu Coinalyze (${coinalyzeData.error || 'Lỗi mạng'}).`}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleRefreshCoinalyze}
+                  className="font-mono text-slate-300"
+                  style={{ fontSize: '0.6rem', padding: '3px 8px', borderRadius: '4px', border: '1px solid var(--border-panel)', background: 'var(--bg-slate-900)', cursor: 'pointer' }}
+                >
+                  Thử lại
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '8px' }}>
+                  {[
+                    { key: '24h', label: '24 GIỜ QUA', stats: coinalyzeData.summary?.h24 },
+                    { key: '7d', label: '7 NGÀY QUA', stats: coinalyzeData.summary?.d7 },
+                    { key: '30d', label: '30 NGÀY QUA', stats: coinalyzeData.summary?.d30 },
+                  ].map(({ key, label, stats }) => {
+                    const active = histTimeframe === key;
+                    const longPct = ((stats?.longRatio ?? 0.5) * 100).toFixed(0);
+                    const shortPct = ((stats?.shortRatio ?? 0.5) * 100).toFixed(0);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setHistTimeframe(key)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '8px 10px',
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                          background: active ? 'rgba(56, 189, 248, 0.1)' : 'var(--bg-slate-900)',
+                          border: active ? '1px solid rgba(56, 189, 248, 0.5)' : '1px solid var(--border-panel)',
+                        }}
+                      >
+                        <div className="font-mono text-slate-400" style={{ fontSize: '0.56rem', display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                          <span>{label}</span>
+                          {active && <span style={{ color: '#38BDF8' }}>● ĐANG XEM</span>}
+                        </div>
+                        <div className="font-mono" style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-contrast)', marginBottom: '4px' }}>
+                          {fmtUsd(stats?.totalUsd || 0)}
+                        </div>
+                        <div style={{ display: 'flex', height: '4px', borderRadius: '2px', overflow: 'hidden', background: 'var(--bg-slate-800)', marginBottom: '4px' }}>
+                          <div style={{ width: `${longPct}%`, background: 'var(--color-rose-400)' }} />
+                          <div style={{ width: `${shortPct}%`, background: 'var(--color-emerald-400)' }} />
+                        </div>
+                        <div className="font-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.54rem' }}>
+                          <span className="text-rose">L: {fmtUsd(stats?.longUsd || 0)} ({longPct}%)</span>
+                          <span className="text-emerald">S: {fmtUsd(stats?.shortUsd || 0)} ({shortPct}%)</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {histBuckets.length > 0 && (
+                  <div style={{ height: '165px', width: '100%', marginTop: '4px' }}>
+                    <Bar data={histChartData} options={histChartOptions} />
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Real Liquidation Feed Table */}
@@ -2302,6 +2524,7 @@ export default function HftRadarTab({
   cvdStatus, livePrice, whaleTrades, liquidations, liqStats5m, liqStats1h, theme, volNodes,
   data, liveVolume, fundingRate, liveChange, liveBasisPct,
   currentLS, lsChartData, oiChartData, getChartOpts,
+  apiKeys, onOpenSettings,
 }) {
   const { isModuleHidden } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
@@ -2550,6 +2773,8 @@ export default function HftRadarTab({
             liquidations={liquidations}
             liqStats5m={liqStats5m}
             liqStats1h={liqStats1h}
+            apiKeys={apiKeys}
+            onOpenSettings={onOpenSettings}
           />
         )}
       </div>

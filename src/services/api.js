@@ -32,6 +32,10 @@ import {
   buildMultiExchangeCvdComparison,
   aggregateOrderBookSnapshots,
 } from './spotFlowEngine.js';
+import {
+  parseCoinalyzeLiquidationHistory,
+  summarizeHistoricalLiquidations,
+} from './liquidationEngine.js';
 
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -40,6 +44,7 @@ const getFredUrl = () => (typeof window !== 'undefined' ? '/api-fred/fred/series
 const getAlphaUrl = () => (typeof window !== 'undefined' ? '/api-alphavantage/query' : 'https://www.alphavantage.co/query');
 const getCoinMetricsUrl = () => (typeof window !== 'undefined' ? '/api-coinmetrics/v4/timeseries/asset-metrics' : 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics');
 const getCoinbaseExchangeUrl = (path) => (typeof window !== 'undefined' ? `/api-coinbase${path}` : `https://api.exchange.coinbase.com${path}`);
+const getCoinalyzeUrl = (path) => (typeof window !== 'undefined' ? `/api-coinalyze${path}` : `https://api.coinalyze.net${path}`);
 
 // ─── BINANCE PUBLIC API ────────────────────────────────────────────────────────
 
@@ -2731,4 +2736,90 @@ export const getMultiAssetCorrelationHistory = async (force = false) => {
     null,
     force
   );
+};
+
+// ─── COINALYZE HISTORICAL LIQUIDATIONS (24H / 7D / 30D) ───────────────────────
+
+/**
+ * Fetches historical liquidation series from Coinalyze `/v1/liquidation-history`
+ * and computes 24h / 7d / 30d summaries.
+ *
+ * @param {Object} [opts]
+ * @param {string} [opts.apiKey]
+ * @param {string} [opts.symbols='BTCUSDT_PERP.A']
+ * @param {string} [opts.interval='1hour']
+ * @param {number} [opts.lookbackDays=30]
+ * @param {boolean} [opts.force=false]
+ */
+export const getCoinalyzeLiquidationHistory = async ({
+  apiKey,
+  symbols = 'BTCUSDT_PERP.A',
+  interval = '1hour',
+  lookbackDays = 30,
+  force = false,
+} = {}) => {
+  const key = (
+    apiKey ||
+    (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_COINALYZE_API_KEY : null) ||
+    ''
+  ).trim();
+
+  if (!key) {
+    return { ok: false, reason: 'MISSING_API_KEY', symbol: symbols, history: [], summary: null };
+  }
+
+  const cacheKey = `coinalyze_liq_${symbols}_${interval}_${lookbackDays}d`;
+
+  try {
+    return await fetchCached(
+      cacheKey,
+      async () => {
+        const to = Math.floor(Date.now() / 1000);
+        const from = to - lookbackDays * 86400;
+        const url = getCoinalyzeUrl('/v1/liquidation-history');
+
+        const res = await axios.get(url, {
+          params: {
+            symbols,
+            interval,
+            from,
+            to,
+            convert_to_usd: 'true',
+            api_key: key,
+          },
+          timeout: 12000,
+        });
+
+        const parsed = parseCoinalyzeLiquidationHistory(res.data);
+        const summary = summarizeHistoricalLiquidations(parsed.history, to * 1000);
+
+        return {
+          ok: true,
+          symbol: parsed.symbol || symbols,
+          history: parsed.history,
+          summary,
+          fetchedAt: Date.now(),
+        };
+      },
+      10 * 60 * 1000, // 10 mins cache TTL (Coinalyze free limit: 40 req/min)
+      null,
+      null,
+      force
+    );
+  } catch (err) {
+    const status = err?.response?.status;
+    let reason = 'REQUEST_FAILED';
+    if (status === 401 || status === 403) reason = 'INVALID_API_KEY';
+    else if (status === 429) reason = 'RATE_LIMITED';
+
+    return {
+      ok: false,
+      reason,
+      status,
+      error: err?.response?.data?.message || err?.message || 'Unknown Coinalyze error',
+      symbol: symbols,
+      history: [],
+      summary: null,
+    };
+  }
 };

@@ -71,6 +71,11 @@ export default defineConfig({
         target: 'https://min-api.cryptocompare.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-cryptocompare/, '')
+      },
+      '/api-coinalyze': {
+        target: 'https://api.coinalyze.net',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-coinalyze/, '')
       }
     }
   }

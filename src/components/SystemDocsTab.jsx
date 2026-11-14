@@ -154,6 +154,21 @@ export default function SystemDocsTab({
               </span>
             </div>
 
+            {/* Coinalyze */}
+            <div className="settings-modal-input-group">
+              <label className="text-slate-400" style={{ fontSize: '0.6rem', fontWeight: 600 }}>COINALYZE API KEY (THANH LÝ 24H/7D/30D)</label>
+              <input
+                type="password"
+                className="settings-modal-input"
+                placeholder="Nhập Coinalyze API key..."
+                value={apiKeys?.coinalyze || ''}
+                onChange={(e) => setApiKeys(p => ({ ...p, coinalyze: e.target.value }))}
+              />
+              <span className="text-slate-500" style={{ fontSize: '0.55rem' }}>
+                Lấy miễn phí tại: <a href="https://coinalyze.net/" target="_blank" rel="noreferrer" className="text-emerald" style={{ textDecoration: 'underline' }}>coinalyze.net</a> (Account → API)
+              </span>
+            </div>
+
             {/* Gemini */}
             <div className="settings-modal-input-group">
               <label className="text-slate-400" style={{ fontSize: '0.6rem', fontWeight: 600 }}>GEMINI API KEY (GOOGLE AI STUDIO)</label>

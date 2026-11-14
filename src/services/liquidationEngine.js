@@ -160,3 +160,155 @@ export function formatLiqUsd(val) {
   if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
   return `${sign}$${abs.toFixed(0)}`;
 }
+
+/**
+ * Parses Coinalyze `/v1/liquidation-history` response array into normalized hourly/daily points.
+ *
+ * Coinalyze schema: `[{ symbol: "BTCUSDT_PERP.A", history: [{ t: 1700000000, l: 120000, s: 80000 }] }]`
+ * where `t` is UNIX epoch in seconds, `l` is Long liquidations, `s` is Short liquidations.
+ *
+ * @param {Array<Object>} payload
+ * @returns {{ symbol: string, history: Array<Object> }}
+ */
+export function parseCoinalyzeLiquidationHistory(payload) {
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return { symbol: '', history: [] };
+  }
+
+  const entry = payload[0] || {};
+  const symbol = String(entry.symbol || '');
+  const rawHistory = Array.isArray(entry.history) ? entry.history : [];
+
+  const history = rawHistory
+    .filter((pt) => pt && Number.isFinite(Number(pt.t)))
+    .map((pt) => {
+      const timestamp = Number(pt.t) * 1000;
+      const longUsd = Math.max(0, Number(pt.l) || 0);
+      const shortUsd = Math.max(0, Number(pt.s) || 0);
+      return {
+        timestamp,
+        longUsd,
+        shortUsd,
+        totalUsd: longUsd + shortUsd,
+        netDelta: shortUsd - longUsd,
+      };
+    })
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  return { symbol, history };
+}
+
+function summarizeWindow(history, cutoffMs, nowMs) {
+  let longUsd = 0;
+  let shortUsd = 0;
+  let bucketCount = 0;
+
+  for (const pt of history) {
+    if (!pt) continue;
+    if (pt.timestamp < cutoffMs || pt.timestamp > nowMs + 3600_000) continue;
+    longUsd += pt.longUsd || 0;
+    shortUsd += pt.shortUsd || 0;
+    bucketCount += 1;
+  }
+
+  const totalUsd = longUsd + shortUsd;
+  const netDelta = shortUsd - longUsd;
+  const longRatio = totalUsd > 0 ? longUsd / totalUsd : 0.5;
+  const shortRatio = totalUsd > 0 ? shortUsd / totalUsd : 0.5;
+
+  let dominanceLabel = 'QUIET';
+  if (totalUsd > 0 && bucketCount > 0) {
+    if (shortUsd >= totalUsd * 0.6) dominanceLabel = 'SHORT_SQUEEZE';
+    else if (longUsd >= totalUsd * 0.6) dominanceLabel = 'LONG_FLUSH';
+    else dominanceLabel = 'BALANCED';
+  }
+
+  return {
+    longUsd,
+    shortUsd,
+    totalUsd,
+    netDelta,
+    longRatio,
+    shortRatio,
+    dominanceLabel,
+    bucketCount,
+  };
+}
+
+/**
+ * Summarizes Coinalyze historical liquidations across 24h, 7d, and 30d rolling windows.
+ *
+ * @param {Array<Object>} history - Output of parseCoinalyzeLiquidationHistory().history
+ * @param {number} [nowMs=Date.now()]
+ * @returns {{ h24: Object, d7: Object, d30: Object }}
+ */
+export function summarizeHistoricalLiquidations(history, nowMs = Date.now()) {
+  const list = Array.isArray(history) ? history : [];
+  const HOUR = 3600_000;
+  return {
+    h24: summarizeWindow(list, nowMs - 24 * HOUR, nowMs),
+    d7: summarizeWindow(list, nowMs - 7 * 24 * HOUR, nowMs),
+    d30: summarizeWindow(list, nowMs - 30 * 24 * HOUR, nowMs),
+  };
+}
+
+/**
+ * Aggregates Coinalyze hourly liquidation points into chart-ready time buckets.
+ * - '24h': hourly buckets over last 24h
+ * - '7d': daily (UTC) buckets over last 7d
+ * - '30d': daily (UTC) buckets over last 30d
+ *
+ * @param {Array<Object>} history
+ * @param {'24h'|'7d'|'30d'} timeframe
+ * @param {number} [nowMs=Date.now()]
+ * @returns {Array<{ timestamp: number, label: string, longUsd: number, shortUsd: number, totalUsd: number }>}
+ */
+export function bucketHistoricalLiquidations(history, timeframe = '24h', nowMs = Date.now()) {
+  if (!Array.isArray(history) || history.length === 0) return [];
+
+  const HOUR = 3600_000;
+  const DAY = 24 * HOUR;
+  const windowMs = timeframe === '30d' ? 30 * DAY : timeframe === '7d' ? 7 * DAY : 24 * HOUR;
+  const cutoff = nowMs - windowMs;
+
+  if (timeframe === '24h') {
+    return history
+      .filter((pt) => pt.timestamp >= cutoff && pt.timestamp <= nowMs + HOUR)
+      .map((pt) => {
+        const d = new Date(pt.timestamp);
+        const label = `${String(d.getHours()).padStart(2, '0')}:00`;
+        return {
+          timestamp: pt.timestamp,
+          label,
+          longUsd: pt.longUsd,
+          shortUsd: pt.shortUsd,
+          totalUsd: pt.totalUsd,
+        };
+      });
+  }
+
+  // Group by UTC day for 7d and 30d
+  const byDay = new Map();
+  for (const pt of history) {
+    if (pt.timestamp < cutoff || pt.timestamp > nowMs + HOUR) continue;
+    const d = new Date(pt.timestamp);
+    const dayKey = d.toISOString().slice(0, 10);
+    const existing = byDay.get(dayKey);
+    if (existing) {
+      existing.longUsd += pt.longUsd;
+      existing.shortUsd += pt.shortUsd;
+      existing.totalUsd += pt.totalUsd;
+    } else {
+      const mmdd = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      byDay.set(dayKey, {
+        timestamp: Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+        label: mmdd,
+        longUsd: pt.longUsd,
+        shortUsd: pt.shortUsd,
+        totalUsd: pt.totalUsd,
+      });
+    }
+  }
+
+  return Array.from(byDay.values()).sort((a, b) => a.timestamp - b.timestamp);
+}
