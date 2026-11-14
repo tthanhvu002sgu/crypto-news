@@ -9,7 +9,6 @@ import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 import CmeCotCard from './CmeCotCard';
-import SignalScoreboardPanel from './SignalScoreboardPanel';
 import CorrelationMatrixPanel from './CorrelationMatrixPanel';
 
 const isPlausibleCpiYoY = (value) => {
@@ -62,17 +61,6 @@ export default function DashboardTab({
       {/* ── HERO: Market Bias Engine Card ── */}
       {!isModuleHidden('dash_bias') && (
         <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} theme={theme} moduleId="dash_bias" />
-      )}
-
-      {/* ── SIGNAL SCOREBOARD: Edge Verification & Walk-Forward Backtest ── */}
-      {!isModuleHidden('dash_signal_scoreboard') && (
-        <SignalScoreboardPanel
-          data={data}
-          etfHistory={etfHistory}
-          btcDisplay={btcDisplay}
-          theme={theme}
-          moduleId="dash_signal_scoreboard"
-        />
       )}
 
       {/* ── SECTION 01: VĨ MÔ & THÁC THANH KHOẢN ── */}
