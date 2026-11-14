@@ -11,6 +11,7 @@ import MultiExchangeFundingPanel from './MultiExchangeFundingPanel';
 import SpotPressurePanel from './SpotPressurePanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import SortableModuleItem from './SortableModuleItem';
 import {
   downloadMoveResearch,
   subscribeMoveTracker,
@@ -1651,6 +1652,18 @@ function WhaleTradesPanel({ apiKeys, onOpenSettings }) {
       tooltip: {
         callbacks: {
           label: (ctx) => `${ctx.dataset.label}: ${fmtUsd(ctx.parsed.y)}`,
+          afterBody: (items) => {
+            const idx = items?.[0]?.dataIndex;
+            if (idx == null || !histBuckets[idx]?.byExchange) return [];
+            const entries = Object.entries(histBuckets[idx].byExchange)
+              .filter(([, v]) => (v?.totalUsd || 0) > 0)
+              .sort((a, b) => (b[1].totalUsd || 0) - (a[1].totalUsd || 0));
+            if (entries.length === 0) return [];
+            return [
+              '─── Chi tiết theo sàn ───',
+              ...entries.map(([ex, v]) => `• ${ex}: ${fmtUsd(v.totalUsd)} (L ${fmtUsd(v.longUsd)} / S ${fmtUsd(v.shortUsd)})`),
+            ];
+          },
         },
       },
     },
@@ -1670,21 +1683,26 @@ function WhaleTradesPanel({ apiKeys, onOpenSettings }) {
         grid: { color: 'rgba(148, 163, 184, 0.08)' },
       },
     },
-  }), []);
+  }), [histBuckets]);
 
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2' }}>
       <div className="hft-panel-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <h3 className="hft-panel-title font-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <span className="hft-icon">🔥</span> LỊCH SỬ THANH LÝ (24H · 7D · 30D)
+            <span className="hft-icon">🔥</span> LỊCH SỬ THANH LÝ TỔNG SÀN (24H · 7D · 30D)
           </h3>
           <DataOriginBadge
             origin="api"
-            label="COINALYZE API"
-            title="Dữ liệu lịch sử thanh lý BTCUSDT Perpetual trên Binance tổng hợp theo giờ từ Coinalyze API (cache 10 phút)."
+            label={coinalyzeData?.exchanges?.length > 1 ? `COINALYZE · ${coinalyzeData.exchanges.length} SÀN` : 'COINALYZE API'}
+            title={coinalyzeData?.exchanges?.length ? `Gộp thanh lý BTC Perpetual từ: ${coinalyzeData.exchanges.join(', ')} (cache 10 phút).` : 'Dữ liệu lịch sử thanh lý BTC Perpetual đa sàn từ Coinalyze API (cache 10 phút).'}
             compact
           />
+          {coinalyzeData?.exchanges?.length > 0 && (
+            <span className="font-mono text-slate-500" style={{ fontSize: '0.56rem' }}>
+              {coinalyzeData.exchanges.join(' · ')}
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2129,7 +2147,7 @@ export default function HftRadarTab({
   currentLS, lsChartData, oiChartData, getChartOpts,
   apiKeys, onOpenSettings,
 }) {
-  const { isModuleHidden } = useModuleVisibility();
+  const { isModuleHidden, getGroupOrder, MODULES_CONFIG } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
   const [spotOrderBook, setSpotOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
@@ -2236,150 +2254,210 @@ export default function HftRadarTab({
       </div>
 
       <div className="hft-grid">
-        {!isModuleHidden('hft_capital_flow') && (
-          <MemoCapitalFlowPanel
-            priceChangePct={liveChange ?? data?.btc?.change}
-            cvdHistory24h={cvdHistory24h}
-            cvdHistory7d={cvdHistory7d}
-            cvdHistory30d={cvdHistory30d}
-            futuresStream={futuresStream}
-            cvdHistory24hSpot={cvdHistory24hSpot}
-            cvdHistory7dSpot={cvdHistory7dSpot}
-            cvdHistory30dSpot={cvdHistory30dSpot}
-            spotStream={spotStream}
-            oiHistory={data?.oiHistory}
-            openInterest={data?.openInterest}
-            fundingRate={fundingRate ?? data?.fundingRate}
-            basisPct={liveBasisPct}
-          />
-        )}
+        {getGroupOrder('hft_main').map((id) => {
+          if (id === 'hft_capital_flow') {
+            if (isModuleHidden('hft_capital_flow')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label={MODULES_CONFIG[id]?.label} style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <MemoCapitalFlowPanel
+                  priceChangePct={liveChange ?? data?.btc?.change}
+                  cvdHistory24h={cvdHistory24h}
+                  cvdHistory7d={cvdHistory7d}
+                  cvdHistory30d={cvdHistory30d}
+                  futuresStream={futuresStream}
+                  cvdHistory24hSpot={cvdHistory24hSpot}
+                  cvdHistory7dSpot={cvdHistory7dSpot}
+                  cvdHistory30dSpot={cvdHistory30dSpot}
+                  spotStream={spotStream}
+                  oiHistory={data?.oiHistory}
+                  openInterest={data?.openInterest}
+                  fundingRate={fundingRate ?? data?.fundingRate}
+                  basisPct={liveBasisPct}
+                />
+              </SortableModuleItem>
+            );
+          }
 
-        {!isModuleHidden('hft_cvd') && (
-          <MemoCVDPanel
-            cvd={cvd}
-            sessionCvd={sessionCvd}
-            buyVolume={buyVolume}
-            sellVolume={sellVolume}
-            cvdHistory={cvdHistory}
-            futuresStream={futuresStream}
-            spotStream={spotStream}
-            cvdHistory24h={cvdHistory24h}
-            cvdHistory7d={cvdHistory7d}
-            cvdHistory30d={cvdHistory30d}
-            cvdHistory24hSpot={cvdHistory24hSpot}
-            cvdHistory7dSpot={cvdHistory7dSpot}
-            cvdHistory30dSpot={cvdHistory30dSpot}
-            cvdStatus={cvdStatus}
-            livePrice={livePrice}
-            volNodes={volNodes}
-            theme={theme}
-            openInterest={data?.openInterest}
-            oiHistory={data?.oiHistory}
-            fundingRate={fundingRate ?? data?.fundingRate}
-          />
-        )}
+          if (id === 'hft_cvd') {
+            if (isModuleHidden('hft_cvd')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label={MODULES_CONFIG[id]?.label} style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <MemoCVDPanel
+                  cvd={cvd}
+                  sessionCvd={sessionCvd}
+                  buyVolume={buyVolume}
+                  sellVolume={sellVolume}
+                  cvdHistory={cvdHistory}
+                  futuresStream={futuresStream}
+                  spotStream={spotStream}
+                  cvdHistory24h={cvdHistory24h}
+                  cvdHistory7d={cvdHistory7d}
+                  cvdHistory30d={cvdHistory30d}
+                  cvdHistory24hSpot={cvdHistory24hSpot}
+                  cvdHistory7dSpot={cvdHistory7dSpot}
+                  cvdHistory30dSpot={cvdHistory30dSpot}
+                  cvdStatus={cvdStatus}
+                  livePrice={livePrice}
+                  volNodes={volNodes}
+                  theme={theme}
+                  openInterest={data?.openInterest}
+                  oiHistory={data?.oiHistory}
+                  fundingRate={fundingRate ?? data?.fundingRate}
+                />
+              </SortableModuleItem>
+            );
+          }
 
-        {!isModuleHidden('hft_spot_pressure') && (
-          <MemoSpotPressurePanel />
-        )}
+          if (id === 'hft_spot_pressure') {
+            if (isModuleHidden('hft_spot_pressure')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label={MODULES_CONFIG[id]?.label} style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <MemoSpotPressurePanel />
+              </SortableModuleItem>
+            );
+          }
 
-        {/* Intraday Derivatives Context: Long/Short Ratio & Open Interest */}
-        {(!isModuleHidden('dash_ls_chart') || !isModuleHidden('dash_oi_chart')) && (
-          <div className="charts-row" style={{ gridColumn: '1 / -1', margin: '4px 0', gridTemplateColumns: (!isModuleHidden('dash_ls_chart') && !isModuleHidden('dash_oi_chart')) ? '1fr 1fr' : '1fr' }}>
-            {!isModuleHidden('dash_ls_chart') && (
-              <div className="glass-panel chart-panel">
-                <div className="chart-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <h3 className="chart-title font-mono text-emerald">
-                      <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
-                    </h3>
-                    <DataOriginBadge origin="history" label="LỊCH SỬ 24H" compact />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="chart-badge font-mono">
-                      {currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
-                    </span>
-                    <ModuleMenu moduleId="dash_ls_chart" />
-                  </div>
+          if (id === 'hft_ls_oi_pair') {
+            if (isModuleHidden('dash_ls_chart') && isModuleHidden('dash_oi_chart')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label="Cụm Long/Short Ratio & Open Interest" style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <div className="charts-row" style={{ margin: '4px 0', gridTemplateColumns: (!isModuleHidden('dash_ls_chart') && !isModuleHidden('dash_oi_chart')) ? '1fr 1fr' : '1fr' }}>
+                  {getGroupOrder('hft_ls_oi_pair').map((pairId) => {
+                    if (pairId === 'dash_ls_chart') {
+                      if (isModuleHidden('dash_ls_chart')) return null;
+                      return (
+                        <SortableModuleItem key={pairId} groupKey="hft_ls_oi_pair" itemId={pairId} isHorizontal label={MODULES_CONFIG[pairId]?.label} style={{ minWidth: 0 }}>
+                          <div className="glass-panel chart-panel">
+                            <div className="chart-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <h3 className="chart-title font-mono text-emerald">
+                                  <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
+                                </h3>
+                                <DataOriginBadge origin="history" label="LỊCH SỬ 24H" compact />
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="chart-badge font-mono">
+                                  {currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
+                                </span>
+                                <ModuleMenu moduleId="dash_ls_chart" />
+                              </div>
+                            </div>
+                            <div className="chart-body" style={{ height: '220px' }}>
+                              {data?.lsHistory?.length > 0 && lsChartData
+                                ? <Line data={lsChartData} options={getChartOpts ? getChartOpts(theme) : {}} />
+                                : <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
+                              }
+                            </div>
+                          </div>
+                        </SortableModuleItem>
+                      );
+                    }
+                    if (pairId === 'dash_oi_chart') {
+                      if (isModuleHidden('dash_oi_chart')) return null;
+                      return (
+                        <SortableModuleItem key={pairId} groupKey="hft_ls_oi_pair" itemId={pairId} isHorizontal label={MODULES_CONFIG[pairId]?.label} style={{ minWidth: 0 }}>
+                          <div className="glass-panel chart-panel">
+                            <div className="chart-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <h3 className="chart-title font-mono text-amber">
+                                  <span className="dot dot-amber" /> OPEN INTEREST — 24H (BTC)
+                                </h3>
+                                <DataOriginBadge origin="history" label="LỊCH SỬ 24H" compact />
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="chart-badge font-mono">
+                                  {data?.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
+                                </span>
+                                <ModuleMenu moduleId="dash_oi_chart" />
+                              </div>
+                            </div>
+                            <div className="chart-body" style={{ height: '220px' }}>
+                              {data?.oiHistory?.length > 0 && oiChartData
+                                ? <Bar data={oiChartData} options={getChartOpts ? getChartOpts(theme) : {}} />
+                                : <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
+                              }
+                            </div>
+                          </div>
+                        </SortableModuleItem>
+                      );
+                    }
+                    return null;
+                  })}
                 </div>
-                <div className="chart-body" style={{ height: '220px' }}>
-                  {data?.lsHistory?.length > 0 && lsChartData
-                    ? <Line data={lsChartData} options={getChartOpts ? getChartOpts(theme) : {}} />
-                    : <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
-                  }
-                </div>
-              </div>
-            )}
+              </SortableModuleItem>
+            );
+          }
 
-            {!isModuleHidden('dash_oi_chart') && (
-              <div className="glass-panel chart-panel">
-                <div className="chart-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <h3 className="chart-title font-mono text-amber">
-                      <span className="dot dot-amber" /> OPEN INTEREST — 24H (BTC)
-                    </h3>
-                    <DataOriginBadge origin="history" label="LỊCH SỬ 24H" compact />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="chart-badge font-mono">
-                      {data?.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
-                    </span>
-                    <ModuleMenu moduleId="dash_oi_chart" />
-                  </div>
-                </div>
-                <div className="chart-body" style={{ height: '220px' }}>
-                  {data?.oiHistory?.length > 0 && oiChartData
-                    ? <Bar data={oiChartData} options={getChartOpts ? getChartOpts(theme) : {}} />
-                    : <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
-                  }
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          if (id === 'hft_move_tracker') {
+            if (isModuleHidden('hft_move_tracker')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label={MODULES_CONFIG[id]?.label} style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <MemoMoveTrackerPanel />
+              </SortableModuleItem>
+            );
+          }
 
-        {!isModuleHidden('hft_move_tracker') && (
-          <MemoMoveTrackerPanel />
-        )}
+          if (id === 'hft_heatmap_whale_pair') {
+            if (isModuleHidden('hft_heatmap') && isModuleHidden('hft_whale_walls')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label="Advanced Price Action: POC, Walls & Liquidations" style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                {!isModuleHidden('hft_heatmap') ? (
+                  <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap}>
+                    {!isModuleHidden('hft_whale_walls') && (
+                      <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={true} />
+                    )}
+                  </MemoAdvancedChartWrapper>
+                ) : (
+                  !isModuleHidden('hft_whale_walls') && (
+                    <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={false} />
+                  )
+                )}
+              </SortableModuleItem>
+            );
+          }
 
-        {(!isModuleHidden('hft_heatmap') || !isModuleHidden('hft_whale_walls')) && (
-          !isModuleHidden('hft_heatmap') ? (
-            <MemoAdvancedChartWrapper theme={theme} whaleData={whaleData} whaleGap={whaleGap}>
-              {!isModuleHidden('hft_whale_walls') && (
-                <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={true} />
-              )}
-            </MemoAdvancedChartWrapper>
-          ) : (
-            !isModuleHidden('hft_whale_walls') && (
-              <MemoTargetLiquidityPanelWrapper whaleData={whaleData} whaleGap={whaleGap} setWhaleGap={setWhaleGap} isNested={false} />
-            )
-          )
-        )}
+          if (id === 'hft_orderbook') {
+            if (isModuleHidden('hft_orderbook')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label={MODULES_CONFIG[id]?.label} style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <MemoOrderBookPanel
+                  orderBook={orderBook}
+                  spotOrderBook={spotOrderBook}
+                  depthLimit={depthLimit}
+                  setDepthLimit={setDepthLimit}
+                />
+              </SortableModuleItem>
+            );
+          }
 
-        {!isModuleHidden('hft_orderbook') && (
-          <MemoOrderBookPanel
-            orderBook={orderBook}
-            spotOrderBook={spotOrderBook}
-            depthLimit={depthLimit}
-            setDepthLimit={setDepthLimit}
-          />
-        )}
+          if (id === 'hft_multi_funding') {
+            if (isModuleHidden('hft_multi_funding')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label={MODULES_CONFIG[id]?.label} style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <MemoMultiExchangeFundingPanel />
+              </SortableModuleItem>
+            );
+          }
 
-        {!isModuleHidden('hft_multi_funding') && (
-          <MemoMultiExchangeFundingPanel />
-        )}
+          if (id === 'hft_liquidations') {
+            if (isModuleHidden('hft_liquidations')) return null;
+            return (
+              <SortableModuleItem key={id} groupKey="hft_main" itemId={id} label={MODULES_CONFIG[id]?.label} style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <MemoWhaleTradesPanel
+                  whaleTrades={whaleTrades}
+                  volume24h={liveVolume || data?.btc?.volume}
+                  liquidations={liquidations}
+                  liqStats5m={liqStats5m}
+                  liqStats1h={liqStats1h}
+                  apiKeys={apiKeys}
+                  onOpenSettings={onOpenSettings}
+                />
+              </SortableModuleItem>
+            );
+          }
 
-        {!isModuleHidden('hft_liquidations') && (
-          <MemoWhaleTradesPanel
-            whaleTrades={whaleTrades}
-            volume24h={liveVolume || data?.btc?.volume}
-            liquidations={liquidations}
-            liqStats5m={liqStats5m}
-            liqStats1h={liqStats1h}
-            apiKeys={apiKeys}
-            onOpenSettings={onOpenSettings}
-          />
-        )}
+          return null;
+        })}
       </div>
     </div>
   );

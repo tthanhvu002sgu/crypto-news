@@ -5,6 +5,8 @@ import {
   aggregateLiquidations,
   formatLiqUsd,
   parseCoinalyzeLiquidationHistory,
+  selectBtcPerpMarketsForLiquidation,
+  parseMultiExchangeCoinalyzeLiquidations,
   summarizeHistoricalLiquidations,
   bucketHistoricalLiquidations,
 } from './liquidationEngine.js';
@@ -296,6 +298,44 @@ describe('liquidationEngine', () => {
       assert.equal(buckets7d.length, 2); // 2 distinct UTC days
       assert.equal(buckets7d[1].longUsd, 300_000);
       assert.equal(buckets7d[1].shortUsd, 150_000);
+    });
+
+    it('selects one primary BTC perpetual per exchange and aggregates multi-exchange liquidations with byExchange breakdown', () => {
+      const exchanges = [
+        { name: 'Binance', code: 'A' },
+        { name: 'Bybit', code: '6' },
+        { name: 'OKX', code: '3' },
+      ];
+      const futureMarkets = [
+        { symbol: 'BTCUSDT_PERP.A', exchange: 'A', base_asset: 'BTC', quote_asset: 'USDT', is_perpetual: true, margined: 'STABLE' },
+        { symbol: 'BTCUSD_PERP.A', exchange: 'A', base_asset: 'BTC', quote_asset: 'USD', is_perpetual: true, margined: 'COIN' },
+        { symbol: 'BTCUSDT.6', exchange: '6', base_asset: 'BTC', quote_asset: 'USDT', is_perpetual: true, margined: 'STABLE' },
+        { symbol: 'BTC-USDT-SWAP.3', exchange: '3', base_asset: 'BTC', quote_asset: 'USDT', is_perpetual: true, margined: 'STABLE' },
+        { symbol: 'ETHUSDT_PERP.A', exchange: 'A', base_asset: 'ETH', quote_asset: 'USDT', is_perpetual: true, margined: 'STABLE' },
+      ];
+
+      const selected = selectBtcPerpMarketsForLiquidation(futureMarkets, exchanges, 10);
+      assert.equal(selected.length, 3);
+      assert.deepEqual(selected.map((s) => s.exchangeName), ['Binance', 'Bybit', 'OKX']);
+      assert.equal(selected[0].symbol, 'BTCUSDT_PERP.A');
+
+      const payload = [
+        { symbol: 'BTCUSDT_PERP.A', history: [{ t: nowSec - 3600, l: 400_000, s: 100_000 }] },
+        { symbol: 'BTCUSDT.6', history: [{ t: nowSec - 3600, l: 200_000, s: 300_000 }] },
+      ];
+      const multi = parseMultiExchangeCoinalyzeLiquidations(payload, selected);
+      assert.deepEqual(multi.exchanges, ['Binance', 'Bybit']);
+      assert.equal(multi.history.length, 1);
+      assert.equal(multi.history[0].longUsd, 600_000);
+      assert.equal(multi.history[0].shortUsd, 400_000);
+      assert.equal(multi.history[0].totalUsd, 1_000_000);
+      assert.equal(multi.history[0].byExchange.Binance.totalUsd, 500_000);
+      assert.equal(multi.history[0].byExchange.Bybit.totalUsd, 500_000);
+
+      const buckets = bucketHistoricalLiquidations(multi.history, '24h', nowMs);
+      assert.equal(buckets.length, 1);
+      assert.equal(buckets[0].byExchange.Binance.longUsd, 400_000);
+      assert.equal(buckets[0].byExchange.Bybit.shortUsd, 300_000);
     });
   });
 });

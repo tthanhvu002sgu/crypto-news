@@ -198,6 +198,169 @@ export function parseCoinalyzeLiquidationHistory(payload) {
   return { symbol, history };
 }
 
+const EXCHANGE_PRIORITY = [
+  'Binance',
+  'Bybit',
+  'OKX',
+  'Bitget',
+  'Gate.io',
+  'HTX',
+  'Huobi',
+  'BitMEX',
+  'Deribit',
+  'Hyperliquid',
+  'Kraken',
+  'Bitfinex',
+  'KuCoin',
+];
+
+const QUOTE_PRIORITY = { USDT: 3, USDC: 2, USD: 1 };
+
+/**
+ * Selects one primary BTC perpetual contract per exchange from Coinalyze `/v1/future-markets`
+ * so multi-exchange liquidation queries stay within the 20-symbol limit and avoid double-counting.
+ *
+ * @param {Array<Object>} futureMarkets
+ * @param {Array<Object>} [exchanges=[]]
+ * @param {number} [maxSymbols=12]
+ * @returns {Array<{ symbol: string, exchangeName: string, quoteAsset: string }>}
+ */
+export function selectBtcPerpMarketsForLiquidation(futureMarkets, exchanges = [], maxSymbols = 12) {
+  if (!Array.isArray(futureMarkets) || futureMarkets.length === 0) {
+    return [];
+  }
+
+  const exchangeNameByCode = new Map();
+  if (Array.isArray(exchanges)) {
+    for (const ex of exchanges) {
+      if (ex?.code && ex?.name) {
+        exchangeNameByCode.set(String(ex.code).trim(), String(ex.name).trim());
+      }
+    }
+  }
+
+  const bestByExchange = new Map();
+
+  for (const m of futureMarkets) {
+    if (!m || !m.symbol) continue;
+    if (String(m.base_asset || '').toUpperCase() !== 'BTC') continue;
+    if (!m.is_perpetual) continue;
+
+    const quote = String(m.quote_asset || '').toUpperCase();
+    const quoteRank = QUOTE_PRIORITY[quote] || 0;
+    if (quoteRank === 0) continue;
+
+    const symbol = String(m.symbol);
+    const suffix = symbol.includes('.') ? symbol.split('.').pop() : '';
+    const rawEx = String(m.exchange || '').trim();
+    const exchangeName =
+      exchangeNameByCode.get(rawEx) ||
+      exchangeNameByCode.get(suffix) ||
+      (rawEx.length > 2 ? rawEx : suffix || rawEx || 'Unknown');
+
+    const isStableMargined = String(m.margined || '').toUpperCase() === 'STABLE' ? 1 : 0;
+    const score = quoteRank * 10 + isStableMargined;
+
+    const existing = bestByExchange.get(exchangeName);
+    if (!existing || score > existing.score) {
+      bestByExchange.set(exchangeName, {
+        symbol,
+        exchangeName,
+        quoteAsset: quote,
+        score,
+      });
+    }
+  }
+
+  return Array.from(bestByExchange.values())
+    .sort((a, b) => {
+      const idxA = EXCHANGE_PRIORITY.indexOf(a.exchangeName);
+      const idxB = EXCHANGE_PRIORITY.indexOf(b.exchangeName);
+      const rankA = idxA === -1 ? 999 : idxA;
+      const rankB = idxB === -1 ? 999 : idxB;
+      if (rankA !== rankB) return rankA - rankB;
+      return a.exchangeName.localeCompare(b.exchangeName);
+    })
+    .slice(0, maxSymbols)
+    .map(({ symbol, exchangeName, quoteAsset }) => ({ symbol, exchangeName, quoteAsset }));
+}
+
+/**
+ * Parses and aggregates multi-exchange Coinalyze `/v1/liquidation-history` payload
+ * into a unified time-series with per-exchange breakdowns.
+ *
+ * @param {Array<Object>} payload
+ * @param {Array<{ symbol: string, exchangeName: string }>} [marketMetaList=[]]
+ * @returns {{ history: Array<Object>, exchanges: Array<string> }}
+ */
+export function parseMultiExchangeCoinalyzeLiquidations(payload, marketMetaList = []) {
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return { history: [], exchanges: [] };
+  }
+
+  const exchangeBySymbol = new Map();
+  for (const meta of marketMetaList) {
+    if (meta?.symbol && meta?.exchangeName) {
+      exchangeBySymbol.set(meta.symbol, meta.exchangeName);
+    }
+  }
+
+  const byTimestamp = new Map();
+  const exchangeTotals = new Map();
+
+  for (const entry of payload) {
+    if (!entry || !entry.symbol) continue;
+    const sym = String(entry.symbol);
+    const exchangeName = exchangeBySymbol.get(sym) || (sym.includes('.') ? sym.split('.').pop() : sym);
+    const rawHistory = Array.isArray(entry.history) ? entry.history : [];
+    if (rawHistory.length === 0) continue;
+
+    for (const pt of rawHistory) {
+      if (!pt || !Number.isFinite(Number(pt.t))) continue;
+      const timestamp = Number(pt.t) * 1000;
+      const longUsd = Math.max(0, Number(pt.l) || 0);
+      const shortUsd = Math.max(0, Number(pt.s) || 0);
+      const totalUsd = longUsd + shortUsd;
+
+      exchangeTotals.set(exchangeName, (exchangeTotals.get(exchangeName) || 0) + totalUsd);
+
+      let bucket = byTimestamp.get(timestamp);
+      if (!bucket) {
+        bucket = {
+          timestamp,
+          longUsd: 0,
+          shortUsd: 0,
+          totalUsd: 0,
+          netDelta: 0,
+          byExchange: {},
+        };
+        byTimestamp.set(timestamp, bucket);
+      }
+
+      bucket.longUsd += longUsd;
+      bucket.shortUsd += shortUsd;
+      bucket.totalUsd += totalUsd;
+      bucket.netDelta = bucket.shortUsd - bucket.longUsd;
+
+      const prevEx = bucket.byExchange[exchangeName];
+      if (prevEx) {
+        prevEx.longUsd += longUsd;
+        prevEx.shortUsd += shortUsd;
+        prevEx.totalUsd += totalUsd;
+      } else {
+        bucket.byExchange[exchangeName] = { longUsd, shortUsd, totalUsd };
+      }
+    }
+  }
+
+  const history = Array.from(byTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp);
+  const exchanges = Array.from(exchangeTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name);
+
+  return { history, exchanges };
+}
+
 function summarizeWindow(history, cutoffMs, nowMs) {
   let longUsd = 0;
   let shortUsd = 0;
@@ -252,8 +415,28 @@ export function summarizeHistoricalLiquidations(history, nowMs = Date.now()) {
   };
 }
 
+function mergeByExchange(target, source) {
+  if (!source || typeof source !== 'object') return target;
+  for (const [ex, vals] of Object.entries(source)) {
+    if (!vals) continue;
+    if (target[ex]) {
+      target[ex].longUsd += vals.longUsd || 0;
+      target[ex].shortUsd += vals.shortUsd || 0;
+      target[ex].totalUsd += vals.totalUsd || 0;
+    } else {
+      target[ex] = {
+        longUsd: vals.longUsd || 0,
+        shortUsd: vals.shortUsd || 0,
+        totalUsd: vals.totalUsd || 0,
+      };
+    }
+  }
+  return target;
+}
+
 /**
- * Aggregates Coinalyze hourly liquidation points into chart-ready time buckets.
+ * Aggregates Coinalyze hourly liquidation points into chart-ready time buckets,
+ * preserving per-exchange breakdowns for chart tooltips.
  * - '24h': hourly buckets over last 24h
  * - '7d': daily (UTC) buckets over last 7d
  * - '30d': daily (UTC) buckets over last 30d
@@ -261,7 +444,7 @@ export function summarizeHistoricalLiquidations(history, nowMs = Date.now()) {
  * @param {Array<Object>} history
  * @param {'24h'|'7d'|'30d'} timeframe
  * @param {number} [nowMs=Date.now()]
- * @returns {Array<{ timestamp: number, label: string, longUsd: number, shortUsd: number, totalUsd: number }>}
+ * @returns {Array<{ timestamp: number, label: string, longUsd: number, shortUsd: number, totalUsd: number, byExchange: Object }>}
  */
 export function bucketHistoricalLiquidations(history, timeframe = '24h', nowMs = Date.now()) {
   if (!Array.isArray(history) || history.length === 0) return [];
@@ -283,6 +466,7 @@ export function bucketHistoricalLiquidations(history, timeframe = '24h', nowMs =
           longUsd: pt.longUsd,
           shortUsd: pt.shortUsd,
           totalUsd: pt.totalUsd,
+          byExchange: mergeByExchange({}, pt.byExchange),
         };
       });
   }
@@ -298,6 +482,7 @@ export function bucketHistoricalLiquidations(history, timeframe = '24h', nowMs =
       existing.longUsd += pt.longUsd;
       existing.shortUsd += pt.shortUsd;
       existing.totalUsd += pt.totalUsd;
+      mergeByExchange(existing.byExchange, pt.byExchange);
     } else {
       const mmdd = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
       byDay.set(dayKey, {
@@ -306,6 +491,7 @@ export function bucketHistoricalLiquidations(history, timeframe = '24h', nowMs =
         longUsd: pt.longUsd,
         shortUsd: pt.shortUsd,
         totalUsd: pt.totalUsd,
+        byExchange: mergeByExchange({}, pt.byExchange),
       });
     }
   }

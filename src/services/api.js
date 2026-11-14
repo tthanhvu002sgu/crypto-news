@@ -33,7 +33,8 @@ import {
   aggregateOrderBookSnapshots,
 } from './spotFlowEngine.js';
 import {
-  parseCoinalyzeLiquidationHistory,
+  selectBtcPerpMarketsForLiquidation,
+  parseMultiExchangeCoinalyzeLiquidations,
   summarizeHistoricalLiquidations,
 } from './liquidationEngine.js';
 
@@ -2741,19 +2742,36 @@ export const getMultiAssetCorrelationHistory = async (force = false) => {
 // ─── COINALYZE HISTORICAL LIQUIDATIONS (24H / 7D / 30D) ───────────────────────
 
 /**
- * Fetches historical liquidation series from Coinalyze `/v1/liquidation-history`
- * and computes 24h / 7d / 30d summaries.
+ * Fetches & caches Coinalyze BTC perpetual markets across exchanges (24h TTL).
+ */
+async function getCoinalyzeBtcPerpMarkets(apiKey) {
+  return fetchCached(
+    'coinalyze_btc_perp_markets_v1',
+    async () => {
+      const [exRes, mktRes] = await Promise.all([
+        axios.get(getCoinalyzeUrl('/v1/exchanges'), { params: { api_key: apiKey }, timeout: 10000 }),
+        axios.get(getCoinalyzeUrl('/v1/future-markets'), { params: { api_key: apiKey }, timeout: 12000 }),
+      ]);
+      const selected = selectBtcPerpMarketsForLiquidation(mktRes.data, exRes.data, 12);
+      if (selected.length > 0) return selected;
+      return [{ symbol: 'BTCUSDT_PERP.A', exchangeName: 'Binance', quoteAsset: 'USDT' }];
+    },
+    24 * 60 * 60 * 1000 // 24h cache
+  );
+}
+
+/**
+ * Fetches aggregated multi-exchange historical liquidation series from Coinalyze
+ * `/v1/liquidation-history` and computes 24h / 7d / 30d summaries + per-exchange breakdown.
  *
  * @param {Object} [opts]
  * @param {string} [opts.apiKey]
- * @param {string} [opts.symbols='BTCUSDT_PERP.A']
  * @param {string} [opts.interval='1hour']
  * @param {number} [opts.lookbackDays=30]
  * @param {boolean} [opts.force=false]
  */
 export const getCoinalyzeLiquidationHistory = async ({
   apiKey,
-  symbols = 'BTCUSDT_PERP.A',
   interval = '1hour',
   lookbackDays = 30,
   force = false,
@@ -2765,37 +2783,46 @@ export const getCoinalyzeLiquidationHistory = async ({
   ).trim();
 
   if (!key) {
-    return { ok: false, reason: 'MISSING_API_KEY', symbol: symbols, history: [], summary: null };
+    return { ok: false, reason: 'MISSING_API_KEY', exchanges: [], history: [], summary: null };
   }
 
-  const cacheKey = `coinalyze_liq_${symbols}_${interval}_${lookbackDays}d`;
+  const cacheKey = `coinalyze_liq_multi_v2_${interval}_${lookbackDays}d`;
 
   try {
     return await fetchCached(
       cacheKey,
       async () => {
+        let markets;
+        try {
+          markets = await getCoinalyzeBtcPerpMarkets(key);
+        } catch {
+          markets = [{ symbol: 'BTCUSDT_PERP.A', exchangeName: 'Binance', quoteAsset: 'USDT' }];
+        }
+
+        const symbolsParam = markets.map((m) => m.symbol).join(',');
         const to = Math.floor(Date.now() / 1000);
         const from = to - lookbackDays * 86400;
         const url = getCoinalyzeUrl('/v1/liquidation-history');
 
         const res = await axios.get(url, {
           params: {
-            symbols,
+            symbols: symbolsParam,
             interval,
             from,
             to,
             convert_to_usd: 'true',
             api_key: key,
           },
-          timeout: 12000,
+          timeout: 15000,
         });
 
-        const parsed = parseCoinalyzeLiquidationHistory(res.data);
+        const parsed = parseMultiExchangeCoinalyzeLiquidations(res.data, markets);
         const summary = summarizeHistoricalLiquidations(parsed.history, to * 1000);
 
         return {
           ok: true,
-          symbol: parsed.symbol || symbols,
+          isAggregated: parsed.exchanges.length > 1,
+          exchanges: parsed.exchanges,
           history: parsed.history,
           summary,
           fetchedAt: Date.now(),
@@ -2817,7 +2844,7 @@ export const getCoinalyzeLiquidationHistory = async ({
       reason,
       status,
       error: err?.response?.data?.message || err?.message || 'Unknown Coinalyze error',
-      symbol: symbols,
+      exchanges: [],
       history: [],
       summary: null,
     };
