@@ -1203,7 +1203,7 @@ function TargetLiquidityPanel({
                                     border: '1px solid var(--border-panel)',
                                     borderRadius: '2px',
                                     padding: '1px 3px',
-                                    background: 'rgba(15, 23, 42, 0.4)',
+                                    background: 'var(--bg-slate-950)',
                                     fontWeight: 'normal'
                                   }}
                                 >
@@ -1275,7 +1275,7 @@ function TargetLiquidityPanel({
                                     border: '1px solid var(--border-panel)',
                                     borderRadius: '2px',
                                     padding: '1px 3px',
-                                    background: 'rgba(15, 23, 42, 0.4)',
+                                    background: 'var(--bg-slate-950)',
                                     fontWeight: 'normal'
                                   }}
                                 >
@@ -1413,7 +1413,7 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
             {orderBook.exchanges.map(ex => {
               const color = ex.obi > 15 ? 'var(--color-emerald-400)' : ex.obi < -15 ? 'var(--color-rose-400)' : 'var(--text-slate-400)';
               return (
-                <div key={ex.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '55px', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '3px 4px', background: 'rgba(15, 23, 42, 0.3)' }} title={`Order Book Imbalance tại sàn ${ex.name}`}>
+                <div key={ex.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '55px', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '3px 4px', background: 'var(--bg-slate-950)' }} title={`Order Book Imbalance tại sàn ${ex.name}`}>
                   <span style={{ fontSize: '0.48rem', color: 'var(--text-slate-500)', fontWeight: 600 }}>{ex.name}</span>
                   <span style={{ fontSize: '0.55rem', color: color, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                     {ex.obi > 0 ? '+' : ''}{ex.obi}%

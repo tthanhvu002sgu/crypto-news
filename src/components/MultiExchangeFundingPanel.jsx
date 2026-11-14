@@ -458,7 +458,7 @@ export default function MultiExchangeFundingPanel({ moduleId = 'hft_multi_fundin
           {analysis?.narrative && (
             <div
               style={{
-                background: 'rgba(15, 23, 42, 0.65)',
+                background: 'var(--bg-slate-950)',
                 border: '1px solid var(--border-panel)',
                 borderRadius: '6px',
                 padding: '10px 14px',

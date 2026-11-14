@@ -1438,7 +1438,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
               top: Math.max(hoverLine.y - 44, 4),
               zIndex: 14,
               pointerEvents: 'none',
-              background: 'rgba(10, 12, 18, 0.95)',
+              background: 'var(--bg-tooltip)',
               border: `1px solid ${hoverLine.color}`,
               borderRadius: '6px',
               padding: '5px 9px',
@@ -1456,13 +1456,13 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
         <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 15, display: 'flex', flexDirection: 'column', gap: '6px', pointerEvents: 'none', maxWidth: '320px' }}>
           {toasts.map(t => (
             <div key={t.id} className="font-mono" style={{
-              background: 'rgba(10, 12, 18, 0.95)',
+              background: 'var(--bg-tooltip)',
               border: `1px solid ${t.color}`,
               borderLeft: `4px solid ${t.color}`,
               borderRadius: '6px',
               padding: '6px 10px',
               fontSize: '0.65rem',
-              color: 'var(--text-slate-200, #e2e8f0)',
+              color: 'var(--text-tooltip-body, var(--text-slate-200))',
               boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
             }}>
               {t.text}

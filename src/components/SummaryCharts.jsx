@@ -429,8 +429,8 @@ export function MacroLiquidityChart({ data: macroData }) {
     <div className="summary-chart-container" style={{ minHeight: '210px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
         {tiles.map((tile) => (
-          <div key={tile.label} style={{ border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '8px', background: 'rgba(15, 23, 42, 0.35)' }}>
-            <div className="font-mono" style={{ fontSize: '0.58rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{tile.label}</div>
+          <div key={tile.label} style={{ border: '1px solid var(--border-panel)', borderRadius: '6px', padding: '8px', background: 'var(--bg-slate-950)' }}>
+            <div className="font-mono" style={{ fontSize: '0.58rem', color: 'var(--text-slate-400)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{tile.label}</div>
             <div className="font-mono" style={{ fontSize: '0.9rem', fontWeight: 700, color: tile.color }}>{tile.value}</div>
           </div>
         ))}
