@@ -2414,8 +2414,12 @@ export default function HftRadarTab({
           <MemoCapitalFlowPanel
             priceChangePct={liveChange ?? data?.btc?.change}
             cvdHistory24h={cvdHistory24h}
+            cvdHistory7d={cvdHistory7d}
+            cvdHistory30d={cvdHistory30d}
             futuresStream={futuresStream}
             cvdHistory24hSpot={cvdHistory24hSpot}
+            cvdHistory7dSpot={cvdHistory7dSpot}
+            cvdHistory30dSpot={cvdHistory30dSpot}
             spotStream={spotStream}
             oiHistory={data?.oiHistory}
             openInterest={data?.openInterest}

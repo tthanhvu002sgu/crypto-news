@@ -205,9 +205,12 @@ export function classifyCapitalFlow({
   const priceDeadband = finite(thresholds.pricePct) ?? 0.15;
   const oiDeadband = finite(thresholds.oiPct) ?? 0.15;
   const cvdDeadband = finite(thresholds.cvdRatioPct) ?? 0.15;
+  const strongCvdThreshold = finite(thresholds.strongCvdRatioPct) ?? 1.5;
   const priceDirection = signWithDeadband(priceChangePct, priceDeadband);
   const oiDirection = signWithDeadband(oiChangePct, oiDeadband);
   const cvdDirection = flowWithDeadband(cvdRatioPct, cvdDeadband);
+  const absCvdRatio = Math.abs(finite(cvdRatioPct) ?? 0);
+  const isStrongFlowPinnedPrice = priceDirection === 'flat' && absCvdRatio >= strongCvdThreshold;
   const quality = dataQuality({ priceChangePct, cvdRatioPct, oiChangePct, fundingRate, basisPct, coveragePct });
   const crowding = crowdingContext(fundingRate, basisPct);
 
@@ -257,6 +260,22 @@ export function classifyCapitalFlow({
           detail: 'OI tăng nhưng aggressive buy chưa nâng được giá; có thể là hấp thụ hoặc long bị kẹt.',
         };
       }
+      if (isStrongFlowPinnedPrice && cvdDirection === 'sell') {
+        return {
+          ...result,
+          flow: 'IN', actionBadge: 'ABSORPTION', bias: 'MIXED', mechanism: 'SELL_ABSORPTION', state: 'SELL_ABSORPTION_WITH_OI_IN', tone: 'constructive',
+          label: 'Hấp thụ lực bán',
+          detail: 'Bán chủ động mạnh nhưng giá đi ngang nhờ tường Limit Bid đỡ, trong khi OI mở rộng.',
+        };
+      }
+      if (isStrongFlowPinnedPrice && cvdDirection === 'buy') {
+        return {
+          ...result,
+          flow: 'IN', actionBadge: 'ABSORPTION', bias: 'MIXED', mechanism: 'BUY_ABSORPTION', state: 'BUY_ABSORPTION_OR_TRAPPED_LONGS', tone: 'warning',
+          label: 'Hấp thụ lực mua (Kẹt Long)',
+          detail: 'Mua chủ động mạnh nhưng giá bị chặn đi ngang bởi tường Limit Ask, trong khi OI mở rộng.',
+        };
+      }
       return {
         ...result,
         flow: 'IN', actionBadge: 'BUILD-UP', bias: 'MIXED', mechanism: 'NEW_POSITION', state: 'CAPITAL_IN_MIXED', tone: 'warning',
@@ -282,6 +301,22 @@ export function classifyCapitalFlow({
           detail: 'Giá, aggressive sell và OI cùng giảm; chưa thể tách voluntary close với liquidation.',
         };
       }
+      if (isStrongFlowPinnedPrice && cvdDirection === 'sell') {
+        return {
+          ...result,
+          flow: 'OUT', actionBadge: 'ABSORPTION', bias: 'MIXED', mechanism: 'SELL_ABSORPTION', state: 'SELL_ABSORPTION_WITH_OI_OUT', tone: 'constructive',
+          label: 'Hấp thụ lực bán',
+          detail: 'Bán chủ động mạnh (thoát vị thế) nhưng giá đi ngang nhờ tường Limit Bid hấp thụ.',
+        };
+      }
+      if (isStrongFlowPinnedPrice && cvdDirection === 'buy') {
+        return {
+          ...result,
+          flow: 'OUT', actionBadge: 'ABSORPTION', bias: 'MIXED', mechanism: 'BUY_ABSORPTION', state: 'BUY_ABSORPTION_WITH_OI_OUT', tone: 'warning',
+          label: 'Hấp thụ lực mua',
+          detail: 'Mua chủ động mạnh (đóng Short) nhưng giá bị chặn đi ngang bởi tường Limit Ask hấp thụ.',
+        };
+      }
       return {
         ...result,
         flow: 'OUT', actionBadge: 'UNWIND', bias: 'MIXED', mechanism: 'POSITION_CLOSING', state: 'CAPITAL_OUT_MIXED', tone: 'warning',
@@ -290,12 +325,14 @@ export function classifyCapitalFlow({
       };
     }
 
-    if ((priceDirection === 'up' && cvdDirection === 'sell') || (priceDirection === 'down' && cvdDirection === 'buy')) {
+    if ((priceDirection === 'up' && cvdDirection === 'sell') || (priceDirection === 'down' && cvdDirection === 'buy') || isStrongFlowPinnedPrice) {
       return {
         ...result,
-        flow: 'ROTATION', actionBadge: 'ROTATION', bias: 'MIXED', mechanism: priceDirection === 'up' ? 'SELL_ABSORPTION' : 'BUY_ABSORPTION', state: 'FLOW_ROTATION', tone: 'warning',
+        flow: 'ROTATION', actionBadge: 'ROTATION', bias: 'MIXED', mechanism: cvdDirection === 'sell' ? 'SELL_ABSORPTION' : 'BUY_ABSORPTION', state: 'FLOW_ROTATION', tone: 'warning',
         label: 'Luân chuyển · Hấp thụ',
-        detail: 'OI gần như không đổi trong khi giá chống lại aggressive flow; chưa có bằng chứng gross capital mở rộng hoặc co lại.',
+        detail: isStrongFlowPinnedPrice
+          ? 'Áp lực chủ động mạnh nhưng giá bị kìm đi ngang và OI gần như không đổi; dấu hiệu tường Limit hấp thụ.'
+          : 'OI gần như không đổi trong khi giá chống lại aggressive flow; chưa có bằng chứng gross capital mở rộng hoặc co lại.',
       };
     }
 

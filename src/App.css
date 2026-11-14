@@ -1483,6 +1483,38 @@
   text-transform: uppercase;
 }
 
+.capital-flow-tf-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px;
+  border-radius: 5px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border-panel);
+}
+
+.capital-flow-tf-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-slate-400);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.capital-flow-tf-btn:hover {
+  color: var(--text-contrast, var(--text-slate-100));
+}
+
+.capital-flow-tf-btn.active {
+  background: rgba(56, 189, 248, 0.16);
+  color: #0284c7;
+}
+
 .capital-flow-status-group {
   display: flex;
   align-items: center;

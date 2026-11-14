@@ -179,3 +179,26 @@ test('identifies spot confluence buy during Short Covering when both Futures and
   assert.equal(result.spotAlignment.tone, 'bullish');
 });
 
+test('detects sell absorption when aggressive selling is strong but price stays flat with OI expanding', () => {
+  const result = classifyCapitalFlow({ ...complete, priceChangePct: -0.05, cvdRatioPct: -2.4, oiChangePct: 1.8 });
+  assert.equal(result.state, 'SELL_ABSORPTION_WITH_OI_IN');
+  assert.equal(result.actionBadge, 'ABSORPTION');
+  assert.equal(result.label, 'Hấp thụ lực bán');
+  assert.equal(result.mechanism, 'SELL_ABSORPTION');
+});
+
+test('detects sell absorption when aggressive selling is strong and price stays flat while OI contracts', () => {
+  const result = classifyCapitalFlow({ ...complete, priceChangePct: 0.04, cvdRatioPct: -2.2, oiChangePct: -1.5 });
+  assert.equal(result.state, 'SELL_ABSORPTION_WITH_OI_OUT');
+  assert.equal(result.actionBadge, 'ABSORPTION');
+  assert.equal(result.label, 'Hấp thụ lực bán');
+});
+
+test('detects rotation absorption when strong flow meets flat price and flat OI', () => {
+  const result = classifyCapitalFlow({ ...complete, priceChangePct: -0.02, cvdRatioPct: -2.0, oiChangePct: 0.05 });
+  assert.equal(result.state, 'FLOW_ROTATION');
+  assert.equal(result.actionBadge, 'ROTATION');
+  assert.equal(result.label, 'Luân chuyển · Hấp thụ');
+  assert.equal(result.mechanism, 'SELL_ABSORPTION');
+});
+
