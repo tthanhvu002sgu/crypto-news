@@ -26,6 +26,10 @@
       "destination": "https://query2.finance.yahoo.com/:path*"
     },
     {
+      "source": "/api-coinbase/:path*",
+      "destination": "https://api.exchange.coinbase.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

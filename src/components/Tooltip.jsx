@@ -114,9 +114,24 @@ export const METRIC_METADATA = {
     formula: 'Support/Resistance Walls ≥ $500K'
   },
   obi: {
-    api: 'Binance Futures API (REST - 100 levels)',
-    def: 'Chênh lệch khối lượng giữa tổng lệnh mua chờ (Bids) và bán chờ (Asks) trong sổ lệnh 100 levels. Đo lường sự bất cân xứng của cung/cầu chờ.',
-    formula: 'OBI = (ΣBidVol - ΣAskVol) / (ΣBidVol + ΣAskVol) (100 levels)'
+    api: 'Binance / Bybit / OKX / Bitget / Coinbase (REST Depth)',
+    def: 'Chênh lệch khối lượng giữa tổng lệnh mua chờ (Bids) và bán chờ (Asks) tách riêng cho Futures OBI và Spot OBI. So sánh 2 mục giúp phát hiện Spot kê đỡ giá hoặc Futures kéo bid ảo.',
+    formula: 'OBI = (ΣBidVol - ΣAskVol) / (ΣBidVol + ΣAskVol)'
+  },
+  coinbasePremium: {
+    api: 'Coinbase Exchange (BTC-USD) vs Binance Spot (BTCUSDT)',
+    def: 'Chênh lệch giá Spot trên Coinbase (dòng tiền USD / tổ chức Mỹ) so với Binance. Premium dương kéo dài khi giá tăng cho thấy lực cầu Spot thực từ thị trường Mỹ.',
+    formula: 'Premium % = ((Coinbase BTC-USD - Binance BTCUSDT) / Binance BTCUSDT) × 100'
+  },
+  spotVolumeRatio: {
+    api: 'Binance Spot & Futures Klines (Quote Volume)',
+    def: 'Tỷ trọng khối lượng giao dịch Spot so với tổng thị trường (Spot + Futures). Tỷ trọng Spot tăng khi phá cản xác nhận dòng tiền thật tham gia thay vì chỉ đầu cơ đòn bẩy.',
+    formula: 'Spot Share % = SpotVol / (SpotVol + FuturesVol) × 100'
+  },
+  multiExchangeCvd: {
+    api: 'Binance, Bybit, OKX (Spot + Futures) & Coinbase (Spot)',
+    def: 'Đối chiếu lực mua/bán chủ động (Taker Buy - Taker Sell) song song giữa Spot và Futures trên nhiều sàn để khắc phục điểm mù khi chỉ xem 1 sàn đơn lẻ.',
+    formula: 'Net Delta = Σ(Taker Buy USD) - Σ(Taker Sell USD)'
   },
   dxy: {
     api: 'FRED API (REST)',

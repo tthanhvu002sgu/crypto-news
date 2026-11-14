@@ -22,6 +22,16 @@ import {
 import {
   buildCorrelationMatrix,
 } from './correlationEngine.js';
+import {
+  calculateCoinbasePremium,
+  parseBinanceAggTrades,
+  parseBybitRecentTrades,
+  parseOkxTrades,
+  parseCoinbaseTrades,
+  summarizeTradeBatch,
+  buildMultiExchangeCvdComparison,
+  aggregateOrderBookSnapshots,
+} from './spotFlowEngine.js';
 
 const isLocal = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -29,6 +39,7 @@ const isLocal = typeof window !== 'undefined' &&
 const getFredUrl = () => (typeof window !== 'undefined' ? '/api-fred/fred/series/observations' : 'https://api.stlouisfed.org/fred/series/observations');
 const getAlphaUrl = () => (typeof window !== 'undefined' ? '/api-alphavantage/query' : 'https://www.alphavantage.co/query');
 const getCoinMetricsUrl = () => (typeof window !== 'undefined' ? '/api-coinmetrics/v4/timeseries/asset-metrics' : 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics');
+const getCoinbaseExchangeUrl = (path) => (typeof window !== 'undefined' ? `/api-coinbase${path}` : `https://api.exchange.coinbase.com${path}`);
 
 // ─── BINANCE PUBLIC API ────────────────────────────────────────────────────────
 
@@ -1033,146 +1044,151 @@ const getOKXContractSize = (symbol) => {
   return 1; // Fallback
 };
 
+const binanceBookParser = (data) => ({
+  bids: data?.bids || [],
+  asks: data?.asks || []
+});
+
+const bybitBookParser = (data) => ({
+  bids: data?.result?.b || [],
+  asks: data?.result?.a || []
+});
+
+const okxBookParser = (data) => ({
+  bids: data?.data?.[0]?.bids || [],
+  asks: data?.data?.[0]?.asks || []
+});
+
+const bitgetBookParser = (data) => ({
+  bids: data?.data?.bids || [],
+  asks: data?.data?.asks || []
+});
+
+const fetchOrderBookSource = async (name, url, parser) => {
+  try {
+    const res = await axios.get(url, { timeout: 4000 });
+    return parser(res.data);
+  } catch (e) {
+    console.warn(`[API - OrderBook] Failed to fetch OBI depth from ${name}:`, e.message);
+    return { bids: [], asks: [] };
+  }
+};
+
+/**
+ * Shared aggregated Order Book Imbalance fetcher for Futures or Spot markets.
+ * Calculates OBI = (ΣBid - ΣAsk) / (ΣBid + ΣAsk).
+ */
+async function fetchAggregatedOrderBookOBI({ market = 'futures', symbol = 'BTCUSDT', limit = 100 } = {}) {
+  const symbolUpper = symbol.toUpperCase();
+  const base = symbolUpper.replace('USDT', '');
+  const okxScale = getOKXContractSize(symbol);
+
+  let bitgetFuturesLimit;
+  if (limit <= 5) bitgetFuturesLimit = 5;
+  else if (limit <= 15) bitgetFuturesLimit = 15;
+  else if (limit <= 50) bitgetFuturesLimit = 50;
+  else if (limit <= 100) bitgetFuturesLimit = 100;
+  else bitgetFuturesLimit = 'max';
+
+  const bitgetSpotLimit = limit <= 5 ? 5 : limit <= 15 ? 15 : limit <= 50 ? 50 : 'max';
+
+  const sources = market === 'spot'
+    ? [
+        {
+          name: 'Binance Spot',
+          tag: 'BIN',
+          url: `https://data-api.binance.vision/api/v3/depth?symbol=${symbolUpper}&limit=${limit}`,
+          parser: binanceBookParser,
+          scale: 1.0,
+          isPrimary: true,
+        },
+        {
+          name: 'Bybit Spot',
+          tag: 'BYB',
+          url: `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbolUpper}&limit=${Math.min(limit, 200)}`,
+          parser: bybitBookParser,
+          scale: 1.0,
+        },
+        {
+          name: 'OKX Spot',
+          tag: 'OKX',
+          url: `https://www.okx.com/api/v5/market/books?instId=${base}-USDT&sz=${Math.min(limit, 400)}`,
+          parser: okxBookParser,
+          scale: 1.0,
+        },
+        {
+          name: 'Bitget Spot',
+          tag: 'BGT',
+          url: `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbolUpper}&limit=${bitgetSpotLimit}`,
+          parser: bitgetBookParser,
+          scale: 1.0,
+        },
+        {
+          name: 'Coinbase Spot',
+          tag: 'COIN',
+          url: getCoinbaseExchangeUrl(`/products/${base}-USD/book?level=2`),
+          parser: binanceBookParser,
+          scale: 1.0,
+        },
+      ]
+    : [
+        {
+          name: 'Binance Futures',
+          tag: 'BIN',
+          url: `https://fapi.binance.com/fapi/v1/depth?symbol=${symbolUpper}&limit=${limit}`,
+          parser: binanceBookParser,
+          scale: 1.0,
+          isPrimary: true,
+        },
+        {
+          name: 'Bybit Futures',
+          tag: 'BYB',
+          url: `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbolUpper}&limit=${Math.min(limit, 500)}`,
+          parser: bybitBookParser,
+          scale: 1.0,
+        },
+        {
+          name: 'OKX Futures',
+          tag: 'OKX',
+          url: `https://www.okx.com/api/v5/market/books?instId=${base}-USDT-SWAP&sz=${Math.min(limit, 400)}`,
+          parser: okxBookParser,
+          scale: okxScale,
+        },
+        {
+          name: 'Bitget Futures',
+          tag: 'BGT',
+          url: `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbolUpper}&productType=usdt-futures&limit=${bitgetFuturesLimit}`,
+          parser: bitgetBookParser,
+          scale: 1.0,
+        },
+      ];
+
+  try {
+    const results = await Promise.all(
+      sources.map((src) => fetchOrderBookSource(src.name, src.url, src.parser))
+    );
+    return aggregateOrderBookSnapshots({ results, sources, market, limit });
+  } catch (e) {
+    console.error(`[API] Aggregated ${market.toUpperCase()} Order Book OBI Error:`, e.message);
+    return null;
+  }
+}
+
 /**
  * Lấy order book từ Futures của top 4 sàn lớn nhất (Binance, Bybit, OKX, Bitget).
  * Tính OBI = (ΣBid - ΣAsk) / (ΣBid + ΣAsk)
  */
-export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => {
-  const symbolUpper = symbol.toUpperCase();
-  const base = symbolUpper.replace('USDT', '');
-  const symbolOKXFutures = `${base}-USDT-SWAP`;
+export const getOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => (
+  fetchAggregatedOrderBookOBI({ market: 'futures', symbol, limit })
+);
 
-  const bybitLimit = Math.min(limit, 500);
-  const okxLimit = Math.min(limit, 400);
-
-  let bitgetLimit = 100;
-  if (limit <= 5) bitgetLimit = 5;
-  else if (limit <= 15) bitgetLimit = 15;
-  else if (limit <= 50) bitgetLimit = 50;
-  else if (limit <= 100) bitgetLimit = 100;
-  else bitgetLimit = 'max';
-
-  const urls = {
-    binance: `https://fapi.binance.com/fapi/v1/depth?symbol=${symbolUpper}&limit=${limit}`,
-    bybit: `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbolUpper}&limit=${bybitLimit}`,
-    okx: `https://www.okx.com/api/v5/market/books?instId=${symbolOKXFutures}&sz=${okxLimit}`,
-    bitget: `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbolUpper}&productType=usdt-futures&limit=${bitgetLimit}`
-  };
-
-  const fetchSource = async (name, url, parser) => {
-    try {
-      const res = await axios.get(url, { timeout: 4000 });
-      return parser(res.data);
-    } catch (e) {
-      console.warn(`[API - OrderBook] Failed to fetch OBI depth from ${name}:`, e.message);
-      return { bids: [], asks: [] };
-    }
-  };
-
-  const binanceParser = (data) => ({
-    bids: data.bids || [],
-    asks: data.asks || []
-  });
-
-  const bybitParser = (data) => ({
-    bids: data.result?.b || [],
-    asks: data.result?.a || []
-  });
-
-  const okxParser = (data) => ({
-    bids: data?.data?.[0]?.bids || [],
-    asks: data?.data?.[0]?.asks || []
-  });
-
-  const bitgetParser = (data) => ({
-    bids: data?.data?.bids || [],
-    asks: data?.data?.asks || []
-  });
-
-  try {
-    const sourceNames = ['Binance Futures', 'Bybit Futures', 'OKX Futures', 'Bitget Futures'];
-    const parsers = [binanceParser, bybitParser, okxParser, bitgetParser];
-
-    const results = await Promise.all([
-      fetchSource('Binance Futures', urls.binance, binanceParser),
-      fetchSource('Bybit Futures', urls.bybit, bybitParser),
-      fetchSource('OKX Futures', urls.okx, okxParser),
-      fetchSource('Bitget Futures', urls.bitget, bitgetParser)
-    ]);
-
-    let totalBidVol = 0;
-    let totalAskVol = 0;
-    let binanceBestBid = 0;
-    let binanceBestAsk = 0;
-    let binanceMinBid = 0;
-    let binanceMaxAsk = 0;
-
-    const okxScale = getOKXContractSize(symbol);
-
-    results.forEach((r, idx) => {
-      const sourceName = sourceNames[idx];
-      const bids = r.bids;
-      const asks = r.asks;
-
-      const scale = sourceName === 'OKX Futures' ? okxScale : 1.0;
-
-      const bidVol = bids.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
-      const askVol = asks.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
-
-      totalBidVol += bidVol;
-      totalAskVol += askVol;
-
-      if (sourceName === 'Binance Futures') {
-        binanceBestBid = bids.length > 0 ? parseFloat(bids[0][0]) : 0;
-        binanceBestAsk = asks.length > 0 ? parseFloat(asks[0][0]) : 0;
-        binanceMinBid = bids.length > 0 ? parseFloat(bids[bids.length - 1][0]) : 0;
-        binanceMaxAsk = asks.length > 0 ? parseFloat(asks[asks.length - 1][0]) : 0;
-      }
-    });
-
-    const total = totalBidVol + totalAskVol;
-    const obi = total > 0 ? ((totalBidVol - totalAskVol) / total) : 0; // -1 to +1
-    const spread = binanceBestBid > 0 ? ((binanceBestAsk - binanceBestBid) / binanceBestBid * 100) : 0;
-
-    const midPrice = (binanceBestBid + binanceBestAsk) / 2 || 60000;
-    const bidVolUsd = totalBidVol * midPrice;
-    const askVolUsd = totalAskVol * midPrice;
-
-    // Calculate OBI for each individual exchange
-    const exchanges = results.map((r, idx) => {
-      const sourceName = sourceNames[idx];
-      const scale = sourceName === 'OKX Futures' ? okxScale : 1.0;
-      const bidVol = r.bids.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
-      const askVol = r.asks.reduce((sum, [, q]) => sum + parseFloat(q) * scale, 0);
-      const tot = bidVol + askVol;
-      const exObi = tot > 0 ? ((bidVol - askVol) / tot) * 100 : 0;
-      return {
-        name: sourceName.replace(' Futures', '').replace(' Spot', '').replace('Binance', 'BIN').replace('Bybit', 'BYB').replace('OKX', 'OKX').replace('Bitget', 'BGT').replace('Coinbase', 'COIN'),
-        obi: parseFloat(exObi.toFixed(1))
-      };
-    });
-
-    return {
-      obi: parseFloat(obi.toFixed(4)),           // -1 to +1
-      obiPercent: parseFloat((obi * 100).toFixed(1)), // -100 to +100
-      spread: parseFloat(spread.toFixed(4)),      // %
-      bestBid: binanceBestBid,
-      bestAsk: binanceBestAsk,
-      minBid: binanceMinBid,
-      maxAsk: binanceMaxAsk,
-      bidVolBtc: parseFloat(totalBidVol.toFixed(2)),
-      askVolBtc: parseFloat(totalAskVol.toFixed(2)),
-      bidVolUsd: Math.round(bidVolUsd),
-      askVolUsd: Math.round(askVolUsd),
-      signal: obi > 0.15 ? 'BUY PRESSURE' : obi < -0.15 ? 'SELL PRESSURE' : 'BALANCED',
-      signalCls: obi > 0.15 ? 'text-emerald' : obi < -0.15 ? 'text-rose' : 'text-slate-400',
-      exchanges
-    };
-  } catch (e) {
-    console.error('[API] Aggregated Order Book OBI Error:', e.message);
-    return null;
-  }
-};
+/**
+ * Lấy order book từ Spot của top 5 sàn (Binance, Bybit, OKX, Bitget, Coinbase).
+ * Tính Spot OBI = (ΣBid - ΣAsk) / (ΣBid + ΣAsk)
+ */
+export const getSpotOrderBookDepth = async (symbol = 'BTCUSDT', limit = 100) => (
+  fetchAggregatedOrderBookOBI({ market: 'spot', symbol, limit })
+);
 
 // ─── WHALE WALLS — Large Limit Orders ≥ $500K ────────────────────────────────
 
@@ -2375,6 +2391,152 @@ export const getMultiExchangeFunding = async (symbol = 'BTCUSDT', force = false)
     null,
     force
   );
+};
+
+// ─── COINBASE PREMIUM INDEX & MULTI-EXCHANGE TAKER FLOW ──────────────────────
+
+/**
+ * Fetches Coinbase Spot USD vs Binance Spot/Futures USDT prices + 24H hourly history
+ * to compute the Coinbase Premium Index.
+ */
+export const getCoinbasePremium = async (symbol = 'BTCUSDT', force = false) => {
+  const symbolUpper = symbol.toUpperCase();
+  const base = symbolUpper.replace('USDT', '');
+
+  return fetchCached(
+    `coinbase_premium_${symbolUpper.toLowerCase()}_v1`,
+    async () => {
+      const [cbTickerRes, bnSpotRes, bnFutRes, cbCandlesRes, bnCandlesRes] = await Promise.allSettled([
+        axios.get(getCoinbaseExchangeUrl(`/products/${base}-USD/ticker`), { timeout: 4500 }),
+        axios.get(`https://data-api.binance.vision/api/v3/ticker/price?symbol=${symbolUpper}`, { timeout: 4500 }),
+        axios.get(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbolUpper}`, { timeout: 4500 }),
+        axios.get(getCoinbaseExchangeUrl(`/products/${base}-USD/candles?granularity=3600`), { timeout: 5000 }),
+        axios.get(`https://data-api.binance.vision/api/v3/klines?symbol=${symbolUpper}&interval=1h&limit=24`, { timeout: 5000 }),
+      ]);
+
+      const coinbasePrice = cbTickerRes.status === 'fulfilled' ? parseFloat(cbTickerRes.value.data?.price) : null;
+      const binanceSpotPrice = bnSpotRes.status === 'fulfilled' ? parseFloat(bnSpotRes.value.data?.price) : null;
+      const binanceFuturesPrice = bnFutRes.status === 'fulfilled' ? parseFloat(bnFutRes.value.data?.price) : null;
+
+      const current = calculateCoinbasePremium({
+        coinbasePrice,
+        binanceSpotPrice,
+        binanceFuturesPrice,
+      });
+
+      // Align 1H candles for 24H trend & average
+      const history24h = [];
+      if (
+        cbCandlesRes.status === 'fulfilled' && Array.isArray(cbCandlesRes.value.data) &&
+        bnCandlesRes.status === 'fulfilled' && Array.isArray(bnCandlesRes.value.data)
+      ) {
+        const bnMap = new Map();
+        for (const k of bnCandlesRes.value.data) {
+          const hourKey = Math.floor(Number(k[0]) / 3600000);
+          const close = parseFloat(k[4]);
+          if (Number.isFinite(hourKey) && Number.isFinite(close) && close > 0) {
+            bnMap.set(hourKey, close);
+          }
+        }
+        const cbPoints = cbCandlesRes.value.data
+          .map((c) => {
+            const hourKey = Math.floor(Number(c[0]) / 3600);
+            const close = parseFloat(c[4]);
+            return { hourKey, time: Number(c[0]) * 1000, close };
+          })
+          .filter((p) => Number.isFinite(p.hourKey) && Number.isFinite(p.close) && p.close > 0)
+          .sort((a, b) => a.time - b.time);
+
+        for (const pt of cbPoints) {
+          const bnClose = bnMap.get(pt.hourKey);
+          if (bnClose) {
+            const diffUsd = pt.close - bnClose;
+            const diffPct = (diffUsd / bnClose) * 100;
+            history24h.push({
+              time: pt.time,
+              premiumUsd: diffUsd,
+              premiumPct: diffPct,
+            });
+          }
+        }
+      }
+
+      const avgPremiumPct24h = history24h.length > 0
+        ? history24h.reduce((sum, item) => sum + item.premiumPct, 0) / history24h.length
+        : null;
+      const avgPremiumUsd24h = history24h.length > 0
+        ? history24h.reduce((sum, item) => sum + item.premiumUsd, 0) / history24h.length
+        : null;
+
+      return {
+        ...current,
+        history24h: history24h.slice(-24),
+        avgPremiumPct24h,
+        avgPremiumUsd24h,
+        timestamp: Date.now(),
+      };
+    },
+    15_000,
+    null,
+    null,
+    force
+  );
+};
+
+/**
+ * Fetches recent public market trades across Binance, Bybit, OKX, and Coinbase
+ * for both Spot and Futures markets, returning normalized per-venue batches
+ * plus a cross-exchange Spot vs Futures comparison snapshot.
+ */
+export const getMultiExchangeTakerFlow = async (symbol = 'BTCUSDT') => {
+  const symbolUpper = symbol.toUpperCase();
+  const base = symbolUpper.replace('USDT', '');
+  const okxScale = getOKXContractSize(symbolUpper);
+
+  const [
+    bnSpotRes,
+    bybSpotRes,
+    okxSpotRes,
+    cbSpotRes,
+    bnFutRes,
+    bybFutRes,
+    okxFutRes,
+  ] = await Promise.allSettled([
+    axios.get(`https://data-api.binance.vision/api/v3/aggTrades?symbol=${symbolUpper}&limit=1000`, { timeout: 4500 }),
+    axios.get(`https://api.bybit.com/v5/market/recent-trade?category=spot&symbol=${symbolUpper}&limit=60`, { timeout: 4500 }),
+    axios.get(`https://www.okx.com/api/v5/market/trades?instId=${base}-USDT&limit=500`, { timeout: 4500 }),
+    axios.get(getCoinbaseExchangeUrl(`/products/${base}-USD/trades?limit=100`), { timeout: 4500 }),
+    axios.get(`https://fapi.binance.com/fapi/v1/aggTrades?symbol=${symbolUpper}&limit=1000`, { timeout: 4500 }),
+    axios.get(`https://api.bybit.com/v5/market/recent-trade?category=linear&symbol=${symbolUpper}&limit=1000`, { timeout: 4500 }),
+    axios.get(`https://www.okx.com/api/v5/market/trades?instId=${base}-USDT-SWAP&limit=500`, { timeout: 4500 }),
+  ]);
+
+  const spotTradesByVenue = {
+    BINANCE: bnSpotRes.status === 'fulfilled' ? parseBinanceAggTrades(bnSpotRes.value.data, 'spot') : [],
+    BYBIT: bybSpotRes.status === 'fulfilled' ? parseBybitRecentTrades(bybSpotRes.value.data, 'spot') : [],
+    OKX: okxSpotRes.status === 'fulfilled' ? parseOkxTrades(okxSpotRes.value.data, 'spot', 1) : [],
+    COINBASE: cbSpotRes.status === 'fulfilled' ? parseCoinbaseTrades(cbSpotRes.value.data) : [],
+  };
+
+  const futuresTradesByVenue = {
+    BINANCE: bnFutRes.status === 'fulfilled' ? parseBinanceAggTrades(bnFutRes.value.data, 'futures') : [],
+    BYBIT: bybFutRes.status === 'fulfilled' ? parseBybitRecentTrades(bybFutRes.value.data, 'futures') : [],
+    OKX: okxFutRes.status === 'fulfilled' ? parseOkxTrades(okxFutRes.value.data, 'futures', okxScale) : [],
+  };
+
+  const spotVenues = Object.fromEntries(
+    Object.entries(spotTradesByVenue).map(([venue, trades]) => [venue, summarizeTradeBatch(trades)])
+  );
+  const futuresVenues = Object.fromEntries(
+    Object.entries(futuresTradesByVenue).map(([venue, trades]) => [venue, summarizeTradeBatch(trades)])
+  );
+
+  return {
+    spotTradesByVenue,
+    futuresTradesByVenue,
+    snapshotComparison: buildMultiExchangeCvdComparison({ spotVenues, futuresVenues }),
+    timestamp: Date.now(),
+  };
 };
 
 // ─── YAHOO FINANCE HISTORICAL DAILY CHART ────────────────────────────────────

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 
-import { getCompletedHourCVD, getOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
+import { getCompletedHourCVD, getOrderBookDepth, getSpotOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
 import AdvancedChart from './AdvancedChart';
 import CapitalFlowPanel from './CapitalFlowPanel';
 import MultiExchangeFundingPanel from './MultiExchangeFundingPanel';
+import SpotPressurePanel from './SpotPressurePanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import {
@@ -18,6 +19,7 @@ import {
 import { describeMoveEvent } from '../services/moveTrackerCore';
 import { subscribeCrosshair } from '../services/crosshairSync';
 import { classifySpotFutures, computeFlowMetrics } from '../services/orderFlowMetrics';
+import { calculateSpotFuturesVolumeRatio, classifyOrderBookComparison } from '../services/spotFlowEngine';
 import { withWindowCumulative } from '../services/cvdService';
 
 // Plugin vẽ đường dọc highlight trên chart CVD theo crosshair của AdvancedChart
@@ -916,6 +918,38 @@ function CVDPanel({
         );
       })}
 
+      {/* Tỷ trọng Spot Volume / Futures Volume Ratio */}
+      {(() => {
+        const futVol = (Number(futuresSeries?.displayVol?.buy) || 0) + (Number(futuresSeries?.displayVol?.sell) || 0);
+        const spotVol = (Number(spotSeries?.displayVol?.buy) || 0) + (Number(spotSeries?.displayVol?.sell) || 0);
+        const volRatio = calculateSpotFuturesVolumeRatio({ spotQuoteVol: spotVol, futuresQuoteVol: futVol });
+        if (volRatio.regime === 'UNAVAILABLE') return null;
+        return (
+          <div className="vol-gauge-container" style={{ marginBottom: '10px' }} title={volRatio.label}>
+            <div className="vol-gauge-labels font-mono">
+              <span style={{ color: '#34d399', fontWeight: 700 }}>SPOT {volRatio.spotSharePct.toFixed(1)}%</span>
+              <Tooltip content={METRIC_METADATA.spotVolumeRatio}>
+                <span style={{ cursor: 'help', color: '#e2e8f0', fontWeight: 600, borderBottom: '1px dashed var(--text-slate-500)' }}>
+                  TỶ TRỌNG SPOT / FUTURES ({cvdTf}) · {volRatio.spotToFuturesRatio != null ? `${volRatio.spotToFuturesRatio.toFixed(2)}x` : '---'}
+                </span>
+              </Tooltip>
+              <span style={{ color: '#a78bfa', fontWeight: 700 }}>FUT {volRatio.futuresSharePct.toFixed(1)}%</span>
+            </div>
+            <div className="vol-gauge-bar">
+              <div style={{ width: `${volRatio.spotSharePct}%`, background: 'linear-gradient(90deg, #059669, #34d399)', transition: 'width 0.3s ease' }} />
+              <div style={{ width: `${volRatio.futuresSharePct}%`, background: 'linear-gradient(90deg, #7c3aed, #a78bfa)', transition: 'width 0.3s ease' }} />
+            </div>
+            <div className="vol-gauge-values font-mono">
+              <span>{fmtUsd(spotVol)}</span>
+              <span style={{ fontSize: '0.52rem', color: volRatio.tone === 'bullish' ? '#34d399' : volRatio.tone === 'warning' ? '#fbbf24' : '#94a3b8' }}>
+                {volRatio.label}
+              </span>
+              <span>{fmtUsd(futVol)}</span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Node Gap Config */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1308,20 +1342,130 @@ function TargetLiquidityPanel({
 
 // ─── PANEL 3: Order Book Depth ────────────────────────────────────────────────
 
-function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
-  const steps = [5, 10, 20, 50, 100, 500, 1000];
+function OrderBookMarketSection({ title, accentColor, data, depthLimit, emptyMessage }) {
+  if (!data) {
+    return (
+      <div className="obi-market-section">
+        <div className="obi-market-section-header font-mono">
+          <span className="obi-market-tag" style={{ color: accentColor }}>{title}</span>
+          <span className="text-slate-500" style={{ fontSize: '0.54rem' }}>Đang tải...</span>
+        </div>
+        <div className="hft-empty font-mono">{emptyMessage}</div>
+      </div>
+    );
+  }
 
-  const renderDepthSlider = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '12px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>SỔ LỆNH DEPTH (OBI LEVEL)</span>
-          {orderBook?.minBid > 0 && orderBook?.maxAsk > 0 && (
-            <span className="font-mono text-slate-500" style={{ fontSize: '0.5rem', marginTop: '2px' }}>
-              Vùng giá: {orderBook.minBid.toLocaleString()} ~ {orderBook.maxAsk.toLocaleString()}
+  const { obiPercent, spread, bidVolBtc, askVolBtc, bidVolUsd, askVolUsd, signal, signalCls, bestBid, bestAsk, minBid, maxAsk } = data;
+  const totalBtc = bidVolBtc + askVolBtc;
+  const bidWidth = totalBtc > 0 ? (bidVolBtc / totalBtc) * 100 : 50;
+  const askWidth = 100 - bidWidth;
+
+  return (
+    <div className="obi-market-section">
+      <div className="obi-market-section-header font-mono">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span className="obi-market-tag" style={{ color: accentColor }}>{title}</span>
+          {minBid > 0 && maxAsk > 0 && (
+            <span className="text-slate-500" style={{ fontSize: '0.48rem' }}>
+              Vùng giá ({depthLimit}L): {minBid.toLocaleString()} ~ {maxAsk.toLocaleString()}
             </span>
           )}
         </div>
+        <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
+      </div>
+
+      {/* OBI Gauge */}
+      <div className="obi-section" style={{ paddingTop: '4px', paddingBottom: '4px' }}>
+        <div className="obi-gauge">
+          <span className="obi-end font-mono text-rose">-100</span>
+          <div className="obi-track">
+            <div
+              className="obi-thumb"
+              style={{ left: `${(obiPercent + 100) / 2}%` }}
+            />
+            <div className="obi-center" />
+          </div>
+          <span className="obi-end font-mono text-emerald">+100</span>
+        </div>
+        <div className="obi-value font-mono" style={{ color: obiPercent > 0 ? '#10b981' : obiPercent < 0 ? '#f43f5e' : '#94a3b8' }}>
+          {obiPercent > 0 ? '+' : ''}{obiPercent}%
+        </div>
+        {data.exchanges && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+            {data.exchanges.map(ex => {
+              const unavailable = ex.hasData === false;
+              const color = unavailable
+                ? 'var(--text-slate-500)'
+                : ex.obi > 15 ? 'var(--color-emerald-400)' : ex.obi < -15 ? 'var(--color-rose-400)' : 'var(--text-slate-400)';
+              return (
+                <div key={ex.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '48px', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '3px 4px', background: 'var(--bg-slate-900)' }} title={`Order Book Imbalance tại sàn ${ex.name}`}>
+                  <span style={{ fontSize: '0.46rem', color: 'var(--text-slate-500)', fontWeight: 600 }}>{ex.name}</span>
+                  <span style={{ fontSize: '0.53rem', color, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {unavailable ? '---' : `${ex.obi > 0 ? '+' : ''}${ex.obi}%`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Depth bars */}
+      <div className="depth-visual" style={{ padding: '6px 0' }}>
+        <div className="depth-bar-container">
+          <div className="depth-bar depth-bid" style={{ width: `${bidWidth}%` }}>
+            <span className="font-mono">{bidVolBtc} BTC</span>
+          </div>
+          <div className="depth-bar depth-ask" style={{ width: `${askWidth}%` }}>
+            <span className="font-mono">{askVolBtc} BTC</span>
+          </div>
+        </div>
+        <div className="depth-usd font-mono">
+          <span className="text-emerald">{fmtUsd(bidVolUsd)} BID</span>
+          <span className="text-rose">{fmtUsd(askVolUsd)} ASK</span>
+        </div>
+      </div>
+
+      {/* Spread & prices */}
+      <div className="ob-meta font-mono">
+        <div className="ob-meta-row">
+          <span className="text-slate-400">Best Bid</span>
+          <span className="text-emerald">{fmtPrice(bestBid)}</span>
+        </div>
+        <div className="ob-meta-row">
+          <span className="text-slate-400">Best Ask</span>
+          <span className="text-rose">{fmtPrice(bestAsk)}</span>
+        </div>
+        <div className="ob-meta-row">
+          <span className="text-slate-400">Spread</span>
+          <span>{spread.toFixed(4)}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderBookPanel({ orderBook, spotOrderBook, depthLimit, setDepthLimit }) {
+  const steps = [5, 10, 20, 50, 100, 500, 1000];
+  const comparison = useMemo(
+    () => classifyOrderBookComparison(orderBook, spotOrderBook),
+    [orderBook, spotOrderBook]
+  );
+
+  const toneBadgeColor = {
+    bullish: { bg: 'rgba(16, 185, 129, 0.14)', color: 'var(--color-emerald-400)', border: '1px solid rgba(16, 185, 129, 0.35)' },
+    bearish: { bg: 'rgba(244, 63, 94, 0.14)', color: 'var(--color-rose-400)', border: '1px solid rgba(244, 63, 94, 0.35)' },
+    constructive: { bg: 'rgba(56, 189, 248, 0.14)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.35)' },
+    warning: { bg: 'rgba(245, 158, 11, 0.14)', color: 'var(--color-amber-400)', border: '1px solid rgba(245, 158, 11, 0.35)' },
+    neutral: { bg: 'rgba(148, 163, 184, 0.12)', color: 'var(--text-slate-300)', border: '1px solid rgba(148, 163, 184, 0.25)' },
+  }[comparison.tone] || {};
+
+  const renderDepthSlider = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)', marginBottom: '4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="font-mono text-slate-400" style={{ fontSize: '0.55rem', fontWeight: 600 }}>
+          SỔ LỆNH DEPTH CHUNG (FUTURES &amp; SPOT OBI LEVEL)
+        </span>
         <span className="font-mono text-emerald" style={{ fontSize: '0.62rem', fontWeight: 700 }}>{depthLimit} Levels</span>
       </div>
       <input
@@ -1354,107 +1498,48 @@ function OrderBookPanel({ orderBook, depthLimit, setDepthLimit }) {
     </div>
   );
 
-  if (!orderBook) {
-    return (
-      <div className="hft-panel glass-panel">
-        <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+  return (
+    <div className="hft-panel glass-panel" style={{ gridColumn: '1 / -1' }}>
+      <div className="hft-panel-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <Tooltip content={METRIC_METADATA.obi}>
             <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-              <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE
+              <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE — FUTURES vs SPOT
             </h3>
           </Tooltip>
-          <ModuleMenu moduleId="hft_orderbook" />
+          <span
+            className="font-mono"
+            style={{
+              fontSize: '0.58rem',
+              fontWeight: 700,
+              padding: '2px 7px',
+              borderRadius: '4px',
+              ...toneBadgeColor,
+            }}
+          >
+            {comparison.label}
+          </span>
         </div>
-        {renderDepthSlider()}
-        <div className="hft-empty font-mono">Nhấn SYNC để tải Order Book...</div>
-      </div>
-    );
-  }
-
-  const { obiPercent, spread, bidVolBtc, askVolBtc, bidVolUsd, askVolUsd, signal, signalCls, bestBid, bestAsk } = orderBook;
-  const bidWidth = bidVolBtc / (bidVolBtc + askVolBtc) * 100;
-  const askWidth = 100 - bidWidth;
-
-  return (
-    <div className="hft-panel glass-panel">
-      <div className="hft-panel-header">
-        <Tooltip content={METRIC_METADATA.obi}>
-          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-            <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE
-          </h3>
-        </Tooltip>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
-          <ModuleMenu moduleId="hft_orderbook" />
-        </div>
+        <ModuleMenu moduleId="hft_orderbook" />
       </div>
 
       {renderDepthSlider()}
 
-      {/* OBI Gauge */}
-      <div className="obi-section" style={{ paddingTop: 0 }}>
-        <div className="obi-label font-mono">ORDER BOOK IMBALANCE (OBI - {depthLimit} levels)</div>
-        <div className="obi-gauge">
-          <span className="obi-end font-mono text-rose">-100</span>
-          <div className="obi-track">
-            <div
-              className="obi-thumb"
-              style={{ left: `${(obiPercent + 100) / 2}%` }}
-            />
-            <div className="obi-center" />
-          </div>
-          <span className="obi-end font-mono text-emerald">+100</span>
-        </div>
-        <div className="obi-value font-mono" style={{ color: obiPercent > 0 ? '#10b981' : obiPercent < 0 ? '#f43f5e' : '#94a3b8' }}>
-          {obiPercent > 0 ? '+' : ''}{obiPercent}%
-        </div>
-        {orderBook.exchanges && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
-            {orderBook.exchanges.map(ex => {
-              const color = ex.obi > 15 ? 'var(--color-emerald-400)' : ex.obi < -15 ? 'var(--color-rose-400)' : 'var(--text-slate-400)';
-              return (
-                <div key={ex.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '55px', border: '1px solid var(--border-panel)', borderRadius: '4px', padding: '3px 4px', background: 'var(--bg-slate-950)' }} title={`Order Book Imbalance tại sàn ${ex.name}`}>
-                  <span style={{ fontSize: '0.48rem', color: 'var(--text-slate-500)', fontWeight: 600 }}>{ex.name}</span>
-                  <span style={{ fontSize: '0.55rem', color: color, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                    {ex.obi > 0 ? '+' : ''}{ex.obi}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Depth bars */}
-      <div className="depth-visual">
-        <div className="depth-bar-container">
-          <div className="depth-bar depth-bid" style={{ width: `${bidWidth}%` }}>
-            <span className="font-mono">{bidVolBtc} BTC</span>
-          </div>
-          <div className="depth-bar depth-ask" style={{ width: `${askWidth}%` }}>
-            <span className="font-mono">{askVolBtc} BTC</span>
-          </div>
-        </div>
-        <div className="depth-usd font-mono">
-          <span className="text-emerald">{fmtUsd(bidVolUsd)} BID</span>
-          <span className="text-rose">{fmtUsd(askVolUsd)} ASK</span>
-        </div>
-      </div>
-
-      {/* Spread & prices */}
-      <div className="ob-meta font-mono">
-        <div className="ob-meta-row">
-          <span className="text-slate-400">Best Bid</span>
-          <span className="text-emerald">{fmtPrice(bestBid)}</span>
-        </div>
-        <div className="ob-meta-row">
-          <span className="text-slate-400">Best Ask</span>
-          <span className="text-rose">{fmtPrice(bestAsk)}</span>
-        </div>
-        <div className="ob-meta-row">
-          <span className="text-slate-400">Spread</span>
-          <span>{spread.toFixed(4)}%</span>
-        </div>
+      <div className="obi-split-grid">
+        <OrderBookMarketSection
+          title="MỤC 1 · FUTURES ORDER BOOK IMBALANCE (PERP)"
+          accentColor="#a78bfa"
+          data={orderBook}
+          depthLimit={depthLimit}
+          emptyMessage="Nhấn SYNC để tải Futures Order Book..."
+        />
+        <OrderBookMarketSection
+          title="MỤC 2 · SPOT ORDER BOOK IMBALANCE (GIAO NGAY)"
+          accentColor="#34d399"
+          data={spotOrderBook}
+          depthLimit={depthLimit}
+          emptyMessage="Nhấn SYNC để tải Spot Order Book..."
+        />
       </div>
     </div>
   );
@@ -2156,6 +2241,7 @@ const MemoOrderBookPanel = React.memo(OrderBookPanel);
 const MemoAdvancedChartWrapper = React.memo(AdvancedChartWrapper);
 const MemoWhaleTradesPanel = React.memo(WhaleTradesPanel);
 const MemoMultiExchangeFundingPanel = React.memo(MultiExchangeFundingPanel);
+const MemoSpotPressurePanel = React.memo(SpotPressurePanel);
 const MemoMoveTrackerPanel = React.memo(MoveTrackerPanel);
 
 export default function HftRadarTab({
@@ -2168,6 +2254,7 @@ export default function HftRadarTab({
 }) {
   const { isModuleHidden } = useModuleVisibility();
   const [orderBook, setOrderBook] = useState(null);
+  const [spotOrderBook, setSpotOrderBook] = useState(null);
   const [whaleData, setWhaleData] = useState(null);
   const [, setIsLoading] = useState(false);
   const [whaleGap, setWhaleGap] = useState(() => {
@@ -2186,28 +2273,45 @@ export default function HftRadarTab({
 
   const obIntervalRef = useRef(null);
   const whaleIntervalRef = useRef(null);
+  const obRequestSeqRef = useRef(0);
   const smoothedObiRef = useRef(null);
+  const smoothedSpotObiRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
+    // Reset EMA state whenever depthLimit changes so prior depth levels never bleed into the new horizon.
+    smoothedObiRef.current = null;
+    smoothedSpotObiRef.current = null;
+    obRequestSeqRef.current += 1;
+
+    const smoothObi = (raw, ref) => {
+      if (!raw) return null;
+      if (ref.current === null) ref.current = raw.obiPercent;
+      else ref.current = (ref.current * 0.85) + (raw.obiPercent * 0.15);
+      return {
+        ...raw,
+        obiPercent: parseFloat(ref.current.toFixed(1)),
+      };
+    };
+
     const fetchOB = async () => {
-      const data = await getOrderBookDepth('BTCUSDT', depthLimit);
-      if (data) {
-        if (smoothedObiRef.current === null) {
-          smoothedObiRef.current = data.obiPercent;
-        } else {
-          smoothedObiRef.current = (smoothedObiRef.current * 0.85) + (data.obiPercent * 0.15);
-        }
-        const smoothed = {
-          ...data,
-          obiPercent: parseFloat(smoothedObiRef.current.toFixed(1))
-        };
-        setOrderBook(smoothed);
+      const reqId = ++obRequestSeqRef.current;
+      const [futRes, spotRes] = await Promise.allSettled([
+        getOrderBookDepth('BTCUSDT', depthLimit),
+        getSpotOrderBookDepth('BTCUSDT', depthLimit),
+      ]);
+      if (cancelled || reqId !== obRequestSeqRef.current) return;
+      if (futRes.status === 'fulfilled' && futRes.value) {
+        setOrderBook(smoothObi(futRes.value, smoothedObiRef));
+      }
+      if (spotRes.status === 'fulfilled' && spotRes.value) {
+        setSpotOrderBook(smoothObi(spotRes.value, smoothedSpotObiRef));
       }
     };
 
     const fetchWhales = async () => {
       const d = await getWhaleWalls();
-      if (d) {
+      if (!cancelled && d) {
         setWhaleData(d);
       }
     };
@@ -2215,7 +2319,9 @@ export default function HftRadarTab({
     const fetchAll = async () => {
       setIsLoading(true);
       await Promise.allSettled([fetchOB(), fetchWhales()]);
-      setIsLoading(false);
+      if (!cancelled) {
+        setIsLoading(false);
+      }
     };
     fetchAll();
 
@@ -2223,6 +2329,8 @@ export default function HftRadarTab({
     whaleIntervalRef.current = setInterval(fetchWhales, 12000);
 
     return () => {
+      cancelled = true;
+      obRequestSeqRef.current += 1;
       if (obIntervalRef.current) clearInterval(obIntervalRef.current);
       if (whaleIntervalRef.current) clearInterval(whaleIntervalRef.current);
     };
@@ -2287,6 +2395,10 @@ export default function HftRadarTab({
             oiHistory={data?.oiHistory}
             fundingRate={fundingRate ?? data?.fundingRate}
           />
+        )}
+
+        {!isModuleHidden('hft_spot_pressure') && (
+          <MemoSpotPressurePanel />
         )}
 
         {/* Intraday Derivatives Context: Long/Short Ratio & Open Interest */}
@@ -2359,6 +2471,7 @@ export default function HftRadarTab({
         {!isModuleHidden('hft_orderbook') && (
           <MemoOrderBookPanel
             orderBook={orderBook}
+            spotOrderBook={spotOrderBook}
             depthLimit={depthLimit}
             setDepthLimit={setDepthLimit}
           />

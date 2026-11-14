@@ -1580,10 +1580,10 @@
   border-color: rgba(148, 163, 184, 0.25);
 }
 
-/* Metrics Strip - Distributed 4-Column Grid */
+/* Metrics Strip - Distributed 5-Column Grid */
 .capital-flow-metrics-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   flex: 1;
   align-items: center;
@@ -1934,6 +1934,107 @@
 }
 .ob-meta-row { display: flex; flex-direction: column; gap: 2px; align-items: center; }
 
+.obi-split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.obi-market-section {
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.obi-market-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-panel);
+}
+.obi-market-tag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Spot Pressure Panel (Coinbase Premium + Multi-Exchange CVD) */
+.spot-pressure-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.4fr);
+  gap: 14px;
+}
+.spot-pressure-card {
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.cb-premium-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 52px;
+  padding: 6px 4px;
+  background: var(--bg-slate-900);
+  border: 1px solid var(--border-panel);
+  border-radius: 4px;
+}
+.cb-premium-bar-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+.multi-cvd-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-panel);
+  border-radius: 6px;
+}
+.multi-cvd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.64rem;
+}
+.multi-cvd-table th,
+.multi-cvd-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-panel);
+  text-align: right;
+  white-space: nowrap;
+}
+.multi-cvd-table th:first-child,
+.multi-cvd-table td:first-child,
+.multi-cvd-table th:last-child,
+.multi-cvd-table td:last-child {
+  text-align: left;
+}
+.multi-cvd-table th {
+  font-size: 0.56rem;
+  color: var(--text-slate-500);
+  background: var(--bg-slate-900);
+  letter-spacing: 0.05em;
+}
+.multi-cvd-table tfoot td {
+  background: rgba(15, 23, 42, 0.55);
+  border-bottom: none;
+  font-weight: 700;
+}
+
 /* Whale Walls Panel */
 .whale-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
 .whale-sum-card {
@@ -2168,12 +2269,16 @@
   .capital-flow-metrics-strip {
     grid-column: 1 / 3;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px 12px;
     padding-top: 8px;
     border-top: 1px solid var(--border-panel);
     width: 100%;
     white-space: normal;
+  }
+  .spot-pressure-grid,
+  .obi-split-grid {
+    grid-template-columns: 1fr;
   }
   .capital-flow-metric-item {
     border-left: none;

@@ -1,6 +1,10 @@
 import { useMemo } from 'react';
 import ModuleMenu from './ModuleMenu';
 import { classifyCapitalFlow } from '../services/capitalFlowEngine';
+import {
+  calculateSpotFuturesVolumeRatio,
+  selectAlignedSpotFuturesVolumes,
+} from '../services/spotFlowEngine';
 
 const finite = (value) => {
   if (value == null || value === '') return null;
@@ -91,12 +95,27 @@ function useCapitalFlowInputs({
   const oiChangePct = firstOi > 0 && lastOi > 0 ? ((lastOi - firstOi) / firstOi) * 100 : null;
   const cvdCoverage = Math.min(100, (normalized.points.length / 24) * 100);
   const oiCoverage = Math.min(100, (validOi.length / 24) * 100);
+  const alignedVolumes = selectAlignedSpotFuturesVolumes({
+    hasFuturesHistory: hasHistory,
+    futuresHistoryVol: historyBuy + historySell,
+    futuresSessionVol: liveSessionBuy + liveSessionSell,
+    hasSpotHistory: hasHistorySpot,
+    spotHistoryVol: historyBuySpot + historySellSpot,
+    spotSessionVol: liveSessionBuySpot + liveSessionSellSpot,
+  });
+  const spotVolumeRatio = calculateSpotFuturesVolumeRatio({
+    spotQuoteVol: alignedVolumes.spotQuoteVol,
+    futuresQuoteVol: alignedVolumes.futuresQuoteVol,
+  });
 
   return {
     netDelta,
     cvdRatioPct,
     spotNetDelta,
     spotCvdRatioPct,
+    totalVolume,
+    totalVolumeSpot,
+    spotVolumeRatio,
     oiChangePct,
     coveragePct: Math.min(cvdCoverage, oiCoverage),
     cvdAsOf: normalized.asOf,
@@ -245,6 +264,33 @@ export default function CapitalFlowPanel({
               {openInterest && (
                 <span className="metric-sub-pct text-slate-400">
                   ({(Number(openInterest) / 1000).toFixed(1)}K BTC)
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div
+            className="capital-flow-metric-item"
+            title={inputs.spotVolumeRatio?.spotSharePct != null
+              ? `${inputs.spotVolumeRatio.label} | Spot Vol: ${compactUsd(inputs.spotVolumeRatio.spotQuoteVol).replace('+', '')} vs Fut Vol: ${compactUsd(inputs.spotVolumeRatio.futuresQuoteVol).replace('+', '')}`
+              : 'Đang chờ dữ liệu Volume Spot vs Futures 24H'}
+          >
+            <span className="metric-label">SPOT / FUT VOL</span>
+            <div className="metric-val-group">
+              <span className={`metric-val ${
+                inputs.spotVolumeRatio?.tone === 'bullish'
+                  ? 'text-emerald'
+                  : inputs.spotVolumeRatio?.tone === 'warning'
+                    ? 'text-amber'
+                    : 'text-slate-200'
+              }`}>
+                {inputs.spotVolumeRatio?.spotSharePct != null
+                  ? `${inputs.spotVolumeRatio.spotSharePct.toFixed(1)}%`
+                  : '---'}
+              </span>
+              {inputs.spotVolumeRatio?.spotToFuturesRatio != null && (
+                <span className="metric-sub-pct text-slate-400">
+                  ({inputs.spotVolumeRatio.spotToFuturesRatio.toFixed(2)}x)
                 </span>
               )}
             </div>

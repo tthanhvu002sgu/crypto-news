@@ -25,6 +25,7 @@ export const MODULES_CONFIG = {
   // 2. Order Flow & Vi Cấu Trúc
   tab_orderflow: { id: 'tab_orderflow', label: 'Tab Order Flow', category: 'Order Flow' },
   hft_multi_funding: { id: 'hft_multi_funding', label: 'Multi-Exchange Funding & Basis (Crowding Radar)', category: 'Order Flow' },
+  hft_spot_pressure: { id: 'hft_spot_pressure', label: 'Spot Buying Pressure (Coinbase Premium & Multi-Exchange CVD)', category: 'Order Flow' },
   hft_capital_flow: { id: 'hft_capital_flow', label: 'Capital Flow In / Out (24H)', category: 'Order Flow' },
   hft_cvd: { id: 'hft_cvd', label: 'CVD & Order Flow (Spot vs Futures)', category: 'Order Flow' },
   dash_ls_chart: { id: 'dash_ls_chart', label: 'Long/Short Ratio — 24H', category: 'Order Flow' },
