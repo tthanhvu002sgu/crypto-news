@@ -448,7 +448,7 @@
 
 /* ─── Macro Dashboard v2 · Pine parity module ─────────────────────────────── */
 .macro-dashboard-card {
-  padding: 16px 18px 12px;
+  padding: 22px 20px 18px;
   position: relative;
   overflow: hidden;
 }
@@ -471,7 +471,7 @@
   display: flex;
   align-items: center;
 }
-.macro-dashboard-header { justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.macro-dashboard-header { justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .macro-dashboard-title-row { gap: 8px; }
 .macro-dashboard-title-row h3 {
   margin: 0;
@@ -480,7 +480,7 @@
   color: var(--text-contrast);
 }
 .macro-dashboard-header p {
-  margin: 4px 0 0 23px;
+  margin: 6px 0 0 23px;
   font-size: .58rem;
   color: var(--text-slate-500);
 }
@@ -558,7 +558,7 @@
 }
 
 .macro-dashboard-state {
-  min-height: 150px;
+  min-height: 220px;
   display: grid;
   place-items: center;
   color: var(--text-slate-500);
@@ -567,7 +567,7 @@
 .macro-decision-strip {
   justify-content: space-between;
   gap: 22px;
-  padding: 12px 14px;
+  padding: 16px 18px;
   background: color-mix(in srgb, var(--macro-action) 6%, var(--bg-slate-950));
   border: 1px solid color-mix(in srgb, var(--macro-action) 25%, var(--border-panel));
   border-left: 3px solid var(--macro-action);
@@ -591,7 +591,7 @@
   border-left: 1px solid var(--border-panel);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .macro-decision-metrics span { color: var(--text-slate-500); font-size: .46rem; letter-spacing: .07em; }
 .macro-decision-metrics strong { color: var(--text-contrast); font-size: .78rem; }
@@ -600,29 +600,33 @@
 .macro-zone-grid {
   display: grid;
   grid-template-columns: minmax(190px, .75fr) minmax(190px, .75fr) minmax(340px, 1.5fr);
-  gap: 10px;
-  margin-top: 10px;
+  gap: 14px;
+  margin-top: 16px;
 }
 .macro-zone-grid > article,
 .macro-fv-chart {
-  min-height: 145px;
-  padding: 13px 14px;
+  min-height: 220px;
+  padding: 18px 18px;
   background: var(--bg-slate-950);
   border: 1px solid var(--border-panel);
   border-radius: 5px;
 }
-.macro-zone-grid > article { border-top: 2px solid var(--zone-color); }
+.macro-zone-grid > article {
+  border-top: 2px solid var(--zone-color);
+  display: flex;
+  flex-direction: column;
+}
 .macro-zone-index { display: block; color: var(--text-slate-500); font-size: .47rem; letter-spacing: .08em; }
 .macro-zone-name {
-  margin: 10px 0 7px;
+  margin: 14px 0 10px;
   font-size: 1.22rem;
   font-weight: 800;
   letter-spacing: .04em;
 }
-.macro-zone-grid article p { margin: 0; color: var(--text-slate-400); font-size: .58rem; line-height: 1.55; }
+.macro-zone-grid article p { margin: 0; color: var(--text-slate-400); font-size: .58rem; line-height: 1.65; }
 .macro-zone-grid article p strong { color: var(--text-slate-200); }
-.macro-zone-sub { margin-top: 13px; color: var(--text-slate-500); font-size: .48rem; line-height: 1.5; }
-.macro-fv-chart { padding: 26px 9px 5px; position: relative; }
+.macro-zone-sub { margin-top: auto; padding-top: 16px; color: var(--text-slate-500); font-size: .48rem; line-height: 1.5; }
+.macro-fv-chart { height: 220px; padding: 32px 12px 10px; position: relative; }
 .macro-chart-ranges {
   position: absolute;
   z-index: 2;
@@ -650,8 +654,8 @@
 
 .macro-details-toggle {
   gap: 6px;
-  margin: 10px 0 0;
-  padding: 5px 0;
+  margin: 16px 0 0;
+  padding: 8px 0;
   color: var(--text-slate-500);
   background: none;
   border: 0;
@@ -670,7 +674,7 @@
 .macro-dashboard-footer {
   justify-content: space-between;
   gap: 12px;
-  margin-top: 9px;
+  margin-top: 14px;
   color: var(--text-slate-600);
   font-size: .44rem;
   letter-spacing: .05em;
