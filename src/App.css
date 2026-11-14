@@ -2034,6 +2034,9 @@
   border-bottom: none;
   font-weight: 700;
 }
+[data-theme='light'] .multi-cvd-table tfoot td {
+  background: var(--bg-slate-950);
+}
 
 /* Whale Walls Panel */
 .whale-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
