@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   detectTopImpulseMoves,
   enrichMoveWithMicrostructure,
+  computeForensicsContextSummary,
   formatForensicsPayloadForAi
 } from './moveForensicsEngine.js';
 
@@ -767,6 +768,73 @@ test('LOGIC-004 & LOGIC-005: sets DEVELOPING_IN_PROGRESS on last bar and include
   assert.match(payload, /Phản Ứng Sau Đợt/);
   assert.match(payload, /DEVELOPING_IN_PROGRESS/);
 });
+
+test('computeForensicsContextSummary computes MTF alignment, Wilder ATR(14), and derivatives crowding', () => {
+  const now = 1700500000000;
+  const makeSeries = (count, stepMs, startPrice, deltaPerBar, spread) => {
+    const rows = [];
+    for (let i = 0; i < count; i += 1) {
+      const openTime = now - (count - i) * stepMs;
+      const closeTime = openTime + stepMs - 1;
+      const open = startPrice + i * deltaPerBar;
+      const close = open + deltaPerBar;
+      const high = Math.max(open, close) + spread;
+      const low = Math.min(open, close) - spread;
+      rows.push([openTime, open, high, low, close, 1000, closeTime]);
+    }
+    return rows;
+  };
+
+  // H4 bearish (-5000 across 20 bars), 1H bearish, 15m short-term bounce (+1000)
+  const k4h = makeSeries(20, 4 * 3600 * 1000, 74000, -250, 400);
+  const k1h = makeSeries(20, 3600 * 1000, 71000, -100, 200);
+  const k15m = makeSeries(20, 15 * 60 * 1000, 68000, 50, 100);
+
+  const summary = computeForensicsContextSummary({
+    k15m,
+    k1h,
+    k4h,
+    moves24h: [{ takerCvdDelta: 45000000 }],
+    moves7d: [{ takerCvdDelta: -200000000 }],
+    movesH4: [{ takerCvdDelta: -850000000 }],
+    currentPrice: 69120,
+    lsRatio: 3.07,
+    fundingRate: 0.00015,
+    basisPct: 0.06,
+    oiChangePct: 4.2,
+    now,
+  });
+
+  assert.equal(summary.refPrice, 69120);
+  assert.equal(summary.trends.h4.bias, 'BEARISH');
+  assert.equal(summary.trends.m15.bias, 'BULLISH');
+  assert.equal(summary.mtfAlignment, 'COUNTER_TREND_BOUNCE_IN_BEAR_H4');
+  assert.ok(summary.atr.m15.value > 0);
+  assert.ok(summary.atr.h1.value > 0);
+  assert.ok(summary.atr.h4.value > 0);
+  assert.ok(summary.atr.recommendedSwingSlBufferMin >= summary.atr.h1.value);
+  assert.ok(summary.derivatives.crowdingFlags.includes('LONG_CROWDED_NO_CAPITULATION'));
+  assert.ok(summary.derivatives.crowdingFlags.includes('POSITIVE_FUNDING_LONGS_PAYING'));
+
+  const payload = formatForensicsPayloadForAi([], [], [], {
+    k15m,
+    k1h,
+    k4h,
+    currentPrice: 69120,
+    lsRatio: 3.07,
+    fundingRate: 0.00015,
+    basisPct: 0.06,
+    oiChangePct: 4.2,
+    now,
+  });
+  assert.match(payload, /### 0\. TỔNG QUAN ĐA KHUNG \(MTF\), BIẾN ĐỘNG ATR & ĐỊNH VỊ PHÁI SINH/);
+  assert.match(payload, /CURRENT_PRICE/);
+  assert.match(payload, /COUNTER_TREND_BOUNCE_IN_BEAR_H4/);
+  assert.match(payload, /Wilder ATR\(14\)/);
+  assert.match(payload, /Funding Rate/);
+  assert.match(payload, /Futures Basis\/Premium/);
+});
+
 
 
 

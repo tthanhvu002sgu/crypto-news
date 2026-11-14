@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
 import Tooltip from './Tooltip';
-import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getBTCFuturesKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getBTCFuturesKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio, getMultiExchangeFunding } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { fetchCached } from '../utils/cache';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService';
@@ -206,6 +206,7 @@ export default function SummaryTab({
   const [forensicsMoves24h, setForensicsMoves24h] = useState([]);
   const [forensicsMoves7d, setForensicsMoves7d] = useState([]);
   const [forensicsMovesH4, setForensicsMovesH4] = useState([]);
+  const forensicsKlinesRef = useRef({ k15m: [], k1h: [], k4h: [] });
   const [isForensicsLoading, setIsForensicsLoading] = useState(false);
   const [forensicsSortBy, setForensicsSortBy] = useState('time'); // 'time' | 'magnitude'
 
@@ -235,7 +236,7 @@ export default function SummaryTab({
 
   const fetchAndEnrichForensics = async (force = false) => {
     if (!force && forensicsMoves24h.length > 0 && forensicsMoves7d.length > 0 && forensicsMovesH4.length > 0) {
-      return { enr24h: forensicsMoves24h, enr7d: forensicsMoves7d, enrH4: forensicsMovesH4 };
+      return { ...forensicsKlinesRef.current, enr24h: forensicsMoves24h, enr7d: forensicsMoves7d, enrH4: forensicsMovesH4 };
     }
 
     setIsForensicsLoading(true);
@@ -302,6 +303,7 @@ export default function SummaryTab({
         klines: k4h,
       });
 
+      forensicsKlinesRef.current = { k15m, k1h, k4h };
       setForensicsMoves24h(enr24h);
       setForensicsMoves7d(enr7d);
       setForensicsMovesH4(enrH4);
@@ -1049,8 +1051,24 @@ ${selectedUserBias !== 'none' ? '' : '- Note: User selected Objective Evaluation
 
 ${await (async () => {
   try {
-    const fRes = await fetchAndEnrichForensics();
-    return formatForensicsPayloadForAi(fRes.enr24h, fRes.enr7d, fRes.enrH4);
+    const [fRes, multiFunding] = await Promise.all([
+      fetchAndEnrichForensics(),
+      getMultiExchangeFunding('BTCUSDT').catch(() => null),
+    ]);
+    const basisPct = toFiniteNumber(
+      multiFunding?.avgBasisPct
+      ?? multiFunding?.exchanges?.find((e) => toFiniteNumber(e?.basisPct) !== null)?.basisPct
+    );
+    return formatForensicsPayloadForAi(fRes.enr24h, fRes.enr7d, fRes.enrH4, {
+      k15m: fRes.k15m,
+      k1h: fRes.k1h,
+      k4h: fRes.k4h,
+      currentPrice: priceNow,
+      lsRatio: lsLast,
+      fundingRate: toFiniteNumber(data.fundingRate),
+      basisPct,
+      oiChangePct,
+    });
   } catch (err) {
     console.warn('Failed to embed forensics payload:', err);
     return '';

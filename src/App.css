@@ -2422,42 +2422,35 @@
 }
 
 .markdown-body h1 {
-  font-size: 1.35rem;
+  font-size: 1.3rem;
   font-weight: 800;
-  color: #34d399;
+  color: #f8fafc;
   margin-top: 2.2em;
   margin-bottom: 1em;
-  padding: 10px 16px;
-  background: rgba(52, 211, 153, 0.08);
-  border-left: 5px solid #34d399;
-  border-radius: 0 6px 6px 0;
-  letter-spacing: 0.04em;
-}
-
-.markdown-body h2 {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: #38bdf8;
-  margin-top: 2.2em;
-  margin-bottom: 0.9em;
-  padding: 8px 14px;
-  background: rgba(56, 189, 248, 0.08);
-  border-left: 4px solid #38bdf8;
-  border-radius: 0 6px 6px 0;
+  padding: 0 0 8px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
   letter-spacing: 0.03em;
 }
 
-.markdown-body h3 {
-  font-size: 1.02rem;
-  font-weight: 600;
+.markdown-body h2 {
+  font-size: 1.12rem;
+  font-weight: 700;
   color: #f1f5f9;
-  margin-top: 1.6em;
-  margin-bottom: 0.7em;
-  margin-left: 0.4em;
-  padding: 5px 12px;
-  background: rgba(255, 255, 255, 0.025);
-  border-left: 3px solid rgba(52, 211, 153, 0.7);
-  border-radius: 0 4px 4px 0;
+  margin-top: 2em;
+  margin-bottom: 0.85em;
+  padding: 0 0 6px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  letter-spacing: 0.02em;
+}
+
+.markdown-body h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-top: 1.5em;
+  margin-bottom: 0.65em;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid rgba(148, 163, 184, 0.4);
 }
 
 .markdown-body h4 {
@@ -2673,49 +2666,31 @@
 
 .num-highlight {
   font-family: var(--font-mono);
-  font-weight: 700;
+  font-weight: 600;
   font-feature-settings: 'tnum';
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(56, 189, 248, 0.12);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  margin: 0 2px;
-  display: inline-block;
-  line-height: 1.35;
-  vertical-align: baseline;
+  color: inherit;
 }
 
 .num-highlight.positive {
-  background: rgba(16, 185, 129, 0.14);
   color: #34d399;
-  border-color: rgba(16, 185, 129, 0.32);
 }
 
 .num-highlight.negative {
-  background: rgba(244, 63, 94, 0.14);
   color: #fb7185;
-  border-color: rgba(244, 63, 94, 0.32);
 }
 
 /* ─── Light Theme Overrides for AI Summary Markdown ──────────────────────── */
 
 [data-theme='light'] .num-highlight {
-  background: rgba(2, 132, 199, 0.1);
-  color: #0284c7;
-  border-color: rgba(2, 132, 199, 0.3);
+  color: inherit;
 }
 
 [data-theme='light'] .num-highlight.positive {
-  background: rgba(5, 150, 105, 0.1);
   color: #059669;
-  border-color: rgba(5, 150, 105, 0.3);
 }
 
 [data-theme='light'] .num-highlight.negative {
-  background: rgba(225, 29, 72, 0.1);
   color: #e11d48;
-  border-color: rgba(225, 29, 72, 0.3);
 }
 
 [data-theme='light'] .markdown-body {
@@ -2723,21 +2698,18 @@
 }
 
 [data-theme='light'] .markdown-body h1 {
-  color: #047857;
-  background: rgba(4, 120, 87, 0.08);
-  border-left-color: #047857;
+  color: #0f172a;
+  border-bottom-color: rgba(15, 23, 42, 0.16);
 }
 
 [data-theme='light'] .markdown-body h2 {
-  color: #0284c7;
-  background: rgba(2, 132, 199, 0.08);
-  border-left-color: #0284c7;
+  color: #1e293b;
+  border-bottom-color: rgba(15, 23, 42, 0.1);
 }
 
 [data-theme='light'] .markdown-body h3 {
-  color: #0f172a;
-  background: rgba(0, 0, 0, 0.03);
-  border-left-color: #047857;
+  color: #1e293b;
+  border-left-color: #cbd5e1;
 }
 
 [data-theme='light'] .markdown-body h4 {

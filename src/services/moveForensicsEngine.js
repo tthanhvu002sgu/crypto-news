@@ -7,6 +7,8 @@
  * và phản ứng sau cú giật (Forward Retracement / Continuation).
  */
 
+import { calculateWilderATR } from './atrCalculator.js';
+
 const toFiniteNumber = (val) => {
   if (val == null) return null;
   if (typeof val === 'number') return Number.isFinite(val) ? val : null;
@@ -634,6 +636,177 @@ export function enrichMoveWithMicrostructure(moves = [], context = {}) {
   });
 }
 
+const normalizeKlinesForAtr = (klines = []) => {
+  if (!Array.isArray(klines)) return [];
+  return klines
+    .map((k) => {
+      if (Array.isArray(k)) return k;
+      if (k && typeof k === 'object') {
+        const openTime = toTimeMs(k.openTime ?? k.time ?? 0) ?? 0;
+        const closeTime = toTimeMs(k.closeTime ?? k.openTime ?? k.time ?? 0) ?? openTime;
+        return [
+          openTime,
+          toFiniteNumber(k.open),
+          toFiniteNumber(k.high),
+          toFiniteNumber(k.low),
+          toFiniteNumber(k.close),
+          toFiniteNumber(k.volume) ?? 0,
+          closeTime,
+        ];
+      }
+      return null;
+    })
+    .filter(Boolean);
+};
+
+const getLastKlineClose = (klines = []) => {
+  if (!Array.isArray(klines) || klines.length === 0) return null;
+  const last = klines[klines.length - 1];
+  if (Array.isArray(last)) return toFiniteNumber(last[4]);
+  if (last && typeof last === 'object') return toFiniteNumber(last.close);
+  return null;
+};
+
+const getFirstKlineOpen = (klines = []) => {
+  if (!Array.isArray(klines) || klines.length === 0) return null;
+  const first = klines[0];
+  if (Array.isArray(first)) return toFiniteNumber(first[1]);
+  if (first && typeof first === 'object') return toFiniteNumber(first.open);
+  return null;
+};
+
+const computeFrameTrend = (klines = [], moves = [], pctThreshold = 1.2) => {
+  const firstOpen = getFirstKlineOpen(klines);
+  const lastClose = getLastKlineClose(klines);
+  const netChangePct = (firstOpen && lastClose && firstOpen > 0)
+    ? ((lastClose - firstOpen) / firstOpen) * 100
+    : null;
+
+  const netCvd = Array.isArray(moves) && moves.length > 0
+    ? moves.reduce((sum, m) => sum + (toFiniteNumber(m.takerCvdDelta) || 0), 0)
+    : null;
+
+  let bias = 'RANGE';
+  if (netChangePct != null) {
+    if (netChangePct <= -pctThreshold && (netCvd == null || netCvd <= 0)) {
+      bias = 'BEARISH';
+    } else if (netChangePct >= pctThreshold && (netCvd == null || netCvd >= 0)) {
+      bias = 'BULLISH';
+    } else if (netChangePct <= -(pctThreshold * 1.5)) {
+      bias = 'BEARISH';
+    } else if (netChangePct >= (pctThreshold * 1.5)) {
+      bias = 'BULLISH';
+    }
+  } else if (Array.isArray(moves) && moves.length > 0) {
+    const netMovePct = moves.reduce((sum, m) => sum + (toFiniteNumber(m.priceChangePercent) || 0), 0);
+    if (netMovePct <= -pctThreshold) bias = 'BEARISH';
+    else if (netMovePct >= pctThreshold) bias = 'BULLISH';
+  }
+
+  return {
+    bias,
+    netChangePct: netChangePct != null ? Number(netChangePct.toFixed(2)) : null,
+    netCvd: netCvd != null ? Number(netCvd.toFixed(0)) : null,
+    lastClose,
+  };
+};
+
+/**
+ * Tổng hợp bối cảnh đa khung (MTF), biến động ATR(14) và định vị phái sinh
+ * nhằm khắc phục thiên kiến bắt đáy, SL quá mỏng và mù khoảng cách giá hiện tại.
+ *
+ * @param {Object} params
+ * @returns {Object}
+ */
+export function computeForensicsContextSummary({
+  k15m = [],
+  k1h = [],
+  k4h = [],
+  moves24h = [],
+  moves7d = [],
+  movesH4 = [],
+  currentPrice = null,
+  lsRatio = null,
+  fundingRate = null,
+  basisPct = null,
+  oiChangePct = null,
+  now = Date.now(),
+} = {}) {
+  const refPrice = toFiniteNumber(currentPrice)
+    ?? getLastKlineClose(k15m)
+    ?? getLastKlineClose(k1h)
+    ?? getLastKlineClose(k4h);
+
+  const raw15m = normalizeKlinesForAtr(k15m);
+  const raw1h = normalizeKlinesForAtr(k1h);
+  const raw4h = normalizeKlinesForAtr(k4h);
+
+  const atr15mVal = calculateWilderATR(raw15m, 14, now).value;
+  const atr1hVal = calculateWilderATR(raw1h, 14, now).value;
+  const atr4hVal = calculateWilderATR(raw4h, 14, now).value;
+
+  const toAtrObj = (val) => ({
+    value: val,
+    percent: (val != null && refPrice && refPrice > 0) ? Number(((val / refPrice) * 100).toFixed(2)) : null,
+  });
+
+  const m15 = computeFrameTrend(k15m, moves24h, 0.5);
+  const h1 = computeFrameTrend(k1h, moves7d, 1.2);
+  const h4 = computeFrameTrend(k4h, movesH4, 1.8);
+
+  let mtfAlignment = 'MIXED_TRANSITION';
+  if (h4.bias === 'BEARISH' && m15.bias === 'BULLISH') {
+    mtfAlignment = 'COUNTER_TREND_BOUNCE_IN_BEAR_H4';
+  } else if (h4.bias === 'BULLISH' && m15.bias === 'BEARISH') {
+    mtfAlignment = 'COUNTER_TREND_PULLBACK_IN_BULL_H4';
+  } else if (h4.bias === 'BEARISH' && (h1.bias === 'BEARISH' || m15.bias === 'BEARISH')) {
+    mtfAlignment = 'ALIGNED_BEARISH';
+  } else if (h4.bias === 'BULLISH' && (h1.bias === 'BULLISH' || m15.bias === 'BULLISH')) {
+    mtfAlignment = 'ALIGNED_BULLISH';
+  }
+
+  const lsVal = toFiniteNumber(lsRatio);
+  const frVal = toFiniteNumber(fundingRate);
+  const basisVal = toFiniteNumber(basisPct);
+  const oiVal = toFiniteNumber(oiChangePct);
+
+  const crowdingFlags = [];
+  if (lsVal != null) {
+    if (lsVal >= 2.0) crowdingFlags.push('LONG_CROWDED_NO_CAPITULATION');
+    else if (lsVal <= 0.8) crowdingFlags.push('SHORT_CROWDED');
+    else crowdingFlags.push('BALANCED_LS');
+  }
+  if (frVal != null) {
+    if (frVal >= 0.0001) crowdingFlags.push('POSITIVE_FUNDING_LONGS_PAYING');
+    else if (frVal <= -0.0001) crowdingFlags.push('NEGATIVE_FUNDING_SHORTS_PAYING');
+    else crowdingFlags.push('NEUTRAL_FUNDING');
+  }
+  if (basisVal != null) {
+    if (basisVal >= 0.05) crowdingFlags.push('CONTANGO_PREMIUM');
+    else if (basisVal <= -0.03) crowdingFlags.push('BACKWARDATION_DISCOUNT');
+  }
+
+  return {
+    refPrice,
+    atr: {
+      m15: toAtrObj(atr15mVal),
+      h1: toAtrObj(atr1hVal),
+      h4: toAtrObj(atr4hVal),
+      recommendedSwingSlBufferMin: atr1hVal != null ? Number((atr1hVal * 1.0).toFixed(0)) : null,
+      recommendedSwingSlBufferSafe: atr1hVal != null ? Number((atr1hVal * 1.5).toFixed(0)) : null,
+    },
+    trends: { m15, h1, h4 },
+    mtfAlignment,
+    derivatives: {
+      lsRatio: lsVal,
+      fundingRate: frVal,
+      basisPct: basisVal,
+      oiChangePct: oiVal,
+      crowdingFlags,
+    },
+  };
+}
+
 /**
  * Định dạng danh sách cú giật thành văn bản Markdown chuẩn để đưa vào prompt cho AI
  *
@@ -661,6 +834,63 @@ export function formatForensicsPayloadForAi(moves24h = [], moves7d = [], movesH4
   parts.push(`## DỮ LIỆU GIẢI PHẪU BIẾN ĐỘNG GIÁ (MOVE FORENSICS & MICROSTRUCTURE DATA)`);
   parts.push(`*Dữ liệu ghi nhận từ Binance Klines (15m cho 24h, 1h cho 7d, 4h cho cấu trúc vĩ mô), kết hợp Taker CVD, Open Interest, L/S Ratio, thanh lý HFT và sự kiện vĩ mô.*`);
   parts.push('');
+
+  const hasContextInputs = Boolean(
+    context.summary
+    || (Array.isArray(context.k15m) && context.k15m.length > 0)
+    || (Array.isArray(context.k1h) && context.k1h.length > 0)
+    || (Array.isArray(context.k4h) && context.k4h.length > 0)
+    || context.currentPrice != null
+    || context.lsRatio != null
+    || context.fundingRate != null
+    || context.basisPct != null
+  );
+
+  if (hasContextInputs) {
+    const summary = context.summary || computeForensicsContextSummary({
+      k15m: context.k15m,
+      k1h: context.k1h,
+      k4h: context.k4h,
+      moves24h,
+      moves7d,
+      movesH4,
+      currentPrice: context.currentPrice,
+      lsRatio: context.lsRatio,
+      fundingRate: context.fundingRate,
+      basisPct: context.basisPct,
+      oiChangePct: context.oiChangePct,
+      now: context.now ?? Date.now(),
+    });
+
+    const fmtPct = (v) => (v == null ? 'N/A' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`);
+    const fmtAtr = (a) => (a?.value == null ? 'N/A' : `${formatUsd(a.value, 0)} (${a.percent != null ? `${a.percent.toFixed(2)}%` : 'N/A'})`);
+    const fmtTrend = (t) => `${t.bias} (Giá: ${fmtPct(t.netChangePct)} | Net CVD sóng: ${t.netCvd != null ? formatCompactUsd(t.netCvd) : 'N/A'})`;
+
+    parts.push(`### 0. TỔNG QUAN ĐA KHUNG (MTF), BIẾN ĐỘNG ATR & ĐỊNH VỊ PHÁI SINH`);
+    parts.push(`- **CURRENT_PRICE (Giá tham chiếu tại thời điểm snapshot):** ${summary.refPrice != null ? formatUsd(summary.refPrice, 2) : 'N/A'}`);
+    parts.push(`- **Độ đồng thuận đa khung (MTF Alignment):** \`${summary.mtfAlignment}\``);
+    parts.push(`  - *Khung H4 (Cấu trúc lớn ~20D):* ${fmtTrend(summary.trends.h4)}`);
+    parts.push(`  - *Khung 1H (Cấu trúc tuần 7D):* ${fmtTrend(summary.trends.h1)}`);
+    parts.push(`  - *Khung 15M (Vi mô 24H):* ${fmtTrend(summary.trends.m15)}`);
+    parts.push(`- **Thước đo biến động Wilder ATR(14):**`);
+    parts.push(`  - *ATR(14) 15m:* ${fmtAtr(summary.atr.m15)} | *ATR(14) 1H:* ${fmtAtr(summary.atr.h1)} | *ATR(14) 4H:* ${fmtAtr(summary.atr.h4)}`);
+    if (summary.atr.recommendedSwingSlBufferMin != null) {
+      parts.push(`  - *Đệm Stop Loss chống Stop Hunt khuyến nghị:* Tối thiểu **${formatUsd(summary.atr.recommendedSwingSlBufferMin, 0)}** (1.0x ATR 1H) đến **${formatUsd(summary.atr.recommendedSwingSlBufferSafe, 0)}** (1.5x ATR 1H) ngoài râu nến quét thanh khoản.`);
+    }
+    parts.push(`- **Định vị Phái sinh (Derivatives Crowding):**`);
+    const frDisplay = summary.derivatives.fundingRate != null
+      ? `${summary.derivatives.fundingRate >= 0 ? '+' : ''}${(summary.derivatives.fundingRate * 100).toFixed(4)}%`
+      : 'N/A';
+    const basisDisplay = summary.derivatives.basisPct != null
+      ? `${summary.derivatives.basisPct >= 0 ? '+' : ''}${summary.derivatives.basisPct.toFixed(4)}%`
+      : 'N/A';
+    const lsDisplay = summary.derivatives.lsRatio != null ? summary.derivatives.lsRatio.toFixed(2) : 'N/A';
+    const oiDisplay = fmtPct(summary.derivatives.oiChangePct);
+    const flagsDisplay = summary.derivatives.crowdingFlags.length > 0 ? summary.derivatives.crowdingFlags.join(', ') : 'N/A';
+    parts.push(`  - *L/S Account Ratio:* **${lsDisplay}** | *Funding Rate:* **${frDisplay}** | *Futures Basis/Premium:* **${basisDisplay}** | *ΔOI:* **${oiDisplay}**`);
+    parts.push(`  - *Trạng thái Crowding:* \`${flagsDisplay}\``);
+    parts.push('');
+  }
 
   // 1. TOP 3 TRONG 24H
   parts.push(`### 1. TOP 3 ĐỢT BIẾN ĐỘNG GIÁ MẠNH NHẤT TRONG 24H QUA (NẾN 15M)`);

@@ -745,13 +745,15 @@ CẤU TRÚC BÁO CÁO 4 PHẦN BẮT BUỘC:
   - Phân tích cơ chế và động lực thúc đẩy: Đợt sóng phản ánh tích lũy, phân phối hay săn thanh lý diện rộng của dòng tiền lớn?
 
 ## 2. 🗺️ BẢN ĐỒ VỊ THẾ BỊ KẸP & VÙNG BẪY THANH KHOẢN (TRAPPED LIQUIDITY MAP)
-### 2.1. Phe Kẹp Vị Thế (Trapped Positioning)
+### 2.1. Phe Kẹp Vị Thế & Định Vị Phái Sinh (Trapped Positioning & Funding/Basis)
 - **Phe Long bị kẹp (Trapped Longs):**
   - **Vùng tập trung lớn nhất:** [Mốc giá $] - [Phân tích vị thế gồng lỗ]
   - **Điểm kích hoạt rủi ro (Long Flush):** [Mốc giá xác nhận thanh lý nếu bị xuyên thủng]
 - **Phe Short bị kẹp (Trapped Shorts):**
   - **Vùng kẹp ngắn hạn:** [Mốc giá $] - [Phân tích người Short đuổi theo cú dump]
   - **Điểm kích nổ Short Squeeze:** [Mốc giá kích hoạt Short buộc phải cover, đẩy giá lên]
+- **Đối chiếu Funding Rate, Basis & L/S Ratio (Bắt buộc):**
+  - [Kết hợp L/S Account Ratio + Funding Rate + Futures Basis/Premium để kết luận: nếu L/S >= 2.0 và Funding dương -> nhỏ lẻ vẫn cố bắt đáy, chưa có Capitulation, rủi ro Long Flush cao; nếu Funding âm sâu & Basis âm -> đội Short quá tải, xác suất Short Squeeze mới cao]
 
 ### 2.2. Các Bể Thanh Lý & Tường Lệnh Tiềm Năng (Liquidity Pools)
 - **Bể thanh khoản & Tường lệnh (Liquidity Pools):**
@@ -760,26 +762,36 @@ CẤU TRÚC BÁO CÁO 4 PHẦN BẮT BUỘC:
   - **Vi cấu trúc sổ lệnh (Order Book):** [Tương quan OBI, tường lệnh Whale Walls lớn nhất, đánh giá độ mỏng trượt giá]
 
 ## 3. 🔮 DỰ PHÓNG TƯƠNG LAI & MA TRẬN KỊCH BẢN (BASE / BULL / BEAR)
-*(Tổng xác suất 3 kịch bản phải đúng 100%)*
+### 3.0. Độ Đồng Thuận Đa Khung Thời Gian (MTF Alignment Check)
+- **Cấu trúc H4 (Xu hướng chủ đạo):** [BEARISH / BULLISH / RANGE] | **Khung 7D (1H):** [Trạng thái] | **Khung 24H (15M):** [Trạng thái]
+- **Kết luận đồng thuận:** [**THUẬN PHA** hoặc **NGƯỢC XU HƯỚNG (COUNTER-TREND)** — Quy tắc bắt buộc: nếu H4 đang Bearish và L/S Ratio vẫn cao (>= 2.0) chưa có BOS tăng trên H4, CẤM gán tổng xác suất > 50% cho kịch bản đảo chiều tăng dài hạn chỉ vì một nhịp Absorption trên 15m]
+
+### 3.1. Ma Trận Kịch Bản *(Tổng xác suất 3 kịch bản phải đúng 100%)*
 - **Kịch Bản Cơ Sở — Base Case [Tỷ lệ %]:**
-  - **Luận điểm cốt lõi:** [Hành vi giá tiếp nối logic từ các cú giật vừa qua]
+  - **Luận điểm cốt lõi:** [Hành vi giá tiếp nối logic từ cấu trúc H4 và các cú giật vừa qua]
   - **Điểm Kích Hoạt (Trigger):** [Mốc giá xác nhận]
   - **Điểm Vô Hiệu (Hard Invalidation/Stop):** [Mốc giá bẻ gãy kịch bản]
-  - **Mục Tiêu Giá (Targets):** [Mốc T1, T2 kèm R:R ước tính]
+  - **Vùng cản đầu tiên (FTA) & Mục Tiêu Giá:** [Mốc FTA (R:R đến FTA) | Mốc T1, T2]
 - **Kịch Bản Tăng Giá — Bullish Scenario [Tỷ lệ %]:**
   - **Luận điểm:** [Bứt phá / Squeeze phe Short]
-  - **Trigger:** [Mốc giá kích hoạt] | **Invalidation:** [Mốc stop] | **Target:** [Mục tiêu R:R]
+  - **Trigger:** [Mốc giá kích hoạt] | **Invalidation:** [Mốc stop] | **FTA & Target:** [FTA R:R | T1, T2]
 - **Kịch Bản Giảm Giá — Bearish Scenario [Tỷ lệ %]:**
   - **Luận điểm:** [Xả hàng / Quét thanh lý phe Long]
-  - **Trigger:** [Mốc giá kích hoạt] | **Invalidation:** [Mốc stop] | **Target:** [Mục tiêu R:R]
+  - **Trigger:** [Mốc giá kích hoạt] | **Invalidation:** [Mốc stop] | **FTA & Target:** [FTA R:R | T1, T2]
 
 ## 4. 🎯 KẾ HOẠCH HÀNH ĐỘNG CHIẾN THUẬT (EXECUTION PLAYBOOK)
-- **Chiến lược cho Swing / Leveraged Trader:**
+- **🚫 ANTI-FOMO / TRẠNG THÁI GIÁ HIỆN TẠI (DO NOT CHASE CHECK):**
+  - **So sánh giá hiện tại (CURRENT_PRICE) với Entry đề xuất:** [Ghi rõ giá hiện tại đang NẰM TRONG hay ĐÃ VƯỢT QUA vùng Entry. Nếu với lệnh LONG mà giá hiện tại > Entry cao nhất (hoặc SHORT mà giá hiện tại < Entry thấp nhất), BẮT BUỘC cảnh báo đỏ: **TUYỆT ĐỐI KHÔNG VÀO LỆNH MARKET / KHÔNG ĐUỔI GIÁ TẠI MỐC HIỆN TẠI**, tính rõ mức R:R bị suy giảm nếu vào ngay, và nêu điều kiện giá hồi về vùng Entry + xác nhận dòng tiền]
+- **Kế hoạch chính cho Swing / Leveraged Trader:**
+  - **Phân loại vị thế & Khối lượng:** [**THUẬN XU HƯỚNG H4 (1.0R)** hoặc **COUNTER-TREND SCALP — GIẢM 50% KHỐI LƯỢNG (0.5R)** nếu ngược cấu trúc H4]
   - **Setup đề xuất:** [LONG / SHORT / CHỜ]
-  - **Điểm vào (Entry):** [Vùng giá cụ thể]
-  - **Dừng lỗ (Stop Loss):** [Mốc giá cắt lỗ]
-  - **Chốt lời (Take Profit):** [Mốc mục tiêu]
-  - **Điều kiện tiên quyết:** Nếu R:R < 1.8 hoặc chưa có tín hiệu xác nhận dòng tiền, kiên quyết ghi **CHỜ / KHÔNG VÀO LỆNH**.
+  - **Điểm vào (Entry Zone):** [Vùng giá cụ thể]
+  - **Dừng lỗ định lượng theo ATR (Stop Loss):** [Mốc giá cắt lỗ — BẮT BUỘC đặt ngoài râu quét thanh khoản kèm đệm >= 1.0x ATR(1H) cho Swing hoặc >= 1.0x ATR(15m) cho Scalp; ghi rõ khoảng cách $ và hệ số ATR, CẤM đặt SL sát râu nến < 0.5x ATR(1H)]
+  - **Vùng cản đầu tiên (FTA) & Chốt lời:** [Mốc FTA -> **FTA R:R = X.X** | T1, T2 (nếu Counter-trend phải hạ Target về gần FTA/thanh khoản gần)]
+  - **Điều kiện tiên quyết (Hard Gate):** Tính R:R dựa trên **FTA R:R** (từ Entry đến vùng cản đầu tiên), CẤM dùng T2 để làm đẹp R:R. Nếu **FTA R:R < 1.5** hoặc **T2 R:R < 1.8** hoặc chưa có xác nhận dòng tiền, kiên quyết ghi **CHỜ / KHÔNG VÀO LỆNH**.
+- **🔄 Kế hoạch Kịch bản Đối lập / Thuận xu hướng H4 (Counter-Scenario Plan — BẮT BUỘC):**
+  - **Bối cảnh kích hoạt:** [Nếu nhịp hồi/giật đi tới vùng cung/cầu đối diện (ví dụ vùng kháng cự/hỗ trợ H4) và xuất hiện từ chối giá / CVD đảo chiều -> Canh **SHORT/LONG thuận xu hướng H4** tại đâu?]
+  - **Vùng Entry chờ:** [Vùng giá] | **SL (theo ATR):** [Mốc SL] | **Target (FTA / T1):** [Mốc TP & FTA R:R] | **Trigger xác nhận:** [Tín hiệu nến/CVD/OI]
 - **Chiến lược cho Spot Investor (Nắm giữ trung-dài hạn):**
   - **Vùng gom tích lũy tối ưu:** [Mức giá gom dựa trên vùng cân bằng sau các cú giật]
   - **Vùng cảnh báo rủi ro cấu trúc:** [Mốc gãy cấu trúc cần hạ tỷ trọng]
@@ -839,13 +851,15 @@ MANDATORY 4-SECTION REPORT STRUCTURE:
   - Diagnose causal mechanism: Did the wave signify institutional accumulation, distribution, or predatory wide-range liquidity sweep?
 
 ## 2. 🗺️ TRAPPED POSITIONING & LIQUIDITY POOLS MAP
-### 2.1. Trapped Positioning
+### 2.1. Trapped Positioning & Derivatives Crowding (Funding/Basis)
 - **Trapped Longs:**
   - **Primary Concentration:** [Price zone $] - [Underwater posture & loss endurance]
   - **Forced Flush Trigger:** [Price level where cascading liquidation is triggered]
 - **Trapped Shorts:**
   - **Short-term Trap Zone:** [Price zone $] - [Shorts chasing breakdown]
   - **Short Squeeze Ignition Trigger:** [Key reclaim level forcing covers]
+- **Funding Rate, Basis & L/S Ratio Cross-Check (Mandatory):**
+  - [Synthesize L/S Account Ratio + Funding Rate + Futures Basis/Premium: if L/S >= 2.0 and Funding is positive -> retail longs remain crowded with no capitulation, elevated Long Flush risk; if Funding is deeply negative & Basis negative -> shorts are overextended, genuine Short Squeeze fuel]
 
 ### 2.2. Key Liquidity Pools & Order Book Walls
 - **Liquidity Pools & Depth (Order Book):**
@@ -854,26 +868,36 @@ MANDATORY 4-SECTION REPORT STRUCTURE:
   - **Order Book Microstructure:** [OBI skew, top Whale Walls, and slippage assessment]
 
 ## 3. 🔮 MULTI-SCENARIO FORWARD PROJECTIONS (BASE / BULL / BEAR)
-*(Scenario weights must sum to exactly 100%)*
+### 3.0. Multi-Timeframe Alignment Check (MTF Alignment)
+- **H4 Macro Structure:** [BEARISH / BULLISH / RANGE] | **7D (1H):** [State] | **24H (15M):** [State]
+- **Alignment Verdict:** [**ALIGNED** or **COUNTER-TREND DIVERGENCE** — Mandatory Rule: if H4 is Bearish and L/S Ratio remains elevated (>= 2.0) without confirmed H4 bullish BOS/CHoCH, FORBID assigning > 50% combined probability to a sustained bullish reversal solely from a 15m Absorption bounce]
+
+### 3.1. Scenario Matrix *(Scenario weights must sum to exactly 100%)*
 - **Base Case Scenario [Weight %]:**
-  - **Core Thesis:** [Logical path deduced from microstructure & move forensics]
+  - **Core Thesis:** [Logical path deduced from H4 structure, microstructure & move forensics]
   - **Confirmation Trigger:** [Exact price level/signal]
   - **Hard Invalidation (Stop):** [Structural invalidation level]
-  - **Price Targets:** [T1, T2 with estimated R:R]
+  - **First Trouble Area (FTA) & Price Targets:** [FTA level (FTA R:R) | T1, T2]
 - **Bullish Scenario [Weight %]:**
   - **Thesis:** [Upward expansion / Short squeeze scenario]
-  - **Trigger:** [Level] | **Invalidation:** [Level] | **Target:** [R:R]
+  - **Trigger:** [Level] | **Invalidation:** [Level] | **FTA & Target:** [FTA R:R | T1, T2]
 - **Bearish Scenario [Weight %]:**
   - **Thesis:** [Downward flush / Long liquidation scenario]
-  - **Trigger:** [Level] | **Invalidation:** [Level] | **Target:** [R:R]
+  - **Trigger:** [Level] | **Invalidation:** [Level] | **FTA & Target:** [FTA R:R | T1, T2]
 
 ## 4. 🎯 ACTIONABLE EXECUTION PLAYBOOK
-- **Swing / Leveraged Trader Strategy:**
+- **🚫 ANTI-FOMO / CURRENT PRICE STATUS (DO NOT CHASE CHECK):**
+  - **Current Price (CURRENT_PRICE) vs Proposed Entry:** [Explicitly state whether CURRENT_PRICE is INSIDE or PAST the favorable Entry Zone. If LONG and CURRENT_PRICE > Entry_High (or SHORT and CURRENT_PRICE < Entry_Low), MUST issue a bold warning: **DO NOT ENTER AT MARKET / DO NOT CHASE**, compute the degraded R:R at CURRENT_PRICE, and specify the exact pullback + flow confirmation required]
+- **Primary Swing / Leveraged Trader Strategy:**
+  - **Alignment & Position Sizing:** [**H4 TREND-ALIGNED (1.0R)** or **COUNTER-TREND SCALP — REDUCE SIZE BY 50% (0.5R)** if opposing H4 structure]
   - **Proposed Setup:** [LONG / SHORT / WAIT]
   - **Entry Zone:** [Explicit price area]
-  - **Hard Stop Loss:** [Structural stop]
-  - **Take Profit Targets:** [T1, T2]
-  - **Prerequisite:** If R:R < 1.8 or volume confirmation is lacking, unequivocally state **WAIT / NO TRADE**.
+  - **ATR-Buffered Hard Stop Loss:** [Structural stop — MUST include >= 1.0x ATR(1H) buffer for Swing or >= 1.0x ATR(15m) for Scalp beyond the liquidity sweep wick; state exact $ buffer and ATR multiple; NEVER place SL < 0.5x ATR(1H) from a raw wick]
+  - **First Trouble Area (FTA) & Take Profit Targets:** [FTA level -> **FTA R:R = X.X** | T1, T2 (cap targets near FTA/nearby liquidity if counter-trend)]
+  - **Prerequisite (Hard Gate):** Compute qualifying R:R to the **First Trouble Area (FTA R:R)**, NEVER use distant T2 to inflate R:R. If **FTA R:R < 1.5** or **T2 R:R < 1.8** or volume confirmation is lacking, unequivocally state **WAIT / NO TRADE**.
+- **🔄 Counter-Scenario / H4 Trend-Following Plan (MANDATORY):**
+  - **Activation Context:** [If price bounces/pulls back into the opposing H4 supply/demand zone and shows rejection / CVD reversal -> Where to enter **WITH the H4 trend**?]
+  - **Pending Entry Zone:** [Zone] | **ATR-Buffered SL:** [Level] | **Target (FTA / T1):** [Level & FTA R:R] | **Confirmation Trigger:** [Candle/CVD/OI signal]
 - **Spot Investor Strategy (Medium/Long-Term):**
   - **Optimal Accumulation Zones:** [Equilibrium post-impulse price levels]
   - **Structural Invalidation Warning:** [Major trend failure level]
