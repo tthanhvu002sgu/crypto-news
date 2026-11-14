@@ -38,6 +38,10 @@
       "destination": "https://nfs.faireconomy.media/:path*"
     },
     {
+      "source": "/api-cryptocompare/:path*",
+      "destination": "https://min-api.cryptocompare.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

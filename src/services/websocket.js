@@ -92,8 +92,17 @@ function createReconnectingWS(url, onMessage, onStatusChange, mountedRef) {
   function close() {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (ws) {
+      ws.onmessage = null;
+      ws.onerror = null;
       ws.onclose = null;
-      ws.close();
+      if (ws.readyState === WebSocket.CONNECTING) {
+        // Defer close until handshake completes to avoid "closed before established" console errors
+        const socket = ws;
+        socket.onopen = () => socket.close();
+      } else if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+      ws = null;
     }
   }
 
@@ -676,7 +685,7 @@ export function useCVDStream() {
               localStorage.setItem('hft_vol_nodes_spot_date', todayRef.current);
               localStorage.setItem('hft_vol_nodes_spot', JSON.stringify(Array.from(volNodeRefSpot.current.entries())));
               localStorage.setItem('hft_whale_trades_date', todayRef.current);
-              localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current));
+              localStorage.setItem('hft_whale_trades', JSON.stringify(whaleRef.current.slice(0, 500)));
               localStorage.setItem('hft_force_orders_date', todayRef.current);
               localStorage.setItem('hft_force_orders', JSON.stringify(liqRef.current.slice(0, 500)));
             } catch (e) {

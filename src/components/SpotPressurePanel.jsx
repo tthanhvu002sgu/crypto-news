@@ -130,7 +130,11 @@ export default function SpotPressurePanel({ moduleId = 'hft_spot_pressure', symb
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('hft_multi_cvd_mode', flowMode);
+    try {
+      localStorage.setItem('hft_multi_cvd_mode', flowMode);
+    } catch {
+      // Ignore storage quota / private-mode errors so UI state still works
+    }
   }, [flowMode]);
 
   const fetchAndApply = useCallback(async (force = false) => {

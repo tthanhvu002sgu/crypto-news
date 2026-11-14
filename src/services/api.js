@@ -965,7 +965,10 @@ export const fetchRealtimeFeed = async () => {
   const fetchCryptoCompare = async () => {
     const items = [];
     try {
-      const ccRes = await axios.get('https://min-api.cryptocompare.com/data/v2/news/?lang=EN', { timeout: 6000 });
+      const ccUrl = typeof window === 'undefined'
+        ? 'https://min-api.cryptocompare.com/data/v2/news/?lang=EN'
+        : '/api-cryptocompare/data/v2/news/?lang=EN';
+      const ccRes = await axios.get(ccUrl, { timeout: 6000 });
       if (ccRes.data?.Data && Array.isArray(ccRes.data.Data)) {
         ccRes.data.Data.slice(0, 20).forEach(item => {
           if (!item.published_on) return;
@@ -1950,38 +1953,32 @@ export const getETFHoldings = async () => {
   try {
     const isNode = typeof window === 'undefined';
     const url = isNode ? 'https://bitbo.io/etf/' : '/api-bitbo/etf/';
-    let html = '';
-    
+
     try {
       const res = await axios.get(url, {
         headers: isNode ? { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } : {},
         timeout: 8000
       });
-      html = res.data;
+      const html = typeof res.data === 'string' ? res.data : '';
+      const match = html.match(/window\.__NUXT__\s*=\s*([\s\S]*?);?<\/script>/);
+      if (match) {
+        const getNuxt = new Function(`return ${match[1]};`);
+        const state = getNuxt();
+        const dataObj = state.data?.[0];
+        if (dataObj && dataObj.funds) {
+          return parseETFFundsObject(dataObj.funds);
+        }
+      }
+      console.warn('[API] ETF holdings Nuxt state missing in proxy/direct HTML, falling back to Jina Reader...');
     } catch (err) {
       console.warn('[API] ETF holdings direct/proxy fetch failed, trying Jina Reader...', err.message);
-      html = await fetchWithJina('https://bitbo.io/etf/', 'text');
-      if (!html) {
-        throw new Error('Jina Reader returned empty content for Bitbo');
-      }
-      return parseETFHoldingsFromMarkdown(html);
     }
-    
-    // Parse Nuxt state từ HTML
-    const match = html.match(/window\.__NUXT__\s*=\s*([\s\S]*?);?<\/script>/);
-    if (!match) {
-      throw new Error('Nuxt state not found in HTML');
+
+    const jinaText = await fetchWithJina('https://bitbo.io/etf/', 'text');
+    if (!jinaText) {
+      throw new Error('Jina Reader returned empty content for Bitbo');
     }
-    
-    const nuxtExpr = match[1];
-    const getNuxt = new Function(`return ${nuxtExpr};`);
-    const state = getNuxt();
-    const dataObj = state.data?.[0];
-    
-    if (dataObj && dataObj.funds) {
-      return parseETFFundsObject(dataObj.funds);
-    }
-    throw new Error('Funds object not found in Nuxt state');
+    return parseETFHoldingsFromMarkdown(jinaText);
   } catch (e) {
     console.error('[API] ETF Holdings error:', e.message);
     return null;
