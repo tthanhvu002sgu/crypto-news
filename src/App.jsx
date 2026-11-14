@@ -34,6 +34,7 @@ import { TAB_REDIRECT_MAP, DEFAULT_TAB_ORDER, normalizeTabId, migrateSavedTabOrd
 import Tooltip, { METRIC_METADATA, useTooltipSettings } from './components/Tooltip';
 import { ModuleVisibilityProvider, useModuleVisibility, MODULES_CONFIG } from './context/ModuleVisibilityContext';
 import ModuleMenu from './components/ModuleMenu';
+import DataOriginBadge, { DataOriginLegend } from './components/DataOriginBadge';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, Title, Tooltip as ChartTooltip, Legend, Filler, BarElement,
@@ -158,11 +159,11 @@ const FreshnessBadge = React.memo(function FreshnessBadge({ type }) {
 });
 
 
-const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId, freshness }) {
+const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, badge, badgeCls, tooltipId, freshness, origin = 'history' }) {
   const metadata = tooltipId ? METRIC_METADATA[tooltipId] : null;
   return (
     <div className="metric-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '2px', gap: '4px' }}>
         {metadata ? (
           <Tooltip content={metadata}>
             <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
@@ -172,7 +173,10 @@ const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, b
         ) : (
           <span className="metric-label font-mono">{label}</span>
         )}
-        {freshness && <FreshnessBadge type={freshness} />}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          {origin && <DataOriginBadge origin={origin} iconOnly compact />}
+          {freshness && <FreshnessBadge type={freshness} />}
+        </span>
       </div>
       <span className="metric-value font-mono">{value}</span>
       {sub && <span className={`metric-sub font-mono ${subCls || 'text-slate-400'}`}>{sub}</span>}
@@ -1438,11 +1442,14 @@ function AppContent() {
             <div className="sidebar-top-row">
               <div className="btc-hero" style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <Tooltip content={METRIC_METADATA.btcPrice}>
-                    <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block', margin: 0 }}>
-                      BITCOIN {wsStatus === 'connected' && <span className="ws-live-tag font-mono">⚡</span>}
-                    </span>
-                  </Tooltip>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <Tooltip content={METRIC_METADATA.btcPrice}>
+                      <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block', margin: 0 }}>
+                        BITCOIN {wsStatus === 'connected' && <span className="ws-live-tag font-mono">⚡</span>}
+                      </span>
+                    </Tooltip>
+                    <DataOriginBadge origin="snapshot" iconOnly compact />
+                  </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`btc-price font-mono${livePrice ? ' ws-price-live' : ''}`} style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
                       ${btcDisplay?.price ? fmt(btcDisplay.price, 0) : '---'}
@@ -1463,6 +1470,8 @@ function AppContent() {
                 )}
               </div>
             </div>
+
+            <DataOriginLegend compact style={{ marginBottom: '8px', padding: '6px 8px' }} />
 
             <div className="sidebar-divider" />
 
@@ -1490,6 +1499,7 @@ function AppContent() {
                         badgeCls="badge-ws"
                         tooltipId="funding"
                         freshness="live"
+                        origin="snapshot"
                       />
                       <MetricCard
                         label="OPEN INTEREST"
@@ -1498,6 +1508,7 @@ function AppContent() {
                         subCls="text-slate-400"
                         tooltipId="oi"
                         freshness="live"
+                        origin="snapshot"
                       />
                       <MetricCard
                         label="L/S RATIO"
@@ -1506,6 +1517,7 @@ function AppContent() {
                         subCls={currentLS && parseFloat(currentLS.longAccount) > 0.55 ? 'text-rose' : 'text-emerald'}
                         tooltipId="lsRatio"
                         freshness="5m"
+                        origin="history"
                       />
                       <MetricCard
                         label="BTC DOMINANCE"
@@ -1514,6 +1526,7 @@ function AppContent() {
                         subCls="text-slate-400"
                         tooltipId="btcDom"
                         freshness="5m"
+                        origin="snapshot"
                       />
                       <MetricCard
                         label="STABLECOIN CAP"
@@ -1522,6 +1535,7 @@ function AppContent() {
                         subCls="text-slate-400"
                         tooltipId="stablecoin"
                         freshness="1h"
+                        origin="snapshot"
                       />
                       <MetricCard
                         label="TOTAL MARKET CAP"
@@ -1530,6 +1544,7 @@ function AppContent() {
                         subCls={data.globalData?.marketCapChange24h > 0 ? 'text-emerald' : 'text-rose'}
                         tooltipId="totalMcap"
                         freshness="1h"
+                        origin="snapshot"
                       />
                       <MetricCard
                         label="BTC 24H VOL"

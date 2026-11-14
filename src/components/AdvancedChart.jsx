@@ -3,6 +3,7 @@ import { createChart, CrosshairMode, LineStyle, CandlestickSeries, HistogramSeri
 import { getBTCKlines } from '../services/api';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 import { emitCrosshair } from '../services/crosshairSync';
 
 const BINS = 150;
@@ -1230,9 +1231,17 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
   return (
     <div className="hft-panel glass-panel" style={{ gridColumn: 'span 2', position: 'relative', minHeight: '520px', height: 'auto', display: 'flex', flexDirection: 'column' }}>
       <div className="hft-panel-header advanced-chart-header">
-        <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-          <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <h3 className="hft-panel-title font-mono" style={{ borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
+            <span className="hft-icon">📊</span> ADVANCED PRICE ACTION: POC, WALLS & LIQUIDATIONS
+          </h3>
+          <DataOriginBadge
+            origin="history"
+            label="LỊCH SỬ KLINES"
+            title="Nến giá, POC/VAH/VAL, Liq Zones (ước lượng), Vol Bubbles & TPO tính từ nến lịch sử + WS live. Riêng Limit Walls đọc sổ lệnh tức thời & theo dõi tuổi từ lúc mở tab."
+            compact
+          />
+        </div>
         <div className="advanced-chart-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <div className="advanced-chart-toolbar" aria-label="Chart controls">
             {/* ── Nhóm 1: Navigation ── */}
@@ -1292,25 +1301,27 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
                       position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 31,
                       background: 'var(--bg-slate-950, #0b0e14)', border: '1px solid var(--border-panel)',
                       borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column',
-                      gap: '8px', minWidth: '200px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                      gap: '8px', minWidth: '240px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                     }}
                   >
                     <span className="font-mono" style={{ fontSize: '0.55rem', color: 'var(--text-slate-500)', fontWeight: 700 }}>OVERLAY LAYERS</span>
                     <button
                       onClick={() => setShowWalls(!showWalls)}
-                      title="Bật/tắt Limit Walls"
+                      title="Bật/tắt Limit Walls (Sổ lệnh tức thời, theo dõi tuổi wall từ lúc mở tab)"
                       className={`advanced-chart-control font-mono ${showWalls ? 'is-active is-walls' : ''}`}
-                      style={{ justifyContent: 'space-between' }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', width: '100%' }}
                     >
-                      🎯 Limit Walls {showWalls ? 'ON' : 'OFF'}
+                      <span>🎯 Limit Walls {showWalls ? 'ON' : 'OFF'}</span>
+                      <DataOriginBadge origin="snapshot" label="Tức thời" compact />
                     </button>
                     <button
                       onClick={() => setShowLiq(!showLiq)}
-                      title="Bật/tắt Liquidation Zones"
+                      title="Bật/tắt Liquidation Zones (Ước lượng từ swing high/low lịch sử)"
                       className={`advanced-chart-control font-mono ${showLiq ? 'is-active is-liq' : ''}`}
-                      style={{ justifyContent: 'space-between' }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', width: '100%' }}
                     >
-                      🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}
+                      <span>🔥 Liq Zones {showLiq ? 'ON' : 'OFF'}</span>
+                      <DataOriginBadge origin="history" label="Lịch sử" compact />
                     </button>
                     <button
                       onClick={() => {
@@ -1318,19 +1329,21 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
                         setShowBubbles(val);
                         localStorage.setItem('hft_show_bubbles', val);
                       }}
-                      title="Bật/tắt Volume Bubbles"
+                      title="Bật/tắt Volume Bubbles (Tính từ nến lịch sử)"
                       className={`advanced-chart-control font-mono ${showBubbles ? 'is-active is-live' : ''}`}
-                      style={{ justifyContent: 'space-between' }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', width: '100%' }}
                     >
-                      🫧 Vol Bubbles {showBubbles ? 'ON' : 'OFF'}
+                      <span>🫧 Vol Bubbles {showBubbles ? 'ON' : 'OFF'}</span>
+                      <DataOriginBadge origin="history" label="Lịch sử" compact />
                     </button>
                     <button
                       onClick={() => setTpoMode(prev => prev === 'off' ? 'blocks' : prev === 'blocks' ? 'letters' : 'off')}
-                      title="Chuyển TPO: tắt, blocks, letters"
+                      title="Chuyển TPO: tắt, blocks, letters (Tính từ nến lịch sử)"
                       className={`advanced-chart-control font-mono ${tpoMode !== 'off' ? 'is-active is-tpo' : ''}`}
-                      style={{ justifyContent: 'space-between' }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', width: '100%' }}
                     >
-                      🧩 TPO {tpoMode === 'off' ? 'OFF' : tpoMode === 'blocks' ? 'BLOCKS' : 'LETTERS'}
+                      <span>🧩 TPO {tpoMode === 'off' ? 'OFF' : tpoMode === 'blocks' ? 'BLOCKS' : 'LETTERS'}</span>
+                      <DataOriginBadge origin="history" label="Lịch sử" compact />
                     </button>
                     <div className="advanced-chart-field" title="Tỉ lệ % chiều rộng của vùng Limit Wall" style={{ marginTop: '2px' }}>
                       <span>WALL W</span>

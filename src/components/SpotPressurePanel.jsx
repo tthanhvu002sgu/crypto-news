@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { RefreshCw, RotateCcw } from 'lucide-react';
 import ModuleMenu from './ModuleMenu';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
+import DataOriginBadge from './DataOriginBadge';
 import { getCoinbasePremium, getMultiExchangeTakerFlow } from '../services/api';
 import {
   createMultiExchangeSessionStore,
@@ -235,6 +236,12 @@ export default function SpotPressurePanel({ moduleId = 'hft_spot_pressure', symb
           <h3 className="hft-panel-title font-mono">
             <span className="hft-icon">🇺🇸</span> SPOT BUYING PRESSURE — COINBASE PREMIUM &amp; MULTI-EXCHANGE CVD
           </h3>
+          <DataOriginBadge
+            origin="hybrid"
+            label="HỖN HỢP: 24H / MỞ TAB"
+            title="Coinbase Premium tải được lịch sử 24H từ API; Multi-Exchange CVD chỉ cộng dồn từ lúc mở tab (hoặc batch gần nhất)."
+            compact
+          />
           {premium?.regime && premium.regime !== 'UNAVAILABLE' && (
             <span
               className="font-mono"
@@ -304,12 +311,20 @@ export default function SpotPressurePanel({ moduleId = 'hft_spot_pressure', symb
       <div className="spot-pressure-grid">
         {/* Left: Coinbase Premium Index */}
         <div className="spot-pressure-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <Tooltip content={METRIC_METADATA.coinbasePremium}>
-              <span className="font-mono text-slate-300" style={{ fontSize: '0.64rem', fontWeight: 700, cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)' }}>
-                COINBASE PREMIUM INDEX
-              </span>
-            </Tooltip>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <Tooltip content={METRIC_METADATA.coinbasePremium}>
+                <span className="font-mono text-slate-300" style={{ fontSize: '0.64rem', fontWeight: 700, cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)' }}>
+                  COINBASE PREMIUM INDEX
+                </span>
+              </Tooltip>
+              <DataOriginBadge
+                origin="history"
+                label="LỊCH SỬ 24H"
+                title="Tải sẵn nến 1H trong 24 giờ gần nhất từ Coinbase & Binance API."
+                compact
+              />
+            </div>
             <span className="font-mono text-slate-500" style={{ fontSize: '0.55rem' }}>
               BTC-USD vs BTCUSDT
             </span>
@@ -434,6 +449,21 @@ export default function SpotPressurePanel({ moduleId = 'hft_spot_pressure', symb
                   MULTI-EXCHANGE SPOT vs FUTURES CVD
                 </span>
               </Tooltip>
+              {flowMode === 'session' ? (
+                <DataOriginBadge
+                  origin="session"
+                  label="CHỈ TỪ LÚC MỞ TAB"
+                  title="Cộng dồn trade mới từ lúc mở tab (chống trùng ID). Đóng/F5 tab sẽ mất lịch sử phiên."
+                  compact
+                />
+              ) : (
+                <DataOriginBadge
+                  origin="snapshot"
+                  label="TỨC THỜI (BATCH)"
+                  title="Chỉ lấy lô lệnh khớp gần nhất tại thời điểm gọi API (không có lịch sử 24H)."
+                  compact
+                />
+              )}
               <span className="font-mono text-slate-500" style={{ fontSize: '0.52rem' }}>
                 {flowMode === 'session'
                   ? `Tích lũy phiên (${sessionElapsedMin}m · chống trùng ID)`

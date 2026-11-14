@@ -17,6 +17,7 @@ import { Line } from 'react-chartjs-2';
 import {
   Activity, Zap, Info, Sparkles, BarChart2, Layers
 } from 'lucide-react';
+import DataOriginBadge from './DataOriginBadge';
 import {
   getBiasComparisonSeries,
   computeBiasBucketDistribution,
@@ -325,6 +326,11 @@ export default function BiasComparisonChart({
           <div className="bias-comp-heading">
             <Sparkles size={14} className="text-emerald-400" />
             <span>ĐỐI CHIẾU SONG SONG &amp; PHÂN PHỐI FORWARD RETURN</span>
+            <DataOriginBadge
+              origin={timeframe === 'realtime' ? 'session' : 'history'}
+              label={timeframe === 'realtime' ? 'MỞ TAB (LOCAL)' : `LỊCH SỬ ${timeframe.toUpperCase()}`}
+              compact
+            />
           </div>
 
           {/* Timeframe Buttons */}
@@ -333,24 +339,26 @@ export default function BiasComparisonChart({
               type="button"
               className={`bias-tf-btn ${timeframe === '7d' ? 'is-active' : ''}`}
               onClick={() => setTimeframe('7d')}
+              title="Dữ liệu lịch sử 7 ngày từ API"
             >
-              7D
+              7D · LS
             </button>
             <button
               type="button"
               className={`bias-tf-btn ${timeframe === '30d' ? 'is-active' : ''}`}
               onClick={() => setTimeframe('30d')}
+              title="Dữ liệu lịch sử 30 ngày từ API"
             >
-              30D
+              30D · LS
             </button>
             <button
               type="button"
               className={`bias-tf-btn ${timeframe === 'realtime' ? 'is-active' : ''}`}
               onClick={() => setTimeframe('realtime')}
               disabled={realtimeCount < 2}
-              title={realtimeCount < 2 ? 'Cần tối thiểu 2 snapshot realtime trong phiên' : 'Xem snapshot thời gian thực'}
+              title={realtimeCount < 2 ? 'Cần tối thiểu 2 snapshot realtime được ghi nhận từ lúc mở tab' : 'Xem snapshot thời gian thực (tích lũy từ lúc mở tab)'}
             >
-              REALTIME {realtimeCount > 0 ? `(${realtimeCount})` : ''}
+              MỞ TAB {realtimeCount > 0 ? `(${realtimeCount})` : ''}
             </button>
           </div>
 

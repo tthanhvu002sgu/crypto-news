@@ -30,6 +30,7 @@ import {
   X, Check, Layers, BarChart2, ShieldCheck, Download,
   Filter, Search, ArrowUpDown, Info, Sparkles, Activity,
 } from 'lucide-react';
+import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 
 // ── FORMATTING HELPERS ────────────────────────────────────────────────────────
 
@@ -650,11 +651,13 @@ export default function ScannerTab() {
             <div className="scanner-heading-group">
               <h2 className="scanner-main-title">ALTCOIN SCANNER V9</h2>
               <span className="scanner-version-badge">RANKING ENGINE {SCANNER_VERSION.toUpperCase()}</span>
+              <DataOriginBadge origin="history" label="LỊCH SỬ + SNAPSHOT NGÀY" compact />
             </div>
           </div>
           <p className="scanner-subtitle text-muted">
             Xếp hạng 50 Altcoin thanh khoản Spot cao nhất từ 4 Trụ Cột: RS (40%), Dòng Tiền (25%), Fundamentals (25%), Thanh Khoản (10%).
           </p>
+          <DataOriginLegend compact style={{ marginTop: '6px' }} />
         </div>
 
         <div className="scanner-header-right">

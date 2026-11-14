@@ -28,6 +28,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 import { COT_REGIMES, processCotData } from '../services/cotEngine';
 import { getCMECot } from '../services/api';
 
@@ -285,6 +286,7 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
               <h3 className="chart-title font-mono text-amber" style={{ margin: 0, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span className="dot dot-amber" /> CME BITCOIN FUTURES COT
               </h3>
+              <DataOriginBadge origin="history" label="LỊCH SỬ TUẦN (52W)" compact />
               <span className="font-mono text-slate-400" style={{ fontSize: '0.68rem', backgroundColor: 'var(--bg-panel-solid, rgba(0,0,0,0.2))', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-panel)' }}>
                 AS OF {currentCot.date || 'LATEST'}
               </span>

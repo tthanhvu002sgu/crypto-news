@@ -4,6 +4,7 @@ import {
   ShieldCheck, Database, Sparkles, Compass
 } from 'lucide-react';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 import { generateSignalScoreboard, SCOREBOARD_HORIZONS } from '../services/signalScoreboardService';
 import { getBiasSnapshots } from '../services/biasSnapshotStore';
 import { loadMovePreview, queryMoveEvents } from '../services/moveEventStore';
@@ -94,6 +95,7 @@ export default function SignalScoreboardPanel({
             <h3 className="scoreboard-title">
               SIGNAL SCOREBOARD — KIỂM CHỨNG "EDGE" &amp; BACKTEST TỰ ĐỘNG ⭐
             </h3>
+            <DataOriginBadge origin="hybrid" label="LỊCH SỬ + MỞ TAB" compact />
           </div>
           <span className="scoreboard-subtitle text-slate-400">
             Thống kê Hit-Rate, Median Forward Return &amp; IQR thực tế (No-Look-Ahead) trên lịch sử klines &amp; live snapshots
@@ -239,7 +241,20 @@ export default function SignalScoreboardPanel({
                   
                   <div className="col-name">
                     <span className="sig-name-text text-contrast">{sig.name}</span>
-                    <span className="sig-cat-badge">{categories[sig.category]?.title || sig.category}</span>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span className="sig-cat-badge">{categories[sig.category]?.title || sig.category}</span>
+                      <DataOriginBadge
+                        origin={sig.category === 'moveTracker' ? 'session' : 'history'}
+                        label={
+                          sig.category === 'moveTracker'
+                            ? 'MỞ TAB'
+                            : sig.category === 'scannerRank'
+                              ? 'SNAPSHOT NGÀY'
+                              : 'LỊCH SỬ'
+                        }
+                        compact
+                      />
+                    </div>
                   </div>
 
                   <span className={`col-dir font-bold ${sig.expectedDirection === 'LONG' ? 'text-emerald' : sig.expectedDirection === 'SHORT' ? 'text-rose' : 'text-slate-400'}`}>

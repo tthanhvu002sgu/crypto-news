@@ -7,6 +7,7 @@ import CascadeTab from './CascadeTab';
 import OptionsRegimePanel from './OptionsRegimePanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 import CmeCotCard from './CmeCotCard';
 import SignalScoreboardPanel from './SignalScoreboardPanel';
 import CorrelationMatrixPanel from './CorrelationMatrixPanel';
@@ -56,6 +57,8 @@ export default function DashboardTab({
 
   return (
     <div className="dashboard-layout">
+      <DataOriginLegend style={{ marginBottom: '-4px' }} />
+
       {/* ── HERO: Market Bias Engine Card ── */}
       {!isModuleHidden('dash_bias') && (
         <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} theme={theme} moduleId="dash_bias" />
@@ -83,10 +86,13 @@ export default function DashboardTab({
       {/* Macro Pulse Panel */}
       {!isModuleHidden('dash_macro') && (
         <div className="glass-panel" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
-              <span className="dot dot-emerald" /> MACRO PULSE
-            </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
+                <span className="dot dot-emerald" /> MACRO PULSE
+              </h3>
+              <DataOriginBadge origin="history" label="LỊCH SỬ API" compact />
+            </div>
             <ModuleMenu moduleId="dash_macro" />
           </div>
 
@@ -251,10 +257,13 @@ export default function DashboardTab({
           {/* Spot ETFs Holdings Panel */}
           {!isModuleHidden('dash_etf_holdings') && (
             <div className="glass-panel whale-panel">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                  <span className="dot dot-emerald" /> US SPOT BITCOIN ETFS (TOTAL: {fmt(etfHoldings.total, 0)} BTC)
-                </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
+                    <span className="dot dot-emerald" /> US SPOT BITCOIN ETFS (TOTAL: {fmt(etfHoldings.total, 0)} BTC)
+                  </h3>
+                  <DataOriginBadge origin="history" label="LỊCH SỬ ETF" compact />
+                </div>
                 <ModuleMenu moduleId="dash_etf_holdings" />
               </div>
               <div className="etf-summary font-mono">
@@ -312,10 +321,13 @@ export default function DashboardTab({
           {/* Spot ETFs Net Flow History Chart Panel */}
           {!isModuleHidden('dash_etf_flows') && (
             <div className="glass-panel whale-panel">
-              <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                  <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
-                </h3>
+              <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
+                    <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
+                  </h3>
+                  <DataOriginBadge origin="history" label="LỊCH SỬ ETF" compact />
+                </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   {etfChartType === 'aum' && (
                     <div className="etf-timeframe-toggle font-mono">

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 import { classifyCapitalFlow } from '../services/capitalFlowEngine';
 import {
   calculateSpotFuturesVolumeRatio,
@@ -120,6 +121,8 @@ function useCapitalFlowInputs({
     coveragePct: Math.min(cvdCoverage, oiCoverage),
     cvdAsOf: normalized.asOf,
     oiAsOf: validOi.at(-1)?.time ?? null,
+    hasHistory,
+    hasHistorySpot,
   };
 }
 
@@ -189,7 +192,17 @@ export default function CapitalFlowPanel({
       <div className="capital-flow-bar">
         {/* Left: Identity, Regime & Dynamic Alerts */}
         <div className="capital-flow-identity">
-          <span className="capital-flow-kicker font-mono">FLOW REGIME · 24H</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span className="capital-flow-kicker font-mono">FLOW REGIME · 24H</span>
+            <DataOriginBadge
+              origin={inputs.hasHistory ? 'history' : 'session'}
+              label={inputs.hasHistory ? 'LỊCH SỬ 24H' : 'MỞ TAB (FALLBACK)'}
+              title={inputs.hasHistory
+                ? 'Tính từ chuỗi dữ liệu 24H lịch sử của Binance (CVD Futures/Spot & OI History).'
+                : 'Đang fallback sang stream từ lúc mở tab do chưa tải xong lịch sử 24H.'}
+              compact
+            />
+          </div>
           <div className="capital-flow-status-group">
             <span className={`capital-flow-state-badge font-mono tone-${verdict.tone || 'neutral'}`}>
               {verdict.actionBadge || verdict.flow}

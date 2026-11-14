@@ -3,6 +3,7 @@ import { calculateMarketBias } from '../services/biasEngine';
 import { getBiasSnapshots, recordBiasSnapshot } from '../services/biasSnapshotStore';
 import ModuleMenu from './ModuleMenu';
 import BiasComparisonChart from './BiasComparisonChart';
+import DataOriginBadge from './DataOriginBadge';
 import {
   ChevronDown, ChevronUp, AlertTriangle, Activity, Gauge, Filter, X,
   Clock, Database, Zap, HelpCircle, History, TrendingUp, TrendingDown,
@@ -22,6 +23,7 @@ function BiasSparkline({ snapshots, color }) {
       <div className="bias-sparkline-empty" role="status">
         <span className="bias-sparkline-empty-line" />
         <span>Đang tích lũy lịch sử realtime · {validSnapshots.length}/2 điểm</span>
+        <DataOriginBadge origin="session" label="TỪ LÚC MỞ TAB" compact />
       </div>
     );
   }
@@ -56,7 +58,10 @@ function BiasSparkline({ snapshots, color }) {
   return (
     <div className="bias-sparkline-block">
       <div className="bias-sparkline-meta">
-        <span className="bias-sparkline-label">XU HƯỚNG SNAPSHOT GẦN NHẤT</span>
+        <span className="bias-sparkline-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          XU HƯỚNG SNAPSHOT GẦN NHẤT
+          <DataOriginBadge origin="session" label="MỞ TAB" compact />
+        </span>
         <span className={`bias-sparkline-delta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : 'is-flat'}`}>
           {delta > 0 ? <TrendingUp size={12} /> : delta < 0 ? <TrendingDown size={12} /> : null}
           {delta >= 0 ? '+' : ''}{delta.toFixed(0)} điểm
@@ -211,6 +216,7 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
           <span className="bias-benchmark-badge font-mono">
             BENCHMARK ĐỐI CHỨNG
           </span>
+          <DataOriginBadge origin="hybrid" label="LỊCH SỬ + MỞ TAB" compact />
         </div>
 
         <div className="bias-header-right">
@@ -508,9 +514,10 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
       {showSnapshots && (
         <div className="bias-snapshots-drawer font-mono">
           <div className="snapshots-drawer-header">
-            <div className="snapshots-title">
+            <div className="snapshots-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <History size={14} className="text-emerald-400" />
               <span>LỊCH SỬ SNAPSHOT ĐỐI CHIẾU THỰC TẾ (PROVENANCE LOG)</span>
+              <DataOriginBadge origin="session" label="CHỈ TỪ LÚC MỞ TAB" compact />
             </div>
             <span className="snapshots-counter-badge">
               Đã ghi nhận: {snapshots.length} điểm

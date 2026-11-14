@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, ShieldCheck, Scale, ExternalLink } from 'lucide-react';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 import { getMultiExchangeFunding } from '../services/api';
 
 const VENUE_META = {
@@ -122,6 +123,12 @@ export default function MultiExchangeFundingPanel({ moduleId = 'hft_multi_fundin
           <h3 className="hft-panel-title font-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <span className="hft-icon">🌐</span> MULTI-EXCHANGE FUNDING & BASIS
           </h3>
+          <DataOriginBadge
+            origin="snapshot"
+            label="TỨC THỜI (4 SÀN)"
+            title="Lấy Funding Rate & Basis hiện tại từ Binance, Bybit, OKX, Bitget (không phụ thuộc lúc mở tab, không có chuỗi lịch sử)."
+            compact
+          />
           <span
             className="font-mono text-slate-400"
             style={{

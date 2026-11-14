@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import Tooltip from './Tooltip';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 
 const isPlausibleCpiYoY = (value) => {
   const number = Number(value);
@@ -29,10 +30,13 @@ export default function CascadeTab({
       transition={{ duration: 0.4 }}
     >
       <div className="glass-panel panel-section">
-        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
-            THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN DÒNG TIỀN VĨ MÔ
-          </h3>
+        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
+              THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN DÒNG TIỀN VĨ MÔ
+            </h3>
+            <DataOriginBadge origin="history" label="LỊCH SỬ API" compact />
+          </div>
           <ModuleMenu moduleId="tab_cascade" />
         </div>
         <p className="text-xs text-slate-400 mb-6" style={{ lineHeight: 1.7, textAlign: 'center' }}>

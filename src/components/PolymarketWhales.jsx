@@ -3,6 +3,7 @@ import { RefreshCw, ExternalLink, TrendingUp, Filter } from 'lucide-react';
 import { getPolymarketTopMarkets } from '../services/api';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 
 const categorizeMarket = (m) => {
   const q = (m.question || '').toLowerCase();
@@ -113,6 +114,7 @@ export default function PolymarketWhales({ fmt, moduleId }) {
           <span className="font-mono text-slate-400" style={{ fontSize: '0.68rem' }}>
             TOP HIGHEST VOLUME VOTES
           </span>
+          <DataOriginBadge origin="snapshot" label="TỨC THỜI (POLYMARKET)" compact />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

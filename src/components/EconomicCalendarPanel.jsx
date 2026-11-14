@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { readCacheValue } from '../utils/cache';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 
 const IMPACT_BADGES = {
   High: { bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.3)', text: '#f43f5e', label: 'HIGH' },
@@ -64,10 +65,11 @@ export default function EconomicCalendarPanel({ theme }) {
       {/* Editorial Minimalist Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <h3 className="font-mono text-emerald" style={{ margin: 0, fontSize: '0.9rem', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
               ECONOMIC CALENDAR (7 DAYS)
             </h3>
+            <DataOriginBadge origin="history" label="LỊCH API" compact />
             {refreshing && <span className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--color-amber-400)' }}>[UPDATING...]</span>}
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-slate-400)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>

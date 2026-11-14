@@ -3,6 +3,7 @@ import { Line, Bar } from 'react-chartjs-2';
 
 import { getCompletedHourCVD, getOrderBookDepth, getSpotOrderBookDepth, getWhaleWalls, getFootprintNodesForTimeframe } from '../services/api';
 import Tooltip, { METRIC_METADATA } from './Tooltip';
+import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 import AdvancedChart from './AdvancedChart';
 import CapitalFlowPanel from './CapitalFlowPanel';
 import MultiExchangeFundingPanel from './MultiExchangeFundingPanel';
@@ -344,7 +345,7 @@ const clusterVolNodes = (nodes, gap) => {
   return Array.from(map.values()).sort((a, b) => b.price - a.price);
 };
 
-function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, coverage, raw = false }) {
+function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, coverage, raw = false, dataOrigin = 'history' }) {
   if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
     return (
       <div className="hft-empty font-mono" style={{ padding: '16px', textOverflow: 'ellipsis', overflow: 'hidden', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.65rem', background: 'var(--bg-slate-950)', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
@@ -358,8 +359,15 @@ function FootprintSection({ marketLabel, accentColor, nodes, nodeGap, cvdTf, cov
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem' }} className="font-mono text-slate-400">
-        <span>{raw ? 'RAW-TRADE FOOTPRINT' : 'EST. VOLUME-BY-PRICE'} ({marketLabel} · {cvdTf})</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px', fontSize: '0.58rem', gap: '6px', flexWrap: 'wrap' }} className="font-mono text-slate-400">
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <span>{raw ? 'RAW-TRADE FOOTPRINT' : 'EST. VOLUME-BY-PRICE'} ({marketLabel} · {cvdTf})</span>
+          <DataOriginBadge
+            origin={dataOrigin}
+            label={dataOrigin === 'history' ? 'LỊCH SỬ API' : 'MỞ TAB'}
+            compact
+          />
+        </span>
         <span style={{ color: accentColor, fontWeight: 600 }}>
           {coverage ? `${coverage.receivedBuckets ?? 0}/${coverage.expectedBuckets ?? 0} bucket · ` : ''}{fmtUsd(totalClusterVol)}
         </span>
@@ -734,6 +742,12 @@ function CVDPanel({
               <span className="hft-icon">📊</span> CVD &amp; ORDER FLOW
             </h3>
           </Tooltip>
+          <DataOriginBadge
+            origin="history"
+            label="LỊCH SỬ API"
+            title="Tải đầy đủ lịch sử 1H (giờ đã chốt), 24H, 7D, 30D và Footprint từ Binance REST API; nến hiện tại nối tiếp từ WebSocket."
+            compact
+          />
           <div className="hft-panel-badges" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <span
               className="hft-badge badge-api font-mono"
@@ -974,9 +988,9 @@ function CVDPanel({
       </div>
 
       {/* Nodes Tables — song song FUTURES & SPOT để so sánh dòng tiền hai thị trường */}
-      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.FUTURES?.coverage} raw={false} />
+      <FootprintSection marketLabel="FUTURES" accentColor="#a78bfa" nodes={clusteredFuturesNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.FUTURES?.coverage} raw={false} dataOrigin={tfNodeMap?.FUTURES?.nodes?.length > 0 ? 'history' : 'session'} />
       <div style={{ height: '12px' }} />
-      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.SPOT?.coverage} raw={false} />
+      <FootprintSection marketLabel="SPOT" accentColor="#34d399" nodes={clusteredSpotNodes} nodeGap={nodeGap} cvdTf={cvdTf} coverage={tfNodeMap?.SPOT?.coverage} raw={false} dataOrigin={tfNodeMap?.SPOT?.nodes?.length > 0 ? 'history' : 'session'} />
 
     </div>
   );
@@ -1081,11 +1095,19 @@ function TargetLiquidityPanel({
     return (
       <div className={containerClass} style={containerStyle}>
         <div className="hft-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Tooltip content={METRIC_METADATA.whaleWalls}>
-            <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-              <span className="hft-icon">🎯</span> LIMIT ORDER
-            </h3>
-          </Tooltip>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <Tooltip content={METRIC_METADATA.whaleWalls}>
+              <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
+                <span className="hft-icon">🎯</span> LIMIT ORDER
+              </h3>
+            </Tooltip>
+            <DataOriginBadge
+              origin="snapshot"
+              label="TỨC THỜI (SỔ LỆNH)"
+              title="Đọc sổ lệnh Limit đang chờ tại thời điểm sync (không cần mở tab trước, không có lịch sử quá khứ)."
+              compact
+            />
+          </div>
           <ModuleMenu moduleId="hft_whale_walls" />
         </div>
         <div className="hft-empty font-mono">Nhấn SYNC để quét các vùng thanh khoản...</div>
@@ -1096,11 +1118,19 @@ function TargetLiquidityPanel({
   return (
     <div className={containerClass} style={containerStyle}>
       <div className="hft-panel-header">
-        <Tooltip content={METRIC_METADATA.whaleWalls}>
-          <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
-            <span className="hft-icon">🎯</span> LIMIT ORDER
-          </h3>
-        </Tooltip>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <Tooltip content={METRIC_METADATA.whaleWalls}>
+            <h3 className="hft-panel-title font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-flex', alignItems: 'center', gap: '6px', lineHeight: 1.5, paddingTop: '4px' }}>
+              <span className="hft-icon">🎯</span> LIMIT ORDER
+            </h3>
+          </Tooltip>
+          <DataOriginBadge
+            origin="snapshot"
+            label="TỨC THỜI (SỔ LỆNH)"
+            title="Đọc sổ lệnh Limit đang chờ tại thời điểm sync (không cần mở tab trước, không có lịch sử quá khứ)."
+            compact
+          />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className={`hft-signal font-mono ${signalCls}`}>{signal}</span>
           <ModuleMenu moduleId="hft_whale_walls" />
@@ -1507,6 +1537,12 @@ function OrderBookPanel({ orderBook, spotOrderBook, depthLimit, setDepthLimit })
               <span className="hft-icon">📖</span> ORDER BOOK IMBALANCE — FUTURES vs SPOT
             </h3>
           </Tooltip>
+          <DataOriginBadge
+            origin="snapshot"
+            label="TỨC THỜI (SỔ LỆNH)"
+            title="Đọc độ sâu Order Book hiện tại đa sàn (làm mượt EMA trong phiên, không có lịch sử quá khứ)."
+            compact
+          />
           <span
             className="font-mono"
             style={{
@@ -1652,6 +1688,13 @@ function WhaleTradesPanel({ whaleTrades, volume24h, liquidations = [], liqStats5
               <span>🐋</span> LỆNH LỚN WHALE (≥ $100K)
             </button>
           </div>
+
+          <DataOriginBadge
+            origin="session"
+            label="CHỈ TỪ LÚC MỞ TAB"
+            title="Lắng nghe WebSocket trực tiếp (btcusdt@forceOrder & aggTrade) kể từ lúc mở tab (giữ tạm trong ngày trên trình duyệt). Không có lịch sử thời gian chưa mở web."
+            compact
+          />
 
           {feedTab === 'liquidations' && (liqStats5m?.dominantSide || (liqStats5m?.dominanceLabel && liqStats5m.dominanceLabel !== 'QUIET')) && (
             <span
@@ -2083,7 +2126,15 @@ function MoveTrackerPanel() {
     <section className="hft-panel glass-panel move-tracker-panel" aria-label="BTC move tracker">
       <header className="hft-panel-header move-tracker-header">
         <div className="move-heading-block">
-          <div className="hft-panel-title font-mono"><span className="hft-icon">↕</span> MOVE TRACKER</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="hft-panel-title font-mono"><span className="hft-icon">↕</span> MOVE TRACKER</div>
+            <DataOriginBadge
+              origin="session"
+              label="CHỈ TỪ LÚC MỞ TAB"
+              title="Chỉ phát hiện xung lực & ghi log vào IndexedDB khi đang mở trình duyệt (ngưỡng ATR(14) lấy từ nến 5m lịch sử)."
+              compact
+            />
+          </div>
           <div className="move-source-line font-mono">
             <span>BINANCE BTCUSDT</span>
             <span className={`move-health move-health--${connectionState.toLowerCase().replace(' ', '-')}`}>{connectionState}</span>
@@ -2355,6 +2406,7 @@ export default function HftRadarTab({
         <p className="hft-radar-desc font-mono">
           Phân tích vi cấu trúc dòng tiền phái sinh theo thời gian thực: CVD Spot vs Futures, L/S Ratio, Open Interest, OBI &amp; Whale Trades
         </p>
+        <DataOriginLegend style={{ marginTop: '8px' }} />
       </div>
 
       <div className="hft-grid">
@@ -2407,9 +2459,12 @@ export default function HftRadarTab({
             {!isModuleHidden('dash_ls_chart') && (
               <div className="glass-panel chart-panel">
                 <div className="chart-header">
-                  <h3 className="chart-title font-mono text-emerald">
-                    <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
-                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 className="chart-title font-mono text-emerald">
+                      <span className="dot dot-emerald" /> LONG/SHORT RATIO — 24H
+                    </h3>
+                    <DataOriginBadge origin="history" label="LỊCH SỬ 24H" compact />
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className="chart-badge font-mono">
                       {currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
@@ -2429,9 +2484,12 @@ export default function HftRadarTab({
             {!isModuleHidden('dash_oi_chart') && (
               <div className="glass-panel chart-panel">
                 <div className="chart-header">
-                  <h3 className="chart-title font-mono text-amber">
-                    <span className="dot dot-amber" /> OPEN INTEREST — 24H (BTC)
-                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 className="chart-title font-mono text-amber">
+                      <span className="dot dot-amber" /> OPEN INTEREST — 24H (BTC)
+                    </h3>
+                    <DataOriginBadge origin="history" label="LỊCH SỬ 24H" compact />
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className="chart-badge font-mono">
                       {data?.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}

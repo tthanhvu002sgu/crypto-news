@@ -11,6 +11,7 @@ import {
   normalizeMacroCandles,
 } from '../services/macroDashboardEngine';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 
 const SETTINGS_KEY = 'macro-dashboard-v2-settings';
 const HISTORY_LIMIT = 10000;
@@ -254,6 +255,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
             <Activity size={15} style={{ color: currentColor }} />
             <h3 className="font-mono">MACRO DASHBOARD v2</h3>
             <span className="macro-source-badge font-mono">BINANCE:BTCUSDT · {settings.timeframe}</span>
+            <DataOriginBadge origin="history" label="LỊCH SỬ KLINES" compact />
           </div>
           <p>Valuator + PnL Matrix · Pine parity mode</p>
         </div>

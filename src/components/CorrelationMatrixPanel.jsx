@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCw, Activity, Layers, ArrowUpRight, ArrowDownRight, Minus, Info } from 'lucide-react';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 import { getMultiAssetCorrelationHistory } from '../services/api';
 import { calculateCorrelationMatrix, ASSET_KEYS } from '../services/correlationEngine';
 
@@ -119,6 +120,7 @@ export default function CorrelationMatrixPanel({ moduleId = 'dash_correlation_ma
             <Activity size={16} className="text-cyan-400" />
             <span>MACRO CORRELATION MATRIX</span>
           </h3>
+          <DataOriginBadge origin="history" label={`LỊCH SỬ ${windowDays}D`} compact />
           <span
             className="font-mono text-slate-400"
             style={{

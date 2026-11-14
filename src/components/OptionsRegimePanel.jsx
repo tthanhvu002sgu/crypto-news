@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ModuleMenu from './ModuleMenu';
+import DataOriginBadge from './DataOriginBadge';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import { fetchCached } from '../utils/cache.js';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService.js';
@@ -138,9 +139,12 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
     <div className="glass-panel" style={{ padding: '16px 20px' }}>
       {/* ── Header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: '8px' }}>
-        <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
-          <span className="dot dot-emerald" /> OPTIONS REGIME — {currency} (DERIBIT)
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
+            <span className="dot dot-emerald" /> OPTIONS REGIME — {currency} (DERIBIT)
+          </h3>
+          <DataOriginBadge origin="snapshot" label="TỨC THỜI (DERIBIT)" compact />
+        </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {/* Asset Toggle (BTC / ETH) */}
           <div className="etf-chart-toggle font-mono">
