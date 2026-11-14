@@ -77,9 +77,14 @@ ANALYTICAL PROTOCOL
 - News items may be headline-only and unverified. Identify them as headline risk unless the supplied text contains enough evidence. Always include the provided date when referencing a news item.
 
 6. Time-horizon separation
-- Tactical: 0-24 hours. Prioritize executed flow, price response, OI, funding, CVD, OBI, and nearby liquidity.
-- Swing: 1-7 days. Prioritize market structure, ETF flow persistence, derivatives positioning, multi-day CVD, and scheduled catalysts.
-- Position: 2-12 weeks. Prioritize macro liquidity, real yields, credit stress, broad risk appetite, on-chain valuation, and COT.
+- For short-term/tactical or multi-purpose briefs:
+  - Tactical: 0-24 hours. Prioritize executed flow, price response, OI, funding, CVD, OBI, and nearby liquidity.
+  - Swing: 1-7 days. Prioritize market structure, ETF flow persistence, derivatives positioning, multi-day CVD, and scheduled catalysts.
+  - Position: 2-12 weeks. Prioritize macro liquidity, real yields, credit stress, broad risk appetite, on-chain valuation, and COT.
+- For Long-Term Spot Investment Committee memos:
+  - Spot Short-Term Timing: 1-4 weeks. Use derivatives crowding, liquidations, OBI, and Spot CVD strictly to time spot deployment and avoid chasing FOMO entries.
+  - Spot Medium-Term Accumulation: 1-3 months. Prioritize Spot ETF flow persistence, CME COT positioning, and macro liquidity transmission.
+  - Spot Long-Term Cycle Holding: 3-12+ months. Prioritize macro regime, real yields, M2/Net Liquidity, and on-chain valuation (MVRV, NUPL, Production Cost).
 - Never use a slow or lagged metric as precise short-term timing evidence.
 
 7. Macro framework
@@ -117,12 +122,14 @@ ANALYTICAL PROTOCOL
 - Lower conviction when data is missing, stale, dependent, venue-limited, or contradictory.
 
 11. Decision standard
-- End with a concrete decision for each relevant horizon: LONG, SHORT, WAIT, REDUCE RISK, HOLD, or ACCUMULATE SPOT CONDITIONALLY.
-- A trade setup is valid only when entry condition, invalidation, target, timeframe, and reward-to-risk can be derived from supplied data.
+- End with a concrete decision for each relevant horizon:
+  - Leveraged/tactical briefs: LONG, SHORT, WAIT, REDUCE RISK, HOLD, or ACCUMULATE SPOT CONDITIONALLY.
+  - Long-Term Spot Investment Committee memos: use Spot-only verdicts — AGGRESSIVE ACCUMULATION, CONDITIONAL DCA, HOLD & MONITOR, WAIT FOR VALUE ZONE, or TRIM / REDUCE RISK (never recommend leveraged LONG/SHORT trades).
+- A leveraged/swing trade setup is valid only when entry condition, invalidation, target, timeframe, and reward-to-risk can be derived from supplied data. If estimated reward-to-risk is below 1.8, confirmation is absent, or the stop cannot be justified, label it NO TRADE.
+- For Long-Term Spot Investment Committee memos, structure capital deployment in staged tranches (Base accumulation, Deep value/flush discount, Cycle confirmation add-on), use derivatives/liquidation flushes to optimize entry price, and define structural invalidation via Macro / ETF / On-chain deterioration rather than tight leveraged stops.
 - Prefer an entry zone plus confirmation over a single arbitrary price.
-- If estimated reward-to-risk is below 1.8, confirmation is absent, or the stop cannot be justified, label it NO TRADE.
 - Never recommend leverage or position size without the user's account risk. You may provide: position size = account risk amount / stop distance.
-- Distinguish a spot investor's action from a leveraged trader's action.
+- Distinguish a spot investor's action from a leveraged trader's action whenever both are present.
 
 12. Insight standard & User Bias Audit
 - Surface 1 to 2 non-obvious insights that a superficial summary would miss.
@@ -202,9 +209,14 @@ GIAO THỨC PHÂN TÍCH BẮT BUỘC
 - Tin tức có thể chỉ là tiêu đề chưa được kiểm chứng đầy đủ. Hãy định danh đó là rủi ro tiêu đề (headline risk). Luôn trích dẫn ngày tháng của tin tức khi nhắc đến.
 
 6. Phân tách khung thời gian phân tích
-- Chiến thuật (Tactical: 0-24 giờ): Ưu tiên dòng lệnh đã khớp (executed flow), phản ứng giá, Open Interest, Funding Rate, CVD, OBI và các vùng thanh khoản gần.
-- Sóng ngắn (Swing: 1-7 ngày): Ưu tiên cấu trúc giá, độ bền dòng tiền Spot ETF, định vị vị thế phái sinh, phân kỳ CVD nhiều ngày và các sự kiện lịch kinh tế.
-- Vị thế trung hạn (Position: 2-12 tuần): Ưu tiên thanh khoản vĩ mô, lãi suất thực, áp lực tín dụng, khẩu vị rủi ro toàn cầu, định giá on-chain và báo cáo COT.
+- Đối với báo cáo chiến thuật / giao dịch ngắn hạn:
+  - Chiến thuật (Tactical: 0-24 giờ): Ưu tiên dòng lệnh đã khớp (executed flow), phản ứng giá, Open Interest, Funding Rate, CVD, OBI và các vùng thanh khoản gần.
+  - Sóng ngắn (Swing: 1-7 ngày): Ưu tiên cấu trúc giá, độ bền dòng tiền Spot ETF, định vị vị thế phái sinh, phân kỳ CVD nhiều ngày và các sự kiện lịch kinh tế.
+  - Vị thế trung hạn (Position: 2-12 tuần): Ưu tiên thanh khoản vĩ mô, lãi suất thực, áp lực tín dụng, khẩu vị rủi ro toàn cầu, định giá on-chain và báo cáo COT.
+- Đối với báo cáo Hội đồng đầu tư (Mua Spot dài hạn):
+  - Ngắn hạn Spot (1-4 tuần): Chỉ dùng định vị phái sinh, thanh lý, OBI và Spot CVD để căn thời điểm giải ngân (timing) giá tốt và tránh FOMO mua đuổi.
+  - Trung hạn Spot (1-3 tháng): Ưu tiên độ bền dòng tiền Spot ETF, vị thế CME COT và kênh truyền dẫn thanh khoản vĩ mô.
+  - Dài hạn Spot (3-12 tháng+): Ưu tiên chế độ vĩ mô, lãi suất thực, M2/Net Liquidity và định giá on-chain (MVRV, NUPL, Chi phí sản xuất khai thác).
 - Tuyệt đối không dùng các chỉ số có độ trễ lớn để làm căn cứ căn thời điểm (timing) cho khung ngắn hạn.
 
 7. Khung phân tích vĩ mô
@@ -242,12 +254,14 @@ GIAO THỨC PHÂN TÍCH BẮT BUỘC
 - Hạ mức độ tin cậy (conviction) khi dữ liệu bị thiếu, có độ trễ, phụ thuộc lẫn nhau, chỉ giới hạn trên một sàn đơn lẻ hoặc có sự mâu thuẫn.
 
 11. Tiêu chuẩn khuyến nghị hành động
-- Kết luận bằng hành động rõ ràng cho từng khung thời gian phù hợp: LONG, SHORT, CHỜ, GIẢM RỦI RO, GIỮ hoặc TÍCH LŨY GIAO NGAY CÓ ĐIỀU KIỆN.
-- Một kế hoạch giao dịch chỉ hợp lệ khi xác định được điều kiện vào lệnh, mức vô hiệu hóa, mục tiêu chốt lời, khung thời gian và tỷ lệ lợi nhuận/rủi ro (Reward-to-Risk) dựa trên dữ liệu.
+- Kết luận bằng hành động rõ ràng cho từng khung thời gian phù hợp:
+  - Báo cáo giao dịch ngắn hạn: LONG, SHORT, CHỜ, GIẢM RỦI RO, GIỮ hoặc TÍCH LŨY GIAO NGAY CÓ ĐIỀU KIỆN.
+  - Báo cáo Hội đồng đầu tư (Spot dài hạn): Chỉ dùng bộ phán quyết dành riêng cho Spot — TÍCH LŨY MẠNH, DCA CÓ ĐIỀU KIỆN, NẮM GIỮ & QUAN SÁT, CHỜ CHIẾT KHẤU SÂU, hoặc HẠ TỶ TRỌNG PHÒNG THỦ (tuyệt đối không khuyến nghị đánh phái sinh LONG/SHORT đòn bẩy).
+- Với kế hoạch giao dịch ngắn hạn/đòn bẩy: chỉ hợp lệ khi xác định được điều kiện vào lệnh, mức vô hiệu hóa, mục tiêu chốt lời, khung thời gian và tỷ lệ R:R >= 1.8; nếu thiếu xác nhận hoặc R:R < 1.8, bắt buộc ghi rõ **KHÔNG GIAO DỊCH**.
+- Với kế hoạch đầu tư Spot dài hạn (Hội đồng đầu tư): thiết lập giải ngân theo từng đợt vốn (Gom cơ sở, Gom chiết khấu sâu/rũ bỏ đòn bẩy, Gia tăng khi xác nhận chu kỳ), tận dụng các nhịp rũ bỏ phái sinh để tối ưu giá vốn, và dùng sự suy thoái cấu trúc Vĩ mô / ETF / On-chain làm ngưỡng vô hiệu hóa dài hạn.
 - Ưu tiên vùng vào lệnh kèm điều kiện xác nhận thay vì một mức giá đơn lẻ tùy tiện.
-- Nếu tỷ lệ R:R ước tính dưới 1.8, chưa có tín hiệu xác nhận hoặc không xác định được điểm dừng lỗ hợp lý, bắt buộc ghi rõ **KHÔNG GIAO DỊCH**.
 - Không khuyến nghị đòn bẩy hay khối lượng vị thế khi chưa biết hạn mức rủi ro tài khoản của người dùng. Có thể cung cấp công thức: Khối lượng vị thế = Số tiền rủi ro chấp nhận / Khoảng cách dừng lỗ.
-- Phân biệt rõ chiến lược dành cho nhà đầu tư nắm giữ giao ngay (Spot) và nhà giao dịch phái sinh dùng đòn bẩy.
+- Phân biệt rõ chiến lược dành cho nhà đầu tư nắm giữ giao ngay (Spot) và nhà giao dịch phái sinh dùng đòn bẩy khi cả hai cùng xuất hiện.
 
 12. Tiêu chuẩn nhận định phi đồng thuận (Insight) & Kiểm định thiên kiến người dùng
 - Nêu 1 đến 2 nhận định phi đồng thuận (asymmetric insights) sâu sắc mà các bản tổng hợp đại trà thường bỏ qua.
@@ -294,39 +308,48 @@ Compare and cross-examine conflicting signals rather than treating metrics in is
 ### 3.3. Spot ETF vs Derivatives / CME COT
 - Cross-check institutional spot inflows against leveraged derivatives positioning (Hedging vs Directional accumulation).
 ### 3.4. Dominant Driver
-- State which signal outranks the others for the 0-24h and 1-7d horizons, and why.
+- State which signal outranks the others for **Medium-Term Spot Accumulation (1-3 months)** and **Long-Term Cycle Holding (3-12+ months)**, and evaluate whether **Short-Term Microstructure (1-4 weeks)** offers a discounted accumulation window or warns against FOMO chasing.
 
 ## 4. SCENARIO MATRIX & ACTIVATION TRIGGERS
 
-| Scenario | Weight (%) | Activation Trigger | Confirming Evidence | Invalidation Level | Expected Route |
-| --- | ---: | --- | --- | --- | --- |
-| Base Case | | | | | |
-| Bull Case | | | | | |
-| Bear Case | | | | | |
+*(Frame all 3 scenarios for medium-to-long-term Spot investing & accumulation based on Macro, ETF/COT flows, and On-chain valuation — NEVER frame them as short-term scalp/swing trades)*
+
+| Spot Investment Scenario | Weight (%) | Activation Trigger (Macro / ETF / Structure) | Confirming Evidence | Spot Accumulation Plan / Target Zone | Structural Invalidation | Expected Cycle Route |
+| --- | ---: | --- | --- | --- | --- | --- |
+| Base Case (Accumulation & Supply Absorption) | | | | | | |
+| Bull Case (Cycle Expansion) | | | | | | |
+| Bear Case (Deep Flush / On-Chain Value Reset) | | | | | | |
 *(Scenario weights must sum to exactly 100%)*
 
 ### 4.1. Options Positioning Walls
-- When options data is supplied, reference Call Wall, Put Wall, and Max Pain as scenario activation or invalidation levels.
+- When options data is supplied, interpret Call Wall, Put Wall, and Max Pain as institutional hedging/magnet zones to optimize Spot entry timing (avoid chasing Spot near Call Wall resistance; prioritize staged buys on flushes toward Put Wall or liquidity discounts).
 
 ## 5. EXECUTIVE DECISION & MULTI-HORIZON PLAYBOOK
 
-(Synthesize this section only after completing the cross-examination of data above)
-- **Core Market Thesis (1 sentence):** Primary dominant driver derived from the synthesis.
-- **Strongest Counter-Thesis / Failure Reason.**
+(Synthesize this section only after completing the cross-examination of data above. Focus 100% on Long-Term Spot Accumulation & Portfolio Management; NEVER recommend leveraged LONG/SHORT derivatives trades)
+- **Core Spot Investment Thesis (1 sentence):** Primary cycle driver derived from Macro, Institutional Flows, and On-chain synthesis.
+- **Strongest Counter-Thesis / Structural Failure Risk.**
 - **Pillar scores (−2..+2):** Macro [x] · Spot [x] · Institutional Flow [x] · On-chain [x] · Derivatives [x] · Microstructure [x] → Total [x]/12 (confidence per pillar: H/M/L).
+- **Mandatory Spot Verdict Set:** Choose strictly from [**AGGRESSIVE ACCUMULATION** | **CONDITIONAL DCA** | **HOLD & MONITOR** | **WAIT FOR VALUE ZONE** | **TRIM / REDUCE RISK**].
 
-| Horizon | Bias | Action Now | Confidence | Activation Trigger | Invalidation |
+| Spot Investment Horizon | Cycle Regime | Spot Action Verdict | Confidence | Entry Zone / Deployment Condition | Structural Invalidation (Macro / ETF / On-Chain) |
 | --- | --- | --- | --- | --- | --- |
-| 0-24h (Tactical) | | | | | |
-| 1-7d (Swing) | | | | | |
-| 2-12w (Position)| | | | | |
+| Short-Term (1-4w: Entry Timing / Flush Watch) | | | | | |
+| Medium-Term (1-3m: ETF Flow & Macro Accumulation) | | | | | |
+| Long-Term (3-12m+: On-Chain MVRV & Production Cost Cycle) | | | | | |
 
 ## 6. ASYMMETRIC INSIGHTS & FALSIFICATION
 
 ### 6.1. Asymmetric Insights
-- Present 1-2 non-obvious market insights (with evidence & why consensus misses it).
-### 6.2. Strategic Setups
-- State concrete setups for **Spot Investor** and **Swing Trader** (apply the Section 11 decision standard: **NO TRADE** if estimated R:R < 1.8 or confirmation is missing).
+- Present 1-2 non-obvious cycle insights (with evidence & why consensus misses it).
+### 6.2. Long-Term Spot Accumulation Plan
+- State a concrete capital-deployment and portfolio plan exclusively for the **Long-Term Spot Investor** (omit short-term Swing/leveraged trade setups completely):
+  - **Staged Tranche / DCA Allocation:**
+    - **Tranche 1 (Base Accumulation / Probe):** Price zone and required flow confirmation.
+    - **Tranche 2 (Deep Discount / Leverage Flush Zone):** Discounted zone anchored to 30d/90d/1y structural support or On-chain value floors (MVRV, Production Cost).
+    - **Tranche 3 (Cycle Confirmation Add-On):** Breakout/reclaim confirmation backed by sustained Spot ETF inflows and Spot CVD alignment.
+  - **Microstructure Timing Optimization (Anti-FOMO):** How to use forced Long liquidations, negative Funding Rates, or Spot CVD absorption to capture lower average cost basis; explicitly flag FOMO zones not to chase.
+  - **Cycle Valuation Targets & Long-Term Structural Invalidation:** Cycle appreciation zones (price structure & MVRV/NUPL heuristics) and the exact Macro / ETF outflow / On-chain structural breakdown conditions that require pausing accumulation or trimming risk.
 
 End with one line: **WHAT WOULD CHANGE MY MIND FIRST:** [Specific signal or price level]`;
 
@@ -368,39 +391,48 @@ Bắt buộc SO SÁNH & ĐỐI CHIẾU các nhóm dữ liệu mâu thuẫn thay 
 ### 3.3. Dòng tiền Spot ETF vs Phái sinh
 - Đối chiếu dòng vốn gom giao ngay của tổ chức với xu hướng định vị đòn bẩy trên sàn phái sinh (bảo hiểm rủi ro hedging hay tích lũy có định hướng).
 ### 3.4. Tín hiệu chi phối (Dominant Driver)
-- Xác định tín hiệu nào mang tính quyết định cao nhất cho khung 0-24h và khung 1-7 ngày, giải thích lý do cụ thể.
+- Xác định tín hiệu nào mang tính quyết định cao nhất cho cấu trúc tích lũy Spot **Trung hạn (1-3 tháng)** và **Dài hạn (3-12 tháng+)**, đồng thời đánh giá vi cấu trúc **Ngắn hạn (1-4 tuần)** đang tạo cơ hội gom hàng giá chiết khấu hay cảnh báo rủi ro mua đuổi (FOMO).
 
 ## 4. MA TRẬN KỊCH BẢN & ĐIỀU KIỆN KÍCH HOẠT
 
-| Kịch bản | Trọng số (%) | Điều kiện kích hoạt | Bằng chứng xác nhận | Điều kiện vô hiệu | Quỹ đạo kỳ vọng |
-| --- | ---: | --- | --- | --- | --- |
-| Kịch bản cơ sở (Base Case) | | | | | |
-| Kịch bản tăng (Bull Case) | | | | | |
-| Kịch bản giảm (Bear Case) | | | | | |
+*(Định hình 3 kịch bản dưới góc nhìn đầu tư và tích lũy Spot trung-dài hạn dựa trên Vĩ mô, Dòng tiền ETF/COT và Định giá On-chain; tuyệt đối không viết kịch bản lướt sóng ngắn hạn)*
+
+| Kịch bản đầu tư Spot | Trọng số (%) | Điều kiện kích hoạt (Vĩ mô / ETF / Cấu trúc) | Bằng chứng xác nhận | Kế hoạch gom Spot / Vùng giá mục tiêu | Điều kiện vô hiệu cấu trúc | Quỹ đạo chu kỳ kỳ vọng |
+| --- | ---: | --- | --- | --- | --- | --- |
+| Kịch bản cơ sở (Base Case — Tích lũy & Hấp thụ) | | | | | | |
+| Kịch bản tăng trưởng chu kỳ (Bull Case — Mở rộng xu hướng) | | | | | | |
+| Kịch bản chiết khấu rũ bỏ (Bear Case — Về vùng giá trị On-chain) | | | | | | |
 *(Tổng trọng số kịch bản phải đúng 100%)*
 
 ### 4.1. Tường định vị Options
-- Khi có dữ liệu options, dùng Call Wall, Put Wall và Max Pain làm mốc kích hoạt hoặc vô hiệu kịch bản.
+- Khi có dữ liệu options, phân tích Call Wall, Put Wall và Max Pain như các vùng hấp lực/phòng hộ của tạo lập để tối ưu thời điểm giải ngân Spot (tránh mua đuổi khi giá áp sát Call Wall, ưu tiên đặt lệnh gom khi giá rũ về Put Wall hoặc vùng chiết khấu thanh khoản).
 
 ## 5. KHUYẾN NGHỊ HÀNH ĐỘNG & BẢN ĐỒ CHIẾN LƯỢC ĐA KHUNG THỜI GIAN
 
-(Chỉ tổng hợp và chốt phần này sau khi đã đối chiếu kỹ lưỡng toàn bộ dữ liệu ở các phần trên)
-- **Luận điểm thị trường cốt lõi (1 câu):** Động lực chi phối trọng yếu nhất rút ra từ tổng hợp dữ liệu.
-- **Phản biện mạnh nhất / Nguy cơ khiến luận điểm chính thất bại.**
+(Chỉ tổng hợp và chốt phần này sau khi đã đối chiếu kỹ lưỡng toàn bộ dữ liệu ở các phần trên. Tập trung 100% vào chiến lược Mua & Quản trị danh mục Spot dài hạn; tuyệt đối không khuyến nghị đánh phái sinh LONG/SHORT đòn bẩy)
+- **Luận điểm đầu tư Spot cốt lõi (1 câu):** Động lực chu kỳ chi phối trọng yếu nhất rút ra từ tổng hợp dữ liệu Vĩ mô, Tổ chức và On-chain.
+- **Phản biện mạnh nhất / Rủi ro cấu trúc khiến luận điểm tích lũy thất bại.**
 - **Điểm trụ cột (−2..+2):** Vĩ mô [x] · Spot [x] · Dòng tiền tổ chức [x] · On-chain [x] · Phái sinh [x] · Vi cấu trúc [x] → Tổng [x]/12 (độ tin cậy từng trụ cột: Cao/TB/Thấp).
+- **Bộ phán quyết Spot bắt buộc:** Chỉ chọn trong [**TÍCH LŨY MẠNH** | **DCA CÓ ĐIỀU KIỆN** | **NẮM GIỮ & QUAN SÁT** | **CHỜ CHIẾT KHẤU SÂU** | **HẠ TỶ TRỌNG PHÒNG THỦ**].
 
-| Khung thời gian | Hướng định vị | Khuyến nghị hành động | Độ tin cậy | Điều kiện kích hoạt | Điều kiện vô hiệu |
+| Khung đầu tư Spot | Trạng thái chu kỳ | Khuyến nghị hành động Spot | Độ tin cậy | Vùng giá / Điều kiện giải ngân | Điều kiện vô hiệu cấu trúc (Vĩ mô / ETF / On-chain) |
 | --- | --- | --- | --- | --- | --- |
-| 0-24h (Chiến thuật) | | | | | |
-| 1-7d (Sóng ngắn) | | | | | |
-| 2-12w (Vị thế trung hạn)| | | | | |
+| Ngắn hạn (1-4 tuần: Timing giải ngân / Chờ nhịp rũ) | | | | | |
+| Trung hạn (1-3 tháng: Tích lũy theo dòng tiền ETF / Vĩ mô) | | | | | |
+| Dài hạn (3-12 tháng+: Nắm giữ theo chu kỳ On-chain MVRV / Chi phí đào) | | | | | |
 
 ## 6. NHẬN ĐỊNH PHI ĐỒNG THUẬN & ĐIỀU KIỆN ĐỔI QUAN ĐIỂM
 
 ### 6.1. Nhận định phi đồng thuận (Asymmetric Insights)
-- Nêu 1 đến 2 nhận định có giá trị khác biệt (asymmetric insights) mà góc nhìn đại trà thường bỏ lỡ (kèm bằng chứng cụ thể và lý do vì sao số đông dễ nhìn nhận sai).
-### 6.2. Kế hoạch thiết lập lệnh (Setups)
-- Thiết lập kế hoạch cụ thể cho **Nhà đầu tư giao ngay (Spot)** và **Nhà giao dịch theo sóng (Swing)** (áp dụng chuẩn quyết định Mục 11: bắt buộc ghi **KHÔNG GIAO DỊCH** nếu R:R ước tính < 1.8 hoặc thiếu tín hiệu xác nhận).
+- Nêu 1 đến 2 nhận định chu kỳ có giá trị khác biệt (asymmetric insights) mà góc nhìn đại trà thường bỏ lỡ (kèm bằng chứng cụ thể và lý do vì sao số đông dễ nhìn nhận sai).
+### 6.2. Kế hoạch phân bổ vốn & Tích lũy Spot dài hạn (Spot Accumulation Plan)
+- Thiết lập kế hoạch giải ngân và quản trị danh mục cụ thể dành riêng cho **Nhà đầu tư giao ngay (Long-Term Spot Investor)** (loại bỏ hoàn toàn giao dịch Swing/đòn bẩy ngắn hạn):
+  - **Chiến lược phân bổ vốn theo đợt (Tranche / DCA Allocation):**
+    - **Đợt 1 (Vùng gom cơ sở / Giải ngân thăm dò):** Vùng giá và điều kiện dòng tiền cần thiết.
+    - **Đợt 2 (Vùng gom chiết khấu sâu / Rũ bỏ đòn bẩy):** Vùng giá chiết khấu gắn với hỗ trợ cấu trúc 30d/90d/1y hoặc ngưỡng định giá On-chain (MVRV, Production Cost).
+    - **Đợt 3 (Gia tăng tỷ trọng khi xác nhận chu kỳ):** Điều kiện bứt phá cấu trúc kèm dòng vốn Spot ETF và Spot CVD đồng thuận.
+  - **Tối ưu điểm mua bằng vi cấu trúc phái sinh (Anti-FOMO & Timing):** Cách tận dụng các nhịp thanh lý cưỡng bức (Long flush), Funding Rate âm hoặc Spot CVD hấp thụ để gom được giá vốn thấp; cảnh báo các mốc không được mua đuổi.
+  - **Mục tiêu nắm giữ theo chu kỳ & Ngưỡng vô hiệu cấu trúc dài hạn:** Vùng định giá mục tiêu (theo cấu trúc giá & MVRV/NUPL) và các điều kiện vĩ mô / dòng vốn ETF / gãy cấu trúc On-chain buộc phải tạm ngưng tích lũy hoặc hạ tỷ trọng bảo vệ vốn.
 
 Kết thúc bằng 1 dòng: **TÍN HIỆU ĐẦU TIÊN BUỘC TÁI ĐÁNH GIÁ LUẬN ĐIỂM:** [Tín hiệu hoặc mốc giá cụ thể]`;
 
@@ -954,8 +986,8 @@ export function getSystemPrompt(style = 'compact', lang = 'en', userBias = 'none
         : `\n\n[USER BIAS SUPPLEMENTAL DIRECTIVE]: The user holds a **${biasUpper}** bias. In Section 3 and 4, cross-examine the move forensics against the ${biasUpper} hypothesis, audit whether recent moves trapped ${biasUpper}s or pave the way for them, and conclude with [**CONFIRMED** | **WAIT** | **INVALIDATED**].`;
     } else {
       result += safeLang === 'vi'
-        ? `\n\n[HƯỚNG DẪN KIỂM ĐỊNH THIÊN KIẾN NGƯỜI DÙNG]: Người dùng đang thiên về hướng **${biasUpper}**. Bắt buộc bổ sung phần **"## 7. KIỂM ĐỊNH THIÊN KIẾN NGƯỜI DÙNG"** ngay sau Mục 6, gồm 3 nội dung: (1) Đánh giá khách quan: dữ liệu thực nghiệm ủng hộ hay phản bác hướng ${biasUpper}, (2) Cảnh báo rủi ro bẫy giá, vùng đòn bẩy bất lợi và nguyên tắc quản trị rủi ro, (3) Kết luận kiểm định: [**HỢP LỆ** | **CẦN CHỜ XÁC NHẬN** | **VÔ HIỆU HÓA**].`
-        : `\n\n[USER BIAS SUPPLEMENTAL DIRECTIVE]: The user holds a **${biasUpper}** bias. You MUST append an explicit section **"## 7. USER BIAS AUDIT"** right after Section 6, addressing: (1) Objective empirical assessment supporting or refuting ${biasUpper}, (2) Trap risks, adverse leverage zones, and risk control parameters, (3) Final Bias Verdict: [**CONFIRMED VALID** | **WAIT FOR CONFIRMATION** | **INVALIDATED**].`;
+        ? `\n\n[HƯỚNG DẪN KIỂM ĐỊNH THIÊN KIẾN NGƯỜI DÙNG]: Người dùng đang thiên về hướng **${biasUpper}**. Bắt buộc bổ sung phần **"## 7. KIỂM ĐỊNH THIÊN KIẾN NGƯỜI DÙNG"** ngay sau Mục 6 dưới góc nhìn đầu tư Spot dài hạn, gồm 3 nội dung: (1) Đánh giá khách quan: dữ liệu thực nghiệm (Vĩ mô, ETF/COT, On-chain) ủng hộ hay phản bác luận điểm ${biasUpper}, (2) Cảnh báo rủi ro FOMO/mua đuổi hoặc bẫy thanh khoản khi giải ngân Spot, và ngưỡng cấu trúc cần phòng thủ, (3) Kết luận kiểm định: [**HỢP LỆ ĐỂ TÍCH LŨY / NẮM GIỮ** | **CẦN CHỜ CHIẾT KHẤU / XÁC NHẬN** | **VÔ HIỆU HÓA CẤU TRÚC**].`
+        : `\n\n[USER BIAS SUPPLEMENTAL DIRECTIVE]: The user holds a **${biasUpper}** bias. You MUST append an explicit section **"## 7. USER BIAS AUDIT"** right after Section 6 from a Long-Term Spot Investment perspective, addressing: (1) Objective empirical assessment (Macro, ETF/COT, On-chain) supporting or refuting ${biasUpper}, (2) FOMO chasing / liquidity flush risks for Spot deployment and structural defense thresholds, (3) Final Bias Verdict: [**VALID FOR ACCUMULATION / HOLD** | **WAIT FOR DISCOUNT / CONFIRMATION** | **STRUCTURALLY INVALIDATED**].`;
     }
   } else {
     if (style === 'compact') {
