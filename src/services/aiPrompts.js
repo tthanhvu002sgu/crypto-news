@@ -755,12 +755,6 @@ CẤU TRÚC BÁO CÁO 4 PHẦN BẮT BUỘC:
 - **Đối chiếu Funding Rate, Basis & L/S Ratio (Bắt buộc):**
   - [Kết hợp L/S Account Ratio + Funding Rate + Futures Basis/Premium để kết luận: nếu L/S >= 2.0 và Funding dương -> nhỏ lẻ vẫn cố bắt đáy, chưa có Capitulation, rủi ro Long Flush cao; nếu Funding âm sâu & Basis âm -> đội Short quá tải, xác suất Short Squeeze mới cao]
 
-### 2.2. Các Bể Thanh Lý & Tường Lệnh Tiềm Năng (Liquidity Pools)
-- **Bể thanh khoản & Tường lệnh (Liquidity Pools):**
-  - **Buy-side Liquidity (Short Stops):** [Vùng thanh khoản trên cao và Call Wall]
-  - **Sell-side Liquidity (Long Stops):** [Vùng hỗ trợ tâm lý dưới thấp và Put Wall]
-  - **Vi cấu trúc sổ lệnh (Order Book):** [Tương quan OBI, tường lệnh Whale Walls lớn nhất, đánh giá độ mỏng trượt giá]
-
 ## 3. 🔮 DỰ PHÓNG TƯƠNG LAI & MA TRẬN KỊCH BẢN (BASE / BULL / BEAR)
 ### 3.0. Độ Đồng Thuận Đa Khung Thời Gian (MTF Alignment Check)
 - **Cấu trúc H4 (Xu hướng chủ đạo):** [BEARISH / BULLISH / RANGE] | **Khung 7D (1H):** [Trạng thái] | **Khung 24H (15M):** [Trạng thái]
@@ -860,12 +854,6 @@ MANDATORY 4-SECTION REPORT STRUCTURE:
   - **Short Squeeze Ignition Trigger:** [Key reclaim level forcing covers]
 - **Funding Rate, Basis & L/S Ratio Cross-Check (Mandatory):**
   - [Synthesize L/S Account Ratio + Funding Rate + Futures Basis/Premium: if L/S >= 2.0 and Funding is positive -> retail longs remain crowded with no capitulation, elevated Long Flush risk; if Funding is deeply negative & Basis negative -> shorts are overextended, genuine Short Squeeze fuel]
-
-### 2.2. Key Liquidity Pools & Order Book Walls
-- **Liquidity Pools & Depth (Order Book):**
-  - **Buy-Side Liquidity (Short Stops):** [Overhead stops & Call Wall levels]
-  - **Sell-Side Liquidity (Long Stops):** [Downside support & Put Wall levels]
-  - **Order Book Microstructure:** [OBI skew, top Whale Walls, and slippage assessment]
 
 ## 3. 🔮 MULTI-SCENARIO FORWARD PROJECTIONS (BASE / BULL / BEAR)
 ### 3.0. Multi-Timeframe Alignment Check (MTF Alignment)
