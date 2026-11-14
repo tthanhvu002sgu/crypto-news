@@ -17,7 +17,8 @@ import { processCotData } from './services/cotEngine';
 import {
   Activity, RefreshCw, BarChart2, BookOpen, Layers,
   Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
-  ChevronDown, ChevronRight, FileSpreadsheet, FileDown, PanelLeftClose, PanelLeftOpen
+  ChevronDown, ChevronRight, FileSpreadsheet, FileDown, PanelLeftClose, PanelLeftOpen,
+  LayoutGrid, RotateCcw, Check
 } from 'lucide-react';
 import { calculateMarketBias } from './services/biasEngine';
 import { syncToGoogleSheetsFromBrowser, validateExportReadiness } from './services/googleSheetSync';
@@ -28,6 +29,7 @@ import SummaryTab from './components/SummaryTab';
 import DashboardTab from './components/DashboardTab';
 import CascadeTab from './components/CascadeTab';
 import TerminalTab from './components/TerminalTab';
+import SortableModuleItem from './components/SortableModuleItem';
 import ScannerTab from './components/ScannerTab';
 import SystemDocsTab from './components/SystemDocsTab';
 import { TAB_REDIRECT_MAP, DEFAULT_TAB_ORDER, normalizeTabId, migrateSavedTabOrder } from './utils/navigation';
@@ -400,7 +402,18 @@ const NAV_TABS_CONFIG = [
 function AppContent() {
   const newsSliderRef = useDraggableScroll();
   const { tooltipsEnabled, setTooltipsEnabled, setLastSyncTime } = useTooltipSettings();
-  const { hiddenModules, showModule, showAllModules, isModuleHidden } = useModuleVisibility();
+  const {
+    hiddenModules,
+    showModule,
+    showAllModules,
+    isModuleHidden,
+    isEditLayoutMode,
+    setIsEditLayoutMode,
+    toggleEditLayoutMode,
+    getGroupOrder,
+    resetModuleOrders,
+    hasCustomOrder,
+  } = useModuleVisibility();
 
   // Custom Tab Ordering State
   const [tabOrder, setTabOrder] = useState(() => {
@@ -1489,6 +1502,25 @@ function AppContent() {
           <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: tooltipsEnabled ? 'rgba(16,185,129,0.1)' : 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
             <HelpCircle size={15} />
           </button>
+          <button
+            className="btn-icon"
+            onClick={toggleEditLayoutMode}
+            title={isEditLayoutMode ? "Thoát chế độ sắp xếp module" : "Sắp xếp vị trí module (Kéo-thả)"}
+            style={{
+              background: isEditLayoutMode ? 'rgba(16,185,129,0.16)' : 'transparent',
+              border: isEditLayoutMode ? '1px solid rgba(16,185,129,0.5)' : '1px solid var(--border-panel)',
+              color: isEditLayoutMode ? 'var(--color-emerald-400)' : 'var(--text-slate-400)',
+              padding: '7px',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.25s ease'
+            }}
+          >
+            <LayoutGrid size={15} />
+          </button>
           <button className="btn-icon" onClick={() => setShowSettings(true)} title="API Settings" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
             <Settings size={15} />
           </button>
@@ -1524,6 +1556,76 @@ function AppContent() {
           </button>
         </div>
       </header>
+
+      {isEditLayoutMode && (
+        <div
+          className="edit-layout-banner font-mono"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px',
+            padding: '8px 16px',
+            margin: '0 0 10px 0',
+            borderRadius: '8px',
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            fontSize: '0.66rem',
+            color: 'var(--color-emerald-400, #34d399)',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <LayoutGrid size={14} />
+            <span>
+              <strong>CHẾ ĐỘ SẮP XẾP LAYOUT:</strong> Kéo-thả hoặc bấm mũi tên trên từng module để đổi vị trí trong cùng khu vực.
+            </span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {hasCustomOrder && (
+              <button
+                type="button"
+                onClick={resetModuleOrders}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: 'var(--color-amber-400, #fbbf24)',
+                  padding: '4px 10px',
+                  borderRadius: '5px',
+                  fontSize: '0.62rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <RotateCcw size={12} />
+                <span>Đặt lại mặc định</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsEditLayoutMode(false)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '1px solid rgba(16, 185, 129, 0.5)',
+                color: 'var(--color-emerald-300, #6ee7b7)',
+                padding: '4px 10px',
+                borderRadius: '5px',
+                fontSize: '0.62rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <Check size={12} />
+              <span>Xong</span>
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* ── Body ───────────────────────────────────────────────────────────── */}
       <div className="main-content">
@@ -1573,8 +1675,11 @@ function AppContent() {
 
             <div className="sidebar-divider" />
 
-            {/* ── Sidebar Accordion Group 1: Derivatives & Market Sentiment ── */}
-            {!isModuleHidden('sidebar_derivatives') && (
+            {getGroupOrder('sidebar').map((sidebarId) => {
+              if (sidebarId === 'sidebar_derivatives') {
+                if (isModuleHidden('sidebar_derivatives')) return null;
+                return (
+                  <SortableModuleItem key={sidebarId} groupKey="sidebar" itemId={sidebarId} label={MODULES_CONFIG[sidebarId]?.label}>
               <div className="sidebar-accordion">
                 <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('derivatives')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('derivatives')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1664,10 +1769,14 @@ function AppContent() {
                   </div>
                 )}
               </div>
-            )}
+                  </SortableModuleItem>
+                );
+              }
 
-            {/* ── Sidebar Accordion Group 2: US Macro Economics ── */}
-            {!isModuleHidden('sidebar_macro') && (
+              if (sidebarId === 'sidebar_macro') {
+                if (isModuleHidden('sidebar_macro')) return null;
+                return (
+                  <SortableModuleItem key={sidebarId} groupKey="sidebar" itemId={sidebarId} label={MODULES_CONFIG[sidebarId]?.label}>
               <div className="sidebar-accordion">
                 <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('macro')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('macro')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1701,10 +1810,14 @@ function AppContent() {
                   </div>
                 )}
               </div>
-            )}
+                  </SortableModuleItem>
+                );
+              }
 
-            {/* ── Sidebar Accordion Group 3: BTC Network & On-chain ── */}
-            {!isModuleHidden('sidebar_onchain') && (
+              if (sidebarId === 'sidebar_onchain') {
+                if (isModuleHidden('sidebar_onchain')) return null;
+                return (
+                  <SortableModuleItem key={sidebarId} groupKey="sidebar" itemId={sidebarId} label={MODULES_CONFIG[sidebarId]?.label}>
               <div className="sidebar-accordion">
                 <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('onchain')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('onchain')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1885,7 +1998,12 @@ function AppContent() {
                   </div>
                 )}
               </div>
-            )}
+                  </SortableModuleItem>
+                );
+              }
+
+              return null;
+            })}
 
           </div>
         </aside>
@@ -2288,6 +2406,63 @@ function AppContent() {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Module Layout Order Section */}
+              <div className="settings-modal-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <h4 className="text-slate-300" style={{ margin: 0, fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <LayoutGrid size={13} className="text-emerald" /> VỊ TRÍ CÁC MODULE
+                  </h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditLayoutMode(!isEditLayoutMode);
+                        if (!isEditLayoutMode) setShowSettings(false);
+                      }}
+                      className="text-emerald"
+                      style={{
+                        background: isEditLayoutMode ? 'rgba(16,185,129,0.18)' : 'transparent',
+                        border: '1px solid rgba(16,185,129,0.4)',
+                        padding: '3px 9px',
+                        borderRadius: '4px',
+                        fontSize: '0.54rem',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <LayoutGrid size={11} />
+                      <span>{isEditLayoutMode ? 'Tắt chế độ kéo-thả' : 'Bật chế độ kéo-thả'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!hasCustomOrder}
+                      onClick={resetModuleOrders}
+                      style={{
+                        background: 'transparent',
+                        border: hasCustomOrder ? '1px solid rgba(245,158,11,0.4)' : '1px solid var(--border-panel)',
+                        color: hasCustomOrder ? 'var(--color-amber-400, #fbbf24)' : 'var(--text-slate-600)',
+                        padding: '3px 9px',
+                        borderRadius: '4px',
+                        fontSize: '0.54rem',
+                        cursor: hasCustomOrder ? 'pointer' : 'not-allowed',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        opacity: hasCustomOrder ? 1 : 0.55,
+                      }}
+                    >
+                      <RotateCcw size={11} />
+                      <span>Đặt lại mặc định</span>
+                    </button>
+                  </div>
+                </div>
+                <p className="text-slate-400" style={{ fontSize: '0.55rem', margin: 0, lineHeight: 1.4 }}>
+                  Dùng menu (⋮) trên từng module để di chuyển lên/xuống, hoặc bật chế độ kéo-thả để sắp xếp trực tiếp trong từng khu vực.
+                </p>
               </div>
 
               {/* Hidden Modules Section */}

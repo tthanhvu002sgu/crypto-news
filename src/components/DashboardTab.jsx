@@ -7,6 +7,7 @@ import CascadeTab from './CascadeTab';
 import OptionsRegimePanel from './OptionsRegimePanel';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import SortableModuleItem from './SortableModuleItem';
 import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 import CmeCotCard from './CmeCotCard';
 import CorrelationMatrixPanel from './CorrelationMatrixPanel';
@@ -38,7 +39,7 @@ export default function DashboardTab({
   etfAumChartData,
   etfAumChartOpts,
 }) {
-  const { isModuleHidden } = useModuleVisibility();
+  const { isModuleHidden, getGroupOrder, MODULES_CONFIG } = useModuleVisibility();
 
   const hasSection1 = !isModuleHidden('dash_macro') || !isModuleHidden('dash_correlation_matrix') || !isModuleHidden('dash_calendar') || !isModuleHidden('tab_cascade');
   const hasSection2 = !isModuleHidden('dash_etf_holdings') || !isModuleHidden('dash_etf_flows') || !isModuleHidden('dash_cme_cot') || !isModuleHidden('dash_macro_valuator');
@@ -71,8 +72,11 @@ export default function DashboardTab({
         </div>
       )}
 
-      {/* Macro Pulse Panel */}
-      {!isModuleHidden('dash_macro') && (
+      {getGroupOrder('dash_sec1').map((id) => {
+        if (id === 'dash_macro') {
+          if (isModuleHidden('dash_macro')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec1" itemId={id} label={MODULES_CONFIG[id]?.label}>
         <div className="glass-panel" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -195,30 +199,43 @@ export default function DashboardTab({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Ma Trận Tương Quan Vĩ Mô (Rolling 30D/90D) */}
-      {!isModuleHidden('dash_correlation_matrix') && (
-        <CorrelationMatrixPanel moduleId="dash_correlation_matrix" />
-      )}
-
-      {/* Lịch Kinh Tế Vĩ Mô 7 Ngày Trong Tuần */}
-      {!isModuleHidden('dash_calendar') && (
-        <EconomicCalendarPanel theme={theme} />
-      )}
-
-      {/* Thác Thanh Khoản — Sơ đồ lưu chuyển */}
-      {!isModuleHidden('tab_cascade') && (
-        <CascadeTab
-          data={data}
-          fmt={fmt}
-          fmtB={fmtB}
-          btcDisplay={btcDisplay}
-          fund={fund}
-          CASCADE_KEY_MAP={CASCADE_KEY_MAP}
-          METRIC_METADATA={METRIC_METADATA}
-        />
-      )}
+            </SortableModuleItem>
+          );
+        }
+        if (id === 'dash_correlation_matrix') {
+          if (isModuleHidden('dash_correlation_matrix')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec1" itemId={id} label={MODULES_CONFIG[id]?.label}>
+              <CorrelationMatrixPanel moduleId="dash_correlation_matrix" />
+            </SortableModuleItem>
+          );
+        }
+        if (id === 'dash_calendar') {
+          if (isModuleHidden('dash_calendar')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec1" itemId={id} label={MODULES_CONFIG[id]?.label}>
+              <EconomicCalendarPanel theme={theme} />
+            </SortableModuleItem>
+          );
+        }
+        if (id === 'tab_cascade') {
+          if (isModuleHidden('tab_cascade')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec1" itemId={id} label={MODULES_CONFIG[id]?.label}>
+              <CascadeTab
+                data={data}
+                fmt={fmt}
+                fmtB={fmtB}
+                btcDisplay={btcDisplay}
+                fund={fund}
+                CASCADE_KEY_MAP={CASCADE_KEY_MAP}
+                METRIC_METADATA={METRIC_METADATA}
+              />
+            </SortableModuleItem>
+          );
+        }
+        return null;
+      })}
 
       {/* ── SECTION 02: OPTIONS & GAMMA EXPOSURE ── */}
       {!isModuleHidden('dash_options_regime') && (
@@ -239,11 +256,17 @@ export default function DashboardTab({
         </div>
       )}
 
-      {/* US Spot Bitcoin ETFs Row */}
-      {(!isModuleHidden('dash_etf_holdings') || !isModuleHidden('dash_etf_flows')) && (
-        <div className="whales-row">
-          {/* Spot ETFs Holdings Panel */}
-          {!isModuleHidden('dash_etf_holdings') && (
+      {getGroupOrder('dash_sec2').map((id) => {
+        if (id === 'dash_etf_pair') {
+          if (isModuleHidden('dash_etf_holdings') && isModuleHidden('dash_etf_flows')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec2" itemId={id} label="Cụm US Spot Bitcoin ETFs (Holdings & Flows)">
+              <div className="whales-row">
+                {getGroupOrder('dash_etf_pair').map((pairId) => {
+                  if (pairId === 'dash_etf_holdings') {
+                    if (isModuleHidden('dash_etf_holdings')) return null;
+                    return (
+                      <SortableModuleItem key={pairId} groupKey="dash_etf_pair" itemId={pairId} isHorizontal label={MODULES_CONFIG[pairId]?.label} style={{ minWidth: 0 }}>
             <div className="glass-panel whale-panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -304,10 +327,13 @@ export default function DashboardTab({
                 </table>
               </div>
             </div>
-          )}
-
-          {/* Spot ETFs Net Flow History Chart Panel */}
-          {!isModuleHidden('dash_etf_flows') && (
+                      </SortableModuleItem>
+                    );
+                  }
+                  if (pairId === 'dash_etf_flows') {
+                    if (isModuleHidden('dash_etf_flows')) return null;
+                    return (
+                      <SortableModuleItem key={pairId} groupKey="dash_etf_pair" itemId={pairId} isHorizontal label={MODULES_CONFIG[pairId]?.label} style={{ minWidth: 0 }}>
             <div className="glass-panel whale-panel">
               <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -359,19 +385,33 @@ export default function DashboardTab({
                 )}
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* CME COT Module (Enhanced with Narrative & Historical Trend) */}
-      {!isModuleHidden('dash_cme_cot') && (
-        <CmeCotCard cotData={data.cotData} theme={theme} moduleId="dash_cme_cot" />
-      )}
-
-      {/* Macro Dashboard Valuator + PnL Matrix */}
-      {!isModuleHidden('dash_macro_valuator') && (
-        <MacroDashboardCard livePrice={btcDisplay?.price} theme={theme} moduleId="dash_macro_valuator" />
-      )}
+                      </SortableModuleItem>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            </SortableModuleItem>
+          );
+        }
+        if (id === 'dash_cme_cot') {
+          if (isModuleHidden('dash_cme_cot')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec2" itemId={id} label={MODULES_CONFIG[id]?.label}>
+              <CmeCotCard cotData={data.cotData} theme={theme} moduleId="dash_cme_cot" />
+            </SortableModuleItem>
+          );
+        }
+        if (id === 'dash_macro_valuator') {
+          if (isModuleHidden('dash_macro_valuator')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec2" itemId={id} label={MODULES_CONFIG[id]?.label}>
+              <MacroDashboardCard livePrice={btcDisplay?.price} theme={theme} moduleId="dash_macro_valuator" />
+            </SortableModuleItem>
+          );
+        }
+        return null;
+      })}
 
       {/* ── SECTION 04: TIN TỨC & DỰ BÁO PHI TẬP TRUNG ── */}
       {hasSection3 && (
@@ -381,8 +421,11 @@ export default function DashboardTab({
         </div>
       )}
 
-      {/* Tin tức vĩ mô */}
-      {!isModuleHidden('dash_news') && data.news && data.news.length > 0 && (
+      {getGroupOrder('dash_sec3').map((id) => {
+        if (id === 'dash_news') {
+          if (isModuleHidden('dash_news') || !data.news || data.news.length === 0) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec3" itemId={id} label={MODULES_CONFIG[id]?.label}>
         <div className="news-slider-wrapper glass-panel" style={{ position: 'relative' }}>
           <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>
             <ModuleMenu moduleId="dash_news" />
@@ -407,10 +450,19 @@ export default function DashboardTab({
             })}
           </div>
         </div>
-      )}
-
-      {/* Polymarket Whales Tracker */}
-      <PolymarketWhales moduleId="dash_polymarket" fmt={fmt} />
+            </SortableModuleItem>
+          );
+        }
+        if (id === 'dash_polymarket') {
+          if (isModuleHidden('dash_polymarket')) return null;
+          return (
+            <SortableModuleItem key={id} groupKey="dash_sec3" itemId={id} label={MODULES_CONFIG[id]?.label}>
+              <PolymarketWhales moduleId="dash_polymarket" fmt={fmt} />
+            </SortableModuleItem>
+          );
+        }
+        return null;
+      })}
     </div>
   );
 }
