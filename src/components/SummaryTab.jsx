@@ -1309,8 +1309,8 @@ ${promptData}
                 if (choice) {
                   const text = choice.content?.parts?.[0]?.text || '';
                   if (text) {
-                    currentText = cleanLatex(currentText + text);
-                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + currentText);
+                    currentText += text;
+                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + cleanLatex(currentText));
                   }
                   if (choice.finishReason && choice.finishReason !== 'STOP') {
                     if (choice.finishReason === 'SAFETY') {
@@ -1326,7 +1326,7 @@ ${promptData}
                         ? `\n\n**[Báo cáo dừng sớm. Lý do: ${choice.finishReason}]**`
                         : `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`;
                     }
-                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + currentText);
+                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + cleanLatex(currentText));
                   }
                 }
               }

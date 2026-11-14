@@ -88,4 +88,24 @@ describe('reportSanitizer & cleanReportMarkdown', () => {
     // Child bullet must be properly indented under group header
     assert.strictEqual(cleaned4b.includes('  - **Biên độ giá:** $77,904'), true);
   });
+
+  it('5. Keeps Base / Bullish / Bearish scenarios at the same root bullet level even if nested', () => {
+    const nestedScenarios = `## 3. 🔮 DỰ PHÓNG TƯƠNG LAI & MA TRẬN KỊCH BẢN (BASE / BULL / BEAR)
+- **Kịch Bản Cơ Sở — Base Case [55%]:**
+  - **Luận điểm cốt lõi:** Cần hấp thụ lực cung.
+  - **Mục Tiêu Giá (Targets):** T1: $71,200 | T2: $73,500.
+  - **Kịch Bản Tăng Giá — Bullish Scenario [20%]:**
+    - **Luận điểm:** Short Squeeze ngắn hạn.
+    - **Mục Tiêu Giá (Targets):** T1: $73,500 | T2: $76,000.
+    - **Kịch Bản Giảm Giá — Bearish Scenario [25%]:**
+      - **Luận điểm:** Dòng tiền bán tháo tiếp tục chi phối.
+      - **Mục Tiêu Giá (Targets):** T1: $66,000 | T2: $63,500.`;
+
+    const cleaned = cleanReportMarkdown(nestedScenarios);
+    assert.strictEqual(cleaned.includes('\n- **Kịch Bản Cơ Sở — Base Case [55%]:**'), true);
+    assert.strictEqual(cleaned.includes('\n- **Kịch Bản Tăng Giá — Bullish Scenario [20%]:**'), true);
+    assert.strictEqual(cleaned.includes('\n- **Kịch Bản Giảm Giá — Bearish Scenario [25%]:**'), true);
+    assert.strictEqual(cleaned.includes('\n  - **Luận điểm:** Short Squeeze ngắn hạn.'), true);
+    assert.strictEqual(cleaned.includes('\n  - **Luận điểm:** Dòng tiền bán tháo tiếp tục chi phối.'), true);
+  });
 });

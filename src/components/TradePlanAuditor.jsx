@@ -277,8 +277,8 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
                     const parsed = JSON.parse(dataStr);
                     const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
                     if (text) {
-                      currentText = cleanLatex(currentText + text);
-                      setAuditResult(currentText);
+                      currentText += text;
+                      setAuditResult(cleanLatex(currentText));
                     }
                   } catch {
                     continue;

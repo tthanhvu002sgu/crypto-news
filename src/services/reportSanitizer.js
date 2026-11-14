@@ -191,6 +191,7 @@ export function cleanReportMarkdown(text) {
   const formattedLines = [];
   let inGroupHeader = false;
   let groupBaseIndent = 0;
+  let groupOrigIndent = 0;
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
@@ -212,6 +213,7 @@ export function cleanReportMarkdown(text) {
     // Extract leading indentation
     const indentMatch = line.match(/^(\s*)/);
     let indent = indentMatch ? indentMatch[1] : '';
+    const origIndent = indent.length;
 
     if (/^[-•*]\s/.test(trimmed)) {
       // Clean leading bullet symbol to standard '- '
@@ -224,24 +226,33 @@ export function cleanReportMarkdown(text) {
       if (isGroupHeader) {
         // This is a parent category bullet
         inGroupHeader = true;
-        groupBaseIndent = indent.length;
+        const cleanHeaderLabel = contentAfterBullet.replace(/\*{1,2}/g, '').trim();
+        const isTopLevelScenario =
+          /^(?:Kịch\s*Bản\s*(?:Cơ\s*Sở|Tăng\s*Giá|Giảm\s*Giá)|(?:Base\s*Case|Bullish|Bearish)\s*Scenario)/i.test(
+            cleanHeaderLabel
+          );
+
+        groupOrigIndent = origIndent;
+        if (isTopLevelScenario) {
+          indent = '';
+          groupBaseIndent = 0;
+        } else {
+          groupBaseIndent = origIndent;
+        }
 
         // Format header bullet: e.g. "- **Phe Short bị kẹp (Trapped Shorts):**"
-        const cleanHeaderLabel = contentAfterBullet.replace(/\*{1,2}/g, '').trim();
         formattedLines.push(`${indent}- **${cleanHeaderLabel}**`);
         continue;
       }
 
       // If this is a content bullet under an active Group Header:
       if (inGroupHeader) {
-        if (indent.length <= groupBaseIndent) {
-          // It was unindented (same level as parent), promote it to child level (groupBaseIndent + 2 spaces)
+        const relIndent = Math.max(0, origIndent - groupOrigIndent);
+        if (relIndent <= 2) {
+          // Promote unindented or 1st-level child to groupBaseIndent + 2 spaces
           indent = ' '.repeat(groupBaseIndent + 2);
-        } else if (indent.length === groupBaseIndent + 2) {
-          // Preserve 2 spaces
-          indent = ' '.repeat(groupBaseIndent + 2);
-        } else if (indent.length > groupBaseIndent + 2) {
-          // Deep child (e.g. 4 spaces)
+        } else {
+          // Deep child (e.g. 4 spaces relative to group header)
           indent = ' '.repeat(groupBaseIndent + 4);
         }
       }
