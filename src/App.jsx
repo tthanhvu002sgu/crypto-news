@@ -1557,6 +1557,30 @@ function AppContent() {
             </svg>
           </div>
         </div>
+        <nav className="tabs-nav header-tabs-nav font-mono">
+          {tabOrder
+            .map(id => NAV_TABS_CONFIG.find(t => t.id === id))
+            .filter(t => t && (!t.moduleId || !isModuleHidden(t.moduleId)))
+            .map(t => (
+              <div
+                key={t.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, t.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleDrop(e, t.id)}
+                className={`tab-btn-wrapper ${draggedTabId === t.id ? 'is-dragging' : ''}`}
+                title="Kéo thả để sắp xếp lại vị trí Menu Tab"
+                style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+              >
+                <button
+                  className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
+                  onClick={() => setActiveTab(t.id)}
+                >
+                  {t.icon} {t.label}
+                </button>
+              </div>
+            ))}
+        </nav>
         <div className="header-right">
           <div className="header-icon-group">
             <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: tooltipsEnabled ? 'rgba(16,185,129,0.1)' : 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
@@ -2078,31 +2102,6 @@ function AppContent() {
 
         {/* ── Main Content Area ─────────────────────────────────────────────── */}
         <main className="content-area">
-          <nav className="tabs-nav font-mono">
-            {tabOrder
-              .map(id => NAV_TABS_CONFIG.find(t => t.id === id))
-              .filter(t => t && (!t.moduleId || !isModuleHidden(t.moduleId)))
-              .map(t => (
-                <div
-                  key={t.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, t.id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleDrop(e, t.id)}
-                  className={`tab-btn-wrapper ${draggedTabId === t.id ? 'is-dragging' : ''}`}
-                  title="Kéo thả để sắp xếp lại vị trí Menu Tab"
-                  style={{ display: 'inline-flex', alignItems: 'center' }}
-                >
-                  <button
-                    className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
-                    onClick={() => setActiveTab(t.id)}
-                  >
-                    {t.icon} {t.label}
-                  </button>
-                </div>
-              ))}
-          </nav>
-
           <div className="tab-content">
 
             {/* ══ 1. OVERVIEW TAB — Keep-Alive State ═══════════════════ */}
