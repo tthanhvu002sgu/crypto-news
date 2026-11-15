@@ -1556,17 +1556,8 @@ function AppContent() {
               />
             </svg>
           </div>
-          <div className="title-group">
-            <h1 className="app-title font-mono">SOVEREIGN MACRO TERMINAL</h1>
-          </div>
         </div>
         <div className="header-right">
-          <div className="status-box font-mono" title={lastSync ? `Lần đồng bộ gần nhất: ${lastSync}` : 'Chưa đồng bộ'}>
-            <LiveDot active={isOnline} />
-            <span className="text-slate-400">{isOnline ? 'LIVE' : 'OFFLINE'}</span>
-            {lastSync && <React.Fragment><span className="text-slate-500">•</span><span className="sync-time">{lastSync}</span></React.Fragment>}
-          </div>
-          <span className="header-divider" aria-hidden="true" />
           <div className="header-icon-group">
             <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: tooltipsEnabled ? 'rgba(16,185,129,0.1)' : 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
               <HelpCircle size={15} />
