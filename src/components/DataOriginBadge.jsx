@@ -36,13 +36,13 @@ export default function DataOriginBadge({
   label,
   title,
   compact = false,
-  iconOnly = false,
+  iconOnly = true,
   style = {},
 }) {
   const cfg = DATA_ORIGIN_CONFIG[origin] || DATA_ORIGIN_CONFIG.history;
   const Icon = cfg.icon;
   const displayLabel = label ?? (compact ? cfg.shortLabel : cfg.defaultLabel);
-  const tooltipText = title || cfg.description;
+  const tooltipText = title || (label ? `${label} — ${cfg.description}` : cfg.description);
 
   return (
     <span
@@ -62,15 +62,15 @@ export function DataOriginLegend({ compact = false, style = {} }) {
     <div className={`data-origin-legend font-mono${compact ? ' is-compact' : ''}`} style={style}>
       <span className="data-origin-legend-title">NGUỒN DỮ LIỆU:</span>
       <span className="data-origin-legend-item" title={DATA_ORIGIN_CONFIG.history.description}>
-        <DataOriginBadge origin="history" compact={compact} />
+        <DataOriginBadge origin="history" compact={compact} iconOnly={false} />
         <span className="data-origin-legend-desc">Tải sẵn quá khứ từ API</span>
       </span>
       <span className="data-origin-legend-item" title={DATA_ORIGIN_CONFIG.session.description}>
-        <DataOriginBadge origin="session" compact={compact} />
+        <DataOriginBadge origin="session" compact={compact} iconOnly={false} />
         <span className="data-origin-legend-desc">Chỉ ghi từ lúc mở tab</span>
       </span>
       <span className="data-origin-legend-item" title={DATA_ORIGIN_CONFIG.snapshot.description}>
-        <DataOriginBadge origin="snapshot" compact={compact} />
+        <DataOriginBadge origin="snapshot" compact={compact} iconOnly={false} />
         <span className="data-origin-legend-desc">Trạng thái hiện tại (không có lịch sử)</span>
       </span>
     </div>
