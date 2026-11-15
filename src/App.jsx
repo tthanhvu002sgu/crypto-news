@@ -12,6 +12,7 @@ import {
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import { fetchCached, readCacheValue } from './utils/cache';
 import { aggregateWeeklyEtfFlows, buildEtfFlowBarData } from './utils/etfFlows';
+import staticFlowHistory from './data/etfFlowHistoryStatic.json';
 import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import { processCotData } from './services/cotEngine';
@@ -274,17 +275,10 @@ const BASELINE_ETF_HOLDINGS = {
   total: 1258664
 };
 
-const BASELINE_ETF_FLOWS = Object.assign([
-  { date: '26/05/26', flow: -333.6 },
-  { date: '27/05/26', flow: -733.4 },
-  { date: '28/05/26', flow: -223.3 },
-  { date: '29/05/26', flow: -125.3 },
-  { date: '01/06/26', flow: -483.8 },
-  { date: '02/06/26', flow: -519.1 },
-  { date: '03/06/26', flow: -396.6 },
-  { date: '04/06/26', flow: 3.2 },
-  { date: '05/06/26', flow: -325.7 },
-], { isFallback: true, status: 'FALLBACK' });
+const BASELINE_ETF_FLOWS = Object.assign(
+  [...staticFlowHistory],
+  { isFallback: true, status: 'FALLBACK' }
+);
 
 const BASELINE_CME_COT = processCotData() || {
   isFallback: true,
@@ -1375,7 +1369,7 @@ function AppContent() {
   );
 
   const etfRecentWeeklyHistory = useMemo(
-    () => etfWeeklyHistory.slice(-15),
+    () => etfWeeklyHistory.slice(-12),
     [etfWeeklyHistory]
   );
 
@@ -1384,57 +1378,85 @@ function AppContent() {
     [etfRecentWeeklyHistory, theme]
   );
 
-  const etfFlowChartOpts = useMemo(() => ({
-    ...getChartOpts(theme),
-    plugins: {
-      ...getChartOpts(theme).plugins,
-      tooltip: {
-        ...getChartOpts(theme).plugins.tooltip,
-        callbacks: {
-          label: (context) => ` Dòng tiền ròng: ${context.parsed.y >= 0 ? '+' : ''}${context.parsed.y}M USD`
+  const etfFlowChartOpts = useMemo(() => {
+    const baseOpts = getChartOpts(theme);
+    return {
+      ...baseOpts,
+      plugins: {
+        ...baseOpts.plugins,
+        tooltip: {
+          ...baseOpts.plugins.tooltip,
+          callbacks: {
+            label: (context) => ` Dòng tiền ròng: ${context.parsed.y >= 0 ? '+' : ''}${context.parsed.y}M USD`
+          }
+        }
+      },
+      scales: {
+        ...baseOpts.scales,
+        x: {
+          ...baseOpts.scales.x,
+          ticks: {
+            ...baseOpts.scales.x.ticks,
+            autoSkip: false,
+            maxTicksLimit: 15,
+            maxRotation: 45,
+            minRotation: 0,
+            font: { family: 'Roboto Mono', size: 8 }
+          }
+        },
+        y: {
+          ...baseOpts.scales.y,
+          ticks: {
+            ...baseOpts.scales.y.ticks,
+            callback: (v) => `${v >= 0 ? '+' : ''}${v}M`
+          }
         }
       }
-    },
-    scales: {
-      ...getChartOpts(theme).scales,
-      y: {
-        ...getChartOpts(theme).scales.y,
-        ticks: {
-          ...getChartOpts(theme).scales.y.ticks,
-          callback: (v) => `${v >= 0 ? '+' : ''}${v}M`
-        }
-      }
-    }
-  }), [theme]);
+    };
+  }, [theme]);
 
-  const etfFlowWeeklyChartOpts = useMemo(() => ({
-    ...getChartOpts(theme),
-    plugins: {
-      ...getChartOpts(theme).plugins,
-      tooltip: {
-        ...getChartOpts(theme).plugins.tooltip,
-        callbacks: {
-          title: (items) => {
-            const idx = items?.[0]?.dataIndex;
-            const week = idx != null ? etfRecentWeeklyHistory[idx] : null;
-            if (!week) return '';
-            return `Tuần ${week.firstDate} – ${week.lastDate} (${week.sessions} phiên)`;
-          },
-          label: (context) => ` Tổng tuần: ${context.parsed.y >= 0 ? '+' : ''}${context.parsed.y}M USD`
+  const etfFlowWeeklyChartOpts = useMemo(() => {
+    const baseOpts = getChartOpts(theme);
+    return {
+      ...baseOpts,
+      plugins: {
+        ...baseOpts.plugins,
+        tooltip: {
+          ...baseOpts.plugins.tooltip,
+          callbacks: {
+            title: (items) => {
+              const idx = items?.[0]?.dataIndex;
+              const week = idx != null ? etfRecentWeeklyHistory[idx] : null;
+              if (!week) return '';
+              return `Tuần ${week.firstDate} – ${week.lastDate} (${week.sessions} phiên)`;
+            },
+            label: (context) => ` Tổng tuần: ${context.parsed.y >= 0 ? '+' : ''}${context.parsed.y}M USD`
+          }
+        }
+      },
+      scales: {
+        ...baseOpts.scales,
+        x: {
+          ...baseOpts.scales.x,
+          ticks: {
+            ...baseOpts.scales.x.ticks,
+            autoSkip: false,
+            maxTicksLimit: 12,
+            maxRotation: 45,
+            minRotation: 0,
+            font: { family: 'Roboto Mono', size: 8 }
+          }
+        },
+        y: {
+          ...baseOpts.scales.y,
+          ticks: {
+            ...baseOpts.scales.y.ticks,
+            callback: (v) => `${v >= 0 ? '+' : ''}${v}M`
+          }
         }
       }
-    },
-    scales: {
-      ...getChartOpts(theme).scales,
-      y: {
-        ...getChartOpts(theme).scales.y,
-        ticks: {
-          ...getChartOpts(theme).scales.y.ticks,
-          callback: (v) => `${v >= 0 ? '+' : ''}${v}M`
-        }
-      }
-    }
-  }), [theme, etfRecentWeeklyHistory]);
+    };
+  }, [theme, etfRecentWeeklyHistory]);
 
   // ── NUPL & Supply in Profit Calculations (Improved) ────────────────────────
   const btcNuplVal = useMemo(() => {
