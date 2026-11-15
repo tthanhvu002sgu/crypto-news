@@ -11,14 +11,14 @@ import {
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import { fetchCached, readCacheValue } from './utils/cache';
-import { aggregateWeeklyEtfFlows, buildEtfFlowBarData } from './utils/etfFlows';
+import { aggregateWeeklyEtfFlows, buildEtfFlowBarData, formatEtfFlowM } from './utils/etfFlows';
 import staticFlowHistory from './data/etfFlowHistoryStatic.json';
 import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import { processCotData } from './services/cotEngine';
 import {
   RefreshCw, BarChart2, BookOpen, Layers,
-  Terminal, HelpCircle, Zap, Radio, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
+  Terminal, HelpCircle, Zap, Crosshair, Moon, Sun, Settings, X, Sparkles, EyeOff,
   ChevronDown, ChevronRight, FileSpreadsheet, FileDown, PanelLeftClose, PanelLeftOpen,
   LayoutGrid, RotateCcw, Check
 } from 'lucide-react';
@@ -1387,7 +1387,7 @@ function AppContent() {
         tooltip: {
           ...baseOpts.plugins.tooltip,
           callbacks: {
-            label: (context) => ` Dòng tiền ròng: ${context.parsed.y >= 0 ? '+' : ''}${context.parsed.y}M USD`
+            label: (context) => ` Dòng tiền ròng: ${formatEtfFlowM(context.parsed.y)} USD`
           }
         }
       },
@@ -1408,7 +1408,7 @@ function AppContent() {
           ...baseOpts.scales.y,
           ticks: {
             ...baseOpts.scales.y.ticks,
-            callback: (v) => `${v >= 0 ? '+' : ''}${v}M`
+            callback: (v) => formatEtfFlowM(v)
           }
         }
       }
@@ -1430,7 +1430,7 @@ function AppContent() {
               if (!week) return '';
               return `Tuần ${week.firstDate} – ${week.lastDate} (${week.sessions} phiên)`;
             },
-            label: (context) => ` Tổng tuần: ${context.parsed.y >= 0 ? '+' : ''}${context.parsed.y}M USD`
+            label: (context) => ` Tổng tuần: ${formatEtfFlowM(context.parsed.y)} USD`
           }
         }
       },
@@ -1451,7 +1451,7 @@ function AppContent() {
           ...baseOpts.scales.y,
           ticks: {
             ...baseOpts.scales.y.ticks,
-            callback: (v) => `${v >= 0 ? '+' : ''}${v}M`
+            callback: (v) => formatEtfFlowM(v)
           }
         }
       }
@@ -1556,72 +1556,63 @@ function AppContent() {
               />
             </svg>
           </div>
-          <div>
-            <div className="title-group">
-              <h1 className="app-title font-mono">SOVEREIGN MACRO TERMINAL</h1>
-              <span className="version-badge font-mono">v5.1-LIVE</span>
-            </div>
-            <p className="subtitle font-mono">
-              Phân tích dòng tiền phi cảm xúc • Hoài nghi Socratic • Dữ liệu thực thời gian thực
-            </p>
+          <div className="title-group">
+            <h1 className="app-title font-mono">SOVEREIGN MACRO TERMINAL</h1>
           </div>
         </div>
         <div className="header-right">
-          <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: tooltipsEnabled ? 'rgba(16,185,129,0.1)' : 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
-            <HelpCircle size={15} />
-          </button>
-          <button
-            className="btn-icon"
-            onClick={toggleEditLayoutMode}
-            title={isEditLayoutMode ? "Thoát chế độ sắp xếp module" : "Sắp xếp vị trí module (Kéo-thả)"}
-            style={{
-              background: isEditLayoutMode ? 'rgba(16,185,129,0.16)' : 'transparent',
-              border: isEditLayoutMode ? '1px solid rgba(16,185,129,0.5)' : '1px solid var(--border-panel)',
-              color: isEditLayoutMode ? 'var(--color-emerald-400)' : 'var(--text-slate-400)',
-              padding: '7px',
-              borderRadius: '50%',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.25s ease'
-            }}
-          >
-            <LayoutGrid size={15} />
-          </button>
-          <button className="btn-icon" onClick={() => setShowSettings(true)} title="API Settings" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
-            <Settings size={15} />
-          </button>
-          <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
-          <div className="status-box font-mono">
+          <div className="status-box font-mono" title={lastSync ? `Lần đồng bộ gần nhất: ${lastSync}` : 'Chưa đồng bộ'}>
             <LiveDot active={isOnline} />
             <span className="text-slate-400">{isOnline ? 'LIVE' : 'OFFLINE'}</span>
             {lastSync && <React.Fragment><span className="text-slate-500">•</span><span className="sync-time">{lastSync}</span></React.Fragment>}
-            </div>
-          {/* WebSocket status badge */}
-          <div className={`ws-badge font-mono ws-${wsStatus}`}>
-            {wsStatus === 'connected'
-              ? <React.Fragment><Zap size={10} /> WS LIVE</React.Fragment>
-              : wsStatus === 'connecting'
-              ? <React.Fragment><Radio size={10} className="spinning" /> WS...</React.Fragment>  
-              : <React.Fragment><Radio size={10} /> WS OFF</React.Fragment>}
-            </div>
-          <div className="auto-refresh-badge font-mono" title="HOT 5m · WARM 15m · COLD 60m (TTL cache)">REST ⟳ TIERED</div>
-          <button className="btn-sync font-mono" onClick={() => syncData(true, ['hot', 'warm', 'cold'])} disabled={isSyncing}>
-            <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
-            {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
-          </button>
-          <button
-            className="btn-sync font-mono btn-export-md"
-            onClick={handleExportMarkdown}
-            disabled={isExportingMd}
-            title="Xuất toàn bộ 12 mục dữ liệu Terminal (Market Bias, Options Deribit, ETF Flow, CME COT, Macro v2, CVD, Flow Regime, L/S, OI, Whale Walls, OBI, Altcoin Scanner - Mới nhất & Lịch sử) ra file Markdown (.md)"
-          >
-            <FileDown size={13} className={isExportingMd ? 'spinning' : ''} />
-            {isExportingMd ? 'ĐANG XUẤT MD...' : 'XUẤT DATA MD'}
-          </button>
+          </div>
+          <span className="header-divider" aria-hidden="true" />
+          <div className="header-icon-group">
+            <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: tooltipsEnabled ? 'rgba(16,185,129,0.1)' : 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
+              <HelpCircle size={15} />
+            </button>
+            <button
+              className="btn-icon"
+              onClick={toggleEditLayoutMode}
+              title={isEditLayoutMode ? "Thoát chế độ sắp xếp module" : "Sắp xếp vị trí module (Kéo-thả)"}
+              style={{
+                background: isEditLayoutMode ? 'rgba(16,185,129,0.16)' : 'transparent',
+                border: isEditLayoutMode ? '1px solid rgba(16,185,129,0.5)' : '1px solid var(--border-panel)',
+                color: isEditLayoutMode ? 'var(--color-emerald-400)' : 'var(--text-slate-400)',
+                padding: '7px',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.25s ease'
+              }}
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
+              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+            <button className="btn-icon" onClick={() => setShowSettings(true)} title="API Settings" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
+              <Settings size={15} />
+            </button>
+          </div>
+          <span className="header-divider" aria-hidden="true" />
+          <div className="header-actions-group">
+            <button className="btn-sync font-mono" onClick={() => syncData(true, ['hot', 'warm', 'cold'])} disabled={isSyncing}>
+              <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
+              {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
+            </button>
+            <button
+              className="btn-sync font-mono btn-export-md"
+              onClick={handleExportMarkdown}
+              disabled={isExportingMd}
+              title="Xuất toàn bộ 12 mục dữ liệu Terminal (Market Bias, Options Deribit, ETF Flow, CME COT, Macro v2, CVD, Flow Regime, L/S, OI, Whale Walls, OBI, Altcoin Scanner - Mới nhất & Lịch sử) ra file Markdown (.md)"
+            >
+              <FileDown size={13} className={isExportingMd ? 'spinning' : ''} />
+              {isExportingMd ? 'ĐANG XUẤT MD...' : 'XUẤT DATA MD'}
+            </button>
+          </div>
         </div>
       </header>
 
