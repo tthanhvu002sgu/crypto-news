@@ -132,8 +132,24 @@ export default function SortableModuleItem({
           userSelect: 'none',
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
           <GripVertical size={13} />
+          {order.length > 1 && idx !== -1 && (
+            <span
+              style={{
+                padding: '1px 5px',
+                borderRadius: '4px',
+                background: 'rgba(16, 185, 129, 0.18)',
+                border: '1px solid rgba(16, 185, 129, 0.35)',
+                fontSize: '0.55rem',
+                fontWeight: 700,
+                color: '#6ee7b7',
+              }}
+              title={`Vị trí hiện tại: ${idx + 1}/${order.length}`}
+            >
+              #{idx + 1}
+            </span>
+          )}
           <span>{label || itemId}</span>
         </span>
         {order.length > 1 && (

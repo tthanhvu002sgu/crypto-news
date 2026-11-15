@@ -64,15 +64,27 @@ export default function DashboardTab({
         <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} theme={theme} moduleId="dash_bias" />
       )}
 
-      {/* ── SECTION 01: VĨ MÔ & THÁC THANH KHOẢN ── */}
-      {hasSection1 && (
-        <div className="overview-section-header font-mono">
-          <span className="overview-section-badge">01 // VĨ MÔ &amp; THÁC THANH KHOẢN</span>
-          <span className="overview-section-desc text-slate-500">Chu kỳ kinh tế, van thanh khoản vĩ mô &amp; lịch sự kiện</span>
-        </div>
-      )}
+      {(() => {
+        const visibleSectionIds = getGroupOrder('dash_sections').filter((secId) => {
+          if (secId === 'dash_sec1') return hasSection1;
+          if (secId === 'dash_options_regime') return !isModuleHidden('dash_options_regime');
+          if (secId === 'dash_sec2') return hasSection2;
+          if (secId === 'dash_sec3') return hasSection3;
+          return false;
+        });
 
-      {getGroupOrder('dash_sec1').map((id) => {
+        return visibleSectionIds.map((secId, secIdx) => {
+          const secNum = String(secIdx + 1).padStart(2, '0');
+
+          if (secId === 'dash_sec1') {
+            return (
+              <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label="Nhóm: Vĩ Mô & Thác Thanh Khoản" className="dashboard-layout">
+                <div className="overview-section-header font-mono">
+                  <span className="overview-section-badge">{secNum} // VĨ MÔ &amp; THÁC THANH KHOẢN</span>
+                  <span className="overview-section-desc text-slate-500">Chu kỳ kinh tế, van thanh khoản vĩ mô &amp; lịch sự kiện</span>
+                </div>
+
+                {getGroupOrder('dash_sec1').map((id) => {
         if (id === 'dash_macro') {
           if (isModuleHidden('dash_macro')) return null;
           return (
@@ -235,28 +247,32 @@ export default function DashboardTab({
           );
         }
         return null;
-      })}
+                })}
+              </SortableModuleItem>
+            );
+          }
 
-      {/* ── SECTION 02: OPTIONS & GAMMA EXPOSURE ── */}
-      {!isModuleHidden('dash_options_regime') && (
-        <>
-          <div className="overview-section-header font-mono">
-            <span className="overview-section-badge">02 // OPTIONS &amp; GAMMA EXPOSURE</span>
-            <span className="overview-section-desc text-slate-500">Call/Put Wall, GEX Flip, Max Pain &amp; Gamma Regime từ Deribit</span>
-          </div>
-          <OptionsRegimePanel moduleId="dash_options_regime" />
-        </>
-      )}
+          if (secId === 'dash_options_regime') {
+            return (
+              <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label={MODULES_CONFIG[secId]?.label} className="dashboard-layout">
+                <div className="overview-section-header font-mono">
+                  <span className="overview-section-badge">{secNum} // OPTIONS &amp; GAMMA EXPOSURE</span>
+                  <span className="overview-section-desc text-slate-500">Call/Put Wall, GEX Flip, Max Pain &amp; Gamma Regime từ Deribit</span>
+                </div>
+                <OptionsRegimePanel moduleId="dash_options_regime" />
+              </SortableModuleItem>
+            );
+          }
 
-      {/* ── SECTION 03: TỔ CHỨC TRADFI & ĐỊNH GIÁ CHU KỲ ── */}
-      {hasSection2 && (
-        <div className="overview-section-header font-mono">
-          <span className="overview-section-badge">03 // TỔ CHỨC TRADFI &amp; ĐỊNH GIÁ CHU KỲ</span>
-          <span className="overview-section-desc text-slate-500">Dòng vốn Spot ETF, vị thế phái sinh CME COT &amp; mô hình định giá chu kỳ</span>
-        </div>
-      )}
+          if (secId === 'dash_sec2') {
+            return (
+              <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label="Nhóm: Tổ Chức TradFi & Định Giá Chu Kỳ" className="dashboard-layout">
+                <div className="overview-section-header font-mono">
+                  <span className="overview-section-badge">{secNum} // TỔ CHỨC TRADFI &amp; ĐỊNH GIÁ CHU KỲ</span>
+                  <span className="overview-section-desc text-slate-500">Dòng vốn Spot ETF, vị thế phái sinh CME COT &amp; mô hình định giá chu kỳ</span>
+                </div>
 
-      {getGroupOrder('dash_sec2').map((id) => {
+                {getGroupOrder('dash_sec2').map((id) => {
         if (id === 'dash_etf_pair') {
           if (isModuleHidden('dash_etf_holdings') && isModuleHidden('dash_etf_flows')) return null;
           return (
@@ -411,17 +427,20 @@ export default function DashboardTab({
           );
         }
         return null;
-      })}
+                })}
+              </SortableModuleItem>
+            );
+          }
 
-      {/* ── SECTION 04: TIN TỨC & DỰ BÁO PHI TẬP TRUNG ── */}
-      {hasSection3 && (
-        <div className="overview-section-header font-mono">
-          <span className="overview-section-badge">04 // TIN TỨC &amp; DỰ BÁO PHI TẬP TRUNG</span>
-          <span className="overview-section-desc text-slate-500">Dòng tin tức thị trường &amp; cược thông minh Polymarket</span>
-        </div>
-      )}
+          if (secId === 'dash_sec3') {
+            return (
+              <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label="Nhóm: Tin Tức & Dự Báo Phi Tập Trung" className="dashboard-layout">
+                <div className="overview-section-header font-mono">
+                  <span className="overview-section-badge">{secNum} // TIN TỨC &amp; DỰ BÁO PHI TẬP TRUNG</span>
+                  <span className="overview-section-desc text-slate-500">Dòng tin tức thị trường &amp; cược thông minh Polymarket</span>
+                </div>
 
-      {getGroupOrder('dash_sec3').map((id) => {
+                {getGroupOrder('dash_sec3').map((id) => {
         if (id === 'dash_news') {
           if (isModuleHidden('dash_news') || !data.news || data.news.length === 0) return null;
           return (
@@ -462,7 +481,14 @@ export default function DashboardTab({
           );
         }
         return null;
-      })}
+                })}
+              </SortableModuleItem>
+            );
+          }
+
+          return null;
+        });
+      })()}
     </div>
   );
 }

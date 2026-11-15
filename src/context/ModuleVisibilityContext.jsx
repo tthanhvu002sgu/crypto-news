@@ -8,6 +8,7 @@ const ORDER_STORAGE_KEY = 'app-module-orders';
 
 export const DEFAULT_MODULE_ORDERS = {
   sidebar: ['sidebar_derivatives', 'sidebar_macro', 'sidebar_onchain'],
+  dash_sections: ['dash_sec1', 'dash_options_regime', 'dash_sec2', 'dash_sec3'],
   dash_sec1: ['dash_macro', 'dash_correlation_matrix', 'dash_calendar', 'tab_cascade'],
   dash_sec2: ['dash_etf_pair', 'dash_cme_cot', 'dash_macro_valuator'],
   dash_etf_pair: ['dash_etf_holdings', 'dash_etf_flows'],
