@@ -36,6 +36,9 @@ export default function DashboardTab({
   setEtfAumTimeframe,
   etfFlowChartData,
   etfFlowChartOpts,
+  etfWeeklyHistory = [],
+  etfFlowWeeklyChartData,
+  etfFlowWeeklyChartOpts,
   etfAumChartData,
   etfAumChartOpts,
 }) {
@@ -389,17 +392,61 @@ export default function DashboardTab({
                   <ModuleMenu moduleId="dash_etf_flows" />
                 </div>
               </div>
-              <div className="chart-body" style={{ height: '220px' }}>
-                {etfHistory.length > 0 ? (
-                  etfChartType === 'flows' ? (
-                    <Bar data={etfFlowChartData} options={etfFlowChartOpts} />
-                  ) : (
-                    <Line data={etfAumChartData} options={etfAumChartOpts} />
-                  )
+              {etfHistory.length > 0 ? (
+                etfChartType === 'flows' ? (
+                  <div className="etf-flows-split">
+                    <div className="etf-flow-subpanel">
+                      <div className="etf-flow-subpanel-header font-mono">
+                        <span className="etf-flow-tf-badge">D · NGÀY</span>
+                        {(() => {
+                          const latestDay = etfHistory[etfHistory.length - 1];
+                          if (!latestDay) return null;
+                          const val = Number(latestDay.flow);
+                          return (
+                            <span className={`etf-flow-latest ${val >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                              {latestDay.date}: {val >= 0 ? '+' : ''}{val}M
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div className="etf-flow-chart-wrap">
+                        <Bar data={etfFlowChartData} options={etfFlowChartOpts} />
+                      </div>
+                    </div>
+
+                    <div className="etf-flow-subpanel">
+                      <div className="etf-flow-subpanel-header font-mono">
+                        <span className="etf-flow-tf-badge">W · TUẦN</span>
+                        {(() => {
+                          const latestWeek = etfWeeklyHistory[etfWeeklyHistory.length - 1];
+                          if (!latestWeek) return null;
+                          const val = Number(latestWeek.flow);
+                          return (
+                            <span className={`etf-flow-latest ${val >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                              {latestWeek.label}: {val >= 0 ? '+' : ''}{val}M
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div className="etf-flow-chart-wrap">
+                        {etfFlowWeeklyChartData?.labels?.length > 0 ? (
+                          <Bar data={etfFlowWeeklyChartData} options={etfFlowWeeklyChartOpts} />
+                        ) : (
+                          <div className="chart-empty font-mono">Chưa có dữ liệu tuần</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 ) : (
+                  <div className="chart-body" style={{ height: '220px' }}>
+                    <Line data={etfAumChartData} options={etfAumChartOpts} />
+                  </div>
+                )
+              ) : (
+                <div className="chart-body" style={{ height: '220px' }}>
                   <div className="chart-empty font-mono">Đang tải biểu đồ...</div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
                       </SortableModuleItem>
                     );

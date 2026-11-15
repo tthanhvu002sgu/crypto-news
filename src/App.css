@@ -2216,6 +2216,51 @@
   color: var(--bg-slate-950);
   font-weight: 700;
 }
+.etf-flows-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.etf-flow-subpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--card-radius-xs);
+  background: var(--bg-slate-900);
+  border: 1px solid var(--border-panel);
+  min-width: 0;
+}
+.etf-flow-subpanel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.etf-flow-tf-badge {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-contrast);
+  background: var(--bg-slate-950);
+  border: 1px solid var(--border-panel);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.etf-flow-latest {
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+.etf-flow-chart-wrap {
+  height: 190px;
+  position: relative;
+}
+@media (max-width: 900px) {
+  .etf-flows-split {
+    grid-template-columns: 1fr;
+  }
+}
 .etf-sum-card {
   padding: 10px;
   border-radius: var(--card-radius-xs);

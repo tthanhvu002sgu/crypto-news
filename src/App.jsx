@@ -11,6 +11,7 @@ import {
 } from './services/api';
 import { useBinanceWebSocket, useCVDStream } from './services/websocket';
 import { fetchCached, readCacheValue } from './utils/cache';
+import { aggregateWeeklyEtfFlows, buildEtfFlowBarData } from './utils/etfFlows';
 import { updateBrowserChromeImmediate } from './utils/browserChrome';
 import { CACHE_TTL, SYNC_INTERVAL } from './config/syncConfig';
 import { processCotData } from './services/cotEngine';
@@ -1362,33 +1363,26 @@ function AppContent() {
     }
   }), [theme]);
 
-  // ── ETF Net Flows Bar Chart ────────────────────────────────────────────────
+  // ── ETF Net Flows Bar Charts (Daily & Weekly) ─────────────────────────────
   const etfFlowChartData = useMemo(() => {
     const recentHistory = etfHistory.slice(-15);
-    return {
-      labels: recentHistory.map(h => h.date),
-      datasets: [{
-        label: 'Net Flow (M USD)',
-        data: recentHistory.map(h => h.flow),
-        backgroundColor: recentHistory.map(h => {
-          if (h.flow >= 0) {
-            return theme === 'light' ? '#047857' : '#10b981';
-          } else {
-            return theme === 'light' ? '#be123c' : '#f43f5e';
-          }
-        }),
-        borderColor: recentHistory.map(h => {
-          if (h.flow >= 0) {
-            return theme === 'light' ? '#064e3b' : '#059669';
-          } else {
-            return theme === 'light' ? '#881337' : '#e11d48';
-          }
-        }),
-        borderWidth: 1,
-        borderRadius: 2,
-      }]
-    };
+    return buildEtfFlowBarData(recentHistory, theme, { labelKey: 'date' });
   }, [etfHistory, theme]);
+
+  const etfWeeklyHistory = useMemo(
+    () => aggregateWeeklyEtfFlows(etfHistory),
+    [etfHistory]
+  );
+
+  const etfRecentWeeklyHistory = useMemo(
+    () => etfWeeklyHistory.slice(-15),
+    [etfWeeklyHistory]
+  );
+
+  const etfFlowWeeklyChartData = useMemo(
+    () => buildEtfFlowBarData(etfRecentWeeklyHistory, theme, { labelKey: 'label' }),
+    [etfRecentWeeklyHistory, theme]
+  );
 
   const etfFlowChartOpts = useMemo(() => ({
     ...getChartOpts(theme),
@@ -1412,6 +1406,35 @@ function AppContent() {
       }
     }
   }), [theme]);
+
+  const etfFlowWeeklyChartOpts = useMemo(() => ({
+    ...getChartOpts(theme),
+    plugins: {
+      ...getChartOpts(theme).plugins,
+      tooltip: {
+        ...getChartOpts(theme).plugins.tooltip,
+        callbacks: {
+          title: (items) => {
+            const idx = items?.[0]?.dataIndex;
+            const week = idx != null ? etfRecentWeeklyHistory[idx] : null;
+            if (!week) return '';
+            return `Tuần ${week.firstDate} – ${week.lastDate} (${week.sessions} phiên)`;
+          },
+          label: (context) => ` Tổng tuần: ${context.parsed.y >= 0 ? '+' : ''}${context.parsed.y}M USD`
+        }
+      }
+    },
+    scales: {
+      ...getChartOpts(theme).scales,
+      y: {
+        ...getChartOpts(theme).scales.y,
+        ticks: {
+          ...getChartOpts(theme).scales.y.ticks,
+          callback: (v) => `${v >= 0 ? '+' : ''}${v}M`
+        }
+      }
+    }
+  }), [theme, etfRecentWeeklyHistory]);
 
   // ── NUPL & Supply in Profit Calculations (Improved) ────────────────────────
   const btcNuplVal = useMemo(() => {
@@ -2099,6 +2122,9 @@ function AppContent() {
                 setEtfAumTimeframe={setEtfAumTimeframe}
                 etfFlowChartData={etfFlowChartData}
                 etfFlowChartOpts={etfFlowChartOpts}
+                etfWeeklyHistory={etfWeeklyHistory}
+                etfFlowWeeklyChartData={etfFlowWeeklyChartData}
+                etfFlowWeeklyChartOpts={etfFlowWeeklyChartOpts}
                 etfAumChartData={etfAumChartData}
                 etfAumChartOpts={etfAumChartOpts}
               />
