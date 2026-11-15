@@ -2058,8 +2058,8 @@ const parseETFHoldingsFromMarkdown = (markdown) => {
 
 /**
  * Lấy lịch sử dòng tiền ETF từ Farside Investors
- * - Sử dụng dữ liệu tĩnh đã bundled sẵn (đến 18/06/26) làm base
- * - Thử fetch trang /btc/ (hiện tại) để bổ sung các ngày mới nhất
+ * - Sử dụng dữ liệu tĩnh đã bundled sẵn (đến 13/11/26) làm base
+ * - Thử fetch trang /btc/ (hiện tại) để bổ sung các ngày mới nhất; nếu phát hiện gap > 7 ngày thì tự backfill từ /bitcoin-etf-flow-all-data/
  */
 export const getETFFlowHistory = async () => {
   const months = {
@@ -2096,50 +2096,69 @@ export const getETFFlowHistory = async () => {
     return sortable < localToday;
   };
 
-  // Start with bundled static data (Jan 2024 → Jun 2026)
+  const parseFarsideRowsAfter = (content, afterSortable) => {
+    if (!content || !content.includes('|')) return [];
+    const rows = [];
+    const dateRegex = /^\s*\|\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s*\|/;
+    for (const line of content.split('\n')) {
+      const match = line.match(dateRegex);
+      if (!match) continue;
+      const cells = line.split('|').map(c => c.trim());
+      const flowVal = parseFlowValue(cells[cells.length - 2]);
+      if (isNaN(flowVal)) continue;
+      const parts = match[1].trim().split(/\s+/);
+      const day = parts[0].padStart(2, '0');
+      const month = months[parts[1].substring(0, 3)] || '01';
+      const year = parts[2];
+      const formattedDate = `${day}/${month}/${year ? year.substring(2) : '26'}`;
+      if ((!afterSortable || toSortableDate(formattedDate) > afterSortable) && isCompletedObservation(formattedDate)) {
+        rows.push({ date: formattedDate, flow: flowVal });
+      }
+    }
+    return rows;
+  };
+
+  // Start with bundled static data (Jan 2024 → Nov 2026)
   const baseHistory = [...staticFlowHistory];
   const lastStaticDate = baseHistory.length > 0 ? baseHistory[baseHistory.length - 1].date : null;
   const lastStaticSortable = lastStaticDate ? toSortableDate(lastStaticDate) : null;
-  
+
   // Try to fetch new rows from /btc/ (current month page - less protected)
   try {
     const content = await fetchWithJina('https://farside.co.uk/btc/', 'text');
-    if (content && content.includes('|')) {
-      const newRows = [];
-      const lines = content.split('\n');
-      const dateRegex = /^\s*\|\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s*\|/;
-      for (const line of lines) {
-        const match = line.match(dateRegex);
-        if (match) {
-          const dateStr = match[1];
-          const cells = line.split('|').map(c => c.trim());
-          const totalStr = cells[cells.length - 2];
-          const flowVal = parseFlowValue(totalStr);
-          if (!isNaN(flowVal)) {
-            const parts = dateStr.trim().split(/\s+/);
-            const day = parts[0].padStart(2, '0');
-            const monthStr = parts[1].substring(0, 3);
-            const year = parts[2];
-            const month = months[monthStr] || '01';
-            const formattedDate = `${day}/${month}/${year ? year.substring(2) : '26'}`;
-            // Only add rows newer than last static date using sortable YYYY-MM-DD format
-            if (!lastStaticSortable || toSortableDate(formattedDate) > lastStaticSortable) {
-              if (isCompletedObservation(formattedDate)) {
-                newRows.push({ date: formattedDate, flow: flowVal });
-              }
-            }
+    let newRows = parseFarsideRowsAfter(content, lastStaticSortable);
+    newRows.sort((a, b) => toSortableDate(a.date).localeCompare(toSortableDate(b.date)));
+
+    // If /btc/ leaves a >7d gap after static history, backfill from /bitcoin-etf-flow-all-data/
+    const hasGap = lastStaticSortable && (
+      newRows.length === 0 ||
+      (Date.parse(toSortableDate(newRows[0].date)) - Date.parse(lastStaticSortable)) > 7 * 86_400_000
+    );
+    if (hasGap) {
+      try {
+        const allContent = await fetchWithJina('https://farside.co.uk/bitcoin-etf-flow-all-data/', 'text');
+        const backfilled = parseFarsideRowsAfter(allContent, lastStaticSortable);
+        if (backfilled.length > 0) {
+          const mergedMap = new Map();
+          for (const row of [...backfilled, ...newRows]) {
+            mergedMap.set(toSortableDate(row.date), row);
           }
+          newRows = Array.from(mergedMap.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([, row]) => row);
         }
+      } catch (allErr) {
+        console.warn('[API] ETF Flow /bitcoin-etf-flow-all-data/ backfill failed:', allErr.message);
       }
-      if (newRows.length > 0) {
-        newRows.sort((a, b) => toSortableDate(a.date).localeCompare(toSortableDate(b.date)));
-        console.log(`[API] ETF Flow: appended ${newRows.length} new rows from /btc/`);
-        const combined = [...baseHistory, ...newRows];
-        combined.isFallback = false;
-        combined.source = 'FARSIDE_LIVE';
-        combined.lastObservationDate = combined[combined.length - 1]?.date;
-        return combined;
-      }
+    }
+
+    if (newRows.length > 0) {
+      console.log(`[API] ETF Flow: appended ${newRows.length} new rows from Farside`);
+      const combined = [...baseHistory, ...newRows];
+      combined.isFallback = false;
+      combined.source = 'FARSIDE_LIVE';
+      combined.lastObservationDate = combined[combined.length - 1]?.date;
+      return combined;
     }
   } catch (e) {
     console.warn('[API] ETF Flow /btc/ fetch failed, using static data only:', e.message);
