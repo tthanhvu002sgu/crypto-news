@@ -37,6 +37,7 @@
     "test:export": "node --test src/services/markdownExportService.test.js"
   },
   "dependencies": {
+    "@upstash/redis": "^1.41.0",
     "axios": "^1.17.0",
     "chart.js": "^4.5.1",
     "framer-motion": "^12.40.0",

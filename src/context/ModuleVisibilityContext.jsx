@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { MODULES_CONFIG } from '../config/modulesConfig';
 
 export { MODULES_CONFIG };
 
 const STORAGE_KEY = 'app-hidden-modules';
 const ORDER_STORAGE_KEY = 'app-module-orders';
+const LAYOUT_API_ENDPOINT = '/api/layout';
 
 export const DEFAULT_MODULE_ORDERS = {
   sidebar: ['sidebar_derivatives', 'sidebar_macro', 'sidebar_onchain'],
@@ -82,6 +83,21 @@ export function ModuleVisibilityProvider({ children }) {
   });
 
   const [isEditLayoutMode, setIsEditLayoutMode] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState('idle');
+
+  const hiddenModulesRef = useRef(hiddenModules);
+  const moduleOrdersRef = useRef(moduleOrders);
+  const isRemoteConfiguredRef = useRef(true);
+  const hasUserEditedRef = useRef(false);
+  const syncTimerRef = useRef(null);
+
+  useEffect(() => {
+    hiddenModulesRef.current = hiddenModules;
+  }, [hiddenModules]);
+
+  useEffect(() => {
+    moduleOrdersRef.current = moduleOrders;
+  }, [moduleOrders]);
 
   const saveToStorage = (list) => {
     try {
@@ -99,28 +115,136 @@ export function ModuleVisibilityProvider({ children }) {
     }
   };
 
+  const pushLayoutToCloud = useCallback(async (nextHidden, nextOrders) => {
+    if (!isRemoteConfiguredRef.current) return;
+    setCloudSyncStatus('syncing');
+    try {
+      const res = await fetch(LAYOUT_API_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hiddenModules: nextHidden,
+          moduleOrders: nextOrders,
+        }),
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        isRemoteConfiguredRef.current = false;
+        setCloudSyncStatus('local');
+        return;
+      }
+      const data = await res.json();
+      if (data?.configured === false) {
+        isRemoteConfiguredRef.current = false;
+        setCloudSyncStatus('local');
+        return;
+      }
+      setCloudSyncStatus('synced');
+    } catch (e) {
+      console.warn('Cloud layout sync failed (falling back to localStorage):', e);
+      setCloudSyncStatus('local');
+    }
+  }, []);
+
+  const scheduleCloudSync = useCallback((nextHidden, nextOrders) => {
+    hasUserEditedRef.current = true;
+    hiddenModulesRef.current = nextHidden;
+    moduleOrdersRef.current = nextOrders;
+    if (!isRemoteConfiguredRef.current) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      pushLayoutToCloud(hiddenModulesRef.current, moduleOrdersRef.current);
+    }, 250);
+  }, [pushLayoutToCloud]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateFromCloud() {
+      try {
+        const res = await fetch(LAYOUT_API_ENDPOINT, { cache: 'no-store' });
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) {
+          isRemoteConfiguredRef.current = false;
+          if (!cancelled) setCloudSyncStatus('local');
+          return;
+        }
+
+        const data = await res.json();
+        if (!data?.configured) {
+          isRemoteConfiguredRef.current = false;
+          if (!cancelled) setCloudSyncStatus('local');
+          return;
+        }
+
+        if (cancelled || hasUserEditedRef.current) return;
+
+        if (data.layout) {
+          const remoteHidden = Array.isArray(data.layout.hiddenModules)
+            ? data.layout.hiddenModules
+            : [];
+          const remoteOrders = mergeOrdersWithDefaults(data.layout.moduleOrders);
+          hiddenModulesRef.current = remoteHidden;
+          moduleOrdersRef.current = remoteOrders;
+          setHiddenModules(remoteHidden);
+          setModuleOrders(remoteOrders);
+          saveToStorage(remoteHidden);
+          saveOrdersToStorage(remoteOrders);
+          setCloudSyncStatus('synced');
+        } else {
+          // Seed cloud DB on first run if current device already has local customizations
+          const localHasHidden = hiddenModulesRef.current.length > 0;
+          const localHasCustomOrder = Object.entries(DEFAULT_MODULE_ORDERS).some(
+            ([groupKey, defaultList]) => {
+              const current = moduleOrdersRef.current[groupKey] || defaultList;
+              return current.length !== defaultList.length || current.some((id, idx) => id !== defaultList[idx]);
+            }
+          );
+          if (localHasHidden || localHasCustomOrder) {
+            await pushLayoutToCloud(hiddenModulesRef.current, moduleOrdersRef.current);
+          } else {
+            setCloudSyncStatus('synced');
+          }
+        }
+      } catch {
+        isRemoteConfiguredRef.current = false;
+        if (!cancelled) setCloudSyncStatus('local');
+      }
+    }
+
+    hydrateFromCloud();
+
+    return () => {
+      cancelled = true;
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [pushLayoutToCloud]);
+
   const hideModule = useCallback((id) => {
     setHiddenModules((prev) => {
       if (prev.includes(id)) return prev;
       const next = [...prev, id];
       saveToStorage(next);
+      scheduleCloudSync(next, moduleOrdersRef.current);
       return next;
     });
-  }, []);
+  }, [scheduleCloudSync]);
 
   const showModule = useCallback((id) => {
     setHiddenModules((prev) => {
       if (!prev.includes(id)) return prev;
       const next = prev.filter((mId) => mId !== id);
       saveToStorage(next);
+      scheduleCloudSync(next, moduleOrdersRef.current);
       return next;
     });
-  }, []);
+  }, [scheduleCloudSync]);
 
   const showAllModules = useCallback(() => {
     setHiddenModules([]);
     saveToStorage([]);
-  }, []);
+    scheduleCloudSync([], moduleOrdersRef.current);
+  }, [scheduleCloudSync]);
 
   const isModuleHidden = useCallback((id) => {
     return hiddenModules.includes(id);
@@ -146,9 +270,10 @@ export function ModuleVisibilityProvider({ children }) {
       [nextList[idx], nextList[targetIdx]] = [nextList[targetIdx], nextList[idx]];
       const next = { ...prev, [groupKey]: nextList };
       saveOrdersToStorage(next);
+      scheduleCloudSync(hiddenModulesRef.current, next);
       return next;
     });
-  }, []);
+  }, [scheduleCloudSync]);
 
   const reorderModule = useCallback((groupKey, sourceId, targetId) => {
     if (!sourceId || !targetId || sourceId === targetId) return;
@@ -163,9 +288,10 @@ export function ModuleVisibilityProvider({ children }) {
       nextList.splice(toIdx, 0, moved);
       const next = { ...prev, [groupKey]: nextList };
       saveOrdersToStorage(next);
+      scheduleCloudSync(hiddenModulesRef.current, next);
       return next;
     });
-  }, []);
+  }, [scheduleCloudSync]);
 
   const resetModuleOrders = useCallback(() => {
     const defaults = mergeOrdersWithDefaults(null);
@@ -175,7 +301,8 @@ export function ModuleVisibilityProvider({ children }) {
     } catch (e) {
       console.error('Error removing module orders from localStorage:', e);
     }
-  }, []);
+    scheduleCloudSync(hiddenModulesRef.current, defaults);
+  }, [scheduleCloudSync]);
 
   const hasCustomOrder = useMemo(() => {
     return Object.entries(DEFAULT_MODULE_ORDERS).some(([groupKey, defaultList]) => {
@@ -201,6 +328,7 @@ export function ModuleVisibilityProvider({ children }) {
     resetModuleOrders,
     hasCustomOrder,
     getGroupForModule,
+    cloudSyncStatus,
   };
 
   return (

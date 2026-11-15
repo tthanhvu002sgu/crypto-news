@@ -46,7 +46,7 @@
       "destination": "https://api.coinalyze.net/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
