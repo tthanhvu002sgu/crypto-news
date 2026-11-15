@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import MarketBiasCard from './MarketBiasCard';
 import MacroDashboardCard from './MacroDashboardCard';
@@ -43,6 +44,7 @@ export default function DashboardTab({
   etfAumChartOpts,
 }) {
   const { isModuleHidden, getGroupOrder, MODULES_CONFIG } = useModuleVisibility();
+  const [etfFlowTimeframe, setEtfFlowTimeframe] = useState('D');
 
   const hasSection1 = !isModuleHidden('dash_macro') || !isModuleHidden('dash_correlation_matrix') || !isModuleHidden('dash_calendar') || !isModuleHidden('tab_cascade');
   const hasSection2 = !isModuleHidden('dash_etf_holdings') || !isModuleHidden('dash_etf_flows') || !isModuleHidden('dash_cme_cot') || !isModuleHidden('dash_macro_valuator');
@@ -362,6 +364,23 @@ export default function DashboardTab({
                   <DataOriginBadge origin="history" label="LỊCH SỬ ETF" compact />
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {etfChartType === 'flows' && (
+                    <div className="etf-timeframe-toggle font-mono">
+                      {[
+                        { key: 'D', title: 'Theo ngày' },
+                        { key: 'W', title: 'Theo tuần' },
+                      ].map(tf => (
+                        <button
+                          key={tf.key}
+                          onClick={() => setEtfFlowTimeframe(tf.key)}
+                          className={`toggle-btn ${etfFlowTimeframe === tf.key ? 'active' : ''}`}
+                          title={tf.title}
+                        >
+                          {tf.key}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {etfChartType === 'aum' && (
                     <div className="etf-timeframe-toggle font-mono">
                       {['30D', '90D', 'ALL'].map(tf => (
@@ -394,47 +413,33 @@ export default function DashboardTab({
               </div>
               {etfHistory.length > 0 ? (
                 etfChartType === 'flows' ? (
-                  <div className="etf-flows-split">
-                    <div className="etf-flow-subpanel">
-                      <div className="etf-flow-subpanel-header font-mono">
-                        <span className="etf-flow-tf-badge">D · NGÀY</span>
-                        {(() => {
-                          const latestDay = etfHistory[etfHistory.length - 1];
-                          if (!latestDay) return null;
-                          const val = Number(latestDay.flow);
-                          return (
-                            <span className={`etf-flow-latest ${val >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                              {latestDay.date}: {val >= 0 ? '+' : ''}{val}M
-                            </span>
-                          );
-                        })()}
-                      </div>
-                      <div className="etf-flow-chart-wrap">
-                        <Bar data={etfFlowChartData} options={etfFlowChartOpts} />
-                      </div>
+                  <div className="etf-flow-subpanel">
+                    <div className="etf-flow-subpanel-header font-mono">
+                      <span className="etf-flow-tf-badge">
+                        {etfFlowTimeframe === 'D' ? 'D · NGÀY' : 'W · TUẦN'}
+                      </span>
+                      {(() => {
+                        const latestItem = etfFlowTimeframe === 'D'
+                          ? etfHistory[etfHistory.length - 1]
+                          : etfWeeklyHistory[etfWeeklyHistory.length - 1];
+                        if (!latestItem) return null;
+                        const val = Number(latestItem.flow);
+                        const label = etfFlowTimeframe === 'D' ? latestItem.date : latestItem.label;
+                        return (
+                          <span className={`etf-flow-latest ${val >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                            {label}: {val >= 0 ? '+' : ''}{val}M
+                          </span>
+                        );
+                      })()}
                     </div>
-
-                    <div className="etf-flow-subpanel">
-                      <div className="etf-flow-subpanel-header font-mono">
-                        <span className="etf-flow-tf-badge">W · TUẦN</span>
-                        {(() => {
-                          const latestWeek = etfWeeklyHistory[etfWeeklyHistory.length - 1];
-                          if (!latestWeek) return null;
-                          const val = Number(latestWeek.flow);
-                          return (
-                            <span className={`etf-flow-latest ${val >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                              {latestWeek.label}: {val >= 0 ? '+' : ''}{val}M
-                            </span>
-                          );
-                        })()}
-                      </div>
-                      <div className="etf-flow-chart-wrap">
-                        {etfFlowWeeklyChartData?.labels?.length > 0 ? (
-                          <Bar data={etfFlowWeeklyChartData} options={etfFlowWeeklyChartOpts} />
-                        ) : (
-                          <div className="chart-empty font-mono">Chưa có dữ liệu tuần</div>
-                        )}
-                      </div>
+                    <div className="etf-flow-chart-wrap" style={{ height: '220px' }}>
+                      {etfFlowTimeframe === 'D' ? (
+                        <Bar data={etfFlowChartData} options={etfFlowChartOpts} />
+                      ) : etfFlowWeeklyChartData?.labels?.length > 0 ? (
+                        <Bar data={etfFlowWeeklyChartData} options={etfFlowWeeklyChartOpts} />
+                      ) : (
+                        <div className="chart-empty font-mono">Chưa có dữ liệu tuần</div>
+                      )}
                     </div>
                   </div>
                 ) : (
