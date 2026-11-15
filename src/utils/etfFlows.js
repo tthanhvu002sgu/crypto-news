@@ -155,3 +155,18 @@ export function buildEtfFlowBarData(items, theme, { labelKey = 'date', datasetLa
     ],
   };
 }
+
+/**
+ * Format an ETF flow value (in millions of USD) as `±XM`, or `±XB` when |value| >= 1000M.
+ */
+export function formatEtfFlowM(value) {
+  if (value == null || value === '') return '---';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '---';
+  const sign = num >= 0 ? '+' : '-';
+  const abs = Math.abs(num);
+  if (abs >= 1000) {
+    return `${sign}${Number((abs / 1000).toFixed(2))}B`;
+  }
+  return `${sign}${Number(abs.toFixed(1))}M`;
+}

@@ -12,6 +12,7 @@ import SortableModuleItem from './SortableModuleItem';
 import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 import CmeCotCard from './CmeCotCard';
 import CorrelationMatrixPanel from './CorrelationMatrixPanel';
+import { formatEtfFlowM } from '../utils/etfFlows';
 
 const isPlausibleCpiYoY = (value) => {
   const number = Number(value);
@@ -427,7 +428,7 @@ export default function DashboardTab({
                         const label = etfFlowTimeframe === 'D' ? latestItem.date : latestItem.label;
                         return (
                           <span className={`etf-flow-latest ${val >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                            {label}: {val >= 0 ? '+' : ''}{val}M
+                            {label}: {formatEtfFlowM(val)}
                           </span>
                         );
                       })()}

@@ -4,6 +4,7 @@ import {
   parseEtfDateToUtc,
   aggregateWeeklyEtfFlows,
   buildEtfFlowBarData,
+  formatEtfFlowM,
 } from './etfFlows.js';
 
 test('parseEtfDateToUtc handles DD/MM/YY, DD/MM, YYYY-MM-DD and rejects invalid dates', () => {
@@ -88,4 +89,15 @@ test('buildEtfFlowBarData colors positive and negative flows correctly', () => {
   assert.deepEqual(data.labels, ['08/06', '15/06']);
   assert.deepEqual(data.datasets[0].data, [-319.3, 120.5]);
   assert.deepEqual(data.datasets[0].backgroundColor, ['#f43f5e', '#10b981']);
+});
+
+test('formatEtfFlowM formats values < 1000M as M and >= 1000M as B', () => {
+  assert.equal(formatEtfFlowM(0), '+0M');
+  assert.equal(formatEtfFlowM(500), '+500M');
+  assert.equal(formatEtfFlowM(-185.4), '-185.4M');
+  assert.equal(formatEtfFlowM(1000), '+1B');
+  assert.equal(formatEtfFlowM(-1065.3), '-1.07B');
+  assert.equal(formatEtfFlowM(-1500), '-1.5B');
+  assert.equal(formatEtfFlowM(1240), '+1.24B');
+  assert.equal(formatEtfFlowM(null), '---');
 });

@@ -438,14 +438,12 @@
   border-bottom: 1px solid var(--border-panel);
 }
 .overview-section-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: 0.95rem;
+  font-weight: 800;
   color: var(--color-emerald-400);
-  letter-spacing: 0.08em;
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  padding: 2px 8px;
-  border-radius: 4px;
+  letter-spacing: 0.06em;
+  background: transparent;
+  padding: 0;
 }
 .overview-section-desc {
   font-size: 0.62rem;
