@@ -811,20 +811,6 @@ function CVDPanel({
           <ModuleMenu moduleId="hft_cvd" />
         </div>
       </div>
-      {/* Unified Flow Verdict & Market Pressure */}
-      <section className={`flow-verdict flow-tone-${flowVerdict?.tone || 'neutral'}`} aria-label="Kết luận dòng lệnh Spot và Futures">
-        <div className="flow-verdict-main">
-          <div className="flow-verdict-title-row">
-            <span className="flow-kicker font-mono">ORDER FLOW VERDICT · {cvdTf}</span>
-            <strong className="flow-verdict-title">{flowVerdict?.title || 'Dòng lệnh cân bằng'}</strong>
-          </div>
-          <span className="flow-verdict-sub">{flowVerdict?.detail || 'Chưa có bên nào kiểm soát rõ ràng.'}</span>
-        </div>
-        <div className="flow-verdict-confidence font-mono">
-          <span>CONFIDENCE</span>
-          <strong title="Score theo cường độ dòng lệnh, không phải xác suất dự báo giá.">{flowVerdict?.confidence == null ? '—' : `${flowVerdict.confidence}%`}</strong>
-        </div>
-      </section>
 
       <div className="flow-pressure-grid">
         {flowCards.map(({ key, accent, series, metrics, netDelta }) => (
