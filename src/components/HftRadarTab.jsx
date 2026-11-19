@@ -129,6 +129,19 @@ const fmtCvdUsd = (n) => {
   return `${sign}$${abs.toFixed(0)}`;
 };
 
+const fmtCvdAxis = (n) => {
+  if (n == null || !Number.isFinite(Number(n))) return '---';
+  const num = Number(n);
+  if (num === 0) return '$0';
+  const sign = num < 0 ? '-' : (num > 0 ? '+' : '');
+  const abs = Math.abs(num);
+  const trim = (val, decimals) => Number(val.toFixed(decimals)).toString();
+  if (abs >= 1e9) return `${sign}$${trim(abs / 1e9, 2)}B`;
+  if (abs >= 1e6) return `${sign}$${trim(abs / 1e6, 1)}M`;
+  if (abs >= 1e3) return `${sign}$${trim(abs / 1e3, 0)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+};
+
 const getLastCompletedHourStart = () => {
   const currentHour = new Date();
   currentHour.setMinutes(0, 0, 0);
@@ -633,8 +646,10 @@ function CVDPanel({
           ...base.scales.y,
           display: true,
           beginAtZero: true,
+          border: { display: false },
           grid: {
             ...base.scales.y.grid,
+            tickLength: 0,
             color: (context) => {
               if (context.tick && context.tick.value === 0) {
                 return isLight ? 'rgba(30, 41, 59, 0.65)' : 'rgba(241, 245, 249, 0.45)';
@@ -650,6 +665,8 @@ function CVDPanel({
           },
           ticks: {
             ...base.scales.y.ticks,
+            maxTicksLimit: 6,
+            padding: 6,
             color: (context) => {
               if (context.tick && context.tick.value === 0) {
                 return isLight ? '#0f172a' : '#f8fafc';
@@ -662,7 +679,7 @@ function CVDPanel({
               }
               return { family: 'Be Vietnam Pro, Roboto Mono', size: 10 };
             },
-            callback: (val) => fmtCvdUsd(val)
+            callback: (val) => fmtCvdAxis(val)
           },
           title: {
             display: true,
@@ -676,16 +693,19 @@ function CVDPanel({
           position: 'right',
           display: true,
           beginAtZero: true,
-          grid: { drawOnChartArea: false },
+          border: { display: false },
+          grid: { drawOnChartArea: false, tickLength: 0 },
           ticks: {
             ...base.scales.y.ticks,
+            maxTicksLimit: 6,
+            padding: 6,
             color: (context) => context.tick?.value === 0
               ? (isLight ? '#0f172a' : '#f8fafc')
               : '#34d399',
             font: (context) => context.tick?.value === 0
               ? { family: 'Be Vietnam Pro, Roboto Mono', size: 10, weight: '700' }
               : { family: 'Be Vietnam Pro, Roboto Mono', size: 10 },
-            callback: (val) => fmtCvdUsd(val)
+            callback: (val) => fmtCvdAxis(val)
           },
           title: {
             display: true,
@@ -695,28 +715,15 @@ function CVDPanel({
           }
         },
         yPrice: {
-          ...base.scales.y,
           type: 'linear',
           position: 'right',
-          display: btcPriceSeries.hasPrices,
+          display: false,
           beginAtZero: false,
-          grid: { drawOnChartArea: false },
-          ticks: {
-            ...base.scales.y.ticks,
-            color: isLight ? '#d97706' : '#f59e0b',
-            font: { family: 'Be Vietnam Pro, Roboto Mono', size: 10 },
-            callback: (val) => `$${Number(val).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
-          },
-          title: {
-            display: true,
-            text: 'GIÁ BTC ($)',
-            color: isLight ? '#d97706' : '#f59e0b',
-            font: { family: 'Be Vietnam Pro, Roboto Mono', size: 9, weight: '600' }
-          }
+          grace: '8%',
         }
       }
     };
-  }, [theme, futuresList, spotList, syncIdx, btcPriceSeries.hasPrices]);
+  }, [theme, futuresList, spotList, syncIdx]);
 
   const chartData = useMemo(() => {
     const labelSource = futuresList.length > 0 ? futuresList : spotList;
@@ -761,24 +768,27 @@ function CVDPanel({
         {
           ...mkDataset('FUTURES', futuresList, '#a78bfa', isLight ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.12)', 'y'),
           fill: false,
+          order: 1,
         },
         {
           ...mkDataset('SPOT', spotList, '#34d399', isLight ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)', 'y1'),
           fill: false,
+          order: 1,
         },
         ...(btcPriceSeries.hasPrices ? [{
           label: 'BTC PRICE',
           data: btcPriceSeries.prices,
-          borderColor: isLight ? '#d97706' : '#f59e0b',
+          borderColor: isLight ? 'rgba(217, 119, 6, 0.78)' : 'rgba(245, 158, 11, 0.78)',
           backgroundColor: 'transparent',
           yAxisID: 'yPrice',
-          borderWidth: 1.75,
+          borderWidth: 1.5,
+          borderDash: [4, 4],
           pointRadius: 0,
           pointHoverRadius: 4,
           fill: false,
           spanGaps: true,
           tension: 0.2,
-          order: 0,
+          order: 2,
         }] : []),
       ].filter(ds => ds.data.length > 0)
     };
