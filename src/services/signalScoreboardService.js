@@ -650,7 +650,7 @@ export function backtestCapitalFlow(dashboardData, horizons = SCOREBOARD_HORIZON
       } else if (classified.flow === 'IN' && classified.bias === 'SHORT') {
         signalGroups.SPOT_CONFLUENCE_SELL.occurrences.push({ ...occ, expectedDirection: 'SHORT' });
       }
-    } else if (classified.spotAlignment?.state === 'SPOT_DIVERGENCE' || (isAbsorptionDip && !isBullCandle)) {
+    } else if ((classified.spotAlignment?.state === 'SPOT_DIVERGENCE' && classified.spotAlignment?.direction === 'BUY') || (isAbsorptionDip && !isBullCandle)) {
       signalGroups.SPOT_DIVERGENCE_BUY.occurrences.push({ ...occ, expectedDirection: 'LONG' });
     }
   }

@@ -194,11 +194,96 @@ test('detects sell absorption when aggressive selling is strong and price stays 
   assert.equal(result.label, 'Hấp thụ lực bán');
 });
 
-test('detects rotation absorption when strong flow meets flat price and flat OI', () => {
+test('detects rotation sell absorption when strong selling meets flat price and flat OI', () => {
   const result = classifyCapitalFlow({ ...complete, priceChangePct: -0.02, cvdRatioPct: -2.0, oiChangePct: 0.05 });
-  assert.equal(result.state, 'FLOW_ROTATION');
-  assert.equal(result.actionBadge, 'ROTATION');
-  assert.equal(result.label, 'Luân chuyển · Hấp thụ');
+  assert.equal(result.state, 'FLOW_ROTATION_SELL_ABSORPTION');
+  assert.equal(result.actionBadge, 'ABSORPTION');
+  assert.equal(result.label, 'Luân chuyển · Hấp thụ bán');
   assert.equal(result.mechanism, 'SELL_ABSORPTION');
+  assert.equal(result.tone, 'constructive');
+});
+
+test('detects rotation buy absorption when strong buying meets flat price and flat OI', () => {
+  const result = classifyCapitalFlow({ ...complete, priceChangePct: 0.02, cvdRatioPct: 2.0, oiChangePct: -0.05 });
+  assert.equal(result.state, 'FLOW_ROTATION_BUY_ABSORPTION');
+  assert.equal(result.actionBadge, 'ABSORPTION');
+  assert.equal(result.label, 'Luân chuyển · Hấp thụ mua');
+  assert.equal(result.mechanism, 'BUY_ABSORPTION');
+  assert.equal(result.tone, 'warning');
+});
+
+test('detects bullish and bearish rotation turnover when price and CVD align with flat OI', () => {
+  const bullish = classifyCapitalFlow({ ...complete, priceChangePct: 2.5, cvdRatioPct: 1.8, oiChangePct: 0.05 });
+  assert.equal(bullish.state, 'FLOW_ROTATION_BULLISH');
+  assert.equal(bullish.actionBadge, 'ROTATION');
+  assert.equal(bullish.label, 'Luân chuyển tăng');
+  assert.equal(bullish.tone, 'constructive');
+
+  const bearish = classifyCapitalFlow({ ...complete, priceChangePct: -2.5, cvdRatioPct: -1.8, oiChangePct: -0.05 });
+  assert.equal(bearish.state, 'FLOW_ROTATION_BEARISH');
+  assert.equal(bearish.actionBadge, 'ROTATION');
+  assert.equal(bearish.label, 'Luân chuyển giảm');
+  assert.equal(bearish.tone, 'bearish');
+});
+
+test('applies wider deadbands for 7D and 30D horizons', () => {
+  const d7 = classifyCapitalFlow({ ...complete, horizon: '7D', priceChangePct: 0.35, cvdRatioPct: 0.5, oiChangePct: 0.35 });
+  assert.equal(d7.horizon, '7D');
+  assert.equal(d7.priceDirection, 'flat');
+  assert.equal(d7.oiDirection, 'flat');
+  assert.equal(d7.state, 'NO_MATERIAL_FLOW_CHANGE');
+
+  const d30 = classifyCapitalFlow({ ...complete, horizon: '30D', priceChangePct: 0.8, cvdRatioPct: 0.5, oiChangePct: 0.8 });
+  assert.equal(d30.horizon, '30D');
+  assert.equal(d30.priceDirection, 'flat');
+  assert.equal(d30.oiDirection, 'flat');
+  assert.equal(d30.state, 'NO_MATERIAL_FLOW_CHANGE');
+});
+
+test('detects sell absorption when OI contracts but price rises against aggressive selling (LOGIC-001)', () => {
+  const result = classifyCapitalFlow({ ...complete, priceChangePct: 0.45, cvdRatioPct: -2.5, oiChangePct: -1.8 });
+  assert.equal(result.state, 'SELL_ABSORPTION_WITH_OI_OUT');
+  assert.equal(result.actionBadge, 'ABSORPTION');
+  assert.equal(result.label, 'Hấp thụ lực bán');
+  assert.equal(result.mechanism, 'SELL_ABSORPTION');
+  assert.equal(result.tone, 'constructive');
+});
+
+test('detects buy absorption when OI contracts but price falls against aggressive buying (LOGIC-001)', () => {
+  const result = classifyCapitalFlow({ ...complete, priceChangePct: -0.45, cvdRatioPct: 2.5, oiChangePct: -1.8 });
+  assert.equal(result.state, 'BUY_ABSORPTION_WITH_OI_OUT');
+  assert.equal(result.actionBadge, 'ABSORPTION');
+  assert.equal(result.label, 'Hấp thụ lực mua');
+  assert.equal(result.mechanism, 'BUY_ABSORPTION');
+  assert.equal(result.tone, 'warning');
+});
+
+test('exposes directional field on spotAlignment and coveragePct on quality (LOGIC-003, LOGIC-005)', () => {
+  const divSell = classifyCapitalFlow({
+    ...complete,
+    coveragePct: 85,
+    priceChangePct: 1.2,
+    cvdRatioPct: 2.1,
+    oiChangePct: 3.4,
+    spotCvdRatioPct: -1.5,
+    spotNetDelta: -50_000_000,
+  });
+  assert.equal(divSell.spotAlignment.state, 'SPOT_DIVERGENCE');
+  assert.equal(divSell.spotAlignment.direction, 'SELL');
+  assert.equal(divSell.quality.coveragePct, 85);
+
+  const divBuy = classifyCapitalFlow({
+    ...complete,
+    coveragePct: 60,
+    priceChangePct: -1.2,
+    cvdRatioPct: -2.1,
+    oiChangePct: 3.4,
+    spotCvdRatioPct: 1.5,
+    spotNetDelta: 50_000_000,
+  });
+  assert.equal(divBuy.spotAlignment.state, 'SPOT_DIVERGENCE');
+  assert.equal(divBuy.spotAlignment.direction, 'BUY');
+  assert.equal(divBuy.quality.level, 'DEGRADED');
+  assert.equal(divBuy.quality.coveragePct, 60);
 });
 

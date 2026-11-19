@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ModuleMenu from './ModuleMenu';
 import DataOriginBadge from './DataOriginBadge';
 import { classifyCapitalFlow } from '../services/capitalFlowEngine';
@@ -66,12 +66,12 @@ function useCapitalFlowInputs({
     ?? (normalized.points.at(-1)?.cumulativeWithinWindow)
     ?? (historyBuy - historySell);
   const hasHistory = normalized.points.length > 0;
-  // The immutable horizon payload is authoritative. Session stream is a fallback only for 24h;
-  // adding it blindly would double-count trades already included by the latest refresh.
-  const netDelta = hasHistory ? (finite(historyNet) ?? 0) : liveSessionCvd;
   const buyVolume = hasHistory ? historyBuy : liveSessionBuy;
   const sellVolume = hasHistory ? historySell : liveSessionSell;
   const totalVolume = buyVolume + sellVolume;
+  // The immutable horizon payload is authoritative. Session stream is a fallback only for 24h;
+  // adding it blindly would double-count trades already included by the latest refresh.
+  const netDelta = totalVolume > 0 ? (hasHistory ? (finite(historyNet) ?? 0) : liveSessionCvd) : null;
   const cvdRatioPct = totalVolume > 0 && netDelta != null ? (netDelta / totalVolume) * 100 : null;
 
   // Spot volume & delta
@@ -85,10 +85,12 @@ function useCapitalFlowInputs({
     ?? (normalizedSpot.points.at(-1)?.cumulativeWithinWindow)
     ?? (historyBuySpot - historySellSpot);
   const hasHistorySpot = normalizedSpot.points.length > 0;
-  const spotNetDelta = hasHistorySpot ? (finite(historyNetSpot) ?? 0) : (allowStreamFallback && spotStream ? liveSessionCvdSpot : null);
   const buyVolumeSpot = hasHistorySpot ? historyBuySpot : liveSessionBuySpot;
   const sellVolumeSpot = hasHistorySpot ? historySellSpot : liveSessionSellSpot;
   const totalVolumeSpot = buyVolumeSpot + sellVolumeSpot;
+  const spotNetDelta = totalVolumeSpot > 0
+    ? (hasHistorySpot ? (finite(historyNetSpot) ?? 0) : (allowStreamFallback && spotStream ? liveSessionCvdSpot : null))
+    : null;
   const spotCvdRatioPct = totalVolumeSpot > 0 && spotNetDelta != null ? (spotNetDelta / totalVolumeSpot) * 100 : null;
 
   const validOi = (Array.isArray(oiHistory) ? oiHistory : [])
@@ -97,7 +99,7 @@ function useCapitalFlowInputs({
   const firstOi = validOi[0]?.value ?? null;
   const lastOi = finite(openInterest) ?? validOi.at(-1)?.value ?? null;
   const oiChangePct = firstOi > 0 && lastOi > 0 ? ((lastOi - firstOi) / firstOi) * 100 : null;
-  const cvdCoverage = hasHistory ? Math.min(100, (normalized.points.length / Math.max(1, normalized.points.length)) * 100) : 0;
+  const cvdCoverage = hasHistory ? Math.min(100, (normalized.points.length / Math.max(1, expectedOiPoints)) * 100) : 0;
   const oiCoverage = Math.min(100, (validOi.length / Math.max(1, expectedOiPoints)) * 100);
   const alignedVolumes = selectAlignedSpotFuturesVolumes({
     hasFuturesHistory: hasHistory,
@@ -143,6 +145,8 @@ const HORIZON_CONFIG = {
   '30d': { label: '30D', period: '1d', limit: 30, expectedOiPoints: 30 },
 };
 
+const HORIZON_CACHE_TTL_MS = 5 * 60 * 1000;
+
 export default function CapitalFlowPanel({
   priceChangePct,
   cvdHistory24h,
@@ -160,10 +164,13 @@ export default function CapitalFlowPanel({
 }) {
   const [timeframe, setTimeframe] = useState('24h');
   const [horizonExtras, setHorizonExtras] = useState({});
+  const horizonExtrasRef = useRef(horizonExtras);
+  horizonExtrasRef.current = horizonExtras;
 
   useEffect(() => {
     if (timeframe === '24h') return;
-    if (horizonExtras[timeframe]?.loaded) return;
+    const cached = horizonExtrasRef.current[timeframe];
+    if (cached?.loaded && (Date.now() - (cached.fetchedAt ?? 0)) < HORIZON_CACHE_TTL_MS) return;
 
     let cancelled = false;
     const cfg = HORIZON_CONFIG[timeframe];
@@ -172,17 +179,20 @@ export default function CapitalFlowPanel({
       getBTCFuturesKlines('BTCUSDT', cfg.period, cfg.limit).catch(() => []),
     ]).then(([oiList, klines]) => {
       if (cancelled) return;
+      const validOiList = Array.isArray(oiList) ? oiList : [];
       const firstOpen = finite(klines?.[0]?.open);
       const lastClose = finite(klines?.at(-1)?.close);
       const computedPricePct = firstOpen > 0 && lastClose > 0
         ? ((lastClose - firstOpen) / firstOpen) * 100
         : null;
+      const isComplete = validOiList.length > 0 && computedPricePct != null;
       setHorizonExtras((prev) => ({
         ...prev,
         [timeframe]: {
-          oiHistory: Array.isArray(oiList) ? oiList : [],
+          oiHistory: validOiList,
           priceChangePct: computedPricePct,
-          loaded: true,
+          loaded: isComplete,
+          fetchedAt: isComplete ? Date.now() : 0,
         },
       }));
     });
@@ -190,7 +200,7 @@ export default function CapitalFlowPanel({
     return () => {
       cancelled = true;
     };
-  }, [timeframe, horizonExtras]);
+  }, [timeframe]);
 
   const activeCvdHistory = timeframe === '7d'
     ? cvdHistory7d
@@ -229,6 +239,7 @@ export default function CapitalFlowPanel({
     coveragePct: inputs.coveragePct,
     spotCvdRatioPct: inputs.spotCvdRatioPct,
     spotNetDelta: inputs.spotNetDelta,
+    horizon: horizonLabel,
   }), [
     activePriceChangePct,
     inputs.cvdRatioPct,
@@ -238,6 +249,7 @@ export default function CapitalFlowPanel({
     basisPct,
     inputs.spotCvdRatioPct,
     inputs.spotNetDelta,
+    horizonLabel,
   ]);
 
   const showAlertSpot = verdict.spotAlignment?.state === 'SPOT_DIVERGENCE';

@@ -653,8 +653,17 @@ function buildFlowRegimeSection(dashboardData, liveChangePct) {
   md += `| **Biến Động Giá 24H (Price Change)** | \`${fmtSigned(liveChangePct ?? dashboardData?.btc?.change, 2, '%')}\` | ±0.15% | ${regime.priceDirection?.toUpperCase()} |\n`;
   md += `| **Tỷ Lệ Futures CVD Ratio** | \`${fmtSigned(cvdRatio, 2, '%')}\` | ±0.15% | ${regime.cvdDirection?.toUpperCase()} |\n`;
   md += `| **Tỷ Lệ Biến Động Hợp Đồng OI** | \`${fmtSigned(oiChangePct, 2, '%')}\` | ±0.15% | ${regime.oiDirection?.toUpperCase()} |\n`;
-  md += `| **Tỷ Lệ Spot CVD Ratio** | \`${fmtSigned(cvdRatioSpot, 2, '%')}\` | ±0.15% | ${netDeltaSpot != null && netDeltaSpot > 0 ? 'BUY' : 'SELL'} |\n`;
-  md += `| **Funding Rate Hiện Tại** | \`${fmtSigned(toFiniteNumber(dashboardData?.fundingRate) ? dashboardData.fundingRate * 100 : null, 4, '%')}\` | ±0.05% | ${regime.crowding?.state || 'NORMAL'} |\n\n`;
+  const spotCvdDirection = cvdRatioSpot == null
+    ? 'UNKNOWN'
+    : cvdRatioSpot > 0.15
+      ? 'BUY'
+      : cvdRatioSpot < -0.15
+        ? 'SELL'
+        : 'NEUTRAL';
+  const fundingRateVal = toFiniteNumber(dashboardData?.fundingRate);
+
+  md += `| **Tỷ Lệ Spot CVD Ratio** | \`${fmtSigned(cvdRatioSpot, 2, '%')}\` | ±0.15% | ${spotCvdDirection} |\n`;
+  md += `| **Funding Rate Hiện Tại** | \`${fmtSigned(fundingRateVal != null ? fundingRateVal * 100 : null, 4, '%')}\` | ±0.05% | ${regime.crowding?.state || 'NORMAL'} |\n\n`;
 
   return md;
 }
