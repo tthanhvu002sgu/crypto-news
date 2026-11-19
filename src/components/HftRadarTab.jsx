@@ -525,6 +525,27 @@ function CVDPanel({
   const futuresList = futuresSeries.chartList;
   const spotList = spotSeries.chartList;
 
+  const btcPriceSeries = useMemo(() => {
+    const labelSource = futuresList.length > 0 ? futuresList : spotList;
+    const prices = labelSource.map((item, idx) => {
+      const raw = item?.price ?? spotList[idx]?.price ?? futuresList[idx]?.price;
+      const num = Number(raw);
+      return Number.isFinite(num) && num > 0 ? num : null;
+    });
+    const hasPrices = prices.some((p) => p != null);
+    let latest = null;
+    for (let i = prices.length - 1; i >= 0; i--) {
+      if (prices[i] != null) {
+        latest = prices[i];
+        break;
+      }
+    }
+    if (latest == null && Number.isFinite(Number(livePrice)) && Number(livePrice) > 0) {
+      latest = Number(livePrice);
+    }
+    return { prices, hasPrices, latest };
+  }, [futuresList, spotList, livePrice]);
+
   const latestCvdF = futuresSeries.netDelta;
   const latestCvdS = spotSeries.netDelta;
 
@@ -588,9 +609,17 @@ function CVDPanel({
           intersect: false,
           callbacks: {
             label: (ctx) => {
+              if (ctx.dataset?.yAxisID === 'yPrice') {
+                const val = ctx.parsed?.y;
+                return val != null
+                  ? ` BTC PRICE: $${Number(val).toLocaleString('en-US', { maximumFractionDigits: 1 })}`
+                  : ' BTC PRICE: ---';
+              }
               const source = ctx.dataset?.label === 'FUTURES' ? futuresList : spotList;
               const item = source?.[ctx.dataIndex];
-              const btcStr = item?.price ? ` · BTC: $${Number(item.price).toLocaleString()}` : '';
+              const btcStr = (!btcPriceSeries.hasPrices && item?.price)
+                ? ` · BTC: $${Number(item.price).toLocaleString()}`
+                : '';
               const deltaStr = item?.delta != null ? ` (Delta: ${fmtCvdUsd(item.delta)})` : '';
               const statusStr = item?.isClosed === false ? ' [Live]' : ' [Closed]';
               return ` ${ctx.dataset?.label || ''}: ${fmtCvdUsd(ctx.parsed?.y ?? 0)}${deltaStr}${statusStr}${btcStr}`;
@@ -664,10 +693,30 @@ function CVDPanel({
             color: '#34d399',
             font: { family: 'Be Vietnam Pro, Roboto Mono', size: 9, weight: '600' }
           }
+        },
+        yPrice: {
+          ...base.scales.y,
+          type: 'linear',
+          position: 'right',
+          display: btcPriceSeries.hasPrices,
+          beginAtZero: false,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            ...base.scales.y.ticks,
+            color: isLight ? '#d97706' : '#f59e0b',
+            font: { family: 'Be Vietnam Pro, Roboto Mono', size: 10 },
+            callback: (val) => `$${Number(val).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+          },
+          title: {
+            display: true,
+            text: 'GIÁ BTC ($)',
+            color: isLight ? '#d97706' : '#f59e0b',
+            font: { family: 'Be Vietnam Pro, Roboto Mono', size: 9, weight: '600' }
+          }
         }
       }
     };
-  }, [theme, futuresList, spotList, syncIdx]);
+  }, [theme, futuresList, spotList, syncIdx, btcPriceSeries.hasPrices]);
 
   const chartData = useMemo(() => {
     const labelSource = futuresList.length > 0 ? futuresList : spotList;
@@ -717,9 +766,23 @@ function CVDPanel({
           ...mkDataset('SPOT', spotList, '#34d399', isLight ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)', 'y1'),
           fill: false,
         },
+        ...(btcPriceSeries.hasPrices ? [{
+          label: 'BTC PRICE',
+          data: btcPriceSeries.prices,
+          borderColor: isLight ? '#d97706' : '#f59e0b',
+          backgroundColor: 'transparent',
+          yAxisID: 'yPrice',
+          borderWidth: 1.75,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: false,
+          spanGaps: true,
+          tension: 0.2,
+          order: 0,
+        }] : []),
       ].filter(ds => ds.data.length > 0)
     };
-  }, [futuresList, spotList, cvdTf, theme]);
+  }, [futuresList, spotList, cvdTf, theme, btcPriceSeries]);
 
   const rangeLabel = cvdTf === '1H'
     ? formatHourRange(completedHourStart)
@@ -855,6 +918,15 @@ function CVDPanel({
             {fmtCvdUsd(latestCvdS)}
           </strong>
         </div>
+        {btcPriceSeries.latest != null && (
+          <div className="cvd-legend-item cvd-legend-price">
+            <span className="cvd-legend-dot" style={{ backgroundColor: '#f59e0b' }} />
+            <span className="cvd-legend-title">BTC PRICE:</span>
+            <strong className="cvd-legend-value" style={{ color: '#f59e0b' }}>
+              ${Number(btcPriceSeries.latest).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+            </strong>
+          </div>
+        )}
       </div>
 
       {/* CVD Line Chart (FUTURES vs SPOT) */}
@@ -889,6 +961,9 @@ function CVDPanel({
               <span style={{ color: '#facc15' }}>⌖ {timeLabel}</span>
               <span style={{ color: '#a78bfa' }}>F {fmtCvdUsd(futuresList[syncIdx]?.cvd)}</span>
               <span style={{ color: '#34d399' }}>S {fmtCvdUsd(spotList[syncIdx]?.cvd)}</span>
+              {btcPriceSeries.prices[syncIdx] != null && (
+                <span style={{ color: '#f59e0b' }}>BTC ${Number(btcPriceSeries.prices[syncIdx]).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+              )}
             </div>
           );
         })() : null}
