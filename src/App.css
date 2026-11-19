@@ -1853,14 +1853,14 @@
 .flow-pressure-card {
   position: relative;
   overflow: hidden;
-  padding: 10px 14px;
+  padding: 8px 14px;
   background: var(--bg-slate-900);
   border: 1px solid var(--border-panel);
   border-top: 2px solid var(--flow-accent);
   border-radius: var(--card-radius-xs);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   transition: transform 180ms ease, border-color 180ms ease;
 }
 .flow-pressure-card:hover {

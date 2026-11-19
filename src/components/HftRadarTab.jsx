@@ -886,30 +886,32 @@ function CVDPanel({
       </div>
 
       <div className="flow-pressure-grid">
-        {flowCards.map(({ key, accent, series, metrics, netDelta }) => (
-          <article className={`flow-pressure-card is-${metrics?.direction || 'neutral'}`} key={key} style={{ '--flow-accent': accent }}>
-            <div className="flow-pressure-head font-mono">
-              <span className="flow-venue-label">{key} AGGRESSIVE FLOW</span>
-              <span className={`flow-direction is-${metrics?.direction || 'neutral'}`}>{(metrics?.direction || 'neutral').toUpperCase()}</span>
-            </div>
-            <div className="flow-pressure-score font-mono">
-              <span className={`flow-delta-val ${(netDelta ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                {fmtCvdUsd(netDelta)}
-              </span>
-              <span className="flow-ratio-val text-slate-400">
-                {fmtSignedPct(metrics?.deltaRatioPct)} vol
-              </span>
-            </div>
-            <div className="flow-pressure-footer font-mono">
-              <span className="flow-momentum-tag">
-                MOMENTUM: <strong className="text-slate-200">{metrics?.momentum === 'accelerating' ? 'TĂNG TỐC ↗' : metrics?.momentum === 'decelerating' ? 'GIẢM TỐC ↘' : 'ỔN ĐỊNH →'}</strong>
-              </span>
-              <span className="flow-strength-tag">
-                <span title="Cường độ mua hoặc bán ròng trong khung đã chọn; 0 là cân bằng, 100 là áp lực mạnh.">STRENGTH: <strong className="text-slate-200">{metrics?.strengthScore ?? '—'}</strong>/100</span>
-              </span>
-            </div>
-          </article>
-        ))}
+        {flowCards.map(({ key, accent, metrics, netDelta }) => {
+          const momentumLabel = metrics?.momentum === 'accelerating'
+            ? 'TĂNG TỐC ↗'
+            : metrics?.momentum === 'decelerating'
+              ? 'GIẢM TỐC ↘'
+              : 'ỔN ĐỊNH →';
+          const hoverTitle = `${key} AGGRESSIVE FLOW (${cvdTf})\n• Tỷ lệ: ${fmtSignedPct(metrics?.deltaRatioPct)} vol\n• Momentum: ${momentumLabel}\n• Strength: ${metrics?.strengthScore ?? '—'}/100`;
+          return (
+            <article
+              className={`flow-pressure-card is-${metrics?.direction || 'neutral'}`}
+              key={key}
+              style={{ '--flow-accent': accent, cursor: 'help' }}
+              title={hoverTitle}
+            >
+              <div className="flow-pressure-head font-mono">
+                <span className="flow-venue-label">{key} AGGRESSIVE FLOW</span>
+                <span className={`flow-direction is-${metrics?.direction || 'neutral'}`}>{(metrics?.direction || 'neutral').toUpperCase()}</span>
+              </div>
+              <div className="flow-pressure-score font-mono">
+                <span className={`flow-delta-val ${(netDelta ?? 0) >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                  {fmtCvdUsd(netDelta)}
+                </span>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       {/* CVD Chart Integrated Legend Bar */}
