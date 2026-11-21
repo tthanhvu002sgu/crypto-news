@@ -3246,7 +3246,7 @@
 
 [data-theme='light'] .markdown-body > ul > li:has(> ul) > strong:first-child,
 [data-theme='light'] .markdown-body .summary-chunk > ul > li:has(> ul) > strong:first-child {
-  color: #0284c7;
+  color: #0f172a;
 }
 
 [data-theme='light'] .markdown-body ul ul > li,

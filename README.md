@@ -111,6 +111,11 @@ Dự án là một Dashboard tổng hợp dữ liệu On-chain, Phân tích kỹ
 
 ## 4. Các Task đã làm (Completed Tasks)
 
+### [2026-11-21] Đổi màu nhãn Group Header Bullet trong AI Decision Lab (Light Theme) sang màu đen
+- **Mode / Type / Action:** UI / CSS / EXE
+- **Thay đổi chính:** Cập nhật selector `[data-theme='light'] .markdown-body > ul > li:has(> ul) > strong:first-child` và `.summary-chunk > ul > li:has(> ul) > strong:first-child` trong `src/App.css` từ `#0284c7` (xanh dương) sang `#0f172a` (đen/slate đậm đồng bộ với chữ in đậm Light Theme).
+- **Kết quả verify:** `npm run build` pass (0 lỗi, 1.98s).
+
 ### [2026-11-08] Khắc phục triệt để lỗi ngắt dòng sai tại tiêu đề biến động & bảo toàn định dạng thời gian
 - **Mode / Type / Action / Lane:** BUGFIX / UI / LLM-SANITIZER / EXE
 - **Tóm tắt:** Sửa lỗi tiêu đề báo cáo biến động giá bị ngắt dòng giữa chừng tại các cặp ngoặc đơn chứa dấu gạch nối (ví dụ: `1.2. Top 5 Biến Động Trong 7 Ngày (Khung 1h` bị rớt `Trình tự thời gian)- Đợt biến động #1...` xuống dòng kế tiếp làm bullet):
