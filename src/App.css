@@ -2705,7 +2705,214 @@
   border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
-/* ─── AI Summary Markdown Styles ───────────────────────────────────────────── */
+/* ─── AI Report Action Toolbar (Copy & Export .md/.pdf) ───────────────────── */
+
+.ai-report-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-panel);
+}
+
+.ai-report-toolbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--text-slate-400);
+}
+
+.ai-report-toolbar-title {
+  font-weight: 700;
+  color: var(--color-emerald-400);
+}
+
+.ai-report-toolbar-streaming {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.66rem;
+  color: var(--color-amber-400);
+}
+
+.ai-report-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 5px;
+  background: var(--bg-slate-900);
+  color: var(--text-slate-200, #e2e8f0);
+  border: 1px solid var(--border-panel);
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.ai-report-btn:hover:not(:disabled) {
+  border-color: var(--color-emerald-400);
+  color: var(--color-emerald-400);
+  background: rgba(16, 185, 129, 0.08);
+  transform: translateY(-1px);
+}
+
+.ai-report-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ai-report-btn.is-success {
+  border-color: var(--color-emerald-500);
+  color: var(--color-emerald-400);
+  background: rgba(16, 185, 129, 0.14);
+}
+
+.ai-report-btn-export {
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.ai-report-btn-export:hover:not(:disabled) {
+  border-color: #38bdf8;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.ai-report-chevron {
+  transition: transform 0.16s ease;
+}
+
+.ai-report-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.ai-report-export-wrap {
+  position: relative;
+}
+
+.ai-report-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: var(--bg-panel-solid, #0f172a);
+  border: 1px solid var(--border-panel);
+  border-radius: 7px;
+  padding: 5px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ai-report-export-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-contrast);
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.ai-report-export-item:hover {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: var(--border-panel);
+}
+
+.ai-report-export-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.ai-report-export-icon.md {
+  color: #38bdf8;
+}
+
+.ai-report-export-icon.pdf {
+  color: var(--color-emerald-400);
+}
+
+.ai-report-export-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-report-export-name {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-contrast);
+}
+
+.ai-report-export-desc {
+  font-size: 0.66rem;
+  color: var(--text-slate-400);
+  line-height: 1.35;
+}
+
+[data-theme='light'] .ai-report-btn {
+  background: #ffffff;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+
+[data-theme='light'] .ai-report-btn:hover:not(:disabled) {
+  background: #ecfdf5;
+  border-color: #059669;
+  color: #047857;
+}
+
+[data-theme='light'] .ai-report-btn-export {
+  background: #f0f9ff;
+  border-color: #7dd3fc;
+  color: #0369a1;
+}
+
+[data-theme='light'] .ai-report-btn-export:hover:not(:disabled) {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #075985;
+}
+
+[data-theme='light'] .ai-report-export-menu {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.14);
+}
+
+[data-theme='light'] .ai-report-export-item:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme='light'] .ai-report-export-icon.md {
+  color: #0284c7;
+}
+
+[data-theme='light'] .ai-report-export-icon.pdf {
+  color: #059669;
+}
 
 /* ─── AI Summary Markdown Styles ───────────────────────────────────────────── */
 

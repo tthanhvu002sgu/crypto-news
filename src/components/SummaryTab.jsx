@@ -18,6 +18,7 @@ import { cleanLatex, cleanReportMarkdown, stripOrphanedBold } from '../services/
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
 import TradePlanAuditor from './TradePlanAuditor';
+import AiReportActions from './AiReportActions';
 import { 
   EtfChart, 
   CvdChart, 
@@ -312,6 +313,7 @@ export default function SummaryTab({
 
   const [openrouterModels, setOpenrouterModels] = useState(FALLBACK_FREE_MODELS);
   const [isOpenrouterLoading, setIsOpenrouterLoading] = useState(false);
+  const reportContentRef = useRef(null);
   const [selectedOpenRouterModel, setSelectedOpenRouterModel] = useState(() => {
     return localStorage.getItem('ai-openrouter-model') || 'deepseek/deepseek-r1:free';
   });
@@ -2051,7 +2053,22 @@ ${promptData}
         }}
       >
         {aiSummary ? (
-          <div className="markdown-body">
+          <>
+            <AiReportActions
+              content={aiSummary}
+              contentRef={reportContentRef}
+              isLoading={isAiLoading}
+              isVi={isVi}
+              filenamePrefix={`ai-analysis-${selectedStyle}`}
+              reportTitle={
+                isVi
+                  ? `AI Market Decision Lab — ${styleLabels[selectedStyle] || selectedStyle}`
+                  : `AI Market Decision Lab — ${styleLabels[selectedStyle] || selectedStyle}`
+              }
+              reportSubtitle={`${aiProvider === 'openrouter' ? selectedOpenRouterModel : selectedModel} • ${selectedLang.toUpperCase()}`}
+              label={isVi ? 'BÀI PHÂN TÍCH AI' : 'AI ANALYSIS REPORT'}
+            />
+            <div className="markdown-body" ref={reportContentRef}>
             {(() => {
               if (selectedStyle !== 'professional') {
                 return <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{aiSummary}</ReactMarkdown>;
@@ -2090,7 +2107,8 @@ ${promptData}
                 );
               });
             })()}
-          </div>
+            </div>
+          </>
         ) : (
           <div style={{ color: 'var(--text-slate-500)', textAlign: 'center', marginTop: '100px' }}>
             {isVi ? (

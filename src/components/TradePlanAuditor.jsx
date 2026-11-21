@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ShieldCheck, Loader2, ArrowUpRight, ArrowDownRight, Zap } from 'lucide-react';
@@ -9,6 +9,7 @@ import { streamOpenRouterCompletion } from '../services/openrouter';
 import { getOrderBookDepth, getWhaleWalls } from '../services/api';
 import { useModuleVisibility } from '../context/ModuleVisibilityContext';
 import ModuleMenu from './ModuleMenu';
+import AiReportActions from './AiReportActions';
 
 export default function TradePlanAuditor({
   data,
@@ -34,6 +35,7 @@ export default function TradePlanAuditor({
   const [customPrice, setCustomPrice] = useState('');
   const [auditResult, setAuditResult] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
+  const auditContentRef = useRef(null);
 
   if (moduleId && isModuleHidden(moduleId)) return null;
 
@@ -513,7 +515,21 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
             animation: 'fadeIn 0.2s ease-out',
           }}
         >
-          <div className="markdown-body">
+          <AiReportActions
+            content={auditResult}
+            contentRef={auditContentRef}
+            isLoading={isAuditing}
+            isVi={isVi}
+            filenamePrefix={`ai-trade-audit-${tradeDirection.toLowerCase()}`}
+            reportTitle={
+              isVi
+                ? `Kiểm định Trade Plan — ${tradeDirection}`
+                : `AI Trade Plan Audit — ${tradeDirection}`
+            }
+            reportSubtitle={`${aiProvider === 'openrouter' ? selectedOpenRouterModel : selectedModel}`}
+            label={isVi ? `BÀI KIỂM ĐỊNH AI (${tradeDirection})` : `AI AUDIT REPORT (${tradeDirection})`}
+          />
+          <div className="markdown-body" ref={auditContentRef}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditResult}</ReactMarkdown>
           </div>
         </div>
