@@ -719,14 +719,44 @@ export function estimateBtcProductionCostRange(difficulty) {
 }
 
 /**
+ * Lấy lịch sử điều chỉnh độ khó (difficulty adjustments) từ mempool.space.
+ * Dùng để dựng đường biên chi phí khai thác (Production Cost Band) theo thời gian.
+ */
+export const getBTCDifficultyHistory = async (timespan = '6m') => {
+  try {
+    const res = await axios.get(`https://mempool.space/api/v1/mining/difficulty-adjustments/${timespan}`, { timeout: 6000 });
+    if (!Array.isArray(res.data)) return [];
+    return res.data
+      .map((row) => ({
+        ts: Number(row?.[0]) * 1000,
+        difficulty: Number(row?.[2]),
+      }))
+      .filter((item) => Number.isFinite(item.ts) && Number.isFinite(item.difficulty) && item.difficulty > 0)
+      .sort((a, b) => a.ts - b.ts);
+  } catch (e) {
+    console.warn('[API] Mempool difficulty history:', e.message);
+    return [];
+  }
+};
+
+/**
  * Lấy dữ liệu mạng lưới Bitcoin trực tiếp từ blockchain.info
  * Hash rate, Difficulty, Transaction count, Mempool, Avg fee
  */
 export const getBTCOnChain = async () => {
   try {
-    const res = await axios.get('https://blockchain.info/stats?format=json', { timeout: 8000 });
-    const d = res.data;
+    const [statsRes, diffHistRes] = await Promise.allSettled([
+      axios.get('https://blockchain.info/stats?format=json', { timeout: 8000 }),
+      getBTCDifficultyHistory('6m'),
+    ]);
+    if (statsRes.status !== 'fulfilled') {
+      throw statsRes.reason;
+    }
+    const d = statsRes.value.data;
     const rawDiff = d.difficulty ? Number(d.difficulty) : null;
+    const difficultyHistory = diffHistRes.status === 'fulfilled' && Array.isArray(diffHistRes.value)
+      ? diffHistRes.value
+      : [];
     return {
       // Hash Rate: chuyển từ GH/s sang EH/s (Exahash)
       hashRate: d.hash_rate ? (d.hash_rate / 1e9).toFixed(2) : null,         // EH/s
@@ -741,6 +771,7 @@ export const getBTCOnChain = async () => {
       avgTxSizeBytes: d.median_fee || null,
       // Range estimate (not a false-precision point) — see estimateBtcProductionCostRange
       productionCost: rawDiff ? estimateBtcProductionCostRange(rawDiff) : null,
+      difficultyHistory,
     };
   } catch (e) {
     console.error('[API] Blockchain.info:', e.message);

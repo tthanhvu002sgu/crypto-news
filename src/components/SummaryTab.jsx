@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
 import Tooltip from './Tooltip';
-import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getBTCFuturesKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio, getMultiExchangeFunding, getCoinbasePremium } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getBTCFuturesKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio, getMultiExchangeFunding, getCoinbasePremium, getBTCDifficultyHistory } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { fetchCached } from '../utils/cache';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService';
@@ -513,6 +513,7 @@ export default function SummaryTab({
     let optionsChain = null;
     let multiFunding = null;
     let coinbasePremium = null;
+    let difficultyHistory = Array.isArray(data.onChain?.difficultyHistory) ? data.onChain.difficultyHistory : [];
 
     try {
       [
@@ -532,6 +533,7 @@ export default function SummaryTab({
         optionsChain,
         multiFunding,
         coinbasePremium,
+        difficultyHistory,
       ] = await Promise.all([
         getOrderBookDepth('BTCUSDT', 100),
         getWhaleWalls(),
@@ -549,6 +551,9 @@ export default function SummaryTab({
         fetchCached('deribit_options_btc_v2', () => fetchDeribitOptionChain('BTC'), 15 * 60 * 1000).catch(() => null),
         getMultiExchangeFunding('BTCUSDT').catch(() => null),
         getCoinbasePremium('BTCUSDT').catch(() => null),
+        difficultyHistory.length > 0
+          ? Promise.resolve(difficultyHistory)
+          : fetchCached('btcDifficultyHistory6m', () => getBTCDifficultyHistory('6m'), 6 * 60 * 60 * 1000).catch(() => []),
       ]);
     } catch (error) {
       console.warn('Error fetching data for report:', error);
@@ -588,7 +593,12 @@ export default function SummaryTab({
     const optionsAnalysis = optionsChain?.instruments?.length
       ? analyzeOptionsChain(optionsChain.instruments, optionsChain.underlyingPrice, null, 'BTC')
       : null;
-    setReportChartData({ fundingHistory: fundingSettlements, options: optionsAnalysis });
+    setReportChartData({
+      fundingHistory: fundingSettlements,
+      options: optionsAnalysis,
+      difficultyHistory: Array.isArray(difficultyHistory) ? difficultyHistory : [],
+      priceHistoryFallback: Array.isArray(klines90d) ? klines90d : [],
+    });
     const activeNews = latestNews?.length > 0 ? latestNews : (data.news || []);
     const klines48h = Array.isArray(data.klines) ? data.klines : [];
     const priceNow =
@@ -2242,11 +2252,17 @@ ${promptData}
               const cvdSource = reportCvdData?.length > 0 ? reportCvdData : (data.cvdHistory30d?.points || data.cvdHistory30d || data.cvdHistory7d?.points || data.cvdHistory7d || []);
               const oiHistory = Array.isArray(data.oiHistory) ? data.oiHistory : [];
               const hasLiquidationStats = Boolean(liqStats5m || liqStats1h);
+              const onChainPriceHistory = Array.isArray(data.btcDailyKlinesAll) && data.btcDailyKlinesAll.length > 0
+                ? data.btcDailyKlinesAll
+                : (reportChartData?.priceHistoryFallback || []);
+              const onChainDiffHistory = Array.isArray(data.onChain?.difficultyHistory) && data.onChain.difficultyHistory.length > 0
+                ? data.onChain.difficultyHistory
+                : (reportChartData?.difficultyHistory || []);
               const chartComponents = {
                 macro: <MacroLiquidityChart key="macro" data={data} />,
                 etf: Array.isArray(etfHistory) && etfHistory.length > 0 ? <EtfChart key="etf" etfHistory={etfHistory} /> : null,
                 cot: data.cotData ? <CotChart key="cot" cotData={data.cotData} /> : null,
-                onchain: <OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} nupl={btcNupl} btcPrice={data.btc?.price} productionCost={data.onChain?.productionCost} />,
+                onchain: <OnChainValuationChart key="onchain" mvrv={data.onChainMetrics?.mvrv} nupl={btcNupl} btcPrice={data.btc?.price} productionCost={data.onChain?.productionCost} priceHistory={onChainPriceHistory} difficultyHistory={onChainDiffHistory} />,
                 oi: oiHistory.length > 0 ? <FundingOiChart key="oi" oiHistory={oiHistory} fundingHistory={reportChartData?.fundingHistory} /> : null,
                 cvd: Array.isArray(cvdSource) && cvdSource.length > 0 ? <CvdChart key="cvd" cvdData={cvdSource} /> : null,
                 liq: hasLiquidationStats ? <LiquidationChart key="liq" liqStats5m={liqStats5m} liqStats1h={liqStats1h} /> : null,

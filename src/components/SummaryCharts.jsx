@@ -12,6 +12,7 @@ import {
   Filler
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
+import { estimateBtcProductionCostRange } from '../services/api';
 
 ChartJS.register(
   CategoryScale,
@@ -244,7 +245,7 @@ export function EtfChart({ etfHistory }) {
     labels: flows.map(f => f.date),
     datasets: [
       {
-        label: 'Net Flow (Trạc $M)',
+        label: 'Net Flow ($M)',
         data: flows.map(f => parseFloat(f.flow || 0)),
         backgroundColor: flows.map(f => parseFloat(f.flow || 0) >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(244, 63, 94, 0.7)'),
         borderColor: flows.map(f => parseFloat(f.flow || 0) >= 0 ? '#10b981' : '#f43f5e'),
@@ -335,52 +336,179 @@ export function CotChart({ cotData }) {
   );
 }
 
-/** 5. Chart Định giá On-chain: BTC Price vs Production Cost (cùng đơn vị $) */
-export function OnChainValuationChart({ mvrv, nupl, btcPrice, productionCost }) {
+/** 5. Chart Định giá On-chain: BTC Price vs Production Cost Line Chart (180D / Fallback) */
+export function OnChainValuationChart({ mvrv, nupl, btcPrice, productionCost, priceHistory, difficultyHistory }) {
   const mvrvVal = parseFloat(mvrv || 0);
   const priceVal = parseFloat(btcPrice || 0);
-  if (!priceVal) return null;
+  const candles = Array.isArray(priceHistory)
+    ? priceHistory
+        .map((c) => ({
+          ts: new Date(c?.time).getTime(),
+          close: parseFloat(c?.close),
+        }))
+        .filter((c) => Number.isFinite(c.ts) && Number.isFinite(c.close) && c.close > 0)
+        .sort((a, b) => a.ts - b.ts)
+        .slice(-180)
+    : [];
 
-  const labels = ['BTC Price ($)', 'Cost Low ($)', 'Cost Mid ($)', 'Cost High ($)'];
-  const values = [
-    priceVal,
-    productionCost?.low != null ? parseFloat(productionCost.low) : null,
-    productionCost?.mid != null ? parseFloat(productionCost.mid) : null,
-    productionCost?.high != null ? parseFloat(productionCost.high) : null,
+  if (!priceVal && candles.length === 0) return null;
+
+  const sortedDiff = Array.isArray(difficultyHistory)
+    ? difficultyHistory
+        .map((d) => ({ ts: Number(d?.ts), difficulty: Number(d?.difficulty) }))
+        .filter((d) => Number.isFinite(d.ts) && Number.isFinite(d.difficulty) && d.difficulty > 0)
+        .sort((a, b) => a.ts - b.ts)
+    : [];
+  const hasDiffHistory = sortedDiff.length > 0;
+  const fallbackEndTs = hasDiffHistory ? sortedDiff[sortedDiff.length - 1].ts : 0;
+
+  // Build timeline points (prefer 180d daily closes; sync final point to live btcPrice if available)
+  const points = candles.length >= 2
+    ? candles.map((c, idx) => (idx === candles.length - 1 && priceVal > 0 ? { ...c, close: priceVal } : c))
+    : [
+        { ts: fallbackEndTs - 86400000, close: priceVal },
+        { ts: fallbackEndTs, close: priceVal },
+      ];
+
+  const fallbackLow = productionCost?.low != null ? parseFloat(productionCost.low) : null;
+  const fallbackMid = productionCost?.mid != null ? parseFloat(productionCost.mid) : null;
+  const fallbackHigh = productionCost?.high != null ? parseFloat(productionCost.high) : null;
+
+  const resolveCostAtTs = (ts) => {
+    if (!hasDiffHistory) {
+      return { low: fallbackLow, mid: fallbackMid, high: fallbackHigh };
+    }
+    let active = sortedDiff[0];
+    for (let i = 0; i < sortedDiff.length; i += 1) {
+      if (sortedDiff[i].ts <= ts) active = sortedDiff[i];
+      else break;
+    }
+    const range = estimateBtcProductionCostRange(active.difficulty);
+    return range || { low: fallbackLow, mid: fallbackMid, high: fallbackHigh };
+  };
+
+  const costSeries = points.map((pt) => resolveCostAtTs(pt.ts));
+  const hasCostBand = costSeries.some((c) => Number.isFinite(c.mid) || Number.isFinite(c.low) || Number.isFinite(c.high));
+
+  const labels = candles.length >= 2
+    ? points.map((pt) => {
+        const dt = new Date(pt.ts);
+        return `${dt.getDate()}/${dt.getMonth() + 1}`;
+      })
+    : ['Prior', 'Current'];
+
+  const datasets = [
+    {
+      label: 'BTC Price ($)',
+      data: points.map((pt) => pt.close),
+      borderColor: '#f59e0b',
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      tension: 0.15,
+      fill: false,
+      order: 1,
+    },
+    ...(hasCostBand ? [
+      {
+        label: 'Cost High ($)',
+        data: costSeries.map((c) => c.high),
+        borderColor: 'rgba(16, 185, 129, 0.5)',
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderDash: [4, 4],
+        pointRadius: 0,
+        stepped: hasDiffHistory ? 'before' : false,
+        tension: 0,
+        fill: false,
+        order: 3,
+      },
+      {
+        label: 'Cost Mid ($)',
+        data: costSeries.map((c) => c.mid),
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+        borderWidth: 1.75,
+        pointRadius: 0,
+        stepped: hasDiffHistory ? 'before' : false,
+        tension: 0,
+        fill: '-1',
+        order: 2,
+      },
+      {
+        label: 'Cost Low ($)',
+        data: costSeries.map((c) => c.low),
+        borderColor: 'rgba(16, 185, 129, 0.5)',
+        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+        borderWidth: 1,
+        borderDash: [4, 4],
+        pointRadius: 0,
+        stepped: hasDiffHistory ? 'before' : false,
+        tension: 0,
+        fill: '-1',
+        order: 4,
+      },
+    ] : []),
   ];
 
-  const data = {
-    labels,
-    datasets: [
-      {
-        label: 'USD',
-        data: values,
-        backgroundColor: ['rgba(245, 158, 11, 0.7)', 'rgba(16, 185, 129, 0.5)', 'rgba(16, 185, 129, 0.7)', 'rgba(16, 185, 129, 0.4)'],
-        borderColor: ['#f59e0b', '#10b981', '#10b981', '#10b981'],
-        borderWidth: 1,
-        borderRadius: 4,
-      }
-    ]
-  };
+  const data = { labels, datasets };
 
   const options = {
     ...commonOptions,
     plugins: {
       ...commonOptions.plugins,
-      legend: { display: false },
-      title: { display: true, text: `🔗 BTC PRICE vs PRODUCTION COST (MVRV: ${mvrvVal || 'N/A'})`, color: '#a855f7', font: { family: 'monospace', size: 11 } }
-    }
+      legend: {
+        display: true,
+        labels: {
+          color: '#94a3b8',
+          font: { family: 'monospace', size: 9 },
+          boxWidth: 12,
+          padding: 8,
+        },
+      },
+      title: {
+        display: true,
+        text: `🔗 BTC PRICE vs PRODUCTION COST (MVRV: ${mvrvVal || 'N/A'})`,
+        color: '#a855f7',
+        font: { family: 'monospace', size: 11 },
+      },
+      tooltip: {
+        ...commonOptions.plugins.tooltip,
+        callbacks: {
+          label: (ctx) => {
+            const v = ctx.parsed?.y;
+            return Number.isFinite(v) ? ` ${ctx.dataset.label}: $${Math.round(v).toLocaleString('en-US')}` : '';
+          },
+        },
+      },
+    },
+    scales: {
+      x: commonOptions.scales.x,
+      y: {
+        ...commonOptions.scales.y,
+        beginAtZero: false,
+        ticks: {
+          ...commonOptions.scales.y.ticks,
+          callback: (val) => `$${Math.round(Number(val) / 1000)}k`,
+        },
+      },
+    },
   };
 
+  const costBandLabel = Number.isFinite(fallbackLow) && Number.isFinite(fallbackHigh)
+    ? `Cost: $${Math.round(fallbackLow / 1000)}k–$${Math.round(fallbackHigh / 1000)}k${Number.isFinite(fallbackMid) ? ` (Mid $${Math.round(fallbackMid / 1000)}k)` : ''}`
+    : 'Production cost: model estimate';
+
   return (
-    <div className="summary-chart-container" style={{ minHeight: '200px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
-      <div style={{ height: '170px' }}>
-        <Bar data={data} options={options} />
+    <div className="summary-chart-container" style={{ minHeight: '235px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
+      <div style={{ height: '195px' }}>
+        <Line data={data} options={options} />
       </div>
-      <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginTop: '8px', display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
+      <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginTop: '8px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
         <span>MVRV: <strong style={{ color: '#a855f7' }}>{mvrvVal || 'N/A'}</strong></span>
         <span>NUPL: <strong>{nupl || 'N/A'}</strong></span>
-        <span>Production cost: model estimate</span>
+        <span>{costBandLabel}</span>
       </div>
     </div>
   );
@@ -453,6 +581,9 @@ export function LiquidationChart({ liqStats5m, liqStats1h }) {
   if (windows.length === 0) return null;
 
   const toMillions = (value) => (Number.isFinite(Number(value)) ? Number(value) / 1e6 : 0);
+  const hasNonZeroLiq = windows.some(
+    (row) => toMillions(row.stats.longLiqUsd) > 0 || toMillions(row.stats.shortLiqUsd) > 0
+  );
   const data = {
     labels: windows.map((row) => row.label),
     datasets: [
@@ -494,8 +625,15 @@ export function LiquidationChart({ liqStats5m, liqStats1h }) {
   };
 
   return (
-    <div className="summary-chart-container" style={{ height: '200px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
-      <Bar data={data} options={options} />
+    <div className="summary-chart-container" style={{ minHeight: '200px', width: '100%', marginTop: '16px', marginBottom: '16px', padding: '16px', background: 'var(--bg-panel-solid)', borderRadius: '8px', border: '1px solid var(--border-panel)' }}>
+      <div style={{ height: hasNonZeroLiq ? '170px' : '150px' }}>
+        <Bar data={data} options={options} />
+      </div>
+      {!hasNonZeroLiq && (
+        <div className="font-mono text-slate-400" style={{ fontSize: '0.62rem', marginTop: '6px', textAlign: 'center', borderTop: '1px dashed var(--border-panel)', paddingTop: '5px' }}>
+          Chưa ghi nhận lệnh thanh lý trong cửa sổ phiên hiện tại (0 USD)
+        </div>
+      )}
     </div>
   );
 }

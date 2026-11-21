@@ -207,3 +207,141 @@ test('skips Executive Summary (Section 0) for charts and anchors options chart i
   assert.match(chartAnchor('cvd'), /3\.1\. Giá vs CVD/);
   assert.match(chartAnchor('liq'), /3\.2\. Dòng thanh lý/);
 });
+
+test('never leaks COT, On-chain, ETF, Macro, or Liq charts into Sections 0, 4, 5, 6 in full Vietnamese canonical report', () => {
+  const report = `## 0. TÓM TẮT ĐIỀU HÀNH (EXECUTIVE SUMMARY)
+- **Dòng tiền tổ chức & Định giá On-chain:** ETF rút vốn, MVRV 1.1, rủi ro thanh lý ngắn hạn.
+
+## 1. BỐI CẢNH VĨ MÔ, TÁC NHÂN BIẾN ĐỘNG & DÒNG TIỀN TỔ CHỨC
+### 1.1. Vĩ mô, Lãi suất thực & Tác nhân biến động (Catalysts)
+- Lãi suất thực +0.30%, DXY 104, VIX 22.
+- **Tác nhân gây biến động & Lịch sự kiện 1-2 tuần tới:** FOMC và CPI.
+### 1.2. Dòng tiền tổ chức (Spot ETF & CME COT)
+- **Độ bền dòng tiền BTC Spot ETF:** Rút ròng -$450M trong 7 phiên.
+- **Vị thế CME COT (trễ 3-7 ngày):** Asset Manager Net Long, Leveraged Funds đóng Short.
+
+## 2. CẤU TRÚC KỸ THUẬT, ĐỊNH GIÁ ON-CHAIN & PHÁI SINH BTC
+### 2.1. Cấu trúc kỹ thuật & Các mốc khung lớn (HTF)
+- Giá dưới MA50 và MA200.
+### 2.2. Định giá On-Chain BTC
+- **MVRV & Giá thực tế suy dẫn:** MVRV 1.1, NUPL 0.09.
+- **Chi phí khai thác & Stablecoin:** BTC Price tiệm cận vùng Production Cost.
+### 2.3. Phái sinh, Định vị Options & Vi cấu trúc
+- **Đòn bẩy & Chênh lệch kỳ hạn:** Open Interest 95,431 BTC, Funding 0.01%.
+- **Dòng lệnh thực thi & Thanh lý:** Spot CVD giảm, thanh lý Long 1h.
+- **Định vị quyền chọn Deribit Options & Kỳ đáo hạn:** Call Wall $80k, Put Wall $50k, Max Pain $62k.
+
+## 3. ĐỐI CHIẾU TÍN HIỆU & XỬ LÝ XUNG ĐỘT DỮ LIỆU
+### 3.1. Giá vs CVD / OBI
+- Đối chiếu giá với Binance Spot CVD và Futures CVD.
+### 3.2. Dòng thanh lý vs Giá / CVD
+- Thanh lý cưỡng bức so với dòng lệnh chủ động.
+### 3.3. Spot ETF vs Phái sinh / CME COT
+- **Spot ETF vs CME COT:** Tổ chức thận trọng hơn bán lẻ.
+### 3.4. Tín hiệu chi phối (Dominant Driver)
+- Động lực trung dài hạn.
+
+## 4. KỊCH BẢN ĐẦU TƯ SPOT & ĐIỀU KIỆN KÍCH HOẠT
+- **Kịch bản cơ sở (Base Case) — 50%:**
+  - **Bằng chứng xác nhận (Spot CVD / ETF):** Chờ ETF dương trở lại.
+
+## 5. KHUYẾN NGHỊ HÀNH ĐỘNG & BẢN ĐỒ CHIẾN LƯỢC ĐA KHUNG
+- **Luận điểm đầu tư Spot cốt lõi:** Thị trường rũ bỏ đòn bẩy tiệm cận chi phí khai thác.
+- **Phản biện mạnh nhất / Rủi ro cấu trúc:** Dòng tiền rút ròng ETF kéo dài.
+- **Điểm trụ cột (-2..+2):** Vĩ mô [-2] · Spot [-2] · Dòng tiền tổ chức [-2] · On-chain [+1] · Phái sinh [-1] · Vi cấu trúc [-2] → Tổng -8/12.
+- **Khung Ngắn hạn (1-4 tuần — Căn thời điểm giải ngân / Chờ nhịp rũ):**
+  - **Trạng thái & Phán quyết:** CHỜ CHIẾT KHẤU SÂU
+- **Khung Trung hạn (1-3 tháng — Tích lũy theo dòng tiền ETF / Vĩ mô):**
+  - **Trạng thái & Phán quyết:** DCA CÓ ĐIỀU KIỆN
+- **Khung Dài hạn (3-12 tháng+ — Nắm giữ theo chu kỳ On-chain BTC):**
+  - **Trạng thái & Phán quyết:** NẮM GIỮ & QUAN SÁT
+
+## 6. NHẬN ĐỊNH PHI ĐỒNG THUẬN & KẾ HOẠCH PHÂN BỔ VỐN SPOT
+### 6.1. Nhận định phi đồng thuận (Asymmetric Insights)
+- Quan sát phi đồng thuận.
+### 6.2. Kế hoạch giải ngân theo đợt & Quản trị rủi ro Spot
+- **Kỷ luật tối ưu giá vốn (Anti-FOMO):** Tận dụng nhịp quét thanh lý Long và Spot CVD.`;
+
+  const blocks = buildProfessionalReportLayout(report);
+  const blockForChart = (chart) => blocks.find((b) => b.charts.includes(chart));
+
+  assert.match(blockForChart('macro').anchor, /1\.1\. Vĩ mô/);
+  assert.match(blockForChart('etf').anchor, /Độ bền dòng tiền BTC Spot ETF/);
+  assert.match(blockForChart('cot').anchor, /Vị thế CME COT/);
+  assert.match(blockForChart('onchain').anchor, /2\.2\. Định giá On-Chain/);
+  assert.match(blockForChart('oi').anchor, /Đòn bẩy & Chênh lệch kỳ hạn/);
+  assert.match(blockForChart('oi').subsectionAnchor, /2\.3\. Phái sinh/);
+  assert.match(blockForChart('options').anchor, /Deribit Options/);
+  assert.match(blockForChart('cvd').anchor, /3\.1\. Giá vs CVD/);
+  assert.match(blockForChart('liq').anchor, /3\.2\. Dòng thanh lý/);
+
+  // Ensure Sections 0, 4, 5, 6 and 3.3 have zero charts
+  const forbiddenSections = /(?:^0\.|^3\.3\.|^4\.|^5\.|^6\.)/;
+  blocks.forEach((b) => {
+    const sec = b.sectionAnchor || b.subsectionAnchor || b.anchor;
+    if (forbiddenSections.test(sec) || /^3\.3\./.test(b.subsectionAnchor || b.anchor)) {
+      assert.equal(b.charts.length, 0, `Expected no charts in "${sec}" (block "${b.anchor}"), got: ${b.charts.join(', ')}`);
+    }
+  });
+});
+
+test('places all 8 charts accurately in English canonical report without leaking into Sections 0, 3.3, 4, 5, 6', () => {
+  const report = `## 0. EXECUTIVE SUMMARY
+- **Institutional Flow & On-Chain Valuation:** ETF outflows, MVRV 1.1, liquidation risk.
+
+## 1. GLOBAL MACRO, CATALYSTS & INSTITUTIONAL FLOWS
+### 1.1. Macro Liquidity, Real-Rate Proxy & Volatility Catalysts
+- Real rate +0.3%, DXY 104, VIX 22.
+### 1.2. Institutional Flows (Spot ETF & CME COT)
+- **BTC Spot ETF Flow Persistence:** -$450M net outflow over 7 sessions.
+- **CME COT Positioning (3-7 day lag):** Asset Managers Net Long, Leveraged Funds covering shorts.
+
+## 2. BTC TECHNICAL STRUCTURE, ON-CHAIN VALUATION & DERIVATIVES
+### 2.1. Technical Structure & HTF Anchors
+- Below MA50 and MA200.
+### 2.2. BTC On-Chain Valuation
+- **MVRV & Implied Realized Price:** MVRV 1.1, NUPL 0.09.
+- **Miner Production Cost & Stablecoins:** Spot near production cost.
+### 2.3. Derivatives, Options Positioning & Microstructure
+- **Leverage & Basis:** Open Interest 95k BTC, Funding 0.01%.
+- **Executed Flow & Liquidations:** Spot CVD negative, Long liquidations elevated.
+- **Deribit Options Positioning & Expiry Context:** Call Wall $80k, Put Wall $50k, Max Pain $62k.
+
+## 3. SIGNAL CROSS-EXAMINATION & CONFLICT RESOLUTION
+### 3.1. Price vs CVD / OBI
+- Price vs Binance Spot CVD and Futures CVD.
+### 3.2. Liquidation Flow vs Price / CVD
+- Forced liquidations vs price response.
+### 3.3. Spot ETF vs Derivatives / CME COT
+- Institutional Spot ETF flows vs CME COT and retail leverage.
+
+## 4. SPOT INVESTMENT SCENARIOS & ACTIVATION TRIGGERS
+- **Base Case — 50%:**
+  - **Confirming Evidence:** Spot CVD and ETF stabilization.
+
+## 5. EXECUTIVE DECISION & MULTI-HORIZON SPOT PLAYBOOK
+- **Medium-Term Horizon (1-3 months — ETF Flow & Macro Accumulation):**
+  - **Regime & Verdict:** CONDITIONAL DCA
+- **Long-Term Horizon (3-12+ months — On-Chain Cycle Holding):**
+  - **Regime & Verdict:** HOLD & MONITOR
+
+## 6. ASYMMETRIC INSIGHTS & STAGED SPOT ACCUMULATION PLAN
+### 6.2. Staged Spot Accumulation & Risk Management Plan
+- **Microstructure Anti-FOMO Execution:** Wait for liquidation flushes and Spot CVD absorption.`;
+
+  const blocks = buildProfessionalReportLayout(report);
+  const blockForChart = (chart) => blocks.find((b) => b.charts.includes(chart));
+
+  assert.match(blockForChart('macro').anchor, /1\.1\. Macro Liquidity/);
+  assert.match(blockForChart('etf').anchor, /BTC Spot ETF Flow Persistence/);
+  assert.match(blockForChart('cot').anchor, /CME COT Positioning/);
+  assert.match(blockForChart('onchain').anchor, /2\.2\. BTC On-Chain Valuation/);
+  assert.match(blockForChart('oi').anchor, /Leverage & Basis/);
+  assert.match(blockForChart('options').anchor, /Deribit Options Positioning/);
+  assert.match(blockForChart('cvd').anchor, /3\.1\. Price vs CVD/);
+  assert.match(blockForChart('liq').anchor, /3\.2\. Liquidation Flow/);
+
+  const charts = blocks.flatMap((b) => b.charts);
+  assert.equal(charts.length, 8);
+  assert.equal(new Set(charts).size, 8);
+});
