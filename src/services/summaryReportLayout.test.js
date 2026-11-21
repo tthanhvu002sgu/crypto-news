@@ -163,3 +163,47 @@ test('places charts accurately in Vietnamese long-term Spot Investment Committee
   const charts = blocks.flatMap((block) => block.charts);
   assert.equal(charts.length, new Set(charts).size);
 });
+
+
+test('skips Executive Summary (Section 0) for charts and anchors options chart inside Section 2.3 in table-free layout', () => {
+  const report = `## 0. TÓM TẮT ĐIỀU HÀNH (EXECUTIVE SUMMARY)
+- **Giá BTC hiện tại:** $57,056 | Vĩ mô thắt chặt, ETF rút vốn, Options gamma âm.
+
+## 1. BỐI CẢNH VĨ MÔ, TÁC NHÂN BIẾN ĐỘNG & DÒNG TIỀN TỔ CHỨC
+### 1.1. Vĩ mô, Lãi suất thực & Tác nhân biến động (Catalysts)
+- Lãi suất thực ước tính +0.30%, VIX 35.89.
+### 1.2. Dòng tiền tổ chức (Spot ETF & CME COT)
+- Spot ETF rút ròng -$1,303.4 triệu; CME COT Leveraged Funds đóng vị thế Short.
+
+## 2. CẤU TRÚC KỸ THUẬT, ĐỊNH GIÁ ON-CHAIN & PHÁI SINH BTC
+### 2.1. Cấu trúc kỹ thuật & Các mốc khung lớn (HTF)
+- Giá dưới MA50 và MA200.
+### 2.2. Định giá On-Chain BTC
+- MVRV 1.16, Giá thực tế suy dẫn $49,186.
+### 2.3. Phái sinh, Định vị Options & Vi cấu trúc
+- **Đòn bẩy & Chênh lệch kỳ hạn:** Open Interest 95,431 BTC.
+- **Định vị quyền chọn Deribit Options & Kỳ đáo hạn:** Call Wall $80,000, Put Wall $40,000, GEX flip $59,494.
+
+## 3. ĐỐI CHIẾU TÍN HIỆU & XỬ LÝ XUNG ĐỘT DỮ LIỆU
+### 3.1. Giá vs CVD / OBI
+- Binance Spot CVD và Futures CVD đồng thuận giảm.
+### 3.2. Dòng thanh lý vs Giá / CVD
+- Thanh lý Long 1h đạt $52.9 triệu.
+
+## 4. KỊCH BẢN ĐẦU TƯ SPOT & ĐIỀU KIỆN KÍCH HOẠT
+- **Kịch bản cơ sở (Base Case) — 50%:** Chờ chiết khấu về $49,500 - $53,500.`;
+
+  const blocks = buildProfessionalReportLayout(report);
+  const execSummaryBlock = blocks.find((b) => /0\. TÓM TẮT ĐIỀU HÀNH/.test(b.anchor));
+  assert.ok(execSummaryBlock, 'Executive Summary block should exist');
+  assert.equal(execSummaryBlock.charts.length, 0, 'Executive Summary must not capture evidence charts');
+
+  const chartAnchor = (chart) => blocks.find((block) => block.charts.includes(chart))?.anchor;
+  assert.match(chartAnchor('macro'), /1\.1\. Vĩ mô/);
+  assert.match(chartAnchor('etf'), /1\.2\. Dòng tiền tổ chức/);
+  assert.match(chartAnchor('cot'), /1\.2\. Dòng tiền tổ chức/);
+  assert.match(chartAnchor('onchain'), /2\.2\. Định giá On-Chain/);
+  assert.match(chartAnchor('options'), /Deribit Options/);
+  assert.match(chartAnchor('cvd'), /3\.1\. Giá vs CVD/);
+  assert.match(chartAnchor('liq'), /3\.2\. Dòng thanh lý/);
+});

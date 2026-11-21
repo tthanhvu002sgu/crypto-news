@@ -3,11 +3,13 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Download, FileDown } from 'lucide-react';
 import Tooltip from './Tooltip';
-import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getBTCFuturesKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio, getMultiExchangeFunding } from '../services/api';
+import { getOrderBookDepth, getWhaleWalls, getBTCKlines, getBTCFuturesKlines, getHistoricalCVD, fetchRealtimeFeed, getOIHistory, getLongShortRatio, getMultiExchangeFunding, getCoinbasePremium } from '../services/api';
 import { getWeeklyEconomicCalendar } from '../services/economicCalendarService';
 import { fetchCached } from '../utils/cache';
 import { fetchDeribitOptionChain } from '../services/deribitOptionsService';
-import { analyzeOptionsChain } from '../services/optionsCalculations';
+import { analyzeOptionsChain, parseInstrumentName } from '../services/optionsCalculations';
+import { calculateBtcTrendRegime } from '../services/biasEngine';
+import { buildReportBlueprint, formatBlueprintForPrompt } from '../services/reportBlueprintEngine';
 import { fetchFuturesFundingHistory } from '../services/scannerDataEngine';
 import { getSystemPrompt, getGenerationConfig, AI_STYLE_LABELS } from '../services/aiPrompts';
 import { buildProfessionalReportLayout } from '../services/summaryReportLayout';
@@ -280,6 +282,7 @@ export default function SummaryTab({
 }) {
   const [reportCvdData, setReportCvdData] = useState([]);
   const [reportChartData, setReportChartData] = useState(null);
+  const [reportMeta, setReportMeta] = useState(null);
   const { isModuleHidden, showModule } = useModuleVisibility();
   const isSummaryHidden = isModuleHidden('tab_summary');
   const isAuditorHidden = isModuleHidden('dash_trade_auditor');
@@ -508,6 +511,8 @@ export default function SummaryTab({
     let calendarRes = null;
     let fundingHistory = [];
     let optionsChain = null;
+    let multiFunding = null;
+    let coinbasePremium = null;
 
     try {
       [
@@ -525,6 +530,8 @@ export default function SummaryTab({
         calendarRes,
         fundingHistory,
         optionsChain,
+        multiFunding,
+        coinbasePremium,
       ] = await Promise.all([
         getOrderBookDepth('BTCUSDT', 100),
         getWhaleWalls(),
@@ -540,6 +547,8 @@ export default function SummaryTab({
         getWeeklyEconomicCalendar().catch(() => null),
         fetchFuturesFundingHistory('BTCUSDT', Date.now() - 3 * 86400000, Date.now()).catch(() => []),
         fetchCached('deribit_options_btc_v2', () => fetchDeribitOptionChain('BTC'), 15 * 60 * 1000).catch(() => null),
+        getMultiExchangeFunding('BTCUSDT').catch(() => null),
+        getCoinbasePremium('BTCUSDT').catch(() => null),
       ]);
     } catch (error) {
       console.warn('Error fetching data for report:', error);
@@ -733,9 +742,21 @@ ${path}`;
       );
     };
 
-    const cotStr = data.cotData
-      ? `- Observation date: ${data.cotData.date || 'N/A'}
+    const cotStr = (() => {
+      if (!data.cotData) return '- CME COT: N/A';
+      const amNet = toFiniteNumber(data.cotData.assetManager?.net);
+      const lfNet = toFiniteNumber(data.cotData.leveragedFunds?.net);
+      const lf4W = toFiniteNumber(data.cotData.analytics?.deltas?.lf4W);
+      const netTag = (v) => (v === null ? 'N/A' : v > 0 ? `Net Long (${formatSigned(v, 0)})` : v < 0 ? `Net Short (${formatSigned(v, 0)})` : 'Flat (0)');
+      const basisTradeHint =
+        lfNet !== null && lfNet < 0 && lf4W !== null && lf4W > 0
+          ? 'Leveraged Funds are structurally Net Short while 4W delta is positive — treat primarily as short covering / Cash-and-Carry Basis Trade unwinding paired with Spot ETF outflows, NOT a directional bullish bet.'
+          : 'Cross-check Leveraged Funds Net position against Spot ETF flows for Cash-and-Carry Basis Trade hedging effects.';
+      return `- Observation date: ${data.cotData.date || 'N/A'}
 - Structural Regime: ${data.cotData.regime?.label || 'N/A'}
+- Asset Manager Current Net Posture: ${netTag(amNet)}
+- Leveraged Funds Current Net Posture: ${netTag(lfNet)}
+- Basis Trade Interpretation Note: ${basisTradeHint}
 - Asset Manager COT Index (26W Percentile): ${data.cotData.analytics?.amCotIndex ?? data.cotData.cotIndex ?? 'N/A'}%
 - Asset Manager 4-Week Net Momentum: ${data.cotData.analytics?.deltas?.am4W != null ? (data.cotData.analytics.deltas.am4W >= 0 ? '+' : '') + data.cotData.analytics.deltas.am4W + ' contracts' : 'N/A'}
 - Leveraged Funds 4-Week Net Momentum: ${data.cotData.analytics?.deltas?.lf4W != null ? (data.cotData.analytics.deltas.lf4W >= 0 ? '+' : '') + data.cotData.analytics.deltas.lf4W + ' contracts' : 'N/A'}
@@ -743,8 +764,8 @@ ${formatCotRow('Dealer Intermediary', data.cotData.dealerIntermediary)}
 ${formatCotRow('Asset Manager / Institutional', data.cotData.assetManager)}
 ${formatCotRow('Leveraged Funds', data.cotData.leveragedFunds)}
 ${formatCotRow('Other Reportables', data.cotData.otherReportables)}
-${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
-      : '- CME COT: N/A';
+${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`;
+    })();
 
     const lsHistory24h = Array.isArray(data.lsHistory) ? data.lsHistory : [];
     const lsSampled = sampleSeries(lsHistory24h, 7);
@@ -1000,7 +1021,39 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
             .map((row) => `  - Strike $${formatNumber(row.strike, 0)} | Call OI ${formatNumber(row.callOI, 0)} | Put OI ${formatNumber(row.putOI, 0)}`)
             .join('\n')
         : '  N/A';
+
+      // Extract expiry distribution from raw Deribit instruments
+      const expiryBreakdownStr = (() => {
+        const insts = optionsChain?.instruments;
+        if (!Array.isArray(insts) || insts.length === 0) return 'N/A';
+        const nowMs = Date.now();
+        const byExpiry = new Map();
+        let totalOiAll = 0;
+        for (const inst of insts) {
+          const parsed = parseInstrumentName(inst.instrumentName || inst.instrument_name);
+          if (!parsed) continue;
+          const oi = Math.max(0, toFiniteNumber(inst.openInterest ?? inst.open_interest) || 0);
+          totalOiAll += oi;
+          const cur = byExpiry.get(parsed.expiry) || { expiry: parsed.expiry, oi: 0, expTs: inst.expirationTimestamp || null };
+          cur.oi += oi;
+          if (!cur.expTs && inst.expirationTimestamp) cur.expTs = inst.expirationTimestamp;
+          byExpiry.set(parsed.expiry, cur);
+        }
+        const topExpiries = Array.from(byExpiry.values())
+          .sort((a, b) => b.oi - a.oi)
+          .slice(0, 3);
+        if (topExpiries.length === 0 || totalOiAll <= 0) return 'N/A';
+        return topExpiries
+          .map((e) => {
+            const dte = e.expTs ? Math.max(0, Math.round((e.expTs - nowMs) / 86400000)) : null;
+            const share = (e.oi / totalOiAll) * 100;
+            return `${e.expiry} (${dte !== null ? `${dte}d DTE, ` : ''}${formatNumber(share, 1)}% OI)`;
+          })
+          .join(' | ');
+      })();
+
       return (
+        `- Scope: Aggregated across ALL active Deribit BTC expiries | Top expiries by OI: ${expiryBreakdownStr}\n` +
         `- Underlying spot used: ${meta?.underlyingPrice != null ? '$' + formatNumber(meta.underlyingPrice, 0) : 'N/A'} | Instruments: ${meta?.instrumentCount ?? 'N/A'}\n` +
         `- Call Wall: ${callWall ? '$' + formatNumber(callWall.strike, 0) + ' (' + formatNumber(callWall.oi, 0) + ' OI)' : 'N/A'}\n` +
         `- Put Wall: ${putWall ? '$' + formatNumber(putWall.strike, 0) + ' (' + formatNumber(putWall.oi, 0) + ' OI)' : 'N/A'}\n` +
@@ -1011,6 +1064,69 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
         `- Top strikes by total OI:\n${strikeLines}`
       );
     })();
+
+    const dailyCandlesForTrend = Array.isArray(data.btcDailyKlinesAll) && data.btcDailyKlinesAll.length >= 14
+      ? data.btcDailyKlinesAll
+      : klines90d;
+    const btcTrendRegime = calculateBtcTrendRegime(dailyCandlesForTrend, priceNow);
+    const mvrvVal = toFiniteNumber(data.onChainMetrics?.mvrv);
+    const impliedRealizedPrice = priceNow && mvrvVal && mvrvVal > 0 ? priceNow / mvrvVal : null;
+    const basisPct = toFiniteNumber(
+      multiFunding?.avgBasisPct
+      ?? multiFunding?.exchanges?.find((e) => toFiniteNumber(e?.basisPct) !== null)?.basisPct
+    );
+    const annualizedBasisPct = basisPct !== null ? basisPct * 365 : null;
+    const cbPremiumPct = toFiniteNumber(coinbasePremium?.premiumPct ?? coinbasePremium?.premiumPercent);
+
+    const reportBlueprint = buildReportBlueprint({
+      priceNow,
+      macro: {
+        realRateProxy,
+        vix: data.vix?.price,
+        tenYearYield: data.tenYearYield,
+        dxy: data.dxy,
+        highYield: data.highYield,
+      },
+      spot: {
+        change7d: price7d.changePct,
+        change30d: price30d.changePct,
+        change90d: price90d.changePct,
+        rangePos30d: price30d.rangePosition,
+        ma50: btcTrendRegime?.ma50,
+        ma200: btcTrendRegime?.ma200,
+      },
+      institutional: {
+        etfNetTotalM: etfFlows.length > 0 ? etfNetTotal : null,
+        etfPositiveDays: etfFlows.length > 0 ? etfPositiveDays : null,
+        etfNegativeDays: etfFlows.length > 0 ? etfNegativeDays : null,
+        amCotIndex: data.cotData?.analytics?.amCotIndex ?? data.cotData?.cotIndex,
+        am4W: data.cotData?.analytics?.deltas?.am4W,
+      },
+      onchain: {
+        mvrv: mvrvVal,
+        prodCostLow: productionCost?.low,
+        prodCostHigh: productionCost?.high,
+      },
+      derivatives: {
+        fundingRate: data.fundingRate,
+        lsRatio: lsLast,
+        oiChangePct,
+        basisPct,
+      },
+      microstructure: {
+        spotCvd24h: spotCvd,
+        futCvd24h: cvd,
+        spotCvd7d: getSeriesNetDelta(activeSpotCvd7dSeries),
+        longLiq1h: liqStats1h?.longLiqUsd,
+        shortLiq1h: liqStats1h?.shortLiqUsd,
+      },
+      options: {
+        gexFlipPrice: optionsAnalysis?.gexFlipPrice,
+        putWallStrike: optionsAnalysis?.putWall?.strike,
+        callWallStrike: optionsAnalysis?.callWall?.strike,
+      },
+    });
+    const blueprintPromptBlock = formatBlueprintForPrompt(reportBlueprint);
 
     const promptData = `
 # MARKET ANALYSIS INPUT
@@ -1026,23 +1142,25 @@ ${formatCotRow('Nonreportable Positions', data.cotData.nonReportable)}`
 - ETF holdings snapshot date is not supplied; freshness is unknown.
 - News is headline/snippet input, not independently verified full-text reporting.
 - Historical CVD is cumulative taker delta rebased at the start of each requested window. Cross-window absolute levels are not comparable.
-- BTC/ETH NUPL shown below is algebraically derived from MVRV by the dashboard. Supply in Profit is also a model estimate from MVRV. These are dependent signals and must not be triple-counted.
+- BTC NUPL, Supply in Profit, and Implied Realized Price shown below are derived from MVRV by the dashboard. These are dependent signals and must not be triple-counted.
 - Order-book liquidity can be cancelled or spoofed. Treat walls as conditional, not guaranteed.
 
+${blueprintPromptBlock}
+
 ## 1. MACRO & CROSS-ASSET
-- US Net Liquidity: ${data.netLiquidity !== null && data.netLiquidity !== undefined ? '$' + formatNumber(data.netLiquidity, 2) + 'B' : 'N/A'}
-- Fed Funds Rate: ${fedRate === null ? 'N/A' : formatNumber(fedRate, 2) + '%'}
+- US Net Liquidity: ${data.netLiquidity !== null && data.netLiquidity !== undefined ? '$' + formatNumber(data.netLiquidity, 2) + 'B' : 'N/A'} [Snapshot — no 7d/30d delta supplied]
+- Fed Funds Rate: ${fedRate === null ? 'N/A' : formatNumber(fedRate, 2) + '%'} [Snapshot]
 - Headline CPI inflation (YoY, FRED CPIAUCSL transformed with pc1): ${cpi === null ? 'N/A' : formatNumber(cpi, 2) + '%'}
 - CPI unit validation: ${cpiValidation}
 - Derived ex-post real-rate proxy (Fed Funds - CPI): ${realRateProxy === null ? 'N/A' : formatSigned(realRateProxy, 2, '%')}
-- US 10Y Yield: ${toFiniteNumber(data.tenYearYield) === null ? 'N/A' : formatNumber(data.tenYearYield, 2) + '%'}
-- DXY: ${formatNumber(data.dxy, 2)}
-- VIX: ${formatNumber(data.vix?.price, 2)}
-- US High-Yield Spread: ${toFiniteNumber(data.highYield) === null ? 'N/A' : formatNumber(data.highYield, 2) + '%'}
+- US 10Y Yield: ${toFiniteNumber(data.tenYearYield) === null ? 'N/A' : formatNumber(data.tenYearYield, 2) + '%'} [Snapshot — no 7d/30d delta supplied]
+- DXY: ${formatNumber(data.dxy, 2)} [Snapshot — no 7d/30d delta supplied]
+- VIX: ${formatNumber(data.vix?.price, 2)} [Snapshot — no 7d/30d delta supplied]
+- US High-Yield Spread: ${toFiniteNumber(data.highYield) === null ? 'N/A' : formatNumber(data.highYield, 2) + '%'} [Snapshot — no 7d/30d delta supplied]
 - US Unemployment: ${toFiniteNumber(data.unrate) === null ? 'N/A' : formatNumber(data.unrate, 2) + '%'}
 - S&P 500: ${formatNumber(data.sp500?.price, 2)} | Change: ${formatSigned(data.sp500?.changePercent, 2, '%')}
 - Nasdaq proxy / QQQ: ${formatNumber(data.qqq?.price, 2)} | Change: ${formatSigned(data.qqq?.changePercent, 2, '%')}
-- M2 Supply: ${data.m2Supply !== null && data.m2Supply !== undefined ? '$' + formatNumber(data.m2Supply, 2) + 'B' : 'N/A'}
+- M2 Supply: ${data.m2Supply !== null && data.m2Supply !== undefined ? '$' + formatNumber(data.m2Supply, 2) + 'B' : 'N/A'} [Snapshot — no 7d/30d delta supplied]
 - Crypto Fear & Greed: ${data.fngData?.value ?? 'N/A'} (${data.fngData?.sentiment || 'N/A'})
 
 ### HIGH-IMPACT ECONOMIC CALENDAR EVENTS (ForexFactory / FairEconomy)
@@ -1059,11 +1177,12 @@ ${(() => {
     .join('\n');
 })().trim()}
 
-## 2. BTC PRICE STRUCTURE & CRYPTO BREADTH
+## 2. BTC PRICE STRUCTURE & HTF ANCHORS
 - BTC spot: ${priceNow === null ? 'N/A' : '$' + formatNumber(priceNow, 2)}
 - BTC 24h change: ${formatSigned(data.btc?.change, 2, '%')}
 - BTC 24h high / low: $${formatNumber(data.btc?.high, 0)} / $${formatNumber(data.btc?.low, 0)}
 - BTC 24h quote volume: ${toFiniteNumber(data.btc?.volume) === null ? 'N/A' : '$' + formatNumber(data.btc.volume / 1e9, 2) + 'B'}
+- BTC HTF Moving Averages (Daily closes): MA50 ${btcTrendRegime?.ma50 ? '$' + formatNumber(btcTrendRegime.ma50, 0) + ' (' + formatSigned(priceNow && btcTrendRegime.ma50 ? ((priceNow - btcTrendRegime.ma50) / btcTrendRegime.ma50) * 100 : null, 1, '%') + ' from spot)' : 'N/A'} | MA200 ${btcTrendRegime?.ma200 ? '$' + formatNumber(btcTrendRegime.ma200, 0) + ' (' + formatSigned(priceNow && btcTrendRegime.ma200 ? ((priceNow - btcTrendRegime.ma200) / btcTrendRegime.ma200) * 100 : null, 1, '%') + ' from spot)' : 'N/A'} | MA50 20d slope ${formatSigned(btcTrendRegime?.slope50, 2, '%')} | 30D Realized Volatility (annualized): ${btcTrendRegime?.realizedVol30d != null ? formatNumber(btcTrendRegime.realizedVol30d, 1) + '%' : 'N/A'}
 ${price48h.text}
 ${price7d.text}
 ${price30d.text}
@@ -1076,15 +1195,13 @@ ${pricePath(klines48h, 12)}
 ### Sampled 7d BTC Path
 ${pricePath(klines7d, 12)}
 
-- ETH: $${formatNumber(data.ethPrice?.price, 2)} | 24h ${formatSigned(data.ethPrice?.change, 2, '%')}
-- SOL: $${formatNumber(data.solPrice?.price, 2)} | 24h ${formatSigned(data.solPrice?.change, 2, '%')}
 - BTC Dominance: ${toFiniteNumber(data.globalData?.btcDominance) === null ? 'N/A' : formatNumber(data.globalData.btcDominance, 1) + '%'}
-- ETH Dominance: ${toFiniteNumber(data.globalData?.ethDominance) === null ? 'N/A' : formatNumber(data.globalData.ethDominance, 1) + '%'}
 - Total Crypto Market Cap: ${toFiniteNumber(data.globalData?.totalMarketCap) === null ? 'N/A' : '$' + formatNumber(data.globalData.totalMarketCap / 1e9, 1) + 'B'}
 
-## 3. ON-CHAIN, NETWORK & STABLECOINS
+## 3. BTC ON-CHAIN, NETWORK & STABLECOINS (BTC-FOCUSED)
 - BTC CoinMetrics observation date: ${data.onChainMetrics?.date || 'N/A'}
 - BTC MVRV: ${data.onChainMetrics?.mvrv || 'N/A'}
+- BTC Implied Realized Price (Spot / MVRV): ${impliedRealizedPrice !== null ? '$' + formatNumber(impliedRealizedPrice, 0) : 'N/A'} | Provenance: algebraically implied from Spot / MVRV, not an independent confirmation.
 - BTC NUPL: ${btcNupl || 'N/A'} | Provenance: derived from MVRV, not independent.
 - BTC Supply in Profit: ${btcSupplyProfit || 'N/A'} | Provenance: model-estimated from MVRV, not independent.
 - BTC Active Addresses: ${data.onChainMetrics?.activeAddresses || 'N/A'}
@@ -1092,15 +1209,9 @@ ${pricePath(klines7d, 12)}
 - BTC Hashrate: ${data.onChain?.hashRate || 'N/A'} EH/s
 - BTC Difficulty: ${data.onChain?.difficulty || 'N/A'}T
 - BTC Production Cost Range: ${productionCostStr}
-- ETH CoinMetrics observation date: ${data.ethOnChainMetrics?.date || 'N/A'}
-- ETH MVRV: ${data.ethOnChainMetrics?.mvrv || 'N/A'}
-- ETH NUPL: ${ethNupl || 'N/A'} | Provenance: derived from MVRV, not independent.
-- ETH Supply in Profit: ${ethSupplyProfit || 'N/A'} | Provenance: model-estimated from MVRV, not independent.
-- ETH Active Addresses: ${data.ethOnChainMetrics?.activeAddresses || 'N/A'}
-- ETH Transactions: ${data.ethOnChainMetrics?.txCount || 'N/A'}
-- USDT Market Cap: ${toFiniteNumber(data.stablecoins?.usdt) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.usdt / 1e9, 2) + 'B'}
-- USDC Market Cap: ${toFiniteNumber(data.stablecoins?.usdc) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.usdc / 1e9, 2) + 'B'}
-- Combined USDT + USDC Market Cap: ${toFiniteNumber(data.stablecoins?.total) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.total / 1e9, 2) + 'B'}
+- USDT Market Cap: ${toFiniteNumber(data.stablecoins?.usdt) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.usdt / 1e9, 2) + 'B'} [Snapshot — no 7d/30d delta supplied]
+- USDC Market Cap: ${toFiniteNumber(data.stablecoins?.usdc) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.usdc / 1e9, 2) + 'B'} [Snapshot — no 7d/30d delta supplied]
+- Combined USDT + USDC Market Cap: ${toFiniteNumber(data.stablecoins?.total) === null ? 'N/A' : '$' + formatNumber(data.stablecoins.total / 1e9, 2) + 'B'} [Snapshot — no 7d/30d delta supplied]
 - Stablecoin exchange reserves and transfer activity: N/A
 
 ## 4. INSTITUTIONAL FLOWS & CME POSITIONING
@@ -1110,7 +1221,7 @@ ${pricePath(klines7d, 12)}
         ? '$' + formatNumber((etfHoldings.total * priceNow) / 1e9, 2) + 'B'
         : 'N/A'
     }
-- Seven-observation ETF Net Flow: ${etfFlows.length > 0 ? formatSigned(etfNetTotal, 1, 'M USD') : 'N/A'}
+- Seven-observation ETF Net Flow: ${etfFlows.length > 0 ? formatSigned(etfNetTotal, 1, 'M') : 'N/A'}
 - Positive / negative observations: ${etfFlows.length > 0 ? etfPositiveDays + ' / ' + etfNegativeDays : 'N/A'}
 - Latest ETF observation date / age: ${latestEtfDate || 'N/A'} / ${etfObservationAgeDays === null ? 'N/A' : etfObservationAgeDays + ' days'}
 - ETF flow status for report date: ${etfPublicationStatus}
@@ -1126,6 +1237,8 @@ ${cotStr}
 ## 5. DERIVATIVES
 - BTC 24h price change input for price/OI matrix: ${formatSigned(data.btc?.change, 2, '%')}
 - Current Funding Rate: ${toFiniteNumber(data.fundingRate) === null ? 'N/A' : formatSigned(data.fundingRate * 100, 4, '%')}
+- Futures Basis (perp vs spot): ${basisPct === null ? 'N/A' : formatSigned(basisPct, 4, '%')} | Implied Annualized Basis: ${annualizedBasisPct === null ? 'N/A' : formatSigned(annualizedBasisPct, 2, '%')}
+- Coinbase Premium Index (US spot demand proxy): ${cbPremiumPct === null ? 'N/A' : formatSigned(cbPremiumPct, 4, '%')}
 - Funding settlements — Binance BTCUSDT, last 9 (8h intervals):
 ${formatFundingHistory(fundingSettlements)}
 - Current Open Interest: ${toFiniteNumber(data.openInterest) === null ? 'N/A' : formatNumber(data.openInterest, 0) + ' BTC'}
@@ -1190,14 +1303,7 @@ ${selectedUserBias !== 'none' ? '' : '- Note: User selected Objective Evaluation
 
 ${await (async () => {
   try {
-    const [fRes, multiFunding] = await Promise.all([
-      fetchAndEnrichForensics(),
-      getMultiExchangeFunding('BTCUSDT').catch(() => null),
-    ]);
-    const basisPct = toFiniteNumber(
-      multiFunding?.avgBasisPct
-      ?? multiFunding?.exchanges?.find((e) => toFiniteNumber(e?.basisPct) !== null)?.basisPct
-    );
+    const fRes = await fetchAndEnrichForensics();
     return formatForensicsPayloadForAi(fRes.enr24h, fRes.enr7d, fRes.enrH4, {
       k15m: fRes.k15m,
       k1h: fRes.k1h,
@@ -1320,6 +1426,7 @@ ${promptData}
 
       setIsAiLoading(true);
       setAiSummary('');
+      setReportMeta(null);
 
       try {
         const prepared = await prepareVerifiedReportData();
@@ -1341,10 +1448,13 @@ ${promptData}
 
         const activeModelInfo = openrouterModels.find((m) => m.id === selectedOpenRouterModel);
         const modelLabel = activeModelInfo ? activeModelInfo.name : selectedOpenRouterModel;
-        const footer = isVi
-          ? `\n\n---\n*Báo cáo tạo bởi OpenRouter Model: **${modelLabel}** · Ngôn ngữ: Tiếng Việt*`
-          : `\n\n---\n*Report generated by OpenRouter Model: **${modelLabel}** · Language: English*`;
-        setAiSummary((prev) => prev + footer);
+        setReportMeta({
+          provider: 'OpenRouter',
+          model: modelLabel,
+          fallbackUsed: false,
+          fallbackFrom: null,
+          lang: selectedLang,
+        });
       } catch (err) {
         console.error('[AI] OpenRouter generation failed:', err);
         let msg = err.message || '';
@@ -1373,22 +1483,29 @@ ${promptData}
 
     setIsAiLoading(true);
     setAiSummary('');
+    setReportMeta(null);
 
-    // Determine candidate models and order of attempts
+    // Prioritize stronger reasoning models before degrading to flash-lite
     const allModels = [
       'gemma-4-31b-it',
       'gemma-4-26b-a4b-it',
-      'gemini-flash-lite-latest',
       'gemini-flash-latest',
+      'gemini-flash-lite-latest',
     ];
     const modelAttempts = [
       selectedModel,
       ...allModels.filter((m) => m !== selectedModel),
     ];
 
+    const isTransientError = (err) => {
+      const msg = String(err?.message || '').toLowerCase();
+      return msg.includes('429') || msg.includes('503') || msg.includes('500') || msg.includes('overloaded') || msg.includes('timeout') || msg.includes('network');
+    };
+
     let success = false;
     let finalError = null;
     let actualModelUsed = selectedModel;
+    let fallbackUsed = false;
 
     try {
       const prepared = await prepareVerifiedReportData();
@@ -1398,112 +1515,127 @@ ${promptData}
       for (let attempt = 0; attempt < modelAttempts.length; attempt++) {
         const model = modelAttempts[attempt];
         actualModelUsed = model;
-
-        const fallbackPrefix = isVi
-          ? `*Đang tự động chuyển sang model dự phòng: **${model}** do model trước lỗi...*\n\n`
-          : `*Automatically falling back to backup model: **${model}** due to previous model error...*\n\n`;
+        const maxRetries = model === 'gemini-flash-lite-latest' ? 0 : 1;
 
         if (attempt > 0) {
-          setAiSummary(fallbackPrefix);
-        } else {
-          setAiSummary('');
+          fallbackUsed = true;
+          console.info(`[AI] Falling back from ${selectedModel} to ${model}`);
+          setReportMeta({
+            provider: 'Gemini API',
+            model,
+            fallbackUsed: true,
+            fallbackFrom: selectedModel,
+            lang: selectedLang,
+          });
         }
 
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${geminiKey}`;
-          const headers = {
-            'Content-Type': 'application/json',
-          };
-
-          const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              system_instruction: {
-                parts: { text: systemPrompt },
-              },
-              contents: [{ role: 'user', parts: [{ text: promptData }] }],
-              generationConfig: getGenerationConfig(selectedStyle),
-            }),
-          });
-
-          if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(errText || `HTTP status ${res.status}`);
+        for (let retry = 0; retry <= maxRetries; retry++) {
+          if (retry > 0) {
+            console.info(`[AI] Retrying ${model} after short backoff (attempt ${retry + 1})...`);
+            await new Promise((r) => setTimeout(r, 1500));
           }
 
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder('utf-8');
-          let buffer = '';
-          let currentText = '';
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${geminiKey}`;
+            const headers = {
+              'Content-Type': 'application/json',
+            };
 
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
+            const res = await fetch(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                system_instruction: {
+                  parts: { text: systemPrompt },
+                },
+                contents: [{ role: 'user', parts: [{ text: promptData }] }],
+                generationConfig: getGenerationConfig(selectedStyle),
+              }),
+            });
 
-            const lines = buffer.split(/\r?\n|\r/);
-            buffer = lines.pop() || '';
+            if (!res.ok) {
+              const errText = await res.text();
+              throw new Error(errText || `HTTP status ${res.status}`);
+            }
 
-            for (const line of lines) {
-              const cleaned = line.trim();
-              if (!cleaned) continue;
-              if (cleaned.startsWith('data: ')) {
-                const dataStr = cleaned.slice(6).trim();
-                if (!dataStr) continue;
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            let currentText = '';
 
-                let parsed = null;
-                try {
-                  parsed = JSON.parse(dataStr);
-                } catch {
-                  continue;
-                }
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
 
-                if (parsed.error) {
-                  throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-                }
-                const choice = parsed.candidates?.[0];
-                if (choice) {
-                  const text = choice.content?.parts?.[0]?.text || '';
-                  if (text) {
-                    currentText += text;
-                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + cleanLatex(currentText));
+              const lines = buffer.split(/\r?\n|\r/);
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                const cleaned = line.trim();
+                if (!cleaned) continue;
+                if (cleaned.startsWith('data: ')) {
+                  const dataStr = cleaned.slice(6).trim();
+                  if (!dataStr) continue;
+
+                  let parsed = null;
+                  try {
+                    parsed = JSON.parse(dataStr);
+                  } catch {
+                    continue;
                   }
-                  if (choice.finishReason && choice.finishReason !== 'STOP') {
-                    if (choice.finishReason === 'SAFETY') {
-                      currentText += isVi
-                        ? '\n\n**[Báo cáo dừng do bộ lọc an toàn AI]**'
-                        : '\n\n**[Report stopped due to AI Safety Filter]**';
-                    } else if (choice.finishReason === 'MAX_TOKENS') {
-                      currentText += isVi
-                        ? '\n\n**[Báo cáo dừng: đã đạt giới hạn token đầu ra]**'
-                        : '\n\n**[Report stopped: Max Output Tokens limit reached]**';
-                    } else {
-                      currentText += isVi
-                        ? `\n\n**[Báo cáo dừng sớm. Lý do: ${choice.finishReason}]**`
-                        : `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`;
+
+                  if (parsed.error) {
+                    throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+                  }
+                  const choice = parsed.candidates?.[0];
+                  if (choice) {
+                    const text = choice.content?.parts?.[0]?.text || '';
+                    if (text) {
+                      currentText += text;
+                      setAiSummary(cleanLatex(currentText));
                     }
-                    setAiSummary((attempt > 0 ? fallbackPrefix : '') + cleanLatex(currentText));
+                    if (choice.finishReason && choice.finishReason !== 'STOP') {
+                      if (choice.finishReason === 'SAFETY') {
+                        currentText += isVi
+                          ? '\n\n**[Báo cáo dừng do bộ lọc an toàn AI]**'
+                          : '\n\n**[Report stopped due to AI Safety Filter]**';
+                      } else if (choice.finishReason === 'MAX_TOKENS') {
+                        currentText += isVi
+                          ? '\n\n**[Báo cáo dừng: đã đạt giới hạn token đầu ra]**'
+                          : '\n\n**[Report stopped: Max Output Tokens limit reached]**';
+                      } else {
+                        currentText += isVi
+                          ? `\n\n**[Báo cáo dừng sớm. Lý do: ${choice.finishReason}]**`
+                          : `\n\n**[Report stopped early. Reason: ${choice.finishReason}]**`;
+                      }
+                      setAiSummary(cleanLatex(currentText));
+                    }
                   }
                 }
               }
             }
-          }
 
-          success = true;
-          break; // Break the outer loop because this attempt succeeded
-        } catch (err) {
-          console.error(`[AI] Attempt ${attempt + 1} (${model}) failed:`, err);
-          finalError = err;
-          // Continue to next model in modelAttempts
+            success = true;
+            break;
+          } catch (err) {
+            console.error(`[AI] Attempt ${attempt + 1} (${model}, retry ${retry}) failed:`, err);
+            finalError = err;
+            if (!isTransientError(err)) break;
+          }
         }
+
+        if (success) break;
       }
 
       if (success) {
-        const footer = isVi
-          ? `\n\n---\n*Báo cáo tạo bởi model: **${actualModelUsed}** (Gemini API) · Ngôn ngữ: Tiếng Việt*`
-          : `\n\n---\n*Report generated by model: **${actualModelUsed}** (Gemini API) · Language: English*`;
-        setAiSummary((prev) => prev + footer);
+        setReportMeta({
+          provider: 'Gemini API',
+          model: actualModelUsed,
+          fallbackUsed,
+          fallbackFrom: fallbackUsed ? selectedModel : null,
+          lang: selectedLang,
+        });
       } else {
         throw finalError || new Error('All models failed to generate content');
       }
@@ -2065,9 +2197,41 @@ ${promptData}
                   ? `AI Market Decision Lab — ${styleLabels[selectedStyle] || selectedStyle}`
                   : `AI Market Decision Lab — ${styleLabels[selectedStyle] || selectedStyle}`
               }
-              reportSubtitle={`${aiProvider === 'openrouter' ? selectedOpenRouterModel : selectedModel} • ${selectedLang.toUpperCase()}`}
+              reportSubtitle={`${reportMeta?.model || (aiProvider === 'openrouter' ? selectedOpenRouterModel : selectedModel)} • ${selectedLang.toUpperCase()}`}
               label={isVi ? 'BÀI PHÂN TÍCH AI' : 'AI ANALYSIS REPORT'}
             />
+            {reportMeta && (
+              <div
+                className="no-print font-mono"
+                style={{
+                  fontSize: '0.68rem',
+                  color: reportMeta.fallbackUsed ? 'var(--color-amber-400)' : 'var(--text-slate-400)',
+                  background: reportMeta.fallbackUsed ? 'var(--bg-amber-badge)' : 'rgba(148, 163, 184, 0.08)',
+                  border: reportMeta.fallbackUsed ? '1px solid var(--border-badge-warn)' : '1px solid var(--border-panel)',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  marginBottom: '12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
+              >
+                <span>
+                  {isVi
+                    ? `Model thực thi: ${reportMeta.model} (${reportMeta.provider})`
+                    : `Executed model: ${reportMeta.model} (${reportMeta.provider})`}
+                </span>
+                {reportMeta.fallbackUsed && (
+                  <span>
+                    {isVi
+                      ? `Dự phòng tự động (từ ${reportMeta.fallbackFrom})`
+                      : `Auto-fallback (from ${reportMeta.fallbackFrom})`}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="markdown-body" ref={reportContentRef}>
             {(() => {
               if (selectedStyle !== 'professional') {

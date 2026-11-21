@@ -221,8 +221,8 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
           selectedModel,
           'gemma-4-31b-it',
           'gemma-4-26b-a4b-it',
-          'gemini-flash-lite-latest',
           'gemini-flash-latest',
+          'gemini-flash-lite-latest',
         ];
         const modelAttempts = Array.from(new Set(candidateModels.filter(Boolean)));
         let lastError = null;
@@ -231,14 +231,9 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
         for (let attempt = 0; attempt < modelAttempts.length; attempt++) {
           const currentModel = modelAttempts[attempt];
           if (attempt > 0) {
-            setAuditResult(
-              isVi
-                ? `*Đang tự động chuyển sang model dự phòng: **${currentModel}** do model trước lỗi...*\n\n`
-                : `*Automatically falling back to backup model: **${currentModel}** due to previous model error...*\n\n`
-            );
-          } else {
-            setAuditResult('');
+            console.info(`[TradeAuditor] Falling back to ${currentModel}`);
           }
+          setAuditResult('');
 
           try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent?alt=sse&key=${geminiKey}`;

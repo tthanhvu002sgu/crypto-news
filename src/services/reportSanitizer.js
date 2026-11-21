@@ -67,8 +67,8 @@ export function cleanReportMarkdown(text) {
     .replace(/<thought>[\s\S]*?<\/thought>/gi, '');
 
   // ── Phase 2: Strip raw pre-text / monologue before the first official report heading ──
-  // Search for the first primary report heading (e.g., "## 1.", "# 1.", "## 1 ", "# BÁO CÁO", "## 💥")
-  const headingMatch = cleaned.match(/(?:^|\n)(#{1,3}\s+(?:1[\s.:)]|[💥🎯🔮🗺️]|BÁO CÁO|REPORT))/i);
+  // Search for the first primary report heading (e.g., "## 0.", "## 1.", "# 1.", "## 1 ", "# BÁO CÁO", "## 💥")
+  const headingMatch = cleaned.match(/(?:^|\n)(#{1,3}\s+(?:[01][\s.:)]|[💥🎯🔮🗺️]|BÁO CÁO|REPORT|TÓM TẮT|EXECUTIVE SUMMARY))/i);
   if (headingMatch && headingMatch.index !== undefined) {
     const preText = cleaned.substring(0, headingMatch.index).trim();
     // Check if preText consists of raw monologue, persona recital, or raw input bullet recaps
@@ -86,8 +86,8 @@ export function cleanReportMarkdown(text) {
   // Matches lines like "- Check: No LaTeX? Yes." or "Check: Bold key metrics? Yes."
   cleaned = cleaned.replace(/^\s*[-•*]?\s*(?:Check|Checking|Self-check|Kiểm tra)\s*:\s*.+$/gim, '');
 
-  // If there is an end-of-report anchor (e.g., TÍN HIỆU THEN CHỐT...), strip any following checklist
-  const anchorRegex = /(\*\*(?:TÍN HIỆU THEN CHỐT ĐẦU TIÊN BUỘC PHẢI THAY ĐỔI GÓC NHÌN|FIRST FACT THAT WOULD INVALIDATE THIS VIEW):\*\*.*)/i;
+  // If there is an end-of-report anchor, strip any following checklist
+  const anchorRegex = /(\*\*(?:TÍN HIỆU THEN CHỐT ĐẦU TIÊN BUỘC PHẢI THAY ĐỔI GÓC NHÌN|FIRST FACT THAT WOULD INVALIDATE THIS VIEW|TÍN HIỆU XÁC NHẬN XU HƯỚNG[^*]*|TIER 2 — TREND CONFIRMATION[^*]*):\*\*.*)/i;
   const anchorMatch = cleaned.match(anchorRegex);
   if (anchorMatch && anchorMatch.index !== undefined) {
     const afterAnchor = cleaned.substring(anchorMatch.index + anchorMatch[0].length);
@@ -282,6 +282,8 @@ export function cleanReportMarkdown(text) {
 
   // ── Phase 8: Final spacing & formatting polish ──
   cleaned = cleaned
+    // Remove duplicate USD suffix after $...M / $...B / $...K (e.g. "-$1,303.4M USD" -> "-$1,303.4M")
+    .replace(/(\$[0-9.,]+[KMBkmb])\s+USD\b/g, '$1')
     // Fix missing space between words and dollar amounts
     .replace(/([a-zA-Zà-ỹÀ-Ỹ])(\$[0-9])/g, '$1 $2')
     // Fix missing space after ) before words

@@ -108,4 +108,23 @@ describe('reportSanitizer & cleanReportMarkdown', () => {
     assert.strictEqual(cleaned.includes('\n  - **Luận điểm:** Short Squeeze ngắn hạn.'), true);
     assert.strictEqual(cleaned.includes('\n  - **Luận điểm:** Dòng tiền bán tháo tiếp tục chi phối.'), true);
   });
+  it('preserves Section 0 Executive Summary and cleans duplicate $...M USD suffixes', () => {
+    const raw = `Role: buy-side crypto research lead
+- Macro: raw notes
+
+## 0. TÓM TẮT ĐIỀU HÀNH (EXECUTIVE SUMMARY)
+- **Dòng tiền ETF:** Rút ròng **-$1,303.4M USD** trong 7 kỳ.
+
+## 1. BỐI CẢNH VĨ MÔ
+- Áp lực bán mạnh với Futures CVD **-$279.1M USD**.
+
+**TÍN HIỆU XÁC NHẬN XU HƯỚNG (TRUNG HẠN — KÍCH HOẠT ĐỢT 3):** Vượt **$63,000**.
+- Check: No tables? Yes.`;
+
+    const cleaned = cleanReportMarkdown(raw);
+    assert.ok(cleaned.startsWith('## 0. TÓM TẮT ĐIỀU HÀNH'), 'Section 0 must be preserved as the opening heading');
+    assert.ok(!cleaned.includes('$1,303.4M USD'), 'Duplicate M USD suffix should be normalized');
+    assert.ok(cleaned.includes('-$1,303.4M'), 'Clean $M format should remain');
+    assert.ok(!cleaned.includes('Check: No tables'), 'Trailing self-check line should be stripped');
+  });
 });

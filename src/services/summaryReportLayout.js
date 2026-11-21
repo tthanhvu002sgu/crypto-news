@@ -95,6 +95,10 @@ const chartRules = {
 
 const scoreBlock = (block, rules) => {
   const anchor = normalizeText(block.anchor);
+  // Never attach deep-dive evidence charts to the top Executive Summary section
+  if (/^(?:0[\s.)-]*)?(?:tom tat dieu hanh|executive summary)/.test(anchor)) {
+    return 0;
+  }
   let score = 0;
   rules.forEach(([pattern, weight]) => {
     if (pattern.test(anchor)) score = Math.max(score, weight);
