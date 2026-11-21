@@ -72,6 +72,7 @@ ANALYTICAL PROTOCOL
 - ETF flows are evidence of creation/redemption-related institutional spot demand, but one day of flow is not a complete explanation for price.
 - ETF CURRENT-DATE HARD RULE: ETF flow publication is delayed. A missing current-date value, blank cell, or provisional 0.0 row is UNKNOWN/PENDING — never observed zero flow. Never claim flow "slowed", "stalled", "paused", or "held at 0.0M" for that date unless the input explicitly labels it as a completed published observation. Use the latest completed observation date and disclose the lag.
 - CME COT is released weekly on Friday using Tuesday positions and therefore lags by roughly 3-7 days. Use it for medium-term positioning, never as a 0-7 day timing trigger.
+- COT BLIND-SPOT & GAMMA RULE: COT is a grouped weekly snapshot, not a real-time orderbook. Large flows often appear across 4-8 week (1-2 month) accumulations or sit off-report in Spread/OTC/Spot ETFs — never claim a counterparty is "missing" simply because one group looks one-sided on a single weekly table. Moreover, real-time forced buying/selling from Options Dealer Negative Gamma (delta-hedging) does NOT appear on COT; whenever Options GEX is Negative Gamma, explicitly note this blind spot and cross-check CVD, Funding, and Options Regime.
 - Stablecoin market capitalization is not immediately deployable BTC demand. Exchange reserves and transfer activity would be needed to estimate near-term purchasing power.
 - If NUPL or Supply in Profit is labelled estimated or model-derived from MVRV, do not count it as an independent confirmation of MVRV. Explicitly flag this dependency.
 - News items may be headline-only and unverified. Identify them as headline risk unless the supplied text contains enough evidence. Always include the provided date when referencing a news item.
@@ -103,7 +104,7 @@ ANALYTICAL PROTOCOL
 
 9. Flows, derivatives, and microstructure framework
 - ETF: assess persistence, concentration, net total, and whether price confirms or resists the flow.
-- COT: cover all five groups when data exists: Dealer Intermediary, Asset Manager, Leveraged Funds, Other Reportables, and Nonreportable. Keep the interpretation role-aware and medium-term.
+- COT: cover all five groups when data exists: Dealer Intermediary, Asset Manager, Leveraged Funds, Other Reportables, and Nonreportable. Keep the interpretation role-aware and medium-term, evaluate 4W-8W counterparty absorption (checking Dealer/Other/Spread/Spot ETF offsets), and flag any Negative Gamma dealer-hedging blind spot.
 - Use the price/OI matrix:
   - Price up + OI up: new risk entering; direction may be leveraged.
   - Price up + OI down: short covering is plausible.
@@ -204,6 +205,7 @@ GIAO THỨC PHÂN TÍCH BẮT BUỘC
 - Dòng tiền Spot ETF phản ánh lực cầu mua/bán giao ngay của tổ chức qua cơ chế tạo/chuộc chứng chỉ quỹ, nhưng biến động một ngày của ETF không đủ giải thích toàn bộ cấu trúc giá thị trường.
 - QUY TẮC DÒNG TIỀN ETF NGÀY HIỆN TẠI: Dữ liệu ETF thường công bố có độ trễ. Ô trống, giá trị N/A hoặc số liệu tạm tính 0.0 nghĩa là CHƯA CÔNG BỐ — không bao giờ được diễn giải là dòng tiền "đứng yên", "chững lại" hay "về 0". Luôn sử dụng ngày công bố hoàn tất gần nhất và ghi rõ độ trễ.
 - Báo cáo CME COT công bố vào thứ Sáu dựa trên vị thế ngày thứ Ba, do đó có độ trễ khoảng 3-7 ngày. Chỉ dùng COT cho định vị trung hạn, tuyệt đối không dùng làm tín hiệu kích hoạt thời điểm ngắn hạn (0-7 ngày).
+- QUY TẮC ĐIỂM MÙ COT & GAMMA: COT chỉ là ảnh chụp tổng hợp theo nhóm tại thời điểm chốt sổ, không phải sổ lệnh real-time. Dòng lệnh lớn thường dồn lệch rõ sau 4-8 tuần (1-2 tháng) hoặc có đối ứng nằm ở Spread/OTC/Spot ETF — không kết luận "thiếu bên bán đối ứng" chỉ vì một bảng tuần bị lệch. Đặc biệt, áp lực mua/bán cưỡng bức từ Dealer Negative Gamma (delta-hedging trên Options) diễn ra real-time và KHÔNG hiện lên COT; khi Options ở trạng thái Negative Gamma, bắt buộc ghi chú điểm mù này và đối chiếu thêm với CVD, Funding và Options Regime.
 - Vốn hóa stablecoin không đồng nghĩa với sức mua BTC sẵn sàng kích hoạt ngay. Cần có dữ liệu dự trữ trên sàn và lượng nạp/rút để đánh giá sức mua ngắn hạn.
 - Nếu chỉ số NUPL hoặc Tỷ lệ nguồn cung có lãi được chú thích là ước tính từ mô hình MVRV, không được xem chúng là bằng chứng xác nhận độc lập cho MVRV. Phải nêu rõ mối tương thuộc này.
 - Tin tức có thể chỉ là tiêu đề chưa được kiểm chứng đầy đủ. Hãy định danh đó là rủi ro tiêu đề (headline risk). Luôn trích dẫn ngày tháng của tin tức khi nhắc đến.
@@ -235,7 +237,7 @@ GIAO THỨC PHÂN TÍCH BẮT BUỘC
 
 9. Khung phân tích dòng tiền, phái sinh và vi cấu trúc
 - Dòng tiền ETF: Đánh giá độ bền bỉ liên tục, mức độ tập trung, tổng dòng tiền ròng và liệu hành động giá đang xác nhận hay đi ngược lại dòng tiền tổ chức.
-- Báo cáo CME COT: Khi có dữ liệu, phân tích đầy đủ 5 nhóm: Dealer Intermediary (Tổ chức trung gian), Asset Manager (Nhà quản lý quỹ), Leveraged Funds (Quỹ đầu cơ dùng đòn bẩy), Other Reportables (Báo cáo khác) và Nonreportable (Phi báo cáo). Phân tích đúng bản chất vai trò của từng nhóm và chỉ áp dụng cho góc nhìn trung hạn.
+- Báo cáo CME COT: Khi có dữ liệu, phân tích đầy đủ 5 nhóm: Dealer Intermediary (Tổ chức trung gian), Asset Manager (Nhà quản lý quỹ), Leveraged Funds (Quỹ đầu cơ dùng đòn bẩy), Other Reportables (Báo cáo khác) và Nonreportable (Phi báo cáo). Phân tích đúng bản chất vai trò của từng nhóm, kiểm tra đối ứng 4W-8W, nêu rõ điểm mù nếu Options đang ở Negative Gamma, và chỉ áp dụng cho góc nhìn trung hạn.
 - Ứng dụng ma trận Giá / Hợp đồng mở (OI):
   - Giá tăng + OI tăng: Dòng vị thế mới gia nhập thị trường; xu hướng có thể được hỗ trợ bởi đòn bẩy.
   - Giá tăng + OI giảm: Nhiều khả năng là hiện tượng đóng vị thế bán khống (short covering).

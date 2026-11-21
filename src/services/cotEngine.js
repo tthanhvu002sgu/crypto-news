@@ -229,6 +229,7 @@ export const generateCotNarrative = ({
   const am = latest.assetManager || {};
   const lf = latest.leveragedFunds || {};
   const retail = latest.nonReportable || {};
+  const dealer = latest.dealerIntermediary || {};
   const oi = latest.openInterest || 0;
 
   // 1. Nhận định Smart Money (Asset Managers)
@@ -266,7 +267,13 @@ export const generateCotNarrative = ({
     retailText += `Tỷ trọng nhỏ (~${retail.longOi || 5}% OI), không chi phối cấu trúc giá chính.`;
   }
 
-  // 4. Tổng kết hành động (Tactical Synthesis)
+  // 4. Phân tích đối ứng & độ trễ 1-2 tháng (Counterparty Balance)
+  const counterpartyBalance = analyzeCotCounterpartyBalance(latest, deltas);
+  const dealerNet = dealer.net ?? 0;
+  let counterpartyText = `Dealer Intermediary đang giữ vị thế ròng **${dealerNet >= 0 ? '+' : ''}${dealerNet.toLocaleString()} hđ** (8W: **${(deltas.dealer8W ?? 0) >= 0 ? '+' : ''}${(deltas.dealer8W ?? 0).toLocaleString()} hđ**). `;
+  counterpartyText += counterpartyBalance.summary;
+
+  // 5. Tổng kết hành động (Tactical Synthesis)
   let tacticalText = '';
   if (regime.id === 'INSTITUTIONAL_ACCUMULATION') {
     tacticalText = `**Tích lũy Thể chế**: Smart Money duy trì vị thế Long vững chắc (COT Index ${amCotIndex}%), củng cố xu hướng tăng trung hạn. Các nhịp điều chỉnh là cơ hội tích lũy theo dòng tiền lớn.`;
@@ -285,6 +292,95 @@ export const generateCotNarrative = ({
     smartMoney: amText,
     hedgeFunds: lfText,
     retail: retailText,
+    counterparty: counterpartyText,
+  };
+};
+
+/**
+ * Kiểm tra sự hấp thụ đối ứng của dòng tiền tổ chức trên cửa sổ 4W–8W (1–2 tháng).
+ * Giải thích các trường hợp nhìn bảng COT thấy 1 phe mua/bán mạnh nhưng thiếu bên đối ứng rõ ràng.
+ */
+export const analyzeCotCounterpartyBalance = (latest, deltas = {}) => {
+  const am4W = deltas.am4W ?? 0;
+  const am8W = deltas.am8W ?? 0;
+  const lf4W = deltas.lf4W ?? 0;
+  const lf8W = deltas.lf8W ?? 0;
+  const dealer4W = deltas.dealer4W ?? 0;
+  const dealer8W = deltas.dealer8W ?? 0;
+  const other4W = deltas.other4W ?? 0;
+  const other8W = deltas.other8W ?? 0;
+  const retail4W = deltas.retail4W ?? 0;
+  const retail8W = deltas.retail8W ?? 0;
+
+  // Chọn cửa sổ chi phối (ưu tiên 8W nếu biến động lớn, fallback 4W)
+  const use8W = Math.abs(am8W) >= Math.abs(am4W);
+  const amFlow = use8W ? am8W : am4W;
+  const lfFlow = use8W ? lf8W : lf4W;
+  const dealerFlow = use8W ? dealer8W : dealer4W;
+  const otherFlow = use8W ? other8W : other4W;
+  const retailFlow = use8W ? retail8W : retail4W;
+  const windowLabel = use8W ? '8 tuần (~2 tháng)' : '4 tuần (~1 tháng)';
+
+  const absAm = Math.abs(amFlow);
+  if (absAm < 800) {
+    return {
+      status: 'BALANCED',
+      severity: 'info',
+      primaryCounterparty: 'NONE',
+      am4W,
+      am8W,
+      lf8W,
+      dealer8W,
+      summary: `Biến động ròng của Asset Managers trong ${windowLabel} ở mức vừa phải (${amFlow >= 0 ? '+' : ''}${amFlow.toLocaleString()} hđ), các nhóm đối ứng phân bổ cân bằng.`,
+    };
+  }
+
+  const isOpposite = (val) => (amFlow > 0 ? val < 0 : val > 0);
+  const candidates = [
+    { key: 'LEVERAGED_FUNDS', label: 'Leveraged Funds (Basis Trade)', val: isOpposite(lfFlow) ? Math.abs(lfFlow) : 0 },
+    { key: 'DEALER', label: 'Dealer Intermediary', val: isOpposite(dealerFlow) ? Math.abs(dealerFlow) : 0 },
+    { key: 'OTHER_REPORTABLES', label: 'Other Reportables', val: isOpposite(otherFlow) ? Math.abs(otherFlow) : 0 },
+    { key: 'RETAIL', label: 'Non-Reportable (Retail)', val: isOpposite(retailFlow) ? Math.abs(retailFlow) : 0 },
+  ].sort((a, b) => b.val - a.val);
+
+  const top = candidates[0];
+  const absorptionRatio = absAm > 0 ? top.val / absAm : 0;
+
+  if (top.key === 'LEVERAGED_FUNDS' && absorptionRatio >= 0.45) {
+    return {
+      status: 'BASIS_ABSORBED',
+      severity: 'info',
+      primaryCounterparty: 'LEVERAGED_FUNDS',
+      am4W,
+      am8W,
+      lf8W,
+      dealer8W,
+      summary: `Trong ${windowLabel}, dòng tiền Asset Managers (${amFlow >= 0 ? '+' : ''}${amFlow.toLocaleString()} hđ) được đối ứng chủ yếu bởi **Leveraged Funds** (${lfFlow >= 0 ? '+' : ''}${lfFlow.toLocaleString()} hđ — cấu trúc Basis Arbitrage).`,
+    };
+  }
+
+  if ((top.key === 'DEALER' || top.key === 'OTHER_REPORTABLES') && absorptionRatio >= 0.45) {
+    return {
+      status: 'DEALER_OTHER_ABSORBED',
+      severity: 'info',
+      primaryCounterparty: top.key,
+      am4W,
+      am8W,
+      lf8W,
+      dealer8W,
+      summary: `Trong ${windowLabel}, phần đối ứng chính cho Asset Managers (${amFlow >= 0 ? '+' : ''}${amFlow.toLocaleString()} hđ) đang nằm ở **${top.label}** (${isOpposite(dealerFlow) && top.key === 'DEALER' ? dealerFlow : otherFlow} hđ), không phải qua Hedge Funds.`,
+    };
+  }
+
+  return {
+    status: 'REPORTING_LAG_GAP',
+    severity: 'warning',
+    primaryCounterparty: top.val > 0 ? top.key : 'OFF_REPORT',
+    am4W,
+    am8W,
+    lf8W,
+    dealer8W,
+    summary: `**Khoảng trống đối ứng (${windowLabel}):** Asset Managers biến động **${amFlow >= 0 ? '+' : ''}${amFlow.toLocaleString()} hđ**, nhưng không có nhóm đơn lẻ nào trên bảng COT đối ứng tương xứng. Lưu ý: COT chỉ chụp snapshot theo nhóm tại thời điểm chốt sổ — phần đối ứng thường nằm ở vị thế **Spread, OTC/Spot ETF**, hoặc **chưa kịp dồn vào số liệu tuần** (thường lệch rõ sau 1–2 tháng).`,
   };
 };
 
@@ -316,6 +412,7 @@ export const processCotData = (rawList, options = { mergeStatic: true }) => {
   const latest = history[0];
   const prevWeek = history[1] || latest;
   const fourWeeksAgo = history[4] || history[history.length - 1];
+  const eightWeeksAgo = history[8] || history[history.length - 1];
   const twelveWeeksAgo = history[12] || history[history.length - 1];
   const twentySixWeeks = history.slice(0, 26);
   const fiftyTwoWeeks = history.slice(0, 52);
@@ -340,23 +437,34 @@ export const processCotData = (rawList, options = { mergeStatic: true }) => {
   const deltas = {
     oiWoW: latest.openInterest - prevWeek.openInterest,
     oi4W: latest.openInterest - fourWeeksAgo.openInterest,
+    oi8W: latest.openInterest - eightWeeksAgo.openInterest,
     oi12W: latest.openInterest - twelveWeeksAgo.openInterest,
 
     amWoW: latest.assetManager.net - prevWeek.assetManager.net,
     am4W: latest.assetManager.net - fourWeeksAgo.assetManager.net,
+    am8W: latest.assetManager.net - eightWeeksAgo.assetManager.net,
     am12W: latest.assetManager.net - twelveWeeksAgo.assetManager.net,
 
     lfWoW: latest.leveragedFunds.net - prevWeek.leveragedFunds.net,
     lf4W: latest.leveragedFunds.net - fourWeeksAgo.leveragedFunds.net,
+    lf8W: latest.leveragedFunds.net - eightWeeksAgo.leveragedFunds.net,
     lf12W: latest.leveragedFunds.net - twelveWeeksAgo.leveragedFunds.net,
 
     retailWoW: latest.nonReportable.net - prevWeek.nonReportable.net,
     retail4W: latest.nonReportable.net - fourWeeksAgo.nonReportable.net,
+    retail8W: latest.nonReportable.net - eightWeeksAgo.nonReportable.net,
     retail12W: latest.nonReportable.net - twelveWeeksAgo.nonReportable.net,
 
     dealerWoW: latest.dealerIntermediary.net - prevWeek.dealerIntermediary.net,
     dealer4W: latest.dealerIntermediary.net - fourWeeksAgo.dealerIntermediary.net,
+    dealer8W: latest.dealerIntermediary.net - eightWeeksAgo.dealerIntermediary.net,
+
+    otherWoW: latest.otherReportables.net - prevWeek.otherReportables.net,
+    other4W: latest.otherReportables.net - fourWeeksAgo.otherReportables.net,
+    other8W: latest.otherReportables.net - eightWeeksAgo.otherReportables.net,
   };
+
+  const counterpartyBalance = analyzeCotCounterpartyBalance(latest, deltas);
 
   // Phân loại Regime
   const regime = classifyCotRegime({
@@ -391,6 +499,7 @@ export const processCotData = (rawList, options = { mergeStatic: true }) => {
       lfRange26W: { min: lfMin26, max: lfMax26 },
       retailRange26W: { min: retailMin26, max: retailMax26 },
       deltas,
+      counterpartyBalance,
       regime,
       weeksAvailable: history.length,
     },

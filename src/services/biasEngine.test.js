@@ -330,4 +330,33 @@ describe('biasEngine unit tests', () => {
       assert.strictEqual(freshness.oldestDataStr, 'ETF 1d', 'Fallback COT should not be chosen as oldest active source');
     });
   });
+
+  describe('COT x Options Negative Gamma cross-signal', () => {
+    it('keeps COT score unchanged when optionsAnalysis is absent and dampens by 30% during NEGATIVE_GAMMA', () => {
+      const baseData = {
+        btc: { price: 95000, change: 1.0 },
+        cotData: {
+          date: '2026-11-17',
+          assetManager: { net: 4000, netChange: 0 },
+        },
+      };
+
+      const biasNormal = calculateMarketBias(baseData);
+      const cotSigNormal = biasNormal.signals.find((s) => s.name === 'CME COT Flow');
+      assert.ok(cotSigNormal);
+      assert.strictEqual(cotSigNormal.score, 12);
+      assert.strictEqual(biasNormal.cotGammaWarning, null);
+
+      const biasNegGamma = calculateMarketBias({
+        ...baseData,
+        optionsAnalysis: { gammaRegime: { regime: 'NEGATIVE_GAMMA' } },
+      });
+      const cotSigNeg = biasNegGamma.signals.find((s) => s.name === 'CME COT Flow');
+      assert.ok(cotSigNeg);
+      assert.ok(Math.abs(cotSigNeg.score - 8.4) < 0.001, `Expected 8.4 (0.7 * 12), got ${cotSigNeg.score}`);
+      assert.strictEqual(cotSigNeg.isGammaDampened, true);
+      assert.ok(cotSigNeg.status.includes('Short Gamma'));
+      assert.ok(biasNegGamma.cotGammaWarning);
+    });
+  });
 });

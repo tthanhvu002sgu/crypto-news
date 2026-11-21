@@ -25,12 +25,15 @@ import {
   Calendar,
   Layers,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import ModuleMenu from './ModuleMenu';
 import DataOriginBadge from './DataOriginBadge';
 import { COT_REGIMES, processCotData } from '../services/cotEngine';
 import { getCMECot } from '../services/api';
+import { readCacheValue } from '../utils/cache';
+import { analyzeOptionsChain } from '../services/optionsCalculations';
 
 ChartJS.register(
   CategoryScale,
@@ -117,11 +120,30 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
   const deltas = analytics?.deltas || {
     amWoW: currentCot?.assetManager?.netChange || 0,
     am4W: 0,
+    am8W: 0,
     lfWoW: currentCot?.leveragedFunds?.netChange || 0,
     lf4W: 0,
+    lf8W: 0,
     oiWoW: currentCot?.openInterestChange || 0,
     oi4W: 0,
+    oi8W: 0,
+    dealer8W: 0,
   };
+  const dealer = currentCot?.dealerIntermediary || { long: 0, short: 0, net: 0 };
+  const counterpartyBalance = analytics?.counterpartyBalance;
+
+  const optionsGammaRegime = useMemo(() => {
+    const cachedChain = readCacheValue('deribit_options_btc_v2', null);
+    if (!cachedChain || !Array.isArray(cachedChain.instruments) || cachedChain.instruments.length === 0) {
+      return null;
+    }
+    try {
+      return analyzeOptionsChain(cachedChain)?.gammaRegime || null;
+    } catch {
+      return null;
+    }
+  }, [currentCot?.date]);
+  const isNegativeGamma = optionsGammaRegime?.regime === 'NEGATIVE_GAMMA';
 
   const amCotIndex = analytics?.amCotIndex ?? (currentCot?.assetManager?.net > 2000 ? 70 : 45);
   const lfCotIndex = analytics?.lfCotIndex ?? 50;
@@ -400,13 +422,18 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
             <div className="font-mono" style={{ fontSize: '1rem', fontWeight: 'bold', marginTop: '4px', color: 'var(--text-contrast)' }}>
               {currentCot.openInterest ? currentCot.openInterest.toLocaleString() : '---'} <span style={{ fontSize: '0.62rem', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>hđ</span>
             </div>
-            <div className="font-mono" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', gap: '6px' }}>
+            <div className="font-mono" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ color: deltas.oiWoW >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
                 WoW: {fmtSigned(deltas.oiWoW)}
               </span>
               {deltas.oi4W !== 0 && (
                 <span style={{ color: deltas.oi4W >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
                   4W: {fmtSigned(deltas.oi4W)}
+                </span>
+              )}
+              {Number.isFinite(deltas.oi8W) && deltas.oi8W !== 0 && (
+                <span style={{ color: deltas.oi8W >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
+                  8W: {fmtSigned(deltas.oi8W)}
                 </span>
               )}
             </div>
@@ -421,13 +448,18 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
             <div className="font-mono" style={{ fontSize: '1rem', fontWeight: 'bold', marginTop: '4px', color: '#10b981' }}>
               {am.net >= 0 ? `+${am.net.toLocaleString()}` : am.net.toLocaleString()} <span style={{ fontSize: '0.62rem', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>Net</span>
             </div>
-            <div className="font-mono" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+            <div className="font-mono" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
               <span style={{ color: deltas.amWoW >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
                 WoW: {fmtSigned(deltas.amWoW)}
               </span>
               <span style={{ color: deltas.am4W >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
                 4W: {fmtSigned(deltas.am4W)}
               </span>
+              {Number.isFinite(deltas.am8W) && (
+                <span style={{ color: deltas.am8W >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
+                  8W: {fmtSigned(deltas.am8W)}
+                </span>
+              )}
             </div>
             {/* Visual Gauge Bar */}
             <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
@@ -444,13 +476,18 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
             <div className="font-mono" style={{ fontSize: '1rem', fontWeight: 'bold', marginTop: '4px', color: '#ef4444' }}>
               {lf.net.toLocaleString()} <span style={{ fontSize: '0.62rem', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>Net</span>
             </div>
-            <div className="font-mono" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+            <div className="font-mono" style={{ fontSize: '0.6rem', marginTop: '4px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
               <span style={{ color: deltas.lfWoW >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
                 WoW: {fmtSigned(deltas.lfWoW)}
               </span>
               <span style={{ color: deltas.lf4W >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
                 4W: {fmtSigned(deltas.lf4W)}
               </span>
+              {Number.isFinite(deltas.lf8W) && (
+                <span style={{ color: deltas.lf8W >= 0 ? 'var(--color-emerald-500)' : 'var(--color-rose-500)' }}>
+                  8W: {fmtSigned(deltas.lf8W)}
+                </span>
+              )}
             </div>
             <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
               <div style={{ width: `${lfCotIndex}%`, height: '100%', backgroundColor: '#ef4444', borderRadius: '2px' }} />
@@ -605,6 +642,35 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
               <MarkdownNarrative content={narrative?.overview || 'Cấu trúc vị thế CME phản ánh phân tầng rõ nét: Asset Managers giữ Long chủ đạo, trong khi Hedge Funds mở Short để phòng hộ Basis Arbitrage.'} />
             </div>
 
+            {/* Blind-Spot & Negative Gamma Alert Banner */}
+            {(isNegativeGamma || counterpartyBalance?.severity === 'warning') && (
+              <div style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                borderLeft: '3px solid var(--color-rose-500, #ef4444)',
+                padding: '10px 14px',
+                borderRadius: '0 6px 6px 0',
+                fontSize: '0.7rem',
+                lineHeight: 1.55,
+                color: 'var(--text-contrast)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold', color: 'var(--color-rose-500, #ef4444)', marginBottom: '4px' }}>
+                  <AlertTriangle size={14} /> CẢNH BÁO ĐIỂM MÙ DỮ LIỆU COT (BLIND-SPOT ALERT)
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {isNegativeGamma && (
+                    <li>
+                      <strong>Deribit đang ở Negative Gamma (Short Gamma):</strong> Áp lực bán/mua cưỡng bức từ <em>Dealer Delta Hedging</em> diễn ra real-time khi giá biến động và <strong>không xuất hiện trong báo cáo COT tuần</strong>.
+                    </li>
+                  )}
+                  {counterpartyBalance?.severity === 'warning' && (
+                    <li>
+                      <strong>Khoảng trống đối ứng 4W–8W:</strong> Dòng tiền Asset Managers chưa thấy bên đối ứng tương xứng trên một nhóm đơn lẻ; phần đối ứng có thể nằm ở <em>Spread, OTC/Spot ETF</em> hoặc dồn vào số liệu sau 1–2 tháng.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
             {/* Deep-dive 3 Pillars */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
               
@@ -644,6 +710,19 @@ export default function CmeCotCard({ cotData, theme = 'dark', moduleId = 'dash_c
                 </div>
                 <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
                   Tỷ lệ L/S: {retail.long.toLocaleString()} / {retail.short.toLocaleString()} ({((retail.long / ((retail.long + retail.short) || 1)) * 100).toFixed(1)}% Long)
+                </div>
+              </div>
+
+              {/* Pillar 4: Dealer & Counterparty Check */}
+              <div style={{ background: 'var(--bg-panel-solid, rgba(0,0,0,0.15))', padding: '12px 14px', borderRadius: '6px', border: '1px solid var(--border-panel)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: '#3b82f6', fontWeight: 'bold', fontSize: '0.72rem' }}>
+                  <ShieldCheck size={14} /> 4. DEALER & ĐỐI ỨNG THANH KHOẢN
+                </div>
+                <div style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'var(--text-contrast)' }}>
+                  <MarkdownNarrative content={narrative?.counterparty || `Dealer Intermediary nắm giữ Net **${dealer.net >= 0 ? '+' : ''}${dealer.net.toLocaleString()} hđ**. Lưu ý COT là snapshot tuần, không phản ánh delta-hedging Options real-time.`} />
+                </div>
+                <div className="font-mono text-slate-500" style={{ fontSize: '0.62rem', marginTop: '8px', borderTop: '1px dashed var(--border-panel)', paddingTop: '6px' }}>
+                  Dealer Net: {dealer.net >= 0 ? `+${dealer.net.toLocaleString()}` : dealer.net.toLocaleString()} hđ • 8W: {fmtSigned(deltas.dealer8W ?? 0)} hđ
                 </div>
               </div>
 

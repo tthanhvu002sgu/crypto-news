@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calculateCotIndex,
   classifyCotRegime,
+  analyzeCotCounterpartyBalance,
   processCotData,
   COT_REGIMES
 } from './cotEngine.js';
@@ -103,5 +104,56 @@ describe('cotEngine', () => {
     // Test with default mergeStatic: true
     const mergedResult = processCotData(rawMock);
     assert.ok(mergedResult.history.length > 10);
+    assert.ok(Number.isFinite(mergedResult.analytics.deltas.am8W));
+    assert.ok(Number.isFinite(mergedResult.analytics.deltas.dealer8W));
+    assert.ok(mergedResult.analytics.counterpartyBalance);
+    assert.ok(mergedResult.narrative.counterparty.includes('Dealer Intermediary'));
+  });
+
+  it('analyzes counterparty balance across 4W-8W windows including reporting lag gap', () => {
+    const basisAbsorbed = analyzeCotCounterpartyBalance({}, {
+      am4W: 1200,
+      am8W: 3000,
+      lf4W: -1100,
+      lf8W: -2600,
+      dealer4W: 0,
+      dealer8W: -100,
+      other4W: 0,
+      other8W: -100,
+      retail4W: 0,
+      retail8W: -200,
+    });
+    assert.equal(basisAbsorbed.status, 'BASIS_ABSORBED');
+    assert.equal(basisAbsorbed.severity, 'info');
+
+    const dealerAbsorbed = analyzeCotCounterpartyBalance({}, {
+      am4W: 1000,
+      am8W: 2000,
+      lf4W: 200,
+      lf8W: 300,
+      dealer4W: -900,
+      dealer8W: -1500,
+      other4W: -100,
+      other8W: -300,
+      retail4W: -200,
+      retail8W: -500,
+    });
+    assert.equal(dealerAbsorbed.status, 'DEALER_OTHER_ABSORBED');
+    assert.equal(dealerAbsorbed.primaryCounterparty, 'DEALER');
+
+    const lagGap = analyzeCotCounterpartyBalance({}, {
+      am4W: 2500,
+      am8W: 5000,
+      lf4W: -300,
+      lf8W: -400,
+      dealer4W: -200,
+      dealer8W: -300,
+      other4W: -100,
+      other8W: -200,
+      retail4W: 100,
+      retail8W: 200,
+    });
+    assert.equal(lagGap.status, 'REPORTING_LAG_GAP');
+    assert.equal(lagGap.severity, 'warning');
   });
 });

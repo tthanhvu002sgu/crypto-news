@@ -493,6 +493,9 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
   }
 
   // 1B. CME COT Institutional Flow (12%)
+  let cotGammaWarning = null;
+  const gammaRegime = data.optionsAnalysis?.gammaRegime || data.optionsData?.gammaRegime || null;
+  const isNegativeGamma = gammaRegime?.regime === 'NEGATIVE_GAMMA';
   const isCotFallback = isItemFallback(data.cotData) || data.cotData?.isFallback === true;
   if (data.cotData?.assetManager && !isCotFallback) {
     const netPos = toFiniteNumber(data.cotData.assetManager.net);
@@ -511,9 +514,15 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
         else if (netChange < -500 && cotSignal <= 0) cotSignal = Math.max(-1.0, cotSignal - 0.2);
       }
 
+      if (isNegativeGamma) {
+        cotSignal *= 0.7;
+        cotGammaWarning = 'Deribit đang ở Short Gamma (Negative Gamma) — báo cáo COT tuần có độ trễ và không phản ánh áp lực delta-hedging cưỡng bức real-time.';
+        cotStatus += ' ⚠️ Short Gamma active (COT trễ, không gồm dealer delta-hedging)';
+      }
+
       instScoreSum += cotSignal * 0.12;
       availableWeight += 0.12;
-      signals.push({ name: 'CME COT Flow', weight: '12%', score: cotSignal * 12, status: cotStatus, pillar: 'institutional' });
+      signals.push({ name: 'CME COT Flow', weight: '12%', score: cotSignal * 12, status: cotStatus, pillar: 'institutional', isGammaDampened: isNegativeGamma });
     }
   } else if (isCotFallback) {
     signals.push({ name: 'CME COT Flow', weight: '0% (FALLBACK)', score: 0, status: 'Dữ liệu CME COT fallback / chưa cập nhật (loại khỏi tính điểm)', pillar: 'institutional', isFallback: true });
@@ -1059,6 +1068,7 @@ export function calculateMarketBias(data, etfHistory = [], options = {}) {
       microstructure: Math.round((microScoreSum / 0.15) * 100) || 0,
     },
     signals,
+    cotGammaWarning,
     upcomingEvents,
     freshness,
     confirmation,
