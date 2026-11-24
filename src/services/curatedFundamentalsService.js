@@ -171,7 +171,8 @@ export function getSectorMetricsGrowthForWindow(symbol, windowKey = '7d', asOf =
     const hasLiveM1 = live.metric1Growth !== undefined && live.metric1Growth !== null;
     const hasLiveM1Values = live.metric1Value !== undefined && live.metric1Prior !== undefined;
     if (hasLiveM1 || hasLiveM1Values) {
-      const liveM1Pub = live.publishedAt ? new Date(live.publishedAt).getTime() : 0;
+      const m1PubRaw = live.publishedAt1 ?? live.publishedAt;
+      const liveM1Pub = m1PubRaw ? new Date(m1PubRaw).getTime() : 0;
       // Anti-lookahead check on live data
       if (Number.isFinite(asOfTime) && Number.isFinite(liveM1Pub) && liveM1Pub > 0 && liveM1Pub <= asOfTime) {
         cur1 = live.metric1Value ?? cur1;
@@ -180,7 +181,7 @@ export function getSectorMetricsGrowthForWindow(symbol, windowKey = '7d', asOf =
         name1 = live.metric1Name ?? name1 ?? 'metric_1';
         unit1 = live.metric1Unit ?? unit1 ?? 'unit';
         sourceUrl1 = live.sourceUrl1 ?? sourceUrl1;
-        pub1 = live.publishedAt ?? pub1;
+        pub1 = m1PubRaw ?? pub1;
       }
     }
 
@@ -188,7 +189,8 @@ export function getSectorMetricsGrowthForWindow(symbol, windowKey = '7d', asOf =
     const hasLiveM2 = live.metric2Growth !== undefined && live.metric2Growth !== null;
     const hasLiveM2Values = live.metric2Value !== undefined && live.metric2Prior !== undefined;
     if (hasLiveM2 || hasLiveM2Values) {
-      const liveM2Pub = live.publishedAt ? new Date(live.publishedAt).getTime() : 0;
+      const m2PubRaw = live.publishedAt2 ?? live.publishedAt;
+      const liveM2Pub = m2PubRaw ? new Date(m2PubRaw).getTime() : 0;
       // Anti-lookahead check on live data
       if (Number.isFinite(asOfTime) && Number.isFinite(liveM2Pub) && liveM2Pub > 0 && liveM2Pub <= asOfTime) {
         cur2 = live.metric2Value ?? cur2;
@@ -197,7 +199,7 @@ export function getSectorMetricsGrowthForWindow(symbol, windowKey = '7d', asOf =
         name2 = live.metric2Name ?? name2 ?? 'network_fees';
         unit2 = live.metric2Unit ?? unit2 ?? 'USD';
         sourceUrl2 = live.sourceUrl2 ?? sourceUrl2;
-        pub2 = live.publishedAt ?? pub2;
+        pub2 = m2PubRaw ?? pub2;
       }
     }
   }

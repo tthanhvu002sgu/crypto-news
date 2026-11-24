@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import axios from 'axios';
-import { extractHistoricalFeesWindow, fetchLiveDefiLlamaMetrics } from './defiLlamaAdapter.js';
+import { extractHistoricalFeesWindow, extractHistoricalTvlWindow, fetchLiveDefiLlamaMetrics } from './defiLlamaAdapter.js';
 import { getSectorMetricsGrowthForWindow } from './curatedFundamentalsService.js';
 
 const DAY = 86_400_000;
@@ -39,4 +39,42 @@ test('future live publication cannot affect a closed snapshot', () => {
   const result = getSectorMetricsGrowthForWindow('SOLUSDT', '7d', new Date(AS_OF), overrides);
   assert.equal(result.metric1Growth, baseline.metric1Growth);
   assert.equal(result.metric2Growth, baseline.metric2Growth);
+});
+
+test('historical TVL extraction computes exact closed-day growth and enforces anti-lookahead', () => {
+  const tvlSeries = [
+    { date: (AS_OF - 8 * DAY) / 1000, tvl: 1000 },
+    { date: (AS_OF - 1 * DAY) / 1000, tvl: 1200 },
+    // Future point after AS_OF must be ignored
+    { date: (AS_OF + 1 * DAY) / 1000, tvl: 9999 },
+  ];
+  const res = extractHistoricalTvlWindow(tvlSeries, '7d', AS_OF);
+  assert.ok(res);
+  assert.equal(res.priorValue, 1000);
+  assert.equal(res.currentValue, 1200);
+  assert.ok(Math.abs(res.growthRate - 0.2) < 1e-9);
+  assert.equal(res.publishedAt, '2026-09-26T00:00:00.000Z');
+});
+
+test('live overrides with independent publishedAt1 and publishedAt2 supply both metrics without static data', () => {
+  // Date far after curatedFundamentals.json (2026-09-27) so static data is unmatched
+  const laterDate = new Date('2026-11-24T00:00:00.000Z');
+  const overrides = {
+    SOLUSDT: {
+      '7d': {
+        metric1Growth: 0.15,
+        metric1Name: 'tvl',
+        metric1Unit: 'USD',
+        publishedAt1: '2026-11-23T00:00:00.000Z',
+        metric2Growth: 0.25,
+        metric2Name: 'network_fees',
+        metric2Unit: 'USD',
+        publishedAt2: '2026-11-23T00:00:00.000Z',
+      },
+    },
+  };
+  const res = getSectorMetricsGrowthForWindow('SOLUSDT', '7d', laterDate, overrides);
+  assert.equal(res.metric1Growth, 0.15);
+  assert.equal(res.metric2Growth, 0.25);
+  assert.equal(res.reason, 'valid');
 });

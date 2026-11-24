@@ -24,6 +24,7 @@ import {
 import {
   probeDefiLlamaStatus,
   fetchLiveDefiLlamaMetrics,
+  fetchLiveDefiLlamaTvlMetrics,
 } from './defiLlamaAdapter.js';
 import {
   calculateRelativeStrength,
@@ -53,8 +54,18 @@ const BINANCE_FUTURES_BASE_URLS = [
   'https://fapi3.binance.com',
 ];
 
+const OKX_API_BASE = ['https:', '', 'www.okx.com'].join('/');
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export function toOkxSwapInstId(symbol) {
+  if (!symbol) return null;
+  const upper = symbol.toUpperCase();
+  if (upper.endsWith('USDT')) {
+    return `${upper.slice(0, -4)}-USDT-SWAP`;
+  }
+  return `${upper}-SWAP`;
+}
 
 /**
  * Utility delay function.
@@ -259,6 +270,237 @@ export async function fetchFuturesFundingHistory(symbol, startTime, endTime) {
 }
 
 /**
+ * Probe Binance Futures exchangeInfo to detect geo-blocking (451/403) and obtain active USDT perpetual symbols.
+ */
+export async function probeBinanceFuturesExchangeInfo() {
+  let geoBlocked = false;
+  let lastError = null;
+
+  for (const baseUrl of BINANCE_FUTURES_BASE_URLS) {
+    try {
+      const resp = await axios.get(`${baseUrl}/fapi/v1/exchangeInfo`, {
+        timeout: 8000,
+        headers: { 'User-Agent': DEFAULT_USER_AGENT },
+      });
+      const symbols = new Set();
+      for (const s of resp.data?.symbols || []) {
+        if (s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.quoteAsset === 'USDT') {
+          symbols.add(s.symbol);
+        }
+      }
+      if (symbols.size > 0) {
+        return { status: 'OK', geoBlocked: false, symbols };
+      }
+    } catch (err) {
+      lastError = err;
+      const status = err.response?.status;
+      if (status === 451 || status === 403) {
+        geoBlocked = true;
+      }
+    }
+  }
+
+  return {
+    status: geoBlocked ? 'GEO_BLOCKED' : 'ERROR',
+    geoBlocked,
+    symbols: null,
+    error: lastError?.message || 'Unable to reach Binance Futures',
+  };
+}
+
+/**
+ * Fetch OKX active USDT-margined SWAP instruments for fallback when Binance Futures is geo-blocked.
+ */
+export async function fetchOkxSwapInstruments() {
+  try {
+    const resp = await axios.get(`${OKX_API_BASE}/api/v5/public/instruments`, {
+      params: { instType: 'SWAP' },
+      timeout: 10000,
+      headers: { 'User-Agent': DEFAULT_USER_AGENT },
+    });
+    const instIds = new Set();
+    for (const item of resp.data?.data || []) {
+      if (item.state === 'live' && item.settleCcy === 'USDT' && item.instId) {
+        instIds.add(item.instId);
+      }
+    }
+    return instIds.size > 0 ? instIds : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch OKX SWAP daily klines + taker volume ratio and normalize into Binance kline tuple format.
+ * Uses unit-invariant buyRatio = buyVol / (buyVol + sellVol) applied to quote volume (volCcyQuote).
+ */
+export async function fetchOkxFuturesDailyKlines(symbol, asOfUtcMidnight, limit = 35) {
+  const instId = toOkxSwapInstId(symbol);
+  if (!instId) return [];
+
+  const asOfTime = asOfUtcMidnight.getTime();
+  const endTime = asOfTime - 1;
+
+  try {
+    const [candlesResp, takerResp] = await Promise.all([
+      axios.get(`${OKX_API_BASE}/api/v5/market/history-candles`, {
+        params: { instId, bar: '1Dutc', after: String(asOfTime), limit: String(limit) },
+        timeout: 10000,
+        headers: { 'User-Agent': DEFAULT_USER_AGENT },
+      }),
+      axios.get(`${OKX_API_BASE}/api/v5/rubik/stat/taker-volume-contract`, {
+        params: { instId, period: '1D', end: String(asOfTime), limit: String(limit) },
+        timeout: 10000,
+        headers: { 'User-Agent': DEFAULT_USER_AGENT },
+      }).catch(() => ({ data: { data: [] } })),
+    ]);
+
+    const rawCandles = Array.isArray(candlesResp.data?.data) ? candlesResp.data.data : [];
+    const rawTaker = Array.isArray(takerResp.data?.data) ? takerResp.data.data : [];
+    if (rawCandles.length === 0 || rawTaker.length === 0) {
+      return [];
+    }
+
+    // Index taker volume ratio by UTC day midnight timestamp
+    const takerRatioByDay = new Map();
+    for (const row of rawTaker) {
+      // [ts, sellVol, buyVol]
+      const ts = Number(row[0]);
+      const sellVol = Number(row[1]);
+      const buyVol = Number(row[2]);
+      if (Number.isFinite(ts) && Number.isFinite(sellVol) && Number.isFinite(buyVol) && (sellVol + buyVol) > 0) {
+        const dayTs = Math.floor(ts / MS_PER_DAY) * MS_PER_DAY;
+        takerRatioByDay.set(dayTs, buyVol / (buyVol + sellVol));
+      }
+    }
+
+    const normalized = [];
+    for (const c of rawCandles) {
+      // [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
+      const openTime = Number(c[0]);
+      const quoteVol = Number(c[7]);
+      if (!Number.isFinite(openTime) || openTime > endTime || !Number.isFinite(quoteVol) || quoteVol <= 0) {
+        continue;
+      }
+      const dayTs = Math.floor(openTime / MS_PER_DAY) * MS_PER_DAY;
+      const buyRatio = takerRatioByDay.get(dayTs);
+      if (buyRatio === undefined) {
+        continue;
+      }
+      const takerBuyQuote = quoteVol * buyRatio;
+      const closeTime = openTime + MS_PER_DAY - 1;
+      normalized.push([
+        openTime,
+        c[1],
+        c[2],
+        c[3],
+        c[4],
+        c[6],
+        closeTime,
+        String(quoteVol),
+        0,
+        '0',
+        String(takerBuyQuote),
+        '0',
+      ]);
+    }
+
+    normalized.sort((a, b) => a[0] - b[0]);
+    return normalized;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch OKX SWAP Open Interest history and normalize to Binance openInterestHist shape.
+ */
+export async function fetchOkxFuturesOiHistory(symbol, asOfUtcMidnight, limit = 35) {
+  const instId = toOkxSwapInstId(symbol);
+  if (!instId) return [];
+
+  const asOfTime = asOfUtcMidnight instanceof Date ? asOfUtcMidnight.getTime() : new Date(asOfUtcMidnight).getTime();
+  try {
+    const resp = await axios.get(`${OKX_API_BASE}/api/v5/rubik/stat/contracts/open-interest-history`, {
+      params: { instId, period: '1D', end: String(asOfTime + MS_PER_DAY), limit: String(Math.min(limit + 2, 100)) },
+      timeout: 10000,
+      headers: { 'User-Agent': DEFAULT_USER_AGENT },
+    });
+
+    const rows = Array.isArray(resp.data?.data) ? resp.data.data : [];
+    return rows
+      .map((r) => {
+        // [ts, oi, oiCcy, oiUsd]
+        const ts = Number(r[0]);
+        const oiBase = Number(r[2]);
+        const oiUsd = Number(r[3]);
+        if (!Number.isFinite(ts) || ts > asOfTime + 4 * 60 * 60 * 1000) return null;
+        return {
+          timestamp: ts,
+          sumOpenInterest: Number.isFinite(oiBase) ? oiBase : null,
+          sumOpenInterestValue: Number.isFinite(oiUsd) ? oiUsd : null,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.timestamp - b.timestamp);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch OKX SWAP Funding Rate history and normalize to Binance fundingRate shape.
+ */
+export async function fetchOkxFuturesFundingHistory(symbol, startTime, endTime) {
+  const instId = toOkxSwapInstId(symbol);
+  if (!instId) return [];
+
+  const allRecords = [];
+  const seen = new Set();
+  let afterCursor = null;
+
+  try {
+    for (let page = 0; page < 4; page += 1) {
+      const params = { instId, limit: '100' };
+      if (afterCursor) params.after = String(afterCursor);
+
+      const resp = await axios.get(`${OKX_API_BASE}/api/v5/public/funding-rate-history`, {
+        params,
+        timeout: 10000,
+        headers: { 'User-Agent': DEFAULT_USER_AGENT },
+      });
+
+      const rows = Array.isArray(resp.data?.data) ? resp.data.data : [];
+      if (rows.length === 0) break;
+
+      let minTime = Infinity;
+      for (const item of rows) {
+        const ft = Number(item.fundingTime);
+        const rate = Number(item.realizedRate ?? item.fundingRate);
+        if (Number.isFinite(ft)) {
+          if (ft < minTime) minTime = ft;
+          if (ft >= startTime && ft <= endTime && Number.isFinite(rate) && !seen.has(ft)) {
+            seen.add(ft);
+            allRecords.push({ fundingTime: ft, fundingRate: rate });
+          }
+        }
+      }
+
+      if (!Number.isFinite(minTime) || minTime <= startTime || rows.length < 100) {
+        break;
+      }
+      afterCursor = minTime;
+      await sleep(80);
+    }
+
+    allRecords.sort((a, b) => a.fundingTime - b.fundingTime);
+    return allRecords;
+  } catch {
+    return allRecords;
+  }
+}
+
+/**
  * Build Top 50 universe by 30-day quote volume.
  */
 export async function buildTop50Universe(asOfUtcMidnight, candidateSymbols = null) {
@@ -408,41 +650,107 @@ export async function generateDailySnapshot({
 
   const rawAssets = [];
 
+  // Probe futures venue once (avoid 50x repeated geo-block failures on US runners)
+  const needsLiveFuturesProbe = universe.some(a => sourceOverrides[a.symbol]?.hasFutures === undefined);
+  let activeFuturesVenue = 'binance';
+  let binanceFuturesSymbols = null;
+  let okxSwapInstIds = null;
+  let binanceFuturesStatus = 'OK';
+
+  if (needsLiveFuturesProbe) {
+    const binanceProbe = await probeBinanceFuturesExchangeInfo();
+    if (binanceProbe.status === 'OK' && binanceProbe.symbols) {
+      activeFuturesVenue = 'binance';
+      binanceFuturesSymbols = binanceProbe.symbols;
+      binanceFuturesStatus = 'OK';
+    } else {
+      console.warn(`[ScannerDataEngine] Binance Futures unavailable (${binanceProbe.status}), probing OKX SWAP fallback...`);
+      okxSwapInstIds = await fetchOkxSwapInstruments();
+      if (okxSwapInstIds && okxSwapInstIds.size > 0) {
+        activeFuturesVenue = 'okx';
+        binanceFuturesStatus = binanceProbe.geoBlocked ? 'GEO_BLOCKED_FALLBACK_OKX' : 'ERROR_FALLBACK_OKX';
+      } else {
+        activeFuturesVenue = 'error';
+        binanceFuturesStatus = binanceProbe.status;
+      }
+    }
+  }
+
   // 3. Process each asset in universe
   for (const asset of universe) {
     const spotKlines = asset.spotKlines || (await fetchSpotDailyKlines(asset.symbol, asOfMidnight, 35));
     const klinesLen = spotKlines.length;
 
-    // Check if asset has futures
+    // Check if asset has futures and fetch derivatives data from active venue
     let futuresKlines = [];
     let oiHistory = [];
     let fundingHistory = [];
     let hasFutures = false;
+    let futuresSource = 'none';
 
     if (sourceOverrides[asset.symbol]?.hasFutures !== undefined) {
       hasFutures = sourceOverrides[asset.symbol].hasFutures;
-    } else {
-      try {
-        futuresKlines = await fetchFuturesDailyKlines(asset.symbol, asOfMidnight, 35);
-        hasFutures = Array.isArray(futuresKlines) && futuresKlines.length > 0;
-      } catch {
-        hasFutures = false;
+      futuresSource = hasFutures ? (sourceOverrides[asset.symbol].futuresSource || 'binance') : 'none';
+      if (hasFutures && sourceOverrides[asset.symbol]?.futuresKlines) {
+        futuresKlines = sourceOverrides[asset.symbol].futuresKlines;
       }
+    } else if (activeFuturesVenue === 'binance') {
+      const listedOnBinanceFutures = binanceFuturesSymbols ? binanceFuturesSymbols.has(asset.symbol) : true;
+      if (listedOnBinanceFutures) {
+        futuresKlines = await fetchFuturesDailyKlines(asset.symbol, asOfMidnight, 35);
+        if (Array.isArray(futuresKlines) && futuresKlines.length > 0) {
+          hasFutures = true;
+          futuresSource = 'binance';
+        } else {
+          // Contract is listed on Binance Futures exchangeInfo, so empty klines means fetch failure, not Spot Only
+          hasFutures = null;
+          futuresSource = 'error';
+        }
+      } else {
+        hasFutures = false;
+        futuresSource = 'none';
+      }
+    } else if (activeFuturesVenue === 'okx') {
+      const okxInstId = toOkxSwapInstId(asset.symbol);
+      const listedOnOkx = okxSwapInstIds && okxInstId ? okxSwapInstIds.has(okxInstId) : false;
+      if (listedOnOkx) {
+        futuresKlines = await fetchOkxFuturesDailyKlines(asset.symbol, asOfMidnight, 35);
+        if (Array.isArray(futuresKlines) && futuresKlines.length > 0) {
+          hasFutures = true;
+          futuresSource = 'okx';
+        } else {
+          hasFutures = null;
+          futuresSource = 'error';
+        }
+      } else {
+        hasFutures = false;
+        futuresSource = 'none';
+      }
+    } else {
+      // Neither Binance Futures nor OKX fallback could be reached
+      hasFutures = null;
+      futuresSource = 'error';
     }
 
-    if (hasFutures) {
-      if (!sourceOverrides[asset.symbol]?.oiHistory) {
-        oiHistory = await fetchFuturesOiHistory(asset.symbol, asOfMidnight, 35);
-      } else {
+    if (hasFutures === true) {
+      if (sourceOverrides[asset.symbol]?.oiHistory) {
         oiHistory = sourceOverrides[asset.symbol].oiHistory;
+      } else if (futuresSource === 'okx') {
+        oiHistory = await fetchOkxFuturesOiHistory(asset.symbol, asOfMidnight, 35);
+      } else {
+        oiHistory = await fetchFuturesOiHistory(asset.symbol, asOfMidnight, 35);
       }
 
-      if (!sourceOverrides[asset.symbol]?.fundingHistory) {
+      if (sourceOverrides[asset.symbol]?.fundingHistory) {
+        fundingHistory = sourceOverrides[asset.symbol].fundingHistory;
+      } else {
         const startTime = asOfMidnight.getTime() - (31 * MS_PER_DAY);
         const endTime = asOfMidnight.getTime() - 1;
-        fundingHistory = await fetchFuturesFundingHistory(asset.symbol, startTime, endTime);
-      } else {
-        fundingHistory = sourceOverrides[asset.symbol].fundingHistory;
+        if (futuresSource === 'okx') {
+          fundingHistory = await fetchOkxFuturesFundingHistory(asset.symbol, startTime, endTime);
+        } else {
+          fundingHistory = await fetchFuturesFundingHistory(asset.symbol, startTime, endTime);
+        }
       }
     }
 
@@ -622,27 +930,41 @@ export async function generateDailySnapshot({
         deltaOiBase: oiMetrics.deltaOiBase,
       });
 
-      // Live DefiLlama Adapter check for fundamentals
-      let liveAdapterMetrics = null;
+      // Live DefiLlama Adapter check for fundamentals (both metric1: TVL and metric2: Fees)
+      let liveTvlMetrics = null;
+      let liveFeesMetrics = null;
       if (asset.defillamaSlug) {
-        try {
-          liveAdapterMetrics = await fetchLiveDefiLlamaMetrics(asset.defillamaSlug, win.key, asOfMidnight);
-        } catch {}
+        const [tvlRes, feesRes] = await Promise.all([
+          fetchLiveDefiLlamaTvlMetrics(asset.defillamaSlug, win.key, asOfMidnight).catch(() => null),
+          fetchLiveDefiLlamaMetrics(asset.defillamaSlug, win.key, asOfMidnight).catch(() => null),
+        ]);
+        liveTvlMetrics = tvlRes;
+        liveFeesMetrics = feesRes;
       }
 
-      const liveOverrides = liveAdapterMetrics ? {
-        [asset.symbol]: {
-          [win.key]: {
-            metric2Growth: liveAdapterMetrics.growthRate,
-            metric2Name: liveAdapterMetrics.metricName,
-            metric2Unit: liveAdapterMetrics.metricUnit,
-            metric2Value: liveAdapterMetrics.currentValue,
-            metric2Prior: liveAdapterMetrics.priorValue,
-            sourceUrl2: liveAdapterMetrics.sourceUrl,
-            publishedAt: liveAdapterMetrics.publishedAt,
-          }
-        }
-      } : null;
+      const liveWinOverride = {};
+      if (liveTvlMetrics) {
+        liveWinOverride.metric1Growth = liveTvlMetrics.growthRate;
+        liveWinOverride.metric1Name = liveTvlMetrics.metricName;
+        liveWinOverride.metric1Unit = liveTvlMetrics.metricUnit;
+        liveWinOverride.metric1Value = liveTvlMetrics.currentValue;
+        liveWinOverride.metric1Prior = liveTvlMetrics.priorValue;
+        liveWinOverride.sourceUrl1 = liveTvlMetrics.sourceUrl;
+        liveWinOverride.publishedAt1 = liveTvlMetrics.publishedAt;
+      }
+      if (liveFeesMetrics) {
+        liveWinOverride.metric2Growth = liveFeesMetrics.growthRate;
+        liveWinOverride.metric2Name = liveFeesMetrics.metricName;
+        liveWinOverride.metric2Unit = liveFeesMetrics.metricUnit;
+        liveWinOverride.metric2Value = liveFeesMetrics.currentValue;
+        liveWinOverride.metric2Prior = liveFeesMetrics.priorValue;
+        liveWinOverride.sourceUrl2 = liveFeesMetrics.sourceUrl;
+        liveWinOverride.publishedAt2 = liveFeesMetrics.publishedAt;
+      }
+
+      const liveOverrides = Object.keys(liveWinOverride).length > 0
+        ? { [asset.symbol]: { [win.key]: liveWinOverride } }
+        : null;
 
       // Fundamentals Growth for this window
       const fundGrowth = getSectorMetricsGrowthForWindow(asset.symbol, win.key, asOfMidnight, liveOverrides);
@@ -703,6 +1025,7 @@ export async function generateDailySnapshot({
       coingeckoId: asset.coingeckoId || null,
       defillamaSlug: asset.defillamaSlug || null,
       hasFutures,
+      futuresSource,
       liquidity30d: asset.volStability || calculateVolumeStability(asset.dailyVolumes30d || []),
       rubric,
       windows: windowsData,
@@ -732,7 +1055,8 @@ export async function generateDailySnapshot({
     generatedAt: generatedAtIso,
     sourceStatus: {
       binanceSpot: 'OK',
-      binanceFutures: 'OK',
+      binanceFutures: binanceFuturesStatus,
+      futuresVenue: activeFuturesVenue,
       defiLlama: defiLlamaStatus,
       curatedFundamentals: 'OK',
     },

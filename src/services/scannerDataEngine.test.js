@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   getUtcMidnightDate,
   generateDailySnapshot,
+  toOkxSwapInstId,
 } from './scannerDataEngine.js';
+import { calculateDerivativesConfirmationScore } from './scannerCalculations.js';
 
 function mockKlineSeries(basePrice, days = 35, growthDaily = 0.005, anchorDate = new Date('2026-09-27T00:00:00.000Z')) {
   const klines = [];
@@ -120,5 +122,22 @@ test('Scanner Data Engine Snapshot Generation', async (t) => {
     assert.ok(sol.windows['7d'].metrics.rsBtc !== null);
     assert.ok(sol.windows['7d'].metrics.rsEth !== null);
     assert.ok(sol.windows['7d'].metrics.spotCvd !== null);
+  });
+
+  await t.test('Converts Binance symbol to OKX SWAP instId and flags futures fetch error (hasFutures: null) as invalid', () => {
+    assert.equal(toOkxSwapInstId('SOLUSDT'), 'SOL-USDT-SWAP');
+    assert.equal(toOkxSwapInstId('xrpusdt'), 'XRP-USDT-SWAP');
+
+    const errRes = calculateDerivativesConfirmationScore({
+      spotCvd: 1000,
+      futuresCvd: null,
+      priceChangePct: 2,
+      deltaOiBase: null,
+      fundingAvgDaily: null,
+      hasFutures: null,
+    });
+    assert.equal(errRes.isValid, false);
+    assert.equal(errRes.score, null);
+    assert.equal(errRes.reason, 'futures_fetch_error');
   });
 });

@@ -37,7 +37,7 @@ import DataOriginBadge, { DataOriginLegend } from './DataOriginBadge';
 const fmtCvd = (n) => {
   if (n == null || !Number.isFinite(Number(n))) return '---';
   const num = Number(n);
-  const sign = num > 0 ? '+' : '';
+  const sign = num > 0 ? '+' : num < 0 ? '-' : '';
   const abs = Math.abs(num);
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
@@ -1044,10 +1044,13 @@ export default function ScannerTab() {
                           }`}>
                             {metrics.flowLabelText || 'Hỗn hợp'}
                           </span>
-                          {asset.hasFutures ? (
+                          {asset.hasFutures === true ? (
                             <small className="text-muted text-xs mt-1">
                               ΔOI: {fmtPct(metrics.deltaOiBasePct)} · Fund: {fmtPct((metrics.fundingAvgDaily || 0) * 100, true, 3)}/d
+                              {asset.futuresSource === 'okx' ? ' · OKX' : ''}
                             </small>
+                          ) : asset.hasFutures === null || asset.futuresSource === 'error' ? (
+                            <small className="text-amber-400 text-xs mt-1">Lỗi tải dữ liệu Futures</small>
                           ) : (
                             <small className="text-muted text-xs mt-1">Spot Only (Không có Futures)</small>
                           )}

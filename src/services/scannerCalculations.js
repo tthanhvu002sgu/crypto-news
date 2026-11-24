@@ -417,6 +417,22 @@ export function calculateDerivativesConfirmationScore({ spotCvd, futuresCvd, pri
   const hasValidDeltaOiBase = isValidNumeric(deltaOiBase);
   const hasValidFunding = isValidNumeric(fundingAvgDaily);
 
+  // If futures status is unknown (API geo-blocked or fetch failed), never treat as Spot Only
+  if (hasFutures === null) {
+    return {
+      score: null,
+      isValid: false,
+      reason: 'futures_fetch_error',
+      missingComponents: ['futures_api'],
+      conditions: {
+        spotCvdPositive: false,
+        futuresCvdPositive: false,
+        priceAndOiExpanding: false,
+        fundingWithinThreshold: false,
+      },
+    };
+  }
+
   // If asset has futures, missing any required futures component fails validation
   if (hasFutures) {
     if (!hasValidFuturesCvd || !hasValidDeltaOiBase || !hasValidFunding) {

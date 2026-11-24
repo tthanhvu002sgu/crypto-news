@@ -11,6 +11,39 @@ const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const LLAMA_CACHE = new Map();
 
 /**
+ * Mapping from DefiLlama protocol/fees slugs to DefiLlama Chain TVL names
+ * used by /v2/historicalChainTvl/{chain}.
+ */
+const DEFILLAMA_CHAIN_SLUGS = {
+  solana: 'Solana',
+  bsc: 'BSC',
+  avax: 'Avalanche',
+  avalanche: 'Avalanche',
+  sui: 'Sui',
+  near: 'Near',
+  aptos: 'Aptos',
+  ton: 'TON',
+  tron: 'Tron',
+  cardano: 'Cardano',
+  arbitrum: 'Arbitrum',
+  optimism: 'Optimism',
+  polygon: 'Polygon',
+  stacks: 'Stacks',
+  starknet: 'Starknet',
+  'zksync-era': 'zkSync Era',
+  sei: 'Sei',
+  injective: 'Injective',
+  hedera: 'Hedera',
+  icp: 'ICP',
+  cosmos: 'Cosmos',
+  polkadot: 'Polkadot',
+  xrp: 'XRPL',
+  doge: 'Doge',
+  filecoin: 'Filecoin',
+  arweave: 'Arweave',
+};
+
+/**
  * Fetch protocol overview from DefiLlama with timeout and caching.
  */
 export async function fetchDefiLlamaProtocol(slug, timeoutMs = 8000) {
@@ -138,6 +171,142 @@ export function extractHistoricalFeesWindow(feesData, windowKey = '7d', asOfTime
         publishedAt: new Date(points.get(asOfSec - daySec).timestamp * 1000).toISOString(),
       };
     }
+  }
+
+  return null;
+}
+
+const DEFILLAMA_WEB_BASE = ['https:', '', 'defillama.com'].join('/');
+
+/**
+ * Fetch historical daily TVL series for an L1/L2 chain from DefiLlama.
+ */
+export async function fetchDefiLlamaChainTvl(chainName, timeoutMs = 8000) {
+  if (!chainName) return null;
+  const cacheKey = `chainTvl:${chainName.toLowerCase().trim()}`;
+
+  if (LLAMA_CACHE.has(cacheKey)) {
+    const cached = LLAMA_CACHE.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+
+  try {
+    const resp = await axios.get(`${DEFILLAMA_API_BASE}/v2/historicalChainTvl/${encodeURIComponent(chainName)}`, {
+      timeout: timeoutMs,
+      headers: { 'User-Agent': 'CryptoNewsScanner/9.0' },
+    });
+
+    if (Array.isArray(resp.data) && resp.data.length > 0) {
+      const entry = { data: resp.data, timestamp: Date.now() };
+      LLAMA_CACHE.set(cacheKey, entry);
+      return resp.data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract historical TVL growth between closed UTC day (asOf - 1d) and (asOf - (days + 1)d).
+ * Strictly enforces anti-lookahead: ignores any observation after asOfTime.
+ */
+export function extractHistoricalTvlWindow(tvlSeries, windowKey = '7d', asOfTime = Date.now()) {
+  if (!Array.isArray(tvlSeries) || tvlSeries.length === 0 || !Number.isFinite(asOfTime)) {
+    return null;
+  }
+
+  const days = windowKey === '24h' ? 1 : windowKey === '30d' ? 30 : 7;
+  const daySec = 86400;
+  const asOfSec = Math.floor(asOfTime / 1000);
+  if (asOfSec % daySec !== 0) return null;
+
+  const points = new Map();
+  for (const item of tvlSeries) {
+    let t = null;
+    let v = null;
+    if (Array.isArray(item)) {
+      t = Number(item[0]);
+      v = Number(item[1]);
+    } else if (item && typeof item === 'object') {
+      t = Number(item.date ?? item.timestamp ?? item.time);
+      v = Number(item.tvl ?? item.totalLiquidityUSD ?? item.value);
+    }
+    if (t > 1e11) t = Math.floor(t / 1000);
+
+    // Anti-lookahead: never use observations published after snapshot asOf
+    if (Number.isFinite(t) && t <= asOfSec && Number.isFinite(v) && v >= 0) {
+      const day = Math.floor(t / daySec) * daySec;
+      const existing = points.get(day);
+      if (!existing || t >= existing.timestamp) {
+        points.set(day, { value: v, timestamp: t });
+      }
+    }
+  }
+
+  const currentDay = asOfSec - daySec;
+  const priorDay = asOfSec - (days + 1) * daySec;
+  const currentPoint = points.get(currentDay);
+  const priorPoint = points.get(priorDay);
+
+  if (!currentPoint || !priorPoint || priorPoint.value <= 0) {
+    return null;
+  }
+
+  return {
+    currentValue: currentPoint.value,
+    priorValue: priorPoint.value,
+    growthRate: (currentPoint.value - priorPoint.value) / priorPoint.value,
+    publishedAt: new Date(currentPoint.timestamp * 1000).toISOString(),
+  };
+}
+
+/**
+ * Fetch and calculate historical TVL growth from DefiLlama for an asset (chain or protocol).
+ * Used as live metric1 (TVL) for Fundamentals pillar.
+ */
+export async function fetchLiveDefiLlamaTvlMetrics(slug, windowKey = '7d', asOfMidnight = new Date()) {
+  if (!slug) return null;
+  const normalizedSlug = slug.toLowerCase().trim();
+  const asOfTime = new Date(asOfMidnight).getTime();
+  if (!Number.isFinite(asOfTime)) return null;
+
+  const chainName = DEFILLAMA_CHAIN_SLUGS[normalizedSlug] || null;
+  if (chainName) {
+    const chainSeries = await fetchDefiLlamaChainTvl(chainName);
+    const historicalChain = extractHistoricalTvlWindow(chainSeries, windowKey, asOfTime);
+    if (historicalChain) {
+      return {
+        metricName: 'tvl',
+        metricUnit: 'USD',
+        currentValue: historicalChain.currentValue,
+        priorValue: historicalChain.priorValue,
+        growthRate: historicalChain.growthRate,
+        sourceUrl: `${DEFILLAMA_WEB_BASE}/chain/${encodeURIComponent(chainName)}`,
+        publishedAt: historicalChain.publishedAt,
+        isValid: true,
+      };
+    }
+  }
+
+  const protocolData = await fetchDefiLlamaProtocol(normalizedSlug);
+  const tvlSeries = Array.isArray(protocolData?.tvl) ? protocolData.tvl : null;
+  if (!tvlSeries) return null;
+
+  const historicalProto = extractHistoricalTvlWindow(tvlSeries, windowKey, asOfTime);
+  if (historicalProto) {
+    return {
+      metricName: 'tvl',
+      metricUnit: 'USD',
+      currentValue: historicalProto.currentValue,
+      priorValue: historicalProto.priorValue,
+      growthRate: historicalProto.growthRate,
+      sourceUrl: `${DEFILLAMA_WEB_BASE}/protocol/${normalizedSlug}`,
+      publishedAt: historicalProto.publishedAt,
+      isValid: true,
+    };
   }
 
   return null;
