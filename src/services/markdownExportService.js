@@ -20,7 +20,7 @@ import { getBiasSnapshots } from './biasSnapshotStore.js';
 import { buildDailyBiasHistory, calculateBiasPriceCorrelation, detectBiasPriceDivergence } from './biasHistoryService.js';
 import { getDeribitOptionsAnalysis } from './deribitOptionsService.js';
 import { getOrderBookDepth, getWhaleWalls } from './api.js';
-import { calculateMacroDashboard } from './macroDashboardEngine.js';
+import { calculateMacroDashboard, MACRO_SOP_PRESET } from './macroDashboardEngine.js';
 import { classifyCapitalFlow } from './capitalFlowEngine.js';
 import {
   loadScannerManifest,
@@ -1108,9 +1108,12 @@ export async function exportMarketDataToMarkdown({
   let macroDashboard = options.macroDashboard || null;
   if (!macroDashboard) {
     try {
-      const candles = dashboardData?.btcDailyKlinesAll ?? dashboardData?.dailyKlines ?? dashboardData?.klines ?? [];
-      if (Array.isArray(candles) && candles.length > 0) {
-        macroDashboard = calculateMacroDashboard(candles);
+      const weeklyCandles = dashboardData?.btcWeeklyKlinesAll ?? dashboardData?.macroWeeklyKlines;
+      const dailyCandles = dashboardData?.btcDailyKlinesAll ?? dashboardData?.dailyKlines;
+      if (Array.isArray(weeklyCandles) && weeklyCandles.length > 0) {
+        macroDashboard = calculateMacroDashboard(weeklyCandles, MACRO_SOP_PRESET);
+      } else if (Array.isArray(dailyCandles) && dailyCandles.length > 0) {
+        macroDashboard = calculateMacroDashboard(dailyCandles, { ...MACRO_SOP_PRESET, timeframe: 'D' });
       }
     } catch (e) {
       console.warn('[MarkdownExport] Macro dashboard calculation error:', e.message);

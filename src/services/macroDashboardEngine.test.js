@@ -1,11 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  applyLivePriceToMacroCandles,
   calculateMacroDashboard,
   macroDashboardInternals,
   CHART_RANGES,
   chartBarsForRange,
   normalizeMacroCandles,
+  ENGINE_MODES,
+  MACRO_SOP_PRESET,
+  checkSopConfigCompliance,
+  evaluateSopAction,
+  isGreenBubble,
+  isRedBubble,
 } from './macroDashboardEngine.js';
 
 const candles = (length, priceAt, overrides = {}) => Array.from({ length }, (_, index) => {
@@ -114,4 +121,125 @@ test('CHART_RANGES contains 6M, 1Y, 3Y, 5Y, ALL and calculates correct bar count
   assert.equal(chartBarsForRange('5Y', 'W'), 260);
   assert.equal(chartBarsForRange('5Y', 'D'), 1825);
   assert.equal(chartBarsForRange('5Y', 'M'), 60);
+});
+
+test('math_v3 exposes per-bar alerts, convictionScore, and fixes cold-start GIFT bug', () => {
+  const rally = candles(40, (index) => 1000 * Math.exp(0.08 * index), { isClosed: true });
+  const result = calculateMacroDashboard(rally, MACRO_SOP_PRESET);
+
+  assert.equal(result.settings.engineMode, ENGINE_MODES.MATH_V3);
+  assert.equal(result.series[17].percentile, 50);
+  assert.notEqual(result.series[17].pnlZone, 'GIFT');
+  assert.equal(typeof result.current.convictionScore, 'number');
+  assert.ok(result.series.every((row) => row.alerts && typeof row.alerts.strongAccum === 'boolean'));
+});
+
+test('checkSopConfigCompliance verifies standard SOP preset and flags mismatches', () => {
+  const ok = checkSopConfigCompliance(MACRO_SOP_PRESET);
+  assert.equal(ok.isCompliant, true);
+  assert.equal(ok.mismatches.length, 0);
+
+  const bad = checkSopConfigCompliance({ engineMode: 'pine_v2', costMethod: 'SMA', timeframe: 'D' });
+  assert.equal(bad.isCompliant, false);
+  const mismatchKeys = bad.mismatches.map((m) => m.key);
+  assert.ok(mismatchKeys.includes('engineMode'));
+  assert.ok(mismatchKeys.includes('costMethod'));
+  assert.ok(mismatchKeys.includes('timeframe'));
+});
+
+test('evaluateSopAction uses latest closed bar and computes Rule 1, Rule 2, and CY-4 accurately', () => {
+  const mkRow = (overrides) => ({
+    time: new Date('2026-11-16T00:00:00Z'),
+    isClosed: true,
+    price: 20000,
+    composite: 0,
+    divergence: false,
+    decision: 'NEUTRAL',
+    ...overrides,
+  });
+
+  // 1. Green Bubble Week 1 on closed bar (even if live W0 is neutral)
+  const gb1 = evaluateSopAction({
+    settings: MACRO_SOP_PRESET,
+    series: [
+      mkRow({ time: new Date('2026-11-09T00:00:00Z'), composite: 2, decision: 'ACCUMULATE' }),
+      mkRow({ time: new Date('2026-11-16T00:00:00Z'), composite: 4, decision: 'STRONG ACCUM' }),
+      mkRow({ time: new Date('2026-11-23T00:00:00Z'), isClosed: false, composite: 1, decision: 'ACCUMULATE' }),
+    ],
+  }, { weeklyBudget: 1000, cashReserve: 80000 });
+
+  assert.equal(gb1.status, 'GREEN_BUBBLE_BUY');
+  assert.equal(gb1.gbStreak, 1);
+  assert.equal(gb1.isLiveDeveloping, true);
+  assert.equal(gb1.rule1.spendUsd, 80000);
+  assert.equal(gb1.rule1.remainingReserveUsd, 0);
+  assert.equal(gb1.rule2.spendUsd, 40000);
+  assert.equal(gb1.rule2.remainingReserveUsd, 40000);
+
+  // 2. Green Bubble Week 2+ -> Rule 1 deploys 100% of current cashReserve (GB-7), Rule 2 deploys 50%
+  const gb2 = evaluateSopAction({
+    settings: MACRO_SOP_PRESET,
+    series: [
+      mkRow({ time: new Date('2026-11-09T00:00:00Z'), composite: 3, decision: 'STRONG ACCUM' }),
+      mkRow({ time: new Date('2026-11-16T00:00:00Z'), composite: 4, decision: 'STRONG ACCUM' }),
+    ],
+  }, { weeklyBudget: 1000, cashReserve: 42000 });
+
+  assert.equal(gb2.status, 'GREEN_BUBBLE_BUY');
+  assert.equal(gb2.gbStreak, 2);
+  assert.equal(gb2.rule1.spendUsd, 42000);
+  assert.equal(gb2.rule1.remainingReserveUsd, 0);
+  assert.equal(gb2.rule2.spendUsd, 21000);
+
+  // 3. Divergence or ACCUMULATE (+2) -> WAIT_ACCUMULATE_CASH (never buy)
+  const wait = evaluateSopAction({
+    settings: MACRO_SOP_PRESET,
+    series: [
+      mkRow({ composite: 3, divergence: true, decision: 'MIXED / WAIT' }),
+    ],
+  }, { weeklyBudget: 1000, cashReserve: 50000 });
+
+  assert.equal(isGreenBubble(wait.signalBar), false);
+  assert.equal(wait.status, 'WAIT_ACCUMULATE_CASH');
+  assert.equal(wait.rule1.spendUsd, 0);
+  assert.equal(wait.rule2.spendUsd, 0);
+
+  // 4. Red Bubble Week 1 -> CY-4 take profit active
+  const rb1 = evaluateSopAction({
+    settings: MACRO_SOP_PRESET,
+    series: [
+      mkRow({ composite: -3, divergence: false, decision: 'STRONG DIST' }),
+    ],
+  }, { weeklyBudget: 1000, cashReserve: 10000 });
+
+  assert.equal(isRedBubble(rb1.signalBar), true);
+  assert.equal(rb1.status, 'RED_BUBBLE_TAKE_PROFIT');
+  assert.equal(rb1.cy4.active, true);
+  assert.equal(rb1.cy4.isFirstWeek, true);
+});
+
+test('LOGIC-003 & LOGIC-006 regressions: dynamic isClosed, safe livePrice override, and math_v3 zMode compliance', () => {
+  const nowMs = Date.UTC(2026, 10, 25, 12, 0, 0);
+  const raw = [
+    { time: '2026-11-16T00:00:00Z', open: 100, high: 110, low: 95, close: 105, volume: 10, closeTime: nowMs - 1000, isClosed: false },
+  ];
+  const normalizedClosed = normalizeMacroCandles(raw, nowMs);
+  assert.equal(normalizedClosed[0].isClosed, true);
+
+  // Closed candle must NOT be mutated by livePrice
+  const untouched = applyLivePriceToMacroCandles(normalizedClosed, 99999, nowMs);
+  assert.equal(untouched[0].close, 105);
+
+  // Open candle MUST update close and expand high/low
+  const openCandle = normalizeMacroCandles([
+    { time: '2026-11-23T00:00:00Z', open: 100, high: 110, low: 95, close: 105, volume: 10, closeTime: nowMs + 60000, isClosed: false },
+  ], nowMs);
+  const updatedHigh = applyLivePriceToMacroCandles(openCandle, 125, nowMs);
+  assert.equal(updatedHigh[0].close, 125);
+  assert.equal(updatedHigh[0].high, 125);
+  assert.equal(updatedHigh[0].low, 95);
+
+  // math_v3 ignores zMode, so Adaptive must still be SOP-compliant
+  const v3Adaptive = checkSopConfigCompliance({ ...MACRO_SOP_PRESET, zMode: 'Adaptive' });
+  assert.equal(v3Adaptive.isCompliant, true);
 });

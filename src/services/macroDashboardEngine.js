@@ -1,4 +1,4 @@
-const ZONES = Object.freeze({
+export const ZONES = Object.freeze({
   GIFT: 'GIFT',
   CHEAP: 'CHEAP',
   FAIR: 'FAIR',
@@ -6,7 +6,13 @@ const ZONES = Object.freeze({
   BUBBLE: 'BUBBLE',
 });
 
+export const ENGINE_MODES = Object.freeze({
+  PINE_V2: 'pine_v2',
+  MATH_V3: 'math_v3',
+});
+
 export const MACRO_DASHBOARD_DEFAULTS = Object.freeze({
+  engineMode: 'pine_v2',
   timeframe: 'W',
   years: [1, 2, 3, 4],
   costMethod: 'SMA',
@@ -37,6 +43,18 @@ export const MACRO_DASHBOARD_DEFAULTS = Object.freeze({
   minBarsAlert: 2,
   bandK: 1,
   minTick: 0.01,
+});
+
+export const MACRO_SOP_PRESET = Object.freeze({
+  ...MACRO_DASHBOARD_DEFAULTS,
+  engineMode: ENGINE_MODES.MATH_V3,
+  timeframe: 'W',
+  costMethod: 'VWAP',
+  weightScheme: 'Equal',
+  zoneMethod: 'Percentile',
+  zMode: 'Structural',
+  useDualWindow: true,
+  useHysteresis: true,
 });
 
 export const CHART_RANGES = Object.freeze(['6M', '1Y', '3Y', '5Y', 'ALL']);
@@ -133,7 +151,7 @@ const weightsFor = (scheme) => {
   return [0.25, 0.25, 0.25, 0.25];
 };
 
-const barsPerYear = (timeframe) => {
+export const barsPerYear = (timeframe) => {
   if (timeframe === 'D') return 365;
   if (timeframe === 'M') return 12;
   return 52;
@@ -256,16 +274,21 @@ const pnlZoneAt = (metrics, settings) => {
   return ZONES.FAIR;
 };
 
-export const normalizeMacroCandles = (candles) => (Array.isArray(candles) ? candles : [])
-  .map((candle) => ({
-    ...candle,
-    time: candle.time instanceof Date ? candle.time : new Date(candle.time),
-    open: finite(candle.open),
-    high: finite(candle.high),
-    low: finite(candle.low),
-    close: finite(candle.close),
-    volume: finite(candle.volume, 0),
-  }))
+export const normalizeMacroCandles = (candles, nowMs = Date.now()) => (Array.isArray(candles) ? candles : [])
+  .map((candle) => {
+    const closeTime = finite(candle.closeTime);
+    return {
+      ...candle,
+      time: candle.time instanceof Date ? candle.time : new Date(candle.time),
+      open: finite(candle.open),
+      high: finite(candle.high),
+      low: finite(candle.low),
+      close: finite(candle.close),
+      volume: finite(candle.volume, 0),
+      closeTime,
+      isClosed: closeTime !== null ? closeTime < nowMs : candle.isClosed !== false,
+    };
+  })
   .filter((candle) => (
     !Number.isNaN(candle.time.getTime())
     && candle.open !== null
@@ -275,10 +298,360 @@ export const normalizeMacroCandles = (candles) => (Array.isArray(candles) ? cand
   ))
   .sort((left, right) => left.time - right.time);
 
+export const applyLivePriceToMacroCandles = (candles, livePrice, nowMs = Date.now()) => {
+  if (!Array.isArray(candles) || candles.length === 0) return candles;
+  const price = finite(livePrice);
+  if (price === null || price <= 0) return candles;
+  const last = candles[candles.length - 1];
+  const closeTime = finite(last.closeTime);
+  const lastIsClosed = closeTime !== null ? closeTime < nowMs : last.isClosed !== false;
+  if (lastIsClosed) return candles;
+
+  const rows = candles.slice();
+  rows[rows.length - 1] = {
+    ...last,
+    close: price,
+    high: Math.max(last.high, price),
+    low: Math.min(last.low, price),
+  };
+  return rows;
+};
+
+const medianOf = (values) => {
+  if (values.length === 0) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : 0.5 * (sorted[mid - 1] + sorted[mid]);
+};
+
+const calculateMathV3ValuatorSeries = (closes, settings, lookback, madLookback) => {
+  const B = barsPerYear(settings.timeframe);
+  const n = closes.length;
+  const logCloses = new Float64Array(n);
+  const prefY = new Float64Array(n + 1);
+  const prefKY = new Float64Array(n + 1);
+  for (let i = 0; i < n; i += 1) {
+    const y = Math.log(Math.max(closes[i], settings.minTick));
+    logCloses[i] = y;
+    prefY[i + 1] = prefY[i] + y;
+    prefKY[i + 1] = prefKY[i] + i * y;
+  }
+
+  const regression = new Array(n);
+  const deviations = new Float64Array(n);
+  for (let index = 0; index < n; index += 1) {
+    const length = Math.min(lookback, index + 1);
+    if (length < 2) {
+      regression[index] = { a: logCloses[index], b: 0, deviation: 0 };
+      deviations[index] = 0;
+      continue;
+    }
+    const lo = index - length + 1;
+    const sumX = (length * (length - 1)) / 2;
+    const sumXX = ((length - 1) * length * (2 * length - 1)) / 6;
+    const sumY = prefY[index + 1] - prefY[lo];
+    const sumKY = prefKY[index + 1] - prefKY[lo];
+    const sumXY = index * sumY - sumKY;
+    const denominator = length * sumXX - sumX * sumX;
+    const b = denominator !== 0 ? (length * sumXY - sumX * sumY) / denominator : 0;
+    const a = (sumY - b * sumX) / length;
+    const deviation = logCloses[index] - a;
+    regression[index] = { a, b, deviation };
+    deviations[index] = deviation;
+  }
+
+  return regression.map((row, index) => {
+    const start = Math.max(0, index - madLookback + 1);
+    const hist = Array.from(deviations.subarray(start, index + 1));
+    const loc = medianOf(hist);
+    const mad = 1.4826 * medianOf(hist.map((d) => Math.abs(d - loc)));
+    const scale = Math.max(mad, 0.18);
+    const z = (row.deviation - loc) / scale;
+    const fairValue = Math.exp(row.a + loc);
+    return {
+      z,
+      fairValue,
+      versusFairValue: fairValue > 0 ? (closes[index] / fairValue - 1) * 100 : 0,
+      cagr: (Math.exp(-row.b * B) - 1) * 100,
+      deviation: row.deviation - loc,
+      sigma: scale,
+      bandUpper: fairValue * Math.exp(settings.bandK * scale),
+      bandLower: fairValue * Math.exp(-settings.bandK * scale),
+    };
+  });
+};
+
+const calculateMathV3Dashboard = (candles, settings) => {
+  const B = barsPerYear(settings.timeframe);
+  const scaleFactor = B / 52;
+  const scaledLongLookback = Math.max(12, Math.round(settings.longLookback * scaleFactor));
+  const scaledShortLookback = Math.max(6, Math.round(settings.shortLookback * scaleFactor));
+  const scaledPctLookback = Math.max(12, Math.round(settings.percentileLookback * scaleFactor));
+  const madLookback = Math.max(12, Math.round(4 * B));
+
+  const closes = candles.map((candle) => candle.close);
+  const logCloses = candles.map((candle) => Math.log(Math.max(candle.close, settings.minTick)));
+  const logTypical = candles.map((candle) => Math.log(Math.max((candle.high + candle.low + candle.close) / 3, settings.minTick)));
+  const logMidHl = candles.map((candle) => Math.log(Math.max((candle.high + candle.low) / 2, settings.minTick)));
+
+  // Cap relative volume at 3x causal 1Y rolling median to immunize against exchange wash-volume regimes.
+  const volWindow = Math.max(4, Math.round(B));
+  const relVol = candles.map((candle, index) => {
+    const start = Math.max(0, index - volWindow + 1);
+    const vols = [];
+    for (let k = start; k <= index; k += 1) vols.push(candles[k].volume);
+    const med = medianOf(vols);
+    return med > 0 ? Math.min(candle.volume / med, 3.0) : 1.0;
+  });
+
+  const longValuator = calculateMathV3ValuatorSeries(closes, settings, scaledLongLookback, madLookback);
+  const shortValuator = calculateMathV3ValuatorSeries(closes, settings, scaledShortLookback, madLookback);
+
+  // Disjoint Halving-cycle cohort tranches: [0..y0], [y0..y1], [y1..y2], [y2..y3] scaled by barsPerYear(tf).
+  const sortedYears = settings.years.slice(0, 4).sort((a, b) => a - b);
+  while (sortedYears.length < 4) sortedYears.push((sortedYears.at(-1) || 0) + 1);
+  const trancheBounds = [0, ...sortedYears.map((y) => Math.max(1, Math.round(y * B)))];
+  const weights = weightsFor(settings.weightScheme);
+
+  const n = candles.length;
+  const prefLogCloses = new Float64Array(n + 1);
+  const prefLogMidHl = new Float64Array(n + 1);
+  const prefRelVol = new Float64Array(n + 1);
+  const prefRelVolLogTypical = new Float64Array(n + 1);
+  for (let i = 0; i < n; i += 1) {
+    prefLogCloses[i + 1] = prefLogCloses[i] + logCloses[i];
+    prefLogMidHl[i + 1] = prefLogMidHl[i] + logMidHl[i];
+    prefRelVol[i + 1] = prefRelVol[i] + relVol[i];
+    prefRelVolLogTypical[i + 1] = prefRelVolLogTypical[i] + relVol[i] * logTypical[i];
+  }
+
+  const trancheLogBasisAt = (index, lagStart, lagEnd) => {
+    const hi = index - lagStart;
+    const lo = Math.max(0, index - lagEnd + 1);
+    if (hi < lo || hi < 0) return null;
+
+    if (settings.costMethod === 'VWAP') {
+      const sw = prefRelVol[hi + 1] - prefRelVol[lo];
+      const swp = prefRelVolLogTypical[hi + 1] - prefRelVolLogTypical[lo];
+      return sw > 0 ? swp / sw : null;
+    }
+    if (settings.costMethod === 'Median HL') {
+      const span = hi - lo + 1;
+      return (prefLogMidHl[hi + 1] - prefLogMidHl[lo]) / span;
+    }
+    if (settings.costMethod !== 'EMA') {
+      const span = hi - lo + 1;
+      return (prefLogCloses[hi + 1] - prefLogCloses[lo]) / span;
+    }
+
+    let sw = 0;
+    let swp = 0;
+    const span = hi - lo + 1;
+    const decay = 2 / (span + 1);
+    for (let k = lo; k <= hi; k += 1) {
+      const w = Math.pow(1 - decay, hi - k);
+      sw += w;
+      swp += w * logCloses[k];
+    }
+    return sw > 0 ? swp / sw : null;
+  };
+
+  const pnlMetrics = candles.map((_, index) => {
+    const logRois = [];
+    const availableFlags = [];
+    for (let t = 0; t < 4; t += 1) {
+      const basisLog = trancheLogBasisAt(index, trancheBounds[t], trancheBounds[t + 1]);
+      if (basisLog === null) {
+        logRois.push(0);
+        availableFlags.push(false);
+      } else {
+        logRois.push(logCloses[index] - basisLog);
+        availableFlags.push(true);
+      }
+    }
+
+    let weightSum = 0;
+    let meanLogMoneyness = 0;
+    let availCount = 0;
+    let underwaterCount = 0;
+    const validRoisPct = [];
+    const rois = logRois.map((m, k) => {
+      if (!availableFlags[k]) return 0;
+      weightSum += weights[k];
+      meanLogMoneyness += m * weights[k];
+      availCount += 1;
+      if (m < 0) underwaterCount += 1;
+      const pct = (Math.exp(m) - 1) * 100;
+      validRoisPct.push(pct);
+      return pct;
+    });
+
+    meanLogMoneyness = weightSum > 0 ? meanLogMoneyness / weightSum : 0;
+    const weightedAverage = (Math.exp(meanLogMoneyness) - 1) * 100;
+    const roiMin = validRoisPct.length > 0 ? Math.min(...validRoisPct) : 0;
+    const roiMax = validRoisPct.length > 0 ? Math.max(...validRoisPct) : 0;
+    const underwater = availCount > 0 ? (underwaterCount / availCount) * 100 : 0;
+
+    return {
+      weightedAverage,
+      meanLogMoneyness,
+      percentile: 50,
+      roiMin,
+      roiMax,
+      underwater,
+      relativeSpread: (roiMax - roiMin) / Math.max(Math.abs(weightedAverage), settings.convergenceFloor),
+      rois,
+    };
+  });
+
+  // Finite-sample cold-start percentile (neutral during initial 6M warmup).
+  const minRankBars = Math.max(12, Math.round(0.5 * B));
+  pnlMetrics.forEach((metrics, index) => {
+    const avail = Math.min(index, scaledPctLookback);
+    if (avail < minRankBars) {
+      metrics.percentile = 50;
+      return;
+    }
+    let countBelow = 0;
+    for (let barsAgo = 1; barsAgo <= avail; barsAgo += 1) {
+      if (pnlMetrics[index - barsAgo].meanLogMoneyness < metrics.meanLogMoneyness) countBelow += 1;
+    }
+    metrics.percentile = (countBelow / avail) * 100;
+  });
+
+  let inGift = false;
+  let inBubble = false;
+  let previousValZone = null;
+  let previousPnlZone = null;
+  let valBarsInZone = 0;
+  let pnlBarsInZone = 0;
+
+  const series = candles.map((candle, index) => {
+    const long = longValuator[index];
+    const short = shortValuator[index];
+    const shortGiftOk = !settings.useDualWindow || short.z < settings.valCheap;
+    const shortBubbleOk = !settings.useDualWindow || short.z > settings.valExpensive;
+
+    if (settings.useHysteresis) {
+      if (long.z < settings.valGift && shortGiftOk) {
+        inGift = true;
+        inBubble = false;
+      } else if (long.z > settings.giftExit || (settings.useDualWindow && short.z > 0)) {
+        inGift = false;
+      }
+
+      if (long.z > settings.valBubble && shortBubbleOk) {
+        inBubble = true;
+        inGift = false;
+      } else if (long.z < settings.bubbleExit || (settings.useDualWindow && short.z < 0)) {
+        inBubble = false;
+      }
+    } else {
+      inGift = long.z < settings.valGift && shortGiftOk;
+      inBubble = long.z > settings.valBubble && shortBubbleOk;
+    }
+
+    let valZone = ZONES.FAIR;
+    if (inGift && !inBubble) valZone = ZONES.GIFT;
+    else if (inBubble && !inGift) valZone = ZONES.BUBBLE;
+    else if (long.z < settings.valCheap && (!settings.useDualWindow || short.z < 0)) valZone = ZONES.CHEAP;
+    else if (long.z > settings.valExpensive && (!settings.useDualWindow || short.z > 0)) valZone = ZONES.EXP;
+
+    const pnl = pnlMetrics[index];
+    let pnlZone;
+    if (settings.zoneMethod === 'Convergence') {
+      pnlZone = pnlZoneAt(pnl, settings);
+    } else if (pnl.percentile < settings.pnlGift && pnl.meanLogMoneyness < 0) {
+      pnlZone = ZONES.GIFT;
+    } else if (pnl.percentile < settings.pnlCheap && pnl.meanLogMoneyness <= 0.05) {
+      pnlZone = ZONES.CHEAP;
+    } else if (pnl.percentile > settings.pnlBubble && pnl.meanLogMoneyness > 0.25) {
+      pnlZone = ZONES.BUBBLE;
+    } else if (pnl.percentile > settings.pnlExpensive && pnl.meanLogMoneyness > 0.10) {
+      pnlZone = ZONES.EXP;
+    } else {
+      pnlZone = ZONES.FAIR;
+    }
+
+    valBarsInZone = valZone === previousValZone ? valBarsInZone + 1 : 1;
+    pnlBarsInZone = pnlZone === previousPnlZone ? pnlBarsInZone + 1 : 1;
+    previousValZone = valZone;
+    previousPnlZone = pnlZone;
+
+    const valScore = zoneScore(valZone);
+    const pnlScore = zoneScore(pnlZone);
+    const composite = valScore + pnlScore;
+    const divergence = (pnlScore >= 1 && valScore <= -1) || (pnlScore <= -1 && valScore >= 1);
+    const convictionScore = 0.5 * (-long.z) + 0.5 * (-pnl.meanLogMoneyness / 0.35);
+
+    return {
+      index,
+      time: candle.time,
+      isClosed: candle.isClosed !== false,
+      closeTime: candle.closeTime ?? null,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume,
+      price: candle.close,
+      fairValue: long.fairValue,
+      bandUpper: long.bandUpper,
+      bandLower: long.bandLower,
+      valZLong: long.z,
+      valZShort: short.z,
+      versusFairValue: long.versusFairValue,
+      impliedCagr: long.cagr,
+      sigma: long.sigma,
+      valZone,
+      valScore,
+      valBarsInZone,
+      ...pnl,
+      pnlZone,
+      pnlScore,
+      pnlBarsInZone,
+      composite,
+      convictionScore,
+      divergence,
+      action: actionFromScore(composite),
+      decision: divergence ? 'MIXED / WAIT' : actionFromScore(composite),
+    };
+  });
+
+  for (let index = 0; index < series.length; index += 1) {
+    const row = series[index];
+    const prev = index > 0 ? series[index - 1] : null;
+    row.alerts = {
+      valGift: row.valZone === ZONES.GIFT && row.valBarsInZone === settings.minBarsAlert,
+      valBubble: row.valZone === ZONES.BUBBLE && row.valBarsInZone === settings.minBarsAlert,
+      valCheap: row.valZone === ZONES.CHEAP && row.valBarsInZone === settings.minBarsAlert,
+      valExpensive: row.valZone === ZONES.EXP && row.valBarsInZone === settings.minBarsAlert,
+      pnlGift: row.pnlZone === ZONES.GIFT && row.pnlBarsInZone === settings.minBarsAlert,
+      pnlBubble: row.pnlZone === ZONES.BUBBLE && row.pnlBarsInZone === settings.minBarsAlert,
+      strongAccum: row.composite >= 3 && (prev?.composite ?? 0) < 3 && !row.divergence,
+      strongDist: row.composite <= -3 && (prev?.composite ?? 0) > -3 && !row.divergence,
+      divergenceNew: row.divergence && !prev?.divergence,
+    };
+  }
+
+  const current = series.at(-1);
+  const previous = series.at(-2) ?? null;
+  return {
+    settings,
+    series,
+    current,
+    previous,
+    alerts: current.alerts,
+  };
+};
+
 export function calculateMacroDashboard(inputCandles, inputSettings = {}) {
   const settings = mergeSettings(inputSettings);
   const candles = normalizeMacroCandles(inputCandles);
   if (candles.length === 0) return { settings, series: [], current: null, previous: null, alerts: {} };
+  if (settings.engineMode === ENGINE_MODES.MATH_V3) {
+    return calculateMathV3Dashboard(candles, settings);
+  }
 
   const closes = candles.map((candle) => candle.close);
   const longValuator = calculateValuatorSeries(closes, settings, settings.longLookback);
@@ -361,9 +734,15 @@ export function calculateMacroDashboard(inputCandles, inputSettings = {}) {
     const divergence = (pnlScore >= 1 && valScore <= -1) || (pnlScore <= -1 && valScore >= 1);
 
     return {
+      index,
       time: candle.time,
       isClosed: candle.isClosed !== false,
       closeTime: candle.closeTime ?? null,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume,
       price: candle.close,
       fairValue: long.fairValue,
       bandUpper: long.bandUpper,
@@ -374,9 +753,11 @@ export function calculateMacroDashboard(inputCandles, inputSettings = {}) {
       impliedCagr: long.cagr,
       sigma: long.sigma,
       valZone,
+      valScore,
       valBarsInZone,
       ...pnl,
       pnlZone,
+      pnlScore,
       pnlBarsInZone,
       composite,
       divergence,
@@ -385,6 +766,22 @@ export function calculateMacroDashboard(inputCandles, inputSettings = {}) {
     };
   });
 
+  for (let index = 0; index < series.length; index += 1) {
+    const row = series[index];
+    const prev = index > 0 ? series[index - 1] : null;
+    row.alerts = {
+      valGift: row.valZone === ZONES.GIFT && row.valBarsInZone === settings.minBarsAlert,
+      valBubble: row.valZone === ZONES.BUBBLE && row.valBarsInZone === settings.minBarsAlert,
+      valCheap: row.valZone === ZONES.CHEAP && row.valBarsInZone === settings.minBarsAlert,
+      valExpensive: row.valZone === ZONES.EXP && row.valBarsInZone === settings.minBarsAlert,
+      pnlGift: row.pnlZone === ZONES.GIFT && row.pnlBarsInZone === settings.minBarsAlert,
+      pnlBubble: row.pnlZone === ZONES.BUBBLE && row.pnlBarsInZone === settings.minBarsAlert,
+      strongAccum: row.composite >= 3 && (prev?.composite ?? 0) < 3 && !row.divergence,
+      strongDist: row.composite <= -3 && (prev?.composite ?? 0) > -3 && !row.divergence,
+      divergenceNew: row.divergence && !prev?.divergence,
+    };
+  }
+
   const current = series.at(-1);
   const previous = series.at(-2) ?? null;
   return {
@@ -392,19 +789,196 @@ export function calculateMacroDashboard(inputCandles, inputSettings = {}) {
     series,
     current,
     previous,
-    alerts: {
-      valGift: current.valZone === ZONES.GIFT && current.valBarsInZone === settings.minBarsAlert,
-      valBubble: current.valZone === ZONES.BUBBLE && current.valBarsInZone === settings.minBarsAlert,
-      valCheap: current.valZone === ZONES.CHEAP && current.valBarsInZone === settings.minBarsAlert,
-      valExpensive: current.valZone === ZONES.EXP && current.valBarsInZone === settings.minBarsAlert,
-      pnlGift: current.pnlZone === ZONES.GIFT && current.pnlBarsInZone === settings.minBarsAlert,
-      pnlBubble: current.pnlZone === ZONES.BUBBLE && current.pnlBarsInZone === settings.minBarsAlert,
-      strongAccum: current.composite >= 3 && (previous?.composite ?? 0) < 3 && !current.divergence,
-      strongDist: current.composite <= -3 && (previous?.composite ?? 0) > -3 && !current.divergence,
-      divergenceNew: current.divergence && !previous?.divergence,
-    },
+    alerts: current.alerts,
   };
 }
+
+export const isGreenBubble = (row) => Boolean(row && row.composite >= 3 && !row.divergence);
+
+export const isRedBubble = (row) => Boolean(row && row.composite <= -3 && !row.divergence);
+
+const SOP_REQUIRED_FIELDS = [
+  { key: 'engineMode', label: 'Engine', expected: ENGINE_MODES.MATH_V3, displayExpected: 'math_v3 (MathClean v3)' },
+  { key: 'timeframe', label: 'Locked TF', expected: 'W', displayExpected: 'W (Tuần)' },
+  { key: 'costMethod', label: 'Cost Basis', expected: 'VWAP', displayExpected: 'VWAP (RVWAP)' },
+  { key: 'weightScheme', label: 'Cohort Weight', expected: 'Equal', displayExpected: 'Equal (1Y/2Y/3Y/4Y)' },
+  { key: 'zoneMethod', label: 'PnL Zone', expected: 'Percentile', displayExpected: 'Percentile' },
+  { key: 'zMode', label: 'Z Mode', expected: 'Structural', displayExpected: 'Structural (MAD 4Y)' },
+  { key: 'useDualWindow', label: 'Dual confirm', expected: true, displayExpected: 'ON' },
+  { key: 'useHysteresis', label: 'Hysteresis', expected: true, displayExpected: 'ON' },
+];
+
+export const checkSopConfigCompliance = (settings = {}) => {
+  const merged = mergeSettings(settings);
+  const isMathV3 = merged.engineMode === ENGINE_MODES.MATH_V3;
+  const checks = SOP_REQUIRED_FIELDS.map((field) => {
+    const actual = isMathV3 && field.key === 'zMode' ? 'Structural' : merged[field.key];
+    const ok = actual === field.expected;
+    return {
+      ...field,
+      actual,
+      displayActual: typeof actual === 'boolean' ? (actual ? 'ON' : 'OFF') : String(actual),
+      ok,
+    };
+  });
+  const mismatches = checks.filter((item) => !item.ok);
+  return {
+    isCompliant: mismatches.length === 0,
+    checks,
+    mismatches,
+  };
+};
+
+/**
+ * Evaluates the live/closed Macro Dashboard state against the Green Bubble DCA SOP (MathClean v3).
+ * Uses the latest CLOSED bar as the canonical SOP signal to avoid mid-week repainting.
+ */
+export const evaluateSopAction = (dashboard, options = {}) => {
+  const series = Array.isArray(dashboard?.series) ? dashboard.series : [];
+  const settings = dashboard?.settings || MACRO_DASHBOARD_DEFAULTS;
+  const weeklyBudget = Math.max(0, finite(options.weeklyBudget, 1000));
+  const cashReserve = Math.max(0, finite(options.cashReserve, 0));
+  const compliance = checkSopConfigCompliance(settings);
+
+  if (series.length === 0) {
+    return {
+      status: 'NO_DATA',
+      signalBar: null,
+      liveBar: null,
+      isLiveDeveloping: false,
+      compliance,
+      gbStreak: 0,
+      rbStreak: 0,
+      totalGreenBubbles: 0,
+      totalRedBubbles: 0,
+      lastGreenBubble: null,
+      lastRedBubble: null,
+      rule1: null,
+      rule2: null,
+      cy4: null,
+    };
+  }
+
+  const latestBar = series.at(-1);
+  const isLiveDeveloping = latestBar?.isClosed === false;
+  let closedIdx = series.length - 1;
+  while (closedIdx >= 0 && series[closedIdx].isClosed === false) {
+    closedIdx -= 1;
+  }
+  const signalBar = closedIdx >= 0 ? series[closedIdx] : latestBar;
+  const liveBar = isLiveDeveloping ? latestBar : null;
+  const closedSeries = closedIdx >= 0 ? series.slice(0, closedIdx + 1) : series;
+
+  let gbStreak = 0;
+  for (let i = closedSeries.length - 1; i >= 0; i -= 1) {
+    if (isGreenBubble(closedSeries[i])) gbStreak += 1;
+    else break;
+  }
+
+  let rbStreak = 0;
+  for (let i = closedSeries.length - 1; i >= 0; i -= 1) {
+    if (isRedBubble(closedSeries[i])) rbStreak += 1;
+    else break;
+  }
+
+  let totalGreenBubbles = 0;
+  let totalRedBubbles = 0;
+  let lastGreenBubble = null;
+  let lastRedBubble = null;
+  for (const row of closedSeries) {
+    if (isGreenBubble(row)) {
+      totalGreenBubbles += 1;
+      lastGreenBubble = row;
+    }
+    if (isRedBubble(row)) {
+      totalRedBubbles += 1;
+      lastRedBubble = row;
+    }
+  }
+
+  const greenActive = isGreenBubble(signalBar);
+  const redActive = isRedBubble(signalBar);
+  const liveGreen = isGreenBubble(liveBar);
+  const liveRed = isRedBubble(liveBar);
+
+  // Rule 1 (GB-7: All-In 100% Reserve on Green Bubble)
+  const rule1Spend = greenActive ? cashReserve : 0;
+  const rule1Remaining = Math.max(0, cashReserve - rule1Spend);
+  // Rule 2 (GB-6: Fractional 50% Reserve / Green Bubble Week)
+  const rule2Spend = greenActive ? cashReserve * 0.5 : 0;
+  const rule2Remaining = Math.max(0, cashReserve - rule2Spend);
+
+  let status = 'WAIT_ACCUMULATE_CASH';
+  let headline = 'KHÔNG MUA BTC · TÍCH LŨY QUỸ DỰ PHÒNG R';
+  let tone = 'neutral';
+  let summary = `Nến đóng gần nhất là ${signalBar.decision} (Score ${signalBar.composite > 0 ? '+' : ''}${signalBar.composite}${signalBar.divergence ? ', Divergence = YES' : ''}). Theo SOP, tuyệt đối KHÔNG mua BTC khi chưa có chấm xanh (Score >= +3 & Divergence = NO).`;
+
+  if (greenActive) {
+    status = 'GREEN_BUBBLE_BUY';
+    headline = `GREEN BUBBLE (TUẦN #${gbStreak}) · KÍCH HOẠT GIẢI NGÂN`;
+    tone = 'buy';
+    summary = gbStreak === 1
+      ? `Nến tuần đóng cửa xác nhận Green Bubble đầu tiên (Score +${signalBar.composite}, Divergence = NO). Kích hoạt giải ngân quỹ dự phòng R trong ngày Thứ Hai (Market Buy hoặc Limit -1% đến -2%, khớp bù cuối ngày).`
+      : `Cụm Green Bubble tiếp diễn sang tuần thứ #${gbStreak} (Score +${signalBar.composite}). Tiếp tục giải ngân theo quy tắc đã chọn.`;
+  } else if (redActive) {
+    status = 'RED_BUBBLE_TAKE_PROFIT';
+    headline = `RED BUBBLE (TUẦN #${rbStreak}) · KHÔNG MUA · TÙY CHỌN CHỐT 50% (CY-4)`;
+    tone = 'sell';
+    summary = rbStreak === 1
+      ? `Nến tuần đóng cửa bật Red Bubble đầu tiên (Score ${signalBar.composite}, Divergence = NO). Tuyệt đối không mua BTC; nếu theo biến thể xoay vòng CY-4, chốt 50% lượng BTC đang giữ đúng 1 lần duy nhất về quỹ R (4% APY), giữ 50% Core Hold.`
+      : `Cụm Red Bubble đang ở tuần thứ #${rbStreak} (Score ${signalBar.composite}). Không mua BTC; nếu đã chốt 50% ở tuần Red Bubble đầu tiên của cụm thì giữ nguyên 50% Core Hold.`;
+  }
+
+  return {
+    status,
+    headline,
+    tone,
+    summary,
+    signalBar,
+    liveBar,
+    isLiveDeveloping,
+    liveGreen,
+    liveRed,
+    compliance,
+    gbStreak,
+    rbStreak,
+    totalGreenBubbles,
+    totalRedBubbles,
+    lastGreenBubble,
+    lastRedBubble,
+    weeklyBudget,
+    cashReserve,
+    rule1: {
+      code: 'GB-7',
+      label: 'Quy tắc 1 · All-In 100% Reserve',
+      action: greenActive
+        ? (gbStreak === 1 ? 'GIẢI NGÂN 100% QUỸ R' : 'GIẢI NGÂN 100% NGÂN SÁCH TUẦN MỚI')
+        : 'GIỮ 100% TIỀN TRONG QUỸ R (+4% APY)',
+      spendUsd: rule1Spend,
+      remainingReserveUsd: rule1Remaining,
+      nextDepositUsd: weeklyBudget,
+    },
+    rule2: {
+      code: 'GB-6',
+      label: 'Quy tắc 2 · Cân bằng 50% Reserve',
+      action: greenActive
+        ? `GIẢI NGÂN 50% QUỸ R (TUẦN GB #${gbStreak})`
+        : 'GIỮ 100% TIỀN TRONG QUỸ R (+4% APY)',
+      spendUsd: rule2Spend,
+      remainingReserveUsd: rule2Remaining,
+      nextDepositUsd: weeklyBudget,
+    },
+    cy4: {
+      active: redActive,
+      isFirstWeek: redActive && rbStreak === 1,
+      action: redActive
+        ? (rbStreak === 1
+          ? 'BÁN 50% BTC ĐANG GIỮ (1 LẦN DUY NHẤT) → ĐƯA VỀ QUỸ R (4% APY), GIỮ 50% CORE HOLD'
+          : 'ĐÃ QUA TUẦN RB #1 → GIỮ NGUYÊN 50% CORE HOLD (KHÔNG BÁN THÊM)')
+        : 'CHƯA KÍCH HOẠT (CHỈ KÍCH HOẠT KHI RED BUBBLE: SCORE <= -3 & !DIV)',
+    },
+  };
+};
 
 export const macroDashboardInternals = {
   ema,

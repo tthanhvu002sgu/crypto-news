@@ -1,0 +1,15 @@
+{
+  "name": "macro-valuator-backtest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Valuator + PnL Matrix (Pine parity mode) calculation engine and backtest suite",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "backtest": "node src/cli.js",
+    "fetch": "node src/cli.js --fetch-only"
+  }
+}
