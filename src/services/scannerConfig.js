@@ -5,7 +5,7 @@
  */
 
 export const SCANNER_SCHEMA_VERSION = 'v9.0.0';
-export const SCANNER_MODEL_VERSION = 'v1.0.0';
+export const SCANNER_MODEL_VERSION = 'v1.1.0';
 export const SCANNER_VERSION = 'v9';
 export const CONFIG_VERSION = 'v9.0.0';
 

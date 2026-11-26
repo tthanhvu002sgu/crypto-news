@@ -16,7 +16,43 @@
     "WBTCUSDT",
     "WETHUSDT",
     "WEETHUSDT",
-    "WBETHUSDT"
+    "WBETHUSDT",
+    "NVDABUSDT",
+    "SOXLBUSDT",
+    "SOXSBUSDT",
+    "SPCXBUSDT",
+    "QQQBUSDT",
+    "MSTRBUSDT",
+    "CRCLBUSDT",
+    "GOOGLBUSDT",
+    "AAPLBUSDT",
+    "TSLABUSDT",
+    "MSFTBUSDT",
+    "AMZNBUSDT",
+    "METABUSDT",
+    "COINBUSDT",
+    "SNDKBUSDT",
+    "KORUBUSDT",
+    "SKHYBUSDT",
+    "ANTBUSDT",
+    "MUBUSDT",
+    "SPYBUSDT",
+    "IVVBUSDT",
+    "AMDBUSDT",
+    "PLTRBUSDT",
+    "PAXGUSDT",
+    "XAUTUSDT",
+    "RWUSDUSDT",
+    "XUSDUSDT",
+    "UUSDT",
+    "USD1USDT",
+    "USDSUSDT",
+    "BFUSDUSDT",
+    "RLUSDUSDT",
+    "PYUSDUSDT",
+    "USDPUSDT",
+    "EURIUSDT",
+    "AEURUSDT"
   ],
   "assets": [
     {
@@ -486,6 +522,177 @@
       "narratives": ["GPU-Clustering", "DePIN", "Solana"],
       "coingeckoId": "io",
       "defillamaSlug": "io-net"
+    },
+    {
+      "symbol": "ZECUSDT",
+      "baseAsset": "ZEC",
+      "name": "Zcash",
+      "sector": "L1",
+      "narratives": ["Privacy", "ZK"],
+      "coingeckoId": "zcash",
+      "defillamaSlug": "zcash"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "baseAsset": "HYPE",
+      "name": "Hyperliquid",
+      "sector": "L1",
+      "narratives": ["Perp-DEX", "AppChain", "DeFi"],
+      "coingeckoId": "hyperliquid",
+      "defillamaSlug": "hyperliquid"
+    },
+    {
+      "symbol": "PEPEUSDT",
+      "baseAsset": "PEPE",
+      "name": "Pepe",
+      "sector": "Meme",
+      "narratives": ["Meme", "Ethereum"],
+      "coingeckoId": "pepe",
+      "defillamaSlug": null
+    },
+    {
+      "symbol": "LTCUSDT",
+      "baseAsset": "LTC",
+      "name": "Litecoin",
+      "sector": "Payments",
+      "narratives": ["Payments", "PoW"],
+      "coingeckoId": "litecoin",
+      "defillamaSlug": "litecoin"
+    },
+    {
+      "symbol": "BCHUSDT",
+      "baseAsset": "BCH",
+      "name": "Bitcoin Cash",
+      "sector": "Payments",
+      "narratives": ["Payments", "PoW"],
+      "coingeckoId": "bitcoin-cash",
+      "defillamaSlug": "bitcoin-cash"
+    },
+    {
+      "symbol": "XLMUSDT",
+      "baseAsset": "XLM",
+      "name": "Stellar",
+      "sector": "Payments",
+      "narratives": ["Payments", "RWA"],
+      "coingeckoId": "stellar",
+      "defillamaSlug": "stellar"
+    },
+    {
+      "symbol": "ZROUSDT",
+      "baseAsset": "ZRO",
+      "name": "LayerZero",
+      "sector": "Infra",
+      "narratives": ["Interoperability", "Omnichain"],
+      "coingeckoId": "layerzero",
+      "defillamaSlug": "layerzero"
+    },
+    {
+      "symbol": "TRUMPUSDT",
+      "baseAsset": "TRUMP",
+      "name": "OFFICIAL TRUMP",
+      "sector": "Meme",
+      "narratives": ["Meme", "PolitiFi", "Solana"],
+      "coingeckoId": "official-trump",
+      "defillamaSlug": null
+    },
+    {
+      "symbol": "PUMPUSDT",
+      "baseAsset": "PUMP",
+      "name": "Pump.fun",
+      "sector": "DeFi",
+      "narratives": ["Launchpad", "Solana", "Meme"],
+      "coingeckoId": "pump-fun",
+      "defillamaSlug": "pump-fun"
+    },
+    {
+      "symbol": "MANTRAUSDT",
+      "baseAsset": "MANTRA",
+      "name": "MANTRA",
+      "sector": "RWA",
+      "narratives": ["RWA", "Cosmos"],
+      "coingeckoId": "mantra-dao",
+      "defillamaSlug": "mantra"
+    },
+    {
+      "symbol": "QNTUSDT",
+      "baseAsset": "QNT",
+      "name": "Quant",
+      "sector": "Infra",
+      "narratives": ["Interoperability", "Enterprise"],
+      "coingeckoId": "quant-network",
+      "defillamaSlug": null
+    },
+    {
+      "symbol": "MOVEUSDT",
+      "baseAsset": "MOVE",
+      "name": "Movement",
+      "sector": "L2",
+      "narratives": ["Move", "Ethereum-L2"],
+      "coingeckoId": "movement",
+      "defillamaSlug": "movement"
+    },
+    {
+      "symbol": "SSVUSDT",
+      "baseAsset": "SSV",
+      "name": "ssv.network",
+      "sector": "Infra",
+      "narratives": ["DVT", "Staking", "Ethereum"],
+      "coingeckoId": "ssv-network",
+      "defillamaSlug": "ssv-network"
+    },
+    {
+      "symbol": "SUSDT",
+      "baseAsset": "S",
+      "name": "Sonic",
+      "sector": "L1",
+      "narratives": ["High-Throughput", "EVM", "DeFi"],
+      "coingeckoId": "sonic-3",
+      "defillamaSlug": "sonic"
+    },
+    {
+      "symbol": "BIGTIMEUSDT",
+      "baseAsset": "BIGTIME",
+      "name": "Big Time",
+      "sector": "Other",
+      "narratives": ["Gaming", "Web3"],
+      "coingeckoId": "big-time",
+      "defillamaSlug": null
+    },
+    {
+      "symbol": "INITUSDT",
+      "baseAsset": "INIT",
+      "name": "Initia",
+      "sector": "L1",
+      "narratives": ["Interoperability", "Rollups"],
+      "coingeckoId": "initia",
+      "defillamaSlug": "initia"
+    },
+    {
+      "symbol": "MEUSDT",
+      "baseAsset": "ME",
+      "name": "Magic Eden",
+      "sector": "Other",
+      "narratives": ["NFT", "Solana", "Marketplace"],
+      "coingeckoId": "magic-eden",
+      "defillamaSlug": "magic-eden"
+    },
+    {
+      "symbol": "PROMUSDT",
+      "baseAsset": "PROM",
+      "name": "Prom",
+      "sector": "L2",
+      "narratives": ["ZK", "Gaming"],
+      "coingeckoId": "prometeus",
+      "defillamaSlug": null
+    },
+    {
+      "symbol": "MMTUSDT",
+      "baseAsset": "MMT",
+      "name": "Momentum",
+      "sector": "DeFi",
+      "narratives": ["DEX", "Sui", "Move"],
+      "coingeckoId": "momentum-finance",
+      "defillamaSlug": "momentum"
     }
   ]
 }

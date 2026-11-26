@@ -124,14 +124,14 @@ test('Scanner v9 Comprehensive Acceptance Test Suite', async (t) => {
   });
 
   await t.test('Rubric: Expires after 90 days', () => {
-    // Evaluating as of 2026-12-15 when rubric was evaluated at 2026-09-01 (over 90 days)
-    const rubric = evaluateRubricForDate('SOLUSDT', '2026-12-15T00:00:00.000Z');
+    // Latest SOLUSDT rubric evaluated at 2026-11-25 -> expires after 90 days (e.g. 2027-03-15)
+    const rubric = evaluateRubricForDate('SOLUSDT', '2027-03-15T00:00:00.000Z');
     assert.equal(rubric.reason, 'rubric_expired_over_90d');
     assert.equal(rubric.isExpired, true);
     assert.equal(rubric.rubricScore, null);
   });
 
-  await t.test('Sector Fundamentals: Enforces minimum 5 peers for quant scoring', () => {
+  await t.test('Sector Fundamentals: Enforces minimum 5 peers when universe also has < 5 peers', () => {
     const fewAssets = [
       { symbol: 'A', sector: 'AI', windows: { '7d': { fundamentals: { metric1Growth: 0.1, metric2Growth: 0.2 } } } },
       { symbol: 'B', sector: 'AI', windows: { '7d': { fundamentals: { metric1Growth: 0.3, metric2Growth: 0.4 } } } },
@@ -139,6 +139,20 @@ test('Scanner v9 Comprehensive Acceptance Test Suite', async (t) => {
     const quantMap = calculateQuantitativeSectorScores(fewAssets, '7d');
     assert.equal(quantMap.get('A').score, null);
     assert.equal(quantMap.get('A').reason, 'insufficient_sector_peers_min_5');
+  });
+
+  await t.test('Sector Fundamentals: Falls back to universe peers when sector has < 3 peers but universe >= 5', () => {
+    const mixedAssets = [
+      { symbol: 'L1_1', sector: 'L1', windows: { '7d': { fundamentals: { metric1Growth: 0.1, metric2Growth: 0.1 } } } },
+      { symbol: 'L1_2', sector: 'L1', windows: { '7d': { fundamentals: { metric1Growth: 0.2, metric2Growth: 0.2 } } } },
+      { symbol: 'L1_3', sector: 'L1', windows: { '7d': { fundamentals: { metric1Growth: 0.3, metric2Growth: 0.3 } } } },
+      { symbol: 'L1_4', sector: 'L1', windows: { '7d': { fundamentals: { metric1Growth: 0.4, metric2Growth: 0.4 } } } },
+      { symbol: 'L1_5', sector: 'L1', windows: { '7d': { fundamentals: { metric1Growth: 0.5, metric2Growth: 0.5 } } } },
+      { symbol: 'RWA_1', sector: 'RWA', windows: { '7d': { fundamentals: { metric1Growth: 0.6, metric2Growth: null } } } },
+    ];
+    const quantMap = calculateQuantitativeSectorScores(mixedAssets, '7d');
+    assert.equal(quantMap.get('RWA_1').peerScope, 'universe_fallback');
+    assert.ok(quantMap.get('RWA_1').score > 80);
   });
 
   await t.test('Sector Fundamentals: Live adapter overriding metric2 preserves metric1 from curated data', () => {
@@ -287,7 +301,7 @@ test('Scanner v9 Comprehensive Acceptance Test Suite', async (t) => {
     assert.equal(scored[4].windows['7d'].rank, 5);
   });
 
-  await t.test('Scoring: Incomplete assets get null total score and null rank, never reweighted', () => {
+  await t.test('Scoring: Incomplete assets compute partial reweighted score if RS+Liq+>=60%, and null if missing RS', () => {
     const assets = [
       {
         symbol: 'COMPLETE_COIN',
@@ -306,10 +320,22 @@ test('Scanner v9 Comprehensive Acceptance Test Suite', async (t) => {
         sector: 'L1',
         hasFutures: true,
         liquidity30d: { stability: 50 },
-        rubric: { rubricScore: null, reason: 'rubric_missing' }, // Missing rubric
+        rubric: { rubricScore: null, reason: 'rubric_missing' }, // Missing rubric -> 75% weight
         windows: {
           '7d': {
             metrics: { rsBtc: 15, rsEth: 15, spotFlowPressure: 0.2, spotCvd: 200, futuresCvd: 200, deltaOiBase: 60, fundingAvgDaily: 0.0001, quoteVolume: 200000 },
+          },
+        },
+      },
+      {
+        symbol: 'NO_RS_COIN',
+        sector: 'L1',
+        hasFutures: true,
+        liquidity30d: { stability: 50 },
+        rubric: { rubricScore: 80, reason: 'valid' },
+        windows: {
+          '7d': {
+            metrics: { rsBtc: null, rsEth: null, spotFlowPressure: 0.2, spotCvd: 200, futuresCvd: 200, deltaOiBase: 60, fundingAvgDaily: 0.0001, quoteVolume: 200000 },
           },
         },
       },
@@ -318,18 +344,22 @@ test('Scanner v9 Comprehensive Acceptance Test Suite', async (t) => {
     const quantMap = new Map([
       ['COMPLETE_COIN', { score: 60, peerCount: 5 }],
       ['INCOMPLETE_COIN', { score: 70, peerCount: 5 }],
+      ['NO_RS_COIN', { score: 70, peerCount: 5 }],
     ]);
 
     const scored = scoreUniverseForWindow(assets, '7d', quantMap);
     const inc = scored.find(a => a.symbol === 'INCOMPLETE_COIN');
-    assert.equal(inc.windows['7d'].scores.totalScore, null);
-    assert.equal(inc.windows['7d'].rank, null);
+    const noRs = scored.find(a => a.symbol === 'NO_RS_COIN');
     assert.equal(inc.windows['7d'].completeness.isComplete, false);
     assert.deepEqual(inc.windows['7d'].completeness.missingPillars, ['fundamentals']);
+    assert.equal(inc.windows['7d'].scores.scoreType, 'partial');
+    assert.ok(inc.windows['7d'].scores.totalScore !== null);
+    assert.equal(noRs.windows['7d'].scores.totalScore, null);
+    assert.equal(noRs.windows['7d'].rank, null);
   });
 
   // ── 5. Tracking, Stale Check & Registry ───────────────────────────────────
-  await t.test('Registry: Excluded assets check (BTC, ETH, Stables, Leveraged, Wrapped)', () => {
+  await t.test('Registry: Excluded assets check (BTC, ETH, Stables, Leveraged, Wrapped, Tokenized)', () => {
     assert.equal(isExcludedSymbol('BTCUSDT'), true);
     assert.equal(isExcludedSymbol('ETHUSDT'), true);
     assert.equal(isExcludedSymbol('USDTUSDC'), true);
@@ -337,8 +367,12 @@ test('Scanner v9 Comprehensive Acceptance Test Suite', async (t) => {
     assert.equal(isExcludedSymbol('BTCUPUSDT'), true);
     assert.equal(isExcludedSymbol('ETHBEARUSDT'), true);
     assert.equal(isExcludedSymbol('WBTCUSDT'), true);
+    assert.equal(isExcludedSymbol('NVDABUSDT'), true);
+    assert.equal(isExcludedSymbol('XAUTUSDT'), true);
+    assert.equal(isExcludedSymbol('牛来USDT'), true);
     assert.equal(isExcludedSymbol('SOLUSDT'), false);
     assert.equal(isExcludedSymbol('AVAXUSDT'), false);
+    assert.equal(isExcludedSymbol('BNBUSDT'), false);
   });
 
   await t.test('Tracking: Computes deltaScore, deltaRank, and NEW asset indicator', () => {

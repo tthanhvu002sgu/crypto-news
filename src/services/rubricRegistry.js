@@ -16,12 +16,20 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const RUBRIC_ENTRIES = new Map();
 for (const entry of rubricsData.entries || []) {
   if (entry.symbol) {
-    RUBRIC_ENTRIES.set(entry.symbol.toUpperCase(), entry);
+    const key = entry.symbol.toUpperCase();
+    if (!RUBRIC_ENTRIES.has(key)) {
+      RUBRIC_ENTRIES.set(key, []);
+    }
+    RUBRIC_ENTRIES.get(key).push(entry);
   }
+}
+for (const list of RUBRIC_ENTRIES.values()) {
+  list.sort((a, b) => new Date(a.evaluatedAt).getTime() - new Date(b.evaluatedAt).getTime());
 }
 
 /**
  * Evaluate rubric validity for a given asset as of a specific date.
+ * Picks the latest evaluation with evaluatedAt <= asOf (anti-lookahead).
  * @param {string} symbol - Binance symbol (e.g. 'SOLUSDT')
  * @param {string|Date} asOf - Snapshot date
  * @returns {object} Evaluation result
@@ -38,9 +46,9 @@ export function evaluateRubricForDate(symbol, asOf = new Date()) {
   }
 
   const sym = symbol.toUpperCase();
-  const entry = RUBRIC_ENTRIES.get(sym);
+  const entries = RUBRIC_ENTRIES.get(sym);
 
-  if (!entry) {
+  if (!entries || entries.length === 0) {
     return {
       productScore: null,
       tokenAccrualScore: null,
@@ -54,22 +62,33 @@ export function evaluateRubricForDate(symbol, asOf = new Date()) {
   }
 
   const asOfTime = new Date(asOf).getTime();
-  const evalTime = new Date(entry.evaluatedAt).getTime();
 
-  // Anti-lookahead: Rubric evaluated after snapshot date cannot be used in past snapshot
-  if (Number.isFinite(asOfTime) && Number.isFinite(evalTime) && evalTime > asOfTime) {
-    return {
-      productScore: null,
-      tokenAccrualScore: null,
-      rubricScore: null,
-      reason: 'rubric_future_lookahead',
-      isExpired: false,
-      evaluatedAt: entry.evaluatedAt,
-      productEvidence: null,
-      tokenAccrualEvidence: null,
-      sourceUrl: null,
-    };
+  // Anti-lookahead: select only evaluations made at or before snapshot asOfTime
+  let entry = null;
+  if (Number.isFinite(asOfTime)) {
+    const eligible = entries.filter(e => {
+      const t = new Date(e.evaluatedAt).getTime();
+      return Number.isFinite(t) && t <= asOfTime;
+    });
+    if (eligible.length === 0) {
+      return {
+        productScore: null,
+        tokenAccrualScore: null,
+        rubricScore: null,
+        reason: 'rubric_future_lookahead',
+        isExpired: false,
+        evaluatedAt: entries[0].evaluatedAt,
+        productEvidence: null,
+        tokenAccrualEvidence: null,
+        sourceUrl: null,
+      };
+    }
+    entry = eligible[eligible.length - 1];
+  } else {
+    entry = entries[entries.length - 1];
   }
+
+  const evalTime = new Date(entry.evaluatedAt).getTime();
 
   // 90-day Expiration check
   const ageMs = asOfTime - evalTime;

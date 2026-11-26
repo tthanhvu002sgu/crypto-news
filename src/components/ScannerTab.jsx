@@ -240,7 +240,11 @@ const AssetRowDetails = React.memo(function AssetRowDetails({ asset, selectedWin
               </div>
               <div className="metric-subrow">
                 <span>Xác nhận phái sinh (30%):</span>
-                <strong className="text-cyan-400">{scores.derivativesConfirmationScore || 0} / 100</strong>
+                <strong className="text-cyan-400">
+                  {scores.flowMode === 'spot_fallback'
+                    ? 'Spot-only fallback'
+                    : `${scores.derivativesConfirmationScore || 0} / 100${asset.futuresSource === 'okx' ? ' (OKX)' : asset.futuresSource === 'binance' ? ' (Binance)' : ''}`}
+                </strong>
               </div>
             </div>
           </div>
@@ -254,7 +258,10 @@ const AssetRowDetails = React.memo(function AssetRowDetails({ asset, selectedWin
             <div className="pillar-card-body">
               <div className="metric-subrow">
                 <span>Định lượng sector (60%):</span>
-                <strong>{fmtScore(scores.quantSectorScore)}</strong>
+                <strong>
+                  {fmtScore(scores.quantSectorScore)}
+                  {scores.quantPeerScope === 'universe_fallback' ? ' (Universe)' : ''}
+                </strong>
               </div>
               <div className="metric-subrow">
                 <span>Qualitative rubric (40%):</span>
@@ -754,6 +761,11 @@ export default function ScannerTab() {
                 style={{ width: `${(summary.completeCount / Math.max(summary.totalAssets, 1)) * 100}%` }}
               />
             </div>
+            {summary.rankedCount != null && (
+              <small className="text-muted text-xs mt-1">
+                {summary.rankedCount} / {summary.totalAssets} coin có điểm xếp hạng
+              </small>
+            )}
           </div>
 
           <div className="summary-stat-card glass-panel">
@@ -961,6 +973,14 @@ export default function ScannerTab() {
                                     {fmtPct(deltaScore, true, 1)}
                                   </span>
                                 )}
+                                {!comp.isComplete && (
+                                  <span
+                                    className="text-xs text-amber-400 ml-1"
+                                    title={comp.missingReasons?.join(', ') || 'Xếp hạng phần'}
+                                  >
+                                    ({comp.coveragePct ?? ''}%)
+                                  </span>
+                                )}
                               </div>
                               <div className="score-micro-bar">
                                 <div className="score-micro-fill" style={{ width: `${Math.min(100, Math.max(0, totalScore))}%` }} />
@@ -1063,6 +1083,10 @@ export default function ScannerTab() {
                           {comp.isComplete ? (
                             <span className="complete-badge text-emerald-400 flex items-center text-xs">
                               <ShieldCheck size={14} className="mr-1" /> ĐỦ 4 TRỤ
+                            </span>
+                          ) : totalScore != null ? (
+                            <span className="incomplete-badge text-amber-400 flex items-center text-xs" title={comp.missingReasons?.join(', ')}>
+                              <AlertTriangle size={14} className="mr-1" /> PHẦN ({(comp.missingPillars?.length ? comp.missingPillars : comp.degradedComponents)?.join('+')})
                             </span>
                           ) : (
                             <span className="incomplete-badge text-amber-400 flex items-center text-xs" title={comp.missingReasons?.join(', ')}>

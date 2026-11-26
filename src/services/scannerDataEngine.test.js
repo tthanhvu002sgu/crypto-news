@@ -109,7 +109,7 @@ test('Scanner Data Engine Snapshot Generation', async (t) => {
     });
 
     assert.equal(snapshot.schemaVersion, 'v9.0.0');
-    assert.equal(snapshot.modelVersion, 'v1.0.0');
+    assert.equal(snapshot.modelVersion, 'v1.1.0');
     assert.equal(snapshot.assets.length, 6);
     assert.equal(snapshot.universe.length, 6);
     assert.ok(snapshot.summary['7d'].totalAssets === 6);

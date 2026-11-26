@@ -41,6 +41,14 @@ const DEFILLAMA_CHAIN_SLUGS = {
   doge: 'Doge',
   filecoin: 'Filecoin',
   arweave: 'Arweave',
+  sonic: 'Sonic',
+  hyperliquid: 'Hyperliquid L1',
+  litecoin: 'Litecoin',
+  'bitcoin-cash': 'Bitcoin Cash',
+  stellar: 'Stellar',
+  zcash: 'Zcash',
+  mantra: 'MANTRA',
+  movement: 'Movement',
 };
 
 /**

@@ -351,29 +351,45 @@ test('9. Full Universe Scoring Model & Completeness Rules', async (t) => {
     assert.equal(avax.windows['7d'].rank, 5);
   });
 
-  await t.test('Missing pillar leads to null total score, null rank, and preserved submetrics (no dynamic reweighting)', () => {
+  await t.test('Missing pillar leads to partial re-weighted score when RS+Liquidity+>=60% weight available, or null when insufficient', () => {
     const assets = [
       createAsset('SOLUSDT'),
       createAsset('INCOMPLETE_COIN', {
-        rubric: { rubricScore: null, reason: 'rubric_missing' }, // missing rubric
+        rubric: { rubricScore: null, reason: 'rubric_missing' }, // missing rubric -> 75% weight available (RS+Flow+Liq)
+      }),
+      createAsset('NO_RS_COIN', {
+        windows: {
+          '7d': {
+            metrics: { rsBtc: null, rsEth: null, spotFlowPressure: 0.1, spotCvd: 100, futuresCvd: 100, priceChangePct: 1, deltaOiBase: 1, fundingAvgDaily: 0.0001, quoteVolume: 100000 },
+            fundamentals: { metric1Growth: 0.1, metric2Growth: 0.1 },
+          },
+        },
       }),
     ];
 
     const quantMap = new Map([
       ['SOLUSDT', { score: 70, peerCount: 5 }],
       ['INCOMPLETE_COIN', { score: 50, peerCount: 5 }],
+      ['NO_RS_COIN', { score: 50, peerCount: 5 }],
     ]);
 
     const scored = scoreUniverseForWindow(assets, '7d', quantMap);
     const inc = scored.find(a => a.symbol === 'INCOMPLETE_COIN');
+    const noRs = scored.find(a => a.symbol === 'NO_RS_COIN');
 
-    assert.equal(inc.windows['7d'].scores.totalScore, null);
-    assert.equal(inc.windows['7d'].rank, null);
     assert.equal(inc.windows['7d'].completeness.isComplete, false);
     assert.deepEqual(inc.windows['7d'].completeness.missingPillars, ['fundamentals']);
-    // RS and Liquidity pillars should still be computed and preserved!
+    assert.equal(inc.windows['7d'].scores.scoreType, 'partial');
+    assert.equal(inc.windows['7d'].scores.coveragePct, 75);
+    assert.ok(inc.windows['7d'].scores.totalScore !== null);
+    assert.ok(inc.windows['7d'].rank !== null);
     assert.ok(inc.windows['7d'].scores.rsPillar !== null);
     assert.ok(inc.windows['7d'].scores.liqPillar !== null);
+
+    // Missing RS (40% + required) -> insufficient -> null score and null rank
+    assert.equal(noRs.windows['7d'].scores.totalScore, null);
+    assert.equal(noRs.windows['7d'].scores.scoreType, 'insufficient');
+    assert.equal(noRs.windows['7d'].rank, null);
   });
 });
 

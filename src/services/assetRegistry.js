@@ -39,6 +39,7 @@ for (const asset of registryData.assets) {
 export function isExcludedSymbol(symbol) {
   if (!symbol) return true;
   const sym = symbol.toUpperCase();
+  if (/[^A-Z0-9]/.test(sym)) return true;
   if (EXCLUDED_SYMBOLS.has(sym)) return true;
 
   // Leveraged tokens (UP, DOWN, BULL, BEAR, 3L, 3S)
@@ -46,8 +47,8 @@ export function isExcludedSymbol(symbol) {
     return true;
   }
 
-  // Stablecoins patterns
-  if (/^(USDT|USDC|BUSD|TUSD|FDUSD|DAI|USDE|USDS|EUR|PAX|GUSD|UST|USD1|RLUSD)/.test(sym) && sym.endsWith('USDT')) {
+  // Stablecoins & tokenized commodity patterns
+  if (/^(USDT|USDC|BUSD|TUSD|FDUSD|DAI|USDE|USDS|EUR|EURI|AEUR|PAX|PAXG|XAUT|GUSD|UST|USD1|RLUSD|RWUSD|XUSD|BFUSD|PYUSD|USDP|UUSDT)/.test(sym) && sym.endsWith('USDT')) {
     if (sym !== 'USDTUSDT') return true;
   }
 

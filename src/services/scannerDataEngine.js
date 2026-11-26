@@ -349,29 +349,51 @@ export async function fetchOkxFuturesDailyKlines(symbol, asOfUtcMidnight, limit 
         headers: { 'User-Agent': DEFAULT_USER_AGENT },
       }),
       axios.get(`${OKX_API_BASE}/api/v5/rubik/stat/taker-volume-contract`, {
-        params: { instId, period: '1D', end: String(asOfTime), limit: String(limit) },
+        params: { instId, period: '1D', unit: '1', end: String(asOfTime), limit: String(limit) },
         timeout: 10000,
         headers: { 'User-Agent': DEFAULT_USER_AGENT },
       }).catch(() => ({ data: { data: [] } })),
     ]);
 
     const rawCandles = Array.isArray(candlesResp.data?.data) ? candlesResp.data.data : [];
-    const rawTaker = Array.isArray(takerResp.data?.data) ? takerResp.data.data : [];
-    if (rawCandles.length === 0 || rawTaker.length === 0) {
+    let rawTaker = Array.isArray(takerResp.data?.data) ? takerResp.data.data : [];
+    if (rawCandles.length === 0) {
       return [];
     }
 
     // Index taker volume ratio by UTC day midnight timestamp
     const takerRatioByDay = new Map();
-    for (const row of rawTaker) {
-      // [ts, sellVol, buyVol]
-      const ts = Number(row[0]);
-      const sellVol = Number(row[1]);
-      const buyVol = Number(row[2]);
-      if (Number.isFinite(ts) && Number.isFinite(sellVol) && Number.isFinite(buyVol) && (sellVol + buyVol) > 0) {
-        const dayTs = Math.floor(ts / MS_PER_DAY) * MS_PER_DAY;
-        takerRatioByDay.set(dayTs, buyVol / (buyVol + sellVol));
+    const indexTakerRows = (rows) => {
+      for (const row of rows) {
+        // [ts, sellVol, buyVol]
+        const ts = Number(row[0]);
+        const sellVol = Number(row[1]);
+        const buyVol = Number(row[2]);
+        if (Number.isFinite(ts) && Number.isFinite(sellVol) && Number.isFinite(buyVol) && (sellVol + buyVol) > 0) {
+          const dayTs = Math.floor(ts / MS_PER_DAY) * MS_PER_DAY;
+          takerRatioByDay.set(dayTs, buyVol / (buyVol + sellVol));
+        }
       }
+    };
+
+    indexTakerRows(rawTaker);
+
+    // Fallback to currency-level CONTRACTS taker volume if contract-level returned zeros/empty
+    if (takerRatioByDay.size === 0) {
+      const ccy = symbol.toUpperCase().replace(/USDT$/, '');
+      if (ccy) {
+        const ccyResp = await axios.get(`${OKX_API_BASE}/api/v5/rubik/stat/taker-volume`, {
+          params: { ccy, instType: 'CONTRACTS', period: '1D', end: String(asOfTime) },
+          timeout: 10000,
+          headers: { 'User-Agent': DEFAULT_USER_AGENT },
+        }).catch(() => ({ data: { data: [] } }));
+        rawTaker = Array.isArray(ccyResp.data?.data) ? ccyResp.data.data : [];
+        indexTakerRows(rawTaker);
+      }
+    }
+
+    if (takerRatioByDay.size === 0) {
+      return [];
     }
 
     const normalized = [];
@@ -434,7 +456,7 @@ export async function fetchOkxFuturesOiHistory(symbol, asOfUtcMidnight, limit = 
         const ts = Number(r[0]);
         const oiBase = Number(r[2]);
         const oiUsd = Number(r[3]);
-        if (!Number.isFinite(ts) || ts > asOfTime + 4 * 60 * 60 * 1000) return null;
+        if (!Number.isFinite(ts) || ts > asOfTime + 12 * 60 * 60 * 1000) return null;
         return {
           timestamp: ts,
           sumOpenInterest: Number.isFinite(oiBase) ? oiBase : null,
@@ -508,12 +530,19 @@ export async function buildTop50Universe(asOfUtcMidnight, candidateSymbols = nul
 
   if (!pairs || pairs.length === 0) {
     try {
-      // 1. Fetch 24hr tickers in a single call to pre-filter high-volume candidates
-      const tickers = await fetchBinanceSpot('/api/v3/ticker/24hr');
+      // 1. Fetch active TRADING Spot USDT pairs + 24hr tickers in parallel
+      const [activePairs, tickers] = await Promise.all([
+        fetchSpotActiveUsdtPairs(),
+        fetchBinanceSpot('/api/v3/ticker/24hr'),
+      ]);
+      const activeSet = new Set(activePairs);
       const validTickerCandidates = [];
 
       for (const t of tickers || []) {
-        if (t.symbol && t.symbol.endsWith('USDT') && !isExcludedSymbol(t.symbol)) {
+        const isAllowed = activeSet.size > 0
+          ? activeSet.has(t.symbol)
+          : (t.symbol && t.symbol.endsWith('USDT') && !isExcludedSymbol(t.symbol));
+        if (isAllowed) {
           const vol24h = Number(t.quoteVolume) || 0;
           if (vol24h > 0) {
             validTickerCandidates.push({ symbol: t.symbol, vol24h });
@@ -521,9 +550,9 @@ export async function buildTop50Universe(asOfUtcMidnight, candidateSymbols = nul
         }
       }
 
-      // Sort by 24h volume to process most liquid first, but do not artificially limit
+      // Sort by 24h volume to process most liquid first, cap to top 120 to avoid scanning 400+ illiquid pairs
       validTickerCandidates.sort((a, b) => b.vol24h - a.vol24h);
-      pairs = validTickerCandidates.map(c => c.symbol);
+      pairs = validTickerCandidates.slice(0, 120).map(c => c.symbol);
     } catch {
       pairs = [];
     }
@@ -537,6 +566,7 @@ export async function buildTop50Universe(asOfUtcMidnight, candidateSymbols = nul
   }
 
   const universeCandidates = [];
+  const expectedLatestOpenTime = asOfUtcMidnight.getTime() - MS_PER_DAY;
 
   // Batch fetch 30d klines to rank by exact 30d volume (batch size 15)
   const batchSize = 15;
@@ -547,6 +577,10 @@ export async function buildTop50Universe(asOfUtcMidnight, candidateSymbols = nul
       if (klines && klines.length >= 30) {
         // Take last 31 completed daily candles if available, else 30
         const completedKlines = klines.slice(-31);
+        const latestCandleOpenTime = Number(completedKlines[completedKlines.length - 1]?.[0]);
+        if (latestCandleOpenTime !== expectedLatestOpenTime) {
+          return null;
+        }
         const completed30 = completedKlines.slice(-30);
         let total30dQuoteVol = 0;
         const dailyVolumes = [];
@@ -859,7 +893,8 @@ export async function generateDailySnapshot({
       };
 
       if (hasFutures && Array.isArray(oiHistory) && oiHistory.length > 0) {
-        // Find record closest to expectedEndOiTime (within 4h tolerance)
+        const oiToleranceMs = futuresSource === 'okx' ? 12 * 60 * 60 * 1000 : 4 * 60 * 60 * 1000;
+        // Find record closest to expectedEndOiTime (within venue-appropriate tolerance)
         const findOiRecord = (targetTime) => {
           let best = null;
           let minDiff = Infinity;
@@ -867,7 +902,7 @@ export async function generateDailySnapshot({
             const rTime = Number(r.timestamp || r.time);
             if (Number.isFinite(rTime)) {
               const diff = Math.abs(rTime - targetTime);
-              if (diff <= 4 * 60 * 60 * 1000 && diff < minDiff) {
+              if (diff <= oiToleranceMs && diff < minDiff) {
                 minDiff = diff;
                 best = r;
               }

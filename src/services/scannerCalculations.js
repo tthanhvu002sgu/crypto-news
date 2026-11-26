@@ -3,7 +3,7 @@
  * Strictly deterministic, zero look-ahead, comprehensive edge-case handling.
  */
 
-export const MODEL_VERSION = 'v1.0.0';
+export const MODEL_VERSION = 'v1.1.0';
 export const SCHEMA_VERSION = 'v9.0.0';
 
 export const PILLAR_WEIGHTS = {
@@ -477,70 +477,108 @@ export function calculateDerivativesConfirmationScore({ spotCvd, futuresCvd, pri
 
 /**
  * Calculate Quantitative Sector Scores for all assets in universe for a specific window.
- * Requires at least MIN_SECTOR_PEERS (5) assets in the same sector with valid metric growths.
+ * Supports single-metric or dual-metric growth; falls back from sector (>=5, then >=3)
+ * to universe-wide peer comparison (>=5) when a sector has too few valid peers.
  */
 export function calculateQuantitativeSectorScores(assets, windowKey = '7d') {
   if (!Array.isArray(assets) || assets.length === 0) return new Map();
 
-  // Group assets by primary sector
+  const getMetricGrowths = (asset) => {
+    const g1Raw = asset.windows?.[windowKey]?.fundamentals?.metric1Growth;
+    const g2Raw = asset.windows?.[windowKey]?.fundamentals?.metric2Growth;
+    const g1 = (g1Raw !== null && g1Raw !== undefined && Number.isFinite(Number(g1Raw))) ? Number(g1Raw) : null;
+    const g2 = (g2Raw !== null && g2Raw !== undefined && Number.isFinite(Number(g2Raw))) ? Number(g2Raw) : null;
+    return { g1, g2, hasAny: g1 !== null || g2 !== null };
+  };
+
+  const scorePeerGroup = (peers, peerScope, reason) => {
+    const g1Values = peers.map(p => p.g1);
+    const g2Values = peers.map(p => p.g2);
+    const p1s = calculatePercentilesMidrank(g1Values);
+    const p2s = calculatePercentilesMidrank(g2Values);
+    const groupMap = new Map();
+
+    for (let i = 0; i < peers.length; i += 1) {
+      const p1 = p1s[i];
+      const p2 = p2s[i];
+      let score = null;
+      let metricCoverage = 'none';
+      if (p1 !== null && p2 !== null) {
+        score = (p1 + p2) / 2;
+        metricCoverage = 'both';
+      } else if (p1 !== null) {
+        score = p1;
+        metricCoverage = 'single_m1';
+      } else if (p2 !== null) {
+        score = p2;
+        metricCoverage = 'single_m2';
+      }
+      groupMap.set(peers[i].asset.symbol, {
+        score,
+        peerCount: peers.length,
+        peerScope,
+        metricCoverage,
+        reason,
+        p1,
+        p2,
+      });
+    }
+    return groupMap;
+  };
+
+  // Precompute universe-wide valid peers for fallback
+  const allValidPeers = [];
   const sectorGroups = new Map();
+
   for (const asset of assets) {
     const sector = asset.sector || 'Other';
     if (!sectorGroups.has(sector)) {
       sectorGroups.set(sector, []);
     }
-    sectorGroups.get(sector).push(asset);
+    const growths = getMetricGrowths(asset);
+    sectorGroups.get(sector).push({ asset, ...growths });
+    if (growths.hasAny) {
+      allValidPeers.push({ asset, ...growths });
+    }
   }
 
-  const results = new Map(); // symbol -> { score, reason, peerCount }
+  const universeScores = allValidPeers.length >= MIN_SECTOR_PEERS
+    ? scorePeerGroup(allValidPeers, 'universe_fallback', 'valid_universe_fallback')
+    : new Map();
 
-  for (const [sector, group] of sectorGroups.entries()) {
-    // Check growth availability for each asset in this sector group
-    const validPeers = group.filter(a => {
-      const g1 = a.windows?.[windowKey]?.fundamentals?.metric1Growth;
-      const g2 = a.windows?.[windowKey]?.fundamentals?.metric2Growth;
-      return Number.isFinite(g1) && Number.isFinite(g2);
-    });
+  const results = new Map(); // symbol -> { score, reason, peerCount, peerScope }
 
+  for (const [, group] of sectorGroups.entries()) {
+    const validPeers = group.filter(p => p.hasAny);
     const peerCount = validPeers.length;
 
-    if (peerCount < MIN_SECTOR_PEERS) {
-      for (const asset of group) {
-        results.set(asset.symbol, {
+    if (peerCount >= MIN_SECTOR_PEERS) {
+      const sectorMap = scorePeerGroup(validPeers, 'sector', 'valid');
+      for (const [sym, val] of sectorMap.entries()) {
+        results.set(sym, val);
+      }
+    } else if (peerCount >= 3) {
+      const sectorMap = scorePeerGroup(validPeers, 'sector_small', 'valid_small_sector');
+      for (const [sym, val] of sectorMap.entries()) {
+        results.set(sym, val);
+      }
+    } else if (universeScores.size > 0) {
+      for (const item of validPeers) {
+        const fallbackScore = universeScores.get(item.asset.symbol);
+        if (fallbackScore) {
+          results.set(item.asset.symbol, fallbackScore);
+        }
+      }
+    }
+
+    for (const item of group) {
+      if (!results.has(item.asset.symbol)) {
+        results.set(item.asset.symbol, {
           score: null,
           peerCount,
-          reason: `insufficient_sector_peers_min_${MIN_SECTOR_PEERS}`,
+          peerScope: 'none',
+          reason: item.hasAny ? `insufficient_sector_peers_min_${MIN_SECTOR_PEERS}` : 'missing_growth_data',
         });
-      }
-    } else {
-      // Calculate percentiles within this sector
-      const m1Growths = validPeers.map(a => a.windows[windowKey].fundamentals.metric1Growth);
-      const m2Growths = validPeers.map(a => a.windows[windowKey].fundamentals.metric2Growth);
-
-      const p1s = calculatePercentilesMidrank(m1Growths);
-      const p2s = calculatePercentilesMidrank(m2Growths);
-
-      for (let i = 0; i < validPeers.length; i += 1) {
-        const peer = validPeers[i];
-        const score = (p1s[i] + p2s[i]) / 2;
-        results.set(peer.symbol, {
-          score,
-          peerCount,
-          reason: 'valid',
-          p1: p1s[i],
-          p2: p2s[i],
-        });
-      }
-
-      // Any asset in group that didn't have valid growths gets null
-      for (const asset of group) {
-        if (!results.has(asset.symbol)) {
-          results.set(asset.symbol, {
-            score: null,
-            peerCount,
-            reason: 'missing_growth_data',
-          });
-        }
       }
     }
   }
@@ -600,12 +638,26 @@ export function scoreUniverseForWindow(assets, windowKey = '7d', quantSectorScor
       hasFutures: asset.hasFutures,
     });
 
+    const degradedComponents = [];
     let flowPillarScore = null;
+    let flowMode = 'none';
     if (pFlow !== null && derivConfirmation.isValid) {
       flowPillarScore = (FLOW_SUBWEIGHTS.spotPressure * pFlow) + (FLOW_SUBWEIGHTS.derivativesConfirmation * derivConfirmation.score);
+      flowMode = 'full';
+    } else if (pFlow !== null) {
+      // Graceful fallback: rank Flow pillar on 100% Spot Flow Pressure when derivatives data is unavailable
+      flowPillarScore = pFlow;
+      flowMode = 'spot_fallback';
+      degradedComponents.push('flow_derivatives');
+      missingReasons.push(derivConfirmation.reason || 'missing_derivatives_data');
+      if (Array.isArray(derivConfirmation.missingComponents)) {
+        for (const compName of derivConfirmation.missingComponents) {
+          missingReasons.push(`missing_${compName}`);
+        }
+      }
     } else {
       missingPillars.push('flow');
-      if (pFlow === null) missingReasons.push('missing_spot_flow_pressure');
+      missingReasons.push('missing_spot_flow_pressure');
       if (!derivConfirmation.isValid) {
         missingReasons.push(derivConfirmation.reason || 'missing_derivatives_data');
         if (Array.isArray(derivConfirmation.missingComponents)) {
@@ -647,17 +699,38 @@ export function scoreUniverseForWindow(assets, windowKey = '7d', quantSectorScor
       if (pStab === null) missingReasons.push('missing_volume_stability_30d');
     }
 
-    // Total Score
-    const isComplete = missingPillars.length === 0;
+    // Total Score (full 4-pillar or graceful re-weighted when RS + Liquidity + >=60% weight available)
+    const isComplete = missingPillars.length === 0 && degradedComponents.length === 0;
+    let availableWeight = 0;
+    let weightedSum = 0;
+
+    if (rsPillarScore !== null) {
+      availableWeight += PILLAR_WEIGHTS.rs;
+      weightedSum += PILLAR_WEIGHTS.rs * rsPillarScore;
+    }
+    if (flowPillarScore !== null) {
+      availableWeight += PILLAR_WEIGHTS.flow;
+      weightedSum += PILLAR_WEIGHTS.flow * flowPillarScore;
+    }
+    if (fundPillarScore !== null) {
+      availableWeight += PILLAR_WEIGHTS.fundamentals;
+      weightedSum += PILLAR_WEIGHTS.fundamentals * fundPillarScore;
+    }
+    if (liqPillarScore !== null) {
+      availableWeight += PILLAR_WEIGHTS.liquidity;
+      weightedSum += PILLAR_WEIGHTS.liquidity * liqPillarScore;
+    }
+
+    const coveragePct = Math.round(availableWeight * 100);
     let totalScore = null;
+    let scoreType = 'insufficient';
 
     if (isComplete) {
-      totalScore = (
-        (PILLAR_WEIGHTS.rs * rsPillarScore) +
-        (PILLAR_WEIGHTS.flow * flowPillarScore) +
-        (PILLAR_WEIGHTS.fundamentals * fundPillarScore) +
-        (PILLAR_WEIGHTS.liquidity * liqPillarScore)
-      );
+      totalScore = weightedSum;
+      scoreType = 'complete';
+    } else if (rsPillarScore !== null && liqPillarScore !== null && availableWeight >= 0.60 - 1e-9) {
+      totalScore = weightedSum / availableWeight;
+      scoreType = 'partial';
     }
 
     scoredAssets.push({
@@ -676,18 +749,24 @@ export function scoreUniverseForWindow(assets, windowKey = '7d', quantSectorScor
           scores: {
             rsPillar: rsPillarScore,
             flowPillar: flowPillarScore,
+            flowMode,
             fundPillar: fundPillarScore,
             liqPillar: liqPillarScore,
             quantSectorScore,
+            quantPeerScope: quantSectorRes?.peerScope || 'none',
             rubricScore,
             derivativesConfirmationScore: derivConfirmation.score,
             derivativesConditions: derivConfirmation.conditions,
             totalScore,
+            scoreType,
+            coveragePct,
           },
           completeness: {
             isComplete,
             missingPillars,
+            degradedComponents,
             missingReasons,
+            coveragePct,
           },
           rank: null, // assigned below
         },
@@ -738,6 +817,7 @@ export function calculateSummaryStatistics(assets, windowKey = '7d') {
 
   const totalAssets = assets.length;
   let completeCount = 0;
+  let rankedCount = 0;
   let rsBtcPosCount = 0;
   let rsEthPosCount = 0;
   let validRsBtc = [];
@@ -761,8 +841,11 @@ export function calculateSummaryStatistics(assets, windowKey = '7d') {
     const win = a.windows?.[windowKey];
     if (!win) continue;
 
-    if (win.scores?.totalScore !== null) {
-      completeCount += 1;
+    if (win.scores?.totalScore !== null && win.scores?.totalScore !== undefined) {
+      rankedCount += 1;
+      if (win.completeness?.isComplete !== false) {
+        completeCount += 1;
+      }
       const score = win.scores.totalScore;
       if (score >= 80) scoreDist.tier80Plus += 1;
       else if (score >= 60) scoreDist.tier60To79 += 1;
@@ -801,6 +884,7 @@ export function calculateSummaryStatistics(assets, windowKey = '7d') {
   return {
     totalAssets,
     completeCount,
+    rankedCount,
     incompleteCount: totalAssets - completeCount,
     rsBtcPositiveRatio: validRsBtc.length > 0 ? (rsBtcPosCount / validRsBtc.length) * 100 : 0,
     rsEthPositiveRatio: validRsEth.length > 0 ? (rsEthPosCount / validRsEth.length) * 100 : 0,
