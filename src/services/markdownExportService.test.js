@@ -145,6 +145,13 @@ test('buildComprehensiveMarkdownReport produces complete 12-section markdown rep
       valuationZone: 'FAIR VALUE',
       longValuator: { z: 0.42, upper: 85000, lower: 52000 },
       shortValuator: { z: 0.31 },
+      convictionScore: 0.15,
+      athDrawdownPct: -8.5,
+      vol2Y: 0.42,
+      valOverheatZ: 1.15,
+      valOverheatPct: 72.4,
+      pnlOverheatZ: 1.05,
+      pnlOverheatPct: 68.0,
       pnl: {
         zone: 'ACCUMULATION',
         weightedAverage: 18.4,
@@ -219,7 +226,7 @@ test('buildComprehensiveMarkdownReport produces complete 12-section markdown rep
   assert.ok(markdown.includes('## 2. OPTIONS REGIME — BTC (DERIBIT)'), 'Includes Section 2');
   assert.ok(markdown.includes('## 3. SPOT BITCOIN ETF FLOW (MỚI NHẤT & LỊCH SỬ)'), 'Includes Section 3');
   assert.ok(markdown.includes('## 4. CME BITCOIN FUTURES COT'), 'Includes Section 4');
-  assert.ok(markdown.includes('## 5. MACRO DASHBOARD v2 (MỚI NHẤT & LỊCH SỬ)'), 'Includes Section 5');
+  assert.ok(markdown.includes('## 5. MACRO DASHBOARD v3 (MỚI NHẤT & LỊCH SỬ)'), 'Includes Section 5');
   assert.ok(markdown.includes('## 6. CVD & ORDER FLOW (MỚI NHẤT & LỊCH SỬ 24H, 7D, 30D)'), 'Includes Section 6');
   assert.ok(markdown.includes('## 7. FLOW REGIME · 24H (MỚI NHẤT & BỐI CẢNH VỊ THẾ)'), 'Includes Section 7');
   assert.ok(markdown.includes('## 8. LONG / SHORT RATIO (L/S RATIO) (MỚI NHẤT & LỊCH SỬ 24H)'), 'Includes Section 8');
@@ -236,6 +243,9 @@ test('buildComprehensiveMarkdownReport produces complete 12-section markdown rep
   assert.ok(markdown.includes('1,050,000 BTC'), 'Includes ETF Holdings');
   assert.ok(markdown.includes('Quản Lý Tài Sản (Asset Managers'), 'Includes CME Asset Managers');
   assert.ok(markdown.includes('Chi Phí Sản Xuất Khai Thác Bitcoin'), 'Includes Production Cost');
+  assert.ok(markdown.includes('4Y ATH Drawdown'), 'Includes math_v3 4Y ATH Drawdown');
+  assert.ok(markdown.includes('2Y Realized Vol'), 'Includes math_v3 2Y Realized Vol');
+  assert.ok(markdown.includes('Overheat Z / %ile'), 'Includes math_v3 Overheat Z / %ile');
   assert.ok(markdown.includes('Futures CVD Net Delta'), 'Includes CVD metrics');
   assert.ok(markdown.includes('SOLUSDT'), 'Includes Altcoin Scanner asset');
   assert.ok(markdown.includes('Tracking Deltas vs 1D & 7D Ago'), 'Includes Scanner historical tracking deltas');

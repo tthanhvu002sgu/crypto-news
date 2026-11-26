@@ -243,3 +243,44 @@ test('LOGIC-003 & LOGIC-006 regressions: dynamic isClosed, safe livePrice overri
   const v3Adaptive = checkSopConfigCompliance({ ...MACRO_SOP_PRESET, zMode: 'Adaptive' });
   assert.equal(v3Adaptive.isCompliant, true);
 });
+
+test('LOGIC-005 regression: CY-4 triggers at most once per cycle between Green Bubbles', () => {
+  const mkRow = (date, composite) => ({
+    time: new Date(`${date}T00:00:00Z`),
+    isClosed: true,
+    price: 50000,
+    composite,
+    divergence: false,
+    decision: composite >= 3 ? 'STRONG ACCUM' : composite <= -3 ? 'STRONG DIST' : 'NEUTRAL',
+  });
+
+  // Cycle 1: GB -> RB1 (first) -> NEUTRAL dip -> RB2 (re-entry in same cycle -> must NOT re-trigger CY-4)
+  const sameCycleSeries = [
+    mkRow('2022-11-14', 3),
+    mkRow('2024-11-18', -3),
+    mkRow('2024-11-25', -2),
+    mkRow('2024-12-02', -3),
+  ];
+
+  const firstRb = evaluateSopAction({ settings: MACRO_SOP_PRESET, series: sameCycleSeries.slice(0, 2) });
+  assert.equal(firstRb.cy4.active, true);
+  assert.equal(firstRb.cy4.isFirstWeek, true);
+  assert.equal(firstRb.cy4.alreadyTriggeredInCycle, false);
+
+  const reEntryRb = evaluateSopAction({ settings: MACRO_SOP_PRESET, series: sameCycleSeries });
+  assert.equal(reEntryRb.cy4.active, true);
+  assert.equal(reEntryRb.cy4.isFirstWeek, false);
+  assert.equal(reEntryRb.cy4.alreadyTriggeredInCycle, true);
+  assert.equal(reEntryRb.cy4.firstTriggerTime.toISOString().slice(0, 10), '2024-11-18');
+
+  // New Cycle 2: another GB resets CY-4 so RB3 triggers again
+  const nextCycleSeries = [
+    ...sameCycleSeries,
+    mkRow('2026-11-16', 3),
+    mkRow('2028-11-20', -3),
+  ];
+  const nextCycleRb = evaluateSopAction({ settings: MACRO_SOP_PRESET, series: nextCycleSeries });
+  assert.equal(nextCycleRb.cy4.active, true);
+  assert.equal(nextCycleRb.cy4.isFirstWeek, true);
+  assert.equal(nextCycleRb.cy4.alreadyTriggeredInCycle, false);
+});

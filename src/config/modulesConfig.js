@@ -15,7 +15,7 @@ export const MODULES_CONFIG = {
   dash_etf_holdings: { id: 'dash_etf_holdings', label: 'US Spot Bitcoin ETFs Holdings', category: 'Overview & Regime' },
   dash_etf_flows: { id: 'dash_etf_flows', label: 'Lịch Sử Dòng Tiền Ròng / AUM Trend', category: 'Overview & Regime' },
   dash_cme_cot: { id: 'dash_cme_cot', label: 'CME Bitcoin Futures COT', category: 'Overview & Regime' },
-  dash_macro_valuator: { id: 'dash_macro_valuator', label: 'Macro Dashboard v2 — Valuator + PnL Matrix', category: 'Overview & Regime' },
+  dash_macro_valuator: { id: 'dash_macro_valuator', label: 'Macro Dashboard v3 — Valuator + PnL Matrix (MathClean v3)', category: 'Overview & Regime' },
   dash_news: { id: 'dash_news', label: 'Tin Tức Vĩ Mô & Thị Trường', category: 'Overview & Regime' },
   dash_polymarket: { id: 'dash_polymarket', label: 'Polymarket — Whale Tracker', category: 'Overview & Regime' },
   dash_btc_chart: { id: 'dash_btc_chart', label: 'BTC/USDT — Giá 48 Giờ Gần Nhất (1H)', category: 'Overview & Regime' },

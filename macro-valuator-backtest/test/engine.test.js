@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import {
   calculateMacroDashboard,
+  isGreenBubble,
+  isRedBubble,
+  MACRO_SOP_PRESET,
   macroDashboardInternals,
   normalizeMacroCandles,
 } from '../src/engine.js';
+import { loadCandlesFromFile } from '../src/dataLoader.js';
 import {
   calculateMacroDashboard as appCalculateMacroDashboard,
 } from '../../src/services/macroDashboardEngine.js';
@@ -101,12 +106,19 @@ test('math_v3: 100% parity between standalone and app engine + strict causality'
     assert.equal(standalone.series[i].composite, original.series[i].composite);
     assert.ok(Math.abs(standalone.series[i].valZLong - original.series[i].valZLong) < 1e-9);
     assert.ok(Math.abs(standalone.series[i].convictionScore - original.series[i].convictionScore) < 1e-9);
+    assert.ok(Math.abs(standalone.series[i].valOverheatZ - original.series[i].valOverheatZ) < 1e-9);
+    assert.ok(Math.abs(standalone.series[i].pnlOverheatZ - original.series[i].pnlOverheatZ) < 1e-9);
+    assert.ok(Math.abs(standalone.series[i].athDrawdownPct - original.series[i].athDrawdownPct) < 1e-9);
   }
 
   for (const cutoff of [40, 120, 220, 300]) {
     const prefix = calculateMacroDashboard(input.slice(0, cutoff + 1), settings);
     assert.equal(prefix.current.composite, standalone.series[cutoff].composite);
+    assert.equal(prefix.current.valZone, standalone.series[cutoff].valZone);
+    assert.equal(prefix.current.pnlZone, standalone.series[cutoff].pnlZone);
     assert.ok(Math.abs(prefix.current.valZLong - standalone.series[cutoff].valZLong) < 1e-12);
+    assert.ok(Math.abs(prefix.current.valOverheatZ - standalone.series[cutoff].valOverheatZ) < 1e-12);
+    assert.ok(Math.abs(prefix.current.pnlOverheatZ - standalone.series[cutoff].pnlOverheatZ) < 1e-12);
     assert.ok(Math.abs(prefix.current.percentile - standalone.series[cutoff].percentile) < 1e-12);
   }
 });
@@ -129,9 +141,41 @@ test('math_v3: fixes cold-start GIFT bug, wash-volume distortion, and dual-confi
   const v2Diff = Math.abs(rBaseV2.current.weightedAverage - rWashV2.current.weightedAverage);
   assert.ok(v3Diff < v2Diff, `Expected math_v3 wash distortion (${v3Diff.toFixed(2)}) < pine_v2 (${v2Diff.toFixed(2)})`);
 
-  // Dual-confirm invariant: GIFT must not remain latched when valZShort > 0
+  // Dual-confirm invariant: GIFT must not remain latched when valZShort > 0; BUBBLE must stay near 4Y ATH
   for (const row of rBaseV3.series) {
     if (row.valZone === 'GIFT') assert.ok(row.valZShort <= 0);
-    if (row.valZone === 'BUBBLE') assert.ok(row.valZShort >= 0);
+    if (row.valZone === 'BUBBLE') assert.ok(row.athDrawdownPct >= -15);
+  }
+});
+
+test('math_v3 SOP on BTCUSDT 1W: preserves exact 20 GB bars and detects ATH-only RB cycle tops', async () => {
+  const btcCandles = await loadCandlesFromFile(fileURLToPath(new URL('../data/BTCUSDT_1w_10000.json', import.meta.url)));
+  const { series } = calculateMacroDashboard(btcCandles, MACRO_SOP_PRESET);
+
+  const gbs = series.filter((r) => isGreenBubble(r));
+  const rbs = series.filter((r) => isRedBubble(r));
+
+  // Exact 20 GB bars preserved (including 2018-12-10 and 2022-11-14..2023-01-02)
+  assert.equal(gbs.length, 20);
+  const gbDates = new Set(gbs.map((r) => r.time.toISOString().slice(0, 10)));
+  assert.ok(gbDates.has('2018-12-10'));
+  assert.ok(gbDates.has('2022-11-14'));
+  assert.ok(gbDates.has('2023-01-02'));
+
+  // Zero false-positive RB during 2019 bear-echo rally and 2020 pre-ATH recovery
+  const rbDates = rbs.map((r) => r.time.toISOString().slice(0, 10));
+  assert.equal(rbDates.filter((d) => d >= '2019-05-01' && d <= '2019-09-30').length, 0);
+  assert.equal(rbDates.filter((d) => d >= '2020-08-01' && d <= '2020-11-30').length, 0);
+
+  // RB fires in all major ATH cycle tops: 2021 Top1, 2021 Top2, 2024 ATH, 2025 Cycle Top
+  assert.ok(rbDates.some((d) => d >= '2021-02-01' && d <= '2021-05-15'));
+  assert.ok(rbDates.some((d) => d >= '2021-10-01' && d <= '2021-11-15'));
+  assert.ok(rbDates.some((d) => d >= '2024-11-15' && d <= '2024-12-15'));
+  assert.ok(rbDates.some((d) => d >= '2025-07-01' && d <= '2025-10-30'));
+
+  // Structural invariants on every RB bar
+  for (const row of rbs) {
+    assert.ok(row.athDrawdownPct >= -15, `Expected RB ${row.time.toISOString()} within 15% of 4Y high, got ${row.athDrawdownPct}`);
+    assert.equal(row.underwater, 0);
   }
 });

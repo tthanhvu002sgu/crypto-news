@@ -295,7 +295,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
   const sopPillLabel = sopAction.status === 'GREEN_BUBBLE_BUY'
     ? `SOP: MUA · GB #${sopAction.gbStreak}`
     : sopAction.status === 'RED_BUBBLE_TAKE_PROFIT'
-      ? `SOP: RED BUBBLE · CY-4`
+      ? (sopAction.cy4?.isFirstWeek ? 'SOP: RED BUBBLE · CHỐT 50% (CY-4)' : 'SOP: RED BUBBLE · GIỮ CORE HOLD')
       : 'SOP: CHỜ · TÍCH QUỸ R';
 
   const chartData = useMemo(() => ({
@@ -376,9 +376,13 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
         callbacks: {
           label: (context) => {
             if (context.dataset.label.startsWith('Green Bubble') || context.dataset.label.startsWith('Red Bubble')) {
-              const score = visibleSeries[context.dataIndex]?.composite;
+              const row = visibleSeries[context.dataIndex];
+              const score = row?.composite;
               const signedScore = score > 0 ? `+${score}` : score;
-              return `${context.dataset.label} · BTC $${fmtNumber(context.raw, 0)} · score ${signedScore}`;
+              const overheatInfo = context.dataset.label.startsWith('Red Bubble') && Number.isFinite(row?.valOverheatZ) && Number.isFinite(row?.athDrawdownPct)
+                ? ` · ATH ${fmtSigned(row.athDrawdownPct, 0)} · OH-Z ${row.valOverheatZ.toFixed(2)}`
+                : '';
+              return `${context.dataset.label} · BTC $${fmtNumber(context.raw, 0)} · score ${signedScore}${overheatInfo}`;
             }
             return `${context.dataset.label}: $${fmtNumber(context.raw, 0)}`;
           },
@@ -417,7 +421,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
           <p>
             Valuator + PnL Matrix ·{' '}
             {isMathV3
-              ? 'MathClean v3 (MAD 4Y · Disjoint Cohorts 1-4Y · RVWAP Anti-Wash)'
+              ? 'MathClean v3 (MAD 4Y · Disjoint Cohorts 1-4Y · RVWAP · ATH Overheat)'
               : 'Pine v2 parity mode'}
           </p>
         </div>
@@ -555,6 +559,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
               <div className="macro-zone-sub font-mono">
                 UNDERWATER {current.underwater.toFixed(0)}% · MIN ROI {fmtSigned(current.roiMin)}
                 {isMathV3 && settings.costMethod === 'VWAP' ? ' · RVWAP' : ''}
+                {isMathV3 && Number.isFinite(current.pnlOverheatZ) ? ` · OH-Z ${current.pnlOverheatZ.toFixed(2)} (${current.pnlOverheatPct.toFixed(0)}%)` : ''}
               </div>
             </article>
             <article style={{ '--zone-color': zoneColors[current.valZone] }}>
@@ -565,6 +570,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
               <p>Z long <strong>{current.valZLong > 0 ? '+' : ''}{current.valZLong.toFixed(2)}</strong> · Z short <strong>{current.valZShort > 0 ? '+' : ''}{current.valZShort.toFixed(2)}</strong></p>
               <div className="macro-zone-sub font-mono">
                 IMPLIED CAGR {fmtSigned(current.impliedCagr)} · σ {current.sigma.toFixed(3)}
+                {isMathV3 && Number.isFinite(current.athDrawdownPct) && Number.isFinite(current.valOverheatZ) ? ` · ATH ${fmtSigned(current.athDrawdownPct, 1)} · OH-Z ${current.valOverheatZ.toFixed(2)}` : ''}
               </div>
             </article>
             <div className="macro-fv-chart">
@@ -612,6 +618,34 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
                   <tr><td>Z Short / Long</td><td>{current.valZShort.toFixed(2)} / {current.valZLong.toFixed(2)}</td><td>{previous ? `${previous.valZShort.toFixed(2)} / ${previous.valZLong.toFixed(2)}` : '---'}</td></tr>
                   <tr><td>vs Fair Value</td><td>{fmtSigned(current.versusFairValue)} · FV ${fmtNumber(current.fairValue, 0)}</td><td>{fmtSigned(previous?.versusFairValue)}</td></tr>
                   <tr><td>Impl. CAGR</td><td>{fmtSigned(current.impliedCagr)} [{isMathV3 ? 'MAD 4Y' : settings.zMode}]</td><td>{settings.costMethod} · {settings.zoneMethod}</td></tr>
+                  {isMathV3 && Number.isFinite(current.athDrawdownPct) && (
+                    <tr>
+                      <td>4Y ATH Drawdown</td>
+                      <td>{fmtSigned(current.athDrawdownPct, 1)}{current.athDrawdownPct >= -15 ? ' · NEAR ATH' : ''}</td>
+                      <td>{Number.isFinite(previous?.athDrawdownPct) ? fmtSigned(previous.athDrawdownPct, 1) : '---'}</td>
+                    </tr>
+                  )}
+                  {isMathV3 && Number.isFinite(current.vol2Y) && (
+                    <tr>
+                      <td>2Y Realized Vol</td>
+                      <td>{(current.vol2Y * 100).toFixed(1)}%</td>
+                      <td>{Number.isFinite(previous?.vol2Y) ? `${(previous.vol2Y * 100).toFixed(1)}%` : '---'}</td>
+                    </tr>
+                  )}
+                  {isMathV3 && Number.isFinite(current.valOverheatZ) && (
+                    <tr>
+                      <td>Val Overheat (Z / %)</td>
+                      <td>{current.valOverheatZ.toFixed(2)} ({current.valOverheatPct.toFixed(1)}%ile) · ≥2.20/90%</td>
+                      <td>{Number.isFinite(previous?.valOverheatZ) ? `${previous.valOverheatZ.toFixed(2)} (${previous.valOverheatPct.toFixed(1)}%ile)` : '---'}</td>
+                    </tr>
+                  )}
+                  {isMathV3 && Number.isFinite(current.pnlOverheatZ) && (
+                    <tr>
+                      <td>PnL Overheat (Z / %)</td>
+                      <td>{current.pnlOverheatZ.toFixed(2)} ({current.pnlOverheatPct.toFixed(1)}%ile) · ≥2.20/90%</td>
+                      <td>{Number.isFinite(previous?.pnlOverheatZ) ? `${previous.pnlOverheatZ.toFixed(2)} (${previous.pnlOverheatPct.toFixed(1)}%ile)` : '---'}</td>
+                    </tr>
+                  )}
                   <tr><td>Bars in Zone</td><td>PnL {current.pnlBarsInZone} · Val {current.valBarsInZone}</td><td>minAlert {settings.minBarsAlert}</td></tr>
                 </tbody>
               </table>
@@ -736,8 +770,19 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
                     <span className="font-mono">BIẾN THỂ XOAY VÒNG CHU KỲ (CY-4 · RED BUBBLE)</span>
                     <strong>{sopAction.cy4?.action}</strong>
                     <div className="macro-sop-action-nums font-mono">
-                      <span>ĐIỀU KIỆN: <b>Score &lt;= -3 &amp; Divergence = NO</b></span>
-                      <span>TRẠNG THÁI: <b>{sopAction.cy4?.active ? `RED BUBBLE #${sopAction.rbStreak}` : 'CHỜ'}</b></span>
+                      <span>ĐIỀU KIỆN: <b>Score &lt;= -3 &amp; !Div (ATH-only ≤ -15%, 1 lần/chu kỳ)</b></span>
+                      <span>
+                        TRẠNG THÁI:{' '}
+                        <b>
+                          {sopAction.cy4?.isFirstWeek
+                            ? 'RED BUBBLE #1 · CHỐT 50% NGAY'
+                            : sopAction.cy4?.alreadyTriggeredInCycle
+                              ? `ĐÃ CHỐT TRONG CHU KỲ (${fmtDate(sopAction.cy4.firstTriggerTime)})`
+                              : sopAction.cy4?.active
+                                ? `RED BUBBLE #${sopAction.rbStreak}`
+                                : 'CHỜ'}
+                        </b>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -830,6 +875,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
                   <div><span>Hiệu quả vốn</span><b>XIRR +24.2%/năm · Sharpe 0.89</b></div>
                   <div><span>Tại đỉnh 09/2025 ($123k)</span><b>ROI +252.8% · MaxDD -20.9% · Sharpe 1.37</b></div>
                   <div><span>Đa chu kỳ 8.3 năm (2018–2026)</span><b>Avg $12,502 · ROI +208.2% (+226.1% @ 4% APY) · Sharpe 0.87</b></div>
+                  <div><span>CY-4 (ATH-only RB · 1 lần/chu kỳ)</span><b>ROI +418.2% ($2,300,964 @ 4% APY) · 2 lần chốt đỉnh</b></div>
                 </div>
               </article>
 
@@ -845,7 +891,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
                   <li><strong>Tích lũy quỹ:</strong> Mỗi tuần nạp đều <code>$X</code> vào Quỹ dự phòng <code>R</code>.</li>
                   <li><strong>Kiểm tra 07:00 Thứ Hai VN:</strong> Chưa có Green Bubble → giữ nguyên tiền trong <code>R</code>.</li>
                   <li><strong>Giải ngân chia lớp 50%:</strong> Mỗi tuần có Green Bubble → giải ngân đúng <strong>50% tiền mặt hiện có trong R</strong> (<code>Spend = 0.50 × R</code>). Cụm 4–5 tuần tự rải theo cấp số nhân (<code>50% → 25% → 12.5% → 6.25% → 3.1%</code>), giải ngân ~94–97% quỹ.</li>
-                  <li><strong>Tùy chọn xoay vòng (Biến thể CY-4):</strong> Khi cụm <strong>Red Bubble (Score &lt;= -3 &amp; !div)</strong> đầu tiên xuất hiện → <strong>bán 50% BTC đang giữ đúng 1 lần duy nhất</strong> về <code>R</code> (4% APY), giữ 50% Core Hold ăn trọn sóng bull kéo dài.</li>
+                  <li><strong>Tùy chọn xoay vòng (Biến thể CY-4):</strong> Khi cụm <strong>Red Bubble (Score &lt;= -3 &amp; !div)</strong> đầu tiên xuất hiện gần đỉnh 4Y ATH (<code>≤ -15%</code>, tối đa 1 lần/chu kỳ giữa 2 Green Bubble) → <strong>bán 50% BTC đang giữ đúng 1 lần duy nhất</strong> về <code>R</code> (4% APY), giữ 50% Core Hold ăn trọn sóng bull kéo dài.</li>
                 </ol>
                 <div className="macro-sop-backtest font-mono">
                   <div><span>2021–2026 ($1k/tuần)</span><b>Avg Cost $16,472 (chỉ chênh $141 so với All-In)</b></div>
@@ -853,6 +899,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
                   <div><span>Hiệu quả vốn</span><b>XIRR +23.6%/năm · Sharpe 0.88 · MaxDD -41.4%</b></div>
                   <div><span>Tại đỉnh 09/2025 ($123k)</span><b>ROI +243.6% · MaxDD -20.7% · Sharpe 1.36</b></div>
                   <div><span>Đa chu kỳ 8.3 năm (2018–2026)</span><b>Avg $12,868 · ROI +197.0% (+215.5% @ 4% APY) · Sharpe 0.89 (CY-4)</b></div>
+                  <div><span>CY-4 (ATH-only RB · 1 lần/chu kỳ)</span><b>ROI +396.4% ($2,203,904 @ 4% APY) · 2 lần chốt đỉnh</b></div>
                 </div>
               </article>
             </div>

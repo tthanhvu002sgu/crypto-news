@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchBinanceKlines, loadCandlesFromFile, saveCandlesToFile } from './dataLoader.js';
-import { MACRO_DASHBOARD_DEFAULTS } from './engine.js';
+import { MACRO_DASHBOARD_DEFAULTS, MACRO_SOP_PRESET } from './engine.js';
 import { BUILTIN_STRATEGIES, exportBacktestArtifacts, runBacktest } from './backtester.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +24,7 @@ Data Options:
   --fetch-only             Fetch & cache data, then exit without running backtest
 
 Engine Options:
+  --preset <sop>           Apply preset configuration (e.g. "sop" -> MathClean v3 + VWAP + W)
   --engine-mode <mode>     pine_v2 | math_v3 (default: pine_v2)
   --cost-method <name>     SMA | VWAP | Median HL | EMA (default: SMA)
   --weight-scheme <name>   Equal | Short-heavy | Long-heavy (default: Equal)
@@ -110,6 +111,13 @@ function parseArgs(argv) {
       case '--fetch-only':
         args.fetchOnly = true;
         break;
+      case '--preset': {
+        const preset = next().toLowerCase();
+        if (preset !== 'sop') throw new Error(`Unknown preset: ${preset}`);
+        Object.assign(args.settings, MACRO_SOP_PRESET);
+        args.timeframe = MACRO_SOP_PRESET.timeframe;
+        break;
+      }
       case '--engine-mode':
         args.settings.engineMode = next();
         break;

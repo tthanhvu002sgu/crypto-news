@@ -529,6 +529,41 @@ export function simulateGreenBubbleDcaSuite({
         return {};
       },
     },
+    {
+      key: 'gb_frac_50_cy4_ath',
+      name: 'GB Frac 50% + CY-4 Once/Cycle',
+      decide: ({ row, reserve, units, state }) => {
+        if (isGB(row)) {
+          state.soldInCycle = false;
+          return { buyUsd: reserve * 0.5 };
+        }
+        if (isRB(row) && !state.soldInCycle && units > 0) {
+          state.soldInCycle = true;
+          return { sellFraction: 0.5 };
+        }
+        return {};
+      },
+    },
+    {
+      key: 'gb_all_in_100',
+      name: 'GB-7: All-In 100% Reserve',
+      decide: ({ row, reserve }) => (isGB(row) ? { buyUsd: reserve } : {}),
+    },
+    {
+      key: 'gb_all_in_100_cy4_ath',
+      name: 'GB-7: All-In 100% + CY-4 Once/Cycle',
+      decide: ({ row, reserve, units, state }) => {
+        if (isGB(row)) {
+          state.soldInCycle = false;
+          return { buyUsd: reserve };
+        }
+        if (isRB(row) && !state.soldInCycle && units > 0) {
+          state.soldInCycle = true;
+          return { sellFraction: 0.5 };
+        }
+        return {};
+      },
+    },
   ];
 
   const endPrice = series[endIndex].close;

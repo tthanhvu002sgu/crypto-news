@@ -414,7 +414,7 @@ function buildCmeCotSection(cotData) {
 // ─── Section 5: Macro Dashboard v2 Builder ────────────────────────────────────
 
 function buildMacroDashboardSection(dashboardData, liveBtcPrice, macroDashboardCalculated) {
-  let md = `## 5. MACRO DASHBOARD v2 (MỚI NHẤT & LỊCH SỬ)\n\n`;
+  let md = `## 5. MACRO DASHBOARD v3 (MỚI NHẤT & LỊCH SỬ)\n\n`;
 
   const spotPrice = toFiniteNumber(liveBtcPrice ?? dashboardData?.btc?.price);
   const current = macroDashboardCalculated?.current || {};
@@ -428,6 +428,13 @@ function buildMacroDashboardSection(dashboardData, liveBtcPrice, macroDashboardC
   const pnlPercentile = toFiniteNumber(current.percentile ?? current.pnl?.percentile);
   const pnlUnderwater = toFiniteNumber(current.underwater ?? current.pnl?.underwater);
   const rois = Array.isArray(current.rois) ? current.rois : (Array.isArray(current.pnl?.rois) ? current.pnl.rois : []);
+  const convictionScore = toFiniteNumber(current.convictionScore);
+  const athDrawdownPct = toFiniteNumber(current.athDrawdownPct);
+  const vol2Y = toFiniteNumber(current.vol2Y);
+  const valOverheatZ = toFiniteNumber(current.valOverheatZ);
+  const valOverheatPct = toFiniteNumber(current.valOverheatPct);
+  const pnlOverheatZ = toFiniteNumber(current.pnlOverheatZ);
+  const pnlOverheatPct = toFiniteNumber(current.pnlOverheatPct);
 
   md += `### 5.1. Định Giá Vĩ Mô & Ma Trận PnL Nhà Đầu Tư (Macro Valuator & PnL Matrix)\n\n`;
   md += `- **Giá BTC Giao Ngay:** ${fmtUsd(spotPrice, 2)}\n`;
@@ -437,7 +444,22 @@ function buildMacroDashboardSection(dashboardData, liveBtcPrice, macroDashboardC
   md += `- **Chế Độ PnL Nhóm Tuổi (PnL Regime):** **${pnlZone}**\n`;
   md += `- **Lợi Nhuận Trung Bình Gia Quyền (Weighted ROI):** \`${fmtSigned(weightedAvg, 2, '%')}\`\n`;
   md += `- **Xếp Hạng Bách Phân Vị Lịch Sử (Percentile Ranking):** \`${fmtNum(pnlPercentile, 1)}%\`\n`;
-  md += `- **Tỷ Lệ Nhóm Nhà Đầu Tư Bị Lỗ (Underwater Cohort):** \`${fmtNum(pnlUnderwater, 1)}%\`\n\n`;
+  md += `- **Tỷ Lệ Nhóm Nhà Đầu Tư Bị Lỗ (Underwater Cohort):** \`${fmtNum(pnlUnderwater, 1)}%\`\n`;
+  if (convictionScore != null) {
+    md += `- **Điểm Tin Cậy Tích Lũy (Conviction Score):** \`${fmtSigned(convictionScore, 2)}\`\n`;
+  }
+  if (athDrawdownPct != null) {
+    md += `- **Khoảng Cách Từ Đỉnh 4 Năm (4Y ATH Drawdown):** \`${fmtSigned(athDrawdownPct, 1, '%')}\`${athDrawdownPct >= -15 ? ' (Near ATH)' : ''}\n`;
+  }
+  if (vol2Y != null) {
+    md += `- **Biến Động Thực Tế 2 Năm (2Y Realized Vol):** \`${fmtNum(vol2Y * 100, 1)}%\`\n`;
+  }
+  if (valOverheatZ != null && pnlOverheatZ != null) {
+    const valPctLabel = valOverheatPct != null ? ` (${fmtNum(valOverheatPct, 1)}%ile)` : '';
+    const pnlPctLabel = pnlOverheatPct != null ? ` (${fmtNum(pnlOverheatPct, 1)}%ile)` : '';
+    md += `- **Chỉ Số Quá Nhiệt Đỉnh Chu Kỳ (Overheat Z / %ile):** Valuator \`${fmtSigned(valOverheatZ, 2)}\`${valPctLabel} · PnL \`${fmtSigned(pnlOverheatZ, 2)}\`${pnlPctLabel}\n`;
+  }
+  md += `\n`;
 
   if (rois.length >= 4) {
     md += `#### Chi Tiết Lợi Nhuận (ROI) Theo Từng Nhóm Tuổi Nhà Đầu Tư\n\n`;

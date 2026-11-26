@@ -519,6 +519,71 @@ const calculateMathV3Dashboard = (candles, settings) => {
     metrics.percentile = (countBelow / avail) * 100;
   });
 
+  // Top-side ATH cycle-top detector (asymmetric: preserves bottom-side GIFT/CHEAP/GB bit-for-bit).
+  const cycleBars = Math.max(12, Math.round(4 * B));
+  const volBars = Math.max(8, Math.round(2 * B));
+  const shortAnchorBars = Math.max(4, Math.round(B));
+
+  const rv2Y = new Float64Array(n);
+  const high4Y = new Float64Array(n);
+  const valOverheatZ = new Float64Array(n);
+  const shortLogDev = new Float64Array(n);
+  const pnlOverheatZ = new Float64Array(n);
+  const valOverheatPct = new Float64Array(n);
+  const pnlOverheatPct = new Float64Array(n);
+
+  for (let index = 0; index < n; index += 1) {
+    // Causal 2Y annualized population stdev of log returns, floored at 0.25 (0.70 when < 4 returns).
+    const volLo = Math.max(1, index - volBars + 1);
+    const volCount = index - volLo + 1;
+    if (volCount < 4) {
+      rv2Y[index] = 0.7;
+    } else {
+      let sumRet = 0;
+      for (let k = volLo; k <= index; k += 1) sumRet += logCloses[k] - logCloses[k - 1];
+      const muRet = sumRet / volCount;
+      let sumSq = 0;
+      for (let k = volLo; k <= index; k += 1) {
+        const diff = (logCloses[k] - logCloses[k - 1]) - muRet;
+        sumSq += diff * diff;
+      }
+      rv2Y[index] = Math.max(Math.sqrt((sumSq / volCount) * B), 0.25);
+    }
+
+    // Causal 4Y rolling high.
+    let hi = 0;
+    const hiLo = Math.max(0, index - cycleBars + 1);
+    for (let k = hiLo; k <= index; k += 1) {
+      if (candles[k].high > hi) hi = candles[k].high;
+    }
+    high4Y[index] = hi;
+
+    const longLo = Math.max(0, index - scaledLongLookback + 1);
+    const meanLogLong = (prefLogCloses[index + 1] - prefLogCloses[longLo]) / (index - longLo + 1);
+    valOverheatZ[index] = (logCloses[index] - meanLogLong) / rv2Y[index];
+
+    const shortLo = Math.max(0, index - shortAnchorBars + 1);
+    const meanLogShort = (prefLogCloses[index + 1] - prefLogCloses[shortLo]) / (index - shortLo + 1);
+    shortLogDev[index] = logCloses[index] - meanLogShort;
+
+    pnlOverheatZ[index] = pnlMetrics[index].meanLogMoneyness / rv2Y[index];
+
+    const avail = Math.min(index, scaledPctLookback);
+    if (avail < minRankBars) {
+      valOverheatPct[index] = 50;
+      pnlOverheatPct[index] = 50;
+    } else {
+      let countValBelow = 0;
+      let countPnlBelow = 0;
+      for (let barsAgo = 1; barsAgo <= avail; barsAgo += 1) {
+        if (valOverheatZ[index - barsAgo] < valOverheatZ[index]) countValBelow += 1;
+        if (pnlOverheatZ[index - barsAgo] < pnlOverheatZ[index]) countPnlBelow += 1;
+      }
+      valOverheatPct[index] = (countValBelow / avail) * 100;
+      pnlOverheatPct[index] = (countPnlBelow / avail) * 100;
+    }
+  }
+
   let inGift = false;
   let inBubble = false;
   let previousValZone = null;
@@ -529,8 +594,14 @@ const calculateMathV3Dashboard = (candles, settings) => {
   const series = candles.map((candle, index) => {
     const long = longValuator[index];
     const short = shortValuator[index];
+    const pnl = pnlMetrics[index];
     const shortGiftOk = !settings.useDualWindow || short.z < settings.valCheap;
-    const shortBubbleOk = !settings.useDualWindow || short.z > settings.valExpensive;
+
+    const nearAth = candle.close >= 0.85 * high4Y[index];
+    const allProfitable = pnl.underwater === 0;
+    const shortTopOk = !settings.useDualWindow || shortLogDev[index] > 0;
+    const enterBubble = nearAth && shortTopOk && valOverheatZ[index] >= 2.20 && valOverheatPct[index] >= settings.pnlBubble;
+    const exitBubble = !nearAth || !shortTopOk || valOverheatZ[index] < 1.90;
 
     if (settings.useHysteresis) {
       if (long.z < settings.valGift && shortGiftOk) {
@@ -540,24 +611,23 @@ const calculateMathV3Dashboard = (candles, settings) => {
         inGift = false;
       }
 
-      if (long.z > settings.valBubble && shortBubbleOk) {
+      if (!inGift && enterBubble) {
         inBubble = true;
         inGift = false;
-      } else if (long.z < settings.bubbleExit || (settings.useDualWindow && short.z < 0)) {
+      } else if (exitBubble) {
         inBubble = false;
       }
     } else {
       inGift = long.z < settings.valGift && shortGiftOk;
-      inBubble = long.z > settings.valBubble && shortBubbleOk;
+      inBubble = !inGift && enterBubble;
     }
 
     let valZone = ZONES.FAIR;
     if (inGift && !inBubble) valZone = ZONES.GIFT;
     else if (inBubble && !inGift) valZone = ZONES.BUBBLE;
     else if (long.z < settings.valCheap && (!settings.useDualWindow || short.z < 0)) valZone = ZONES.CHEAP;
-    else if (long.z > settings.valExpensive && (!settings.useDualWindow || short.z > 0)) valZone = ZONES.EXP;
+    else if (nearAth && shortTopOk && valOverheatZ[index] >= 1.90 && valOverheatPct[index] >= settings.pnlExpensive) valZone = ZONES.EXP;
 
-    const pnl = pnlMetrics[index];
     let pnlZone;
     if (settings.zoneMethod === 'Convergence') {
       pnlZone = pnlZoneAt(pnl, settings);
@@ -565,9 +635,9 @@ const calculateMathV3Dashboard = (candles, settings) => {
       pnlZone = ZONES.GIFT;
     } else if (pnl.percentile < settings.pnlCheap && pnl.meanLogMoneyness <= 0.05) {
       pnlZone = ZONES.CHEAP;
-    } else if (pnl.percentile > settings.pnlBubble && pnl.meanLogMoneyness > 0.25) {
+    } else if (nearAth && allProfitable && pnlOverheatPct[index] > settings.pnlBubble && pnlOverheatZ[index] >= 2.20) {
       pnlZone = ZONES.BUBBLE;
-    } else if (pnl.percentile > settings.pnlExpensive && pnl.meanLogMoneyness > 0.10) {
+    } else if (allProfitable && pnlOverheatPct[index] > settings.pnlExpensive && pnlOverheatZ[index] >= 1.90) {
       pnlZone = ZONES.EXP;
     } else {
       pnlZone = ZONES.FAIR;
@@ -603,6 +673,12 @@ const calculateMathV3Dashboard = (candles, settings) => {
       versusFairValue: long.versusFairValue,
       impliedCagr: long.cagr,
       sigma: long.sigma,
+      vol2Y: rv2Y[index],
+      athDrawdownPct: high4Y[index] > 0 ? (candle.close / high4Y[index] - 1) * 100 : 0,
+      valOverheatZ: valOverheatZ[index],
+      valOverheatPct: valOverheatPct[index],
+      pnlOverheatZ: pnlOverheatZ[index],
+      pnlOverheatPct: pnlOverheatPct[index],
       valZone,
       valScore,
       valBarsInZone,
@@ -901,6 +977,25 @@ export const evaluateSopAction = (dashboard, options = {}) => {
   const liveGreen = isGreenBubble(liveBar);
   const liveRed = isRedBubble(liveBar);
 
+  let lastGbIdx = -1;
+  for (let i = closedSeries.length - 1; i >= 0; i -= 1) {
+    if (isGreenBubble(closedSeries[i])) {
+      lastGbIdx = i;
+      break;
+    }
+  }
+  let cy4FirstRbBar = null;
+  let rbClustersSinceLastGb = 0;
+  for (let i = lastGbIdx + 1; i < closedSeries.length; i += 1) {
+    if (isRedBubble(closedSeries[i]) && (i === lastGbIdx + 1 || !isRedBubble(closedSeries[i - 1]))) {
+      rbClustersSinceLastGb += 1;
+      if (!cy4FirstRbBar) cy4FirstRbBar = closedSeries[i];
+    }
+  }
+  const cy4IsFirstWeek = redActive && rbStreak === 1 && rbClustersSinceLastGb === 1;
+  const cy4AlreadyTriggered = Boolean(cy4FirstRbBar) && !cy4IsFirstWeek;
+  const cy4FirstDateStr = cy4FirstRbBar ? cy4FirstRbBar.time.toISOString().slice(0, 10) : null;
+
   // Rule 1 (GB-7: All-In 100% Reserve on Green Bubble)
   const rule1Spend = greenActive ? cashReserve : 0;
   const rule1Remaining = Math.max(0, cashReserve - rule1Spend);
@@ -924,9 +1019,13 @@ export const evaluateSopAction = (dashboard, options = {}) => {
     status = 'RED_BUBBLE_TAKE_PROFIT';
     headline = `RED BUBBLE (TUẦN #${rbStreak}) · KHÔNG MUA · TÙY CHỌN CHỐT 50% (CY-4)`;
     tone = 'sell';
-    summary = rbStreak === 1
-      ? `Nến tuần đóng cửa bật Red Bubble đầu tiên (Score ${signalBar.composite}, Divergence = NO). Tuyệt đối không mua BTC; nếu theo biến thể xoay vòng CY-4, chốt 50% lượng BTC đang giữ đúng 1 lần duy nhất về quỹ R (4% APY), giữ 50% Core Hold.`
-      : `Cụm Red Bubble đang ở tuần thứ #${rbStreak} (Score ${signalBar.composite}). Không mua BTC; nếu đã chốt 50% ở tuần Red Bubble đầu tiên của cụm thì giữ nguyên 50% Core Hold.`;
+    if (cy4IsFirstWeek) {
+      summary = `Nến tuần đóng cửa bật Red Bubble đầu tiên (Score ${signalBar.composite}, Divergence = NO). Tuyệt đối không mua BTC; nếu theo biến thể xoay vòng CY-4, chốt 50% lượng BTC đang giữ đúng 1 lần duy nhất về quỹ R (4% APY), giữ 50% Core Hold.`;
+    } else if (rbClustersSinceLastGb > 1) {
+      summary = `Cụm Red Bubble tái diễn (Score ${signalBar.composite}). Không mua BTC; CY-4 đã kích hoạt chốt 50% ở ngày ${cy4FirstDateStr} trong chu kỳ này nên tiếp tục giữ nguyên 50% Core Hold.`;
+    } else {
+      summary = `Cụm Red Bubble đang ở tuần thứ #${rbStreak} (Score ${signalBar.composite}). Không mua BTC; nếu đã chốt 50% ở tuần Red Bubble đầu tiên của cụm thì giữ nguyên 50% Core Hold.`;
+    }
   }
 
   return {
@@ -970,11 +1069,15 @@ export const evaluateSopAction = (dashboard, options = {}) => {
     },
     cy4: {
       active: redActive,
-      isFirstWeek: redActive && rbStreak === 1,
+      isFirstWeek: cy4IsFirstWeek,
+      alreadyTriggeredInCycle: cy4AlreadyTriggered,
+      firstTriggerTime: cy4FirstRbBar ? cy4FirstRbBar.time : null,
       action: redActive
-        ? (rbStreak === 1
+        ? (cy4IsFirstWeek
           ? 'BÁN 50% BTC ĐANG GIỮ (1 LẦN DUY NHẤT) → ĐƯA VỀ QUỸ R (4% APY), GIỮ 50% CORE HOLD'
-          : 'ĐÃ QUA TUẦN RB #1 → GIỮ NGUYÊN 50% CORE HOLD (KHÔNG BÁN THÊM)')
+          : (rbClustersSinceLastGb > 1
+            ? `ĐÃ KÍCH HOẠT CY-4 TRONG CHU KỲ NÀY (${cy4FirstDateStr}) → GIỮ NGUYÊN 50% CORE HOLD`
+            : 'ĐÃ QUA TUẦN RB #1 → GIỮ NGUYÊN 50% CORE HOLD (KHÔNG BÁN THÊM)'))
         : 'CHƯA KÍCH HOẠT (CHỈ KÍCH HOẠT KHI RED BUBBLE: SCORE <= -3 & !DIV)',
     },
   };
