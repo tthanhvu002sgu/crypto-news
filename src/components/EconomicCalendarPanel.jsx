@@ -61,69 +61,47 @@ export default function EconomicCalendarPanel({ theme }) {
   const getImpact = (impact) => IMPACT_BADGES[impact] || IMPACT_BADGES.Medium;
 
   return (
-    <div className="glass-panel economic-calendar-panel" style={{ padding: '16px', marginBottom: '20px', border: '1px solid var(--border-panel)', borderRadius: '8px' }}>
-      {/* Editorial Minimalist Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
+    <div className="glass-panel economic-calendar-panel panel-padded">
+      <div className="panel-top-bar">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <h3 className="font-mono text-emerald" style={{ margin: 0, fontSize: '0.9rem', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
-              ECONOMIC CALENDAR (7 DAYS)
+          <div className="panel-title-group">
+            <h3 className="chart-title" style={{ margin: 0 }}>
+              Lịch sự kiện kinh tế (7 ngày)
             </h3>
-            <DataOriginBadge origin="history" label="LỊCH API" compact />
-            {refreshing && <span className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--color-amber-400)' }}>[UPDATING...]</span>}
+            <DataOriginBadge origin="history" label="Lịch API" compact />
+            {refreshing && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-accent)' }}>Đang cập nhật...</span>}
           </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-slate-400)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
-            US &amp; Global Macroeconomic Release Schedule
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-slate-400)', marginTop: '2px' }}>
+            Lịch công bố dữ liệu vĩ mô Mỹ và toàn cầu
           </div>
         </div>
 
-        {/* Filter Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          {[
-            { key: 'ALL', label: 'ALL' },
-            { key: 'HIGH', label: 'HIGH IMPACT' },
-            { key: 'USD', label: 'USD ONLY' },
-            { key: 'CRYPTO', label: 'CRYPTO IMPACT' },
-          ].map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setFilter(item.key)}
-              style={{
-                padding: '4px 8px',
-                borderRadius: '4px',
-                fontSize: '0.65rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                fontFamily: 'var(--font-mono)',
-                letterSpacing: '0.04em',
-                background: filter === item.key ? 'var(--color-emerald-500)' : 'transparent',
-                color: filter === item.key ? '#000' : 'var(--text-slate-400)',
-                border: filter === item.key ? '1px solid var(--color-emerald-400)' : '1px solid rgba(255,255,255,0.1)',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
+        {/* Connected Segmented Filter Control */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="segmented-control">
+            {[
+              { key: 'ALL', label: 'Tất cả' },
+              { key: 'HIGH', label: 'Tác động cao' },
+              { key: 'USD', label: 'Chỉ USD' },
+              { key: 'CRYPTO', label: 'Ảnh hưởng Crypto' },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setFilter(item.key)}
+                className={`segmented-btn ${filter === item.key ? 'is-active' : ''}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => loadData(true)}
-            title="Reload Calendar Data"
-            style={{
-              padding: '4px 6px',
-              borderRadius: '4px',
-              fontSize: '0.7rem',
-              cursor: 'pointer',
-              background: 'transparent',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'var(--text-slate-400)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            title="Tải lại lịch kinh tế"
+            className="btn-header-secondary"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21.5 2v6h-6M2.5 22v-6h6" />
               <path d="M2 11.5a10 10 0 0 1 18.8-4.3L21.5 8M2.5 16l1.2 1.2A10 10 0 0 0 22 12.5" />
             </svg>
@@ -218,7 +196,7 @@ export default function EconomicCalendarPanel({ theme }) {
                             borderRadius: '4px',
                             padding: '5px 6px',
                             cursor: 'pointer',
-                            transition: 'all 0.12s ease-in-out',
+                            transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: '3px',

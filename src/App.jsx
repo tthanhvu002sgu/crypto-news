@@ -151,7 +151,7 @@ const CASCADE_KEY_MAP = {
 
 const FreshnessBadge = React.memo(function FreshnessBadge({ type }) {
   if (type === 'live') {
-    return <span className="freshness-badge badge-live">LIVE</span>;
+    return <span className="freshness-badge badge-live">Live</span>;
   }
   if (type === '5m' || type === 'hot') {
     return <span className="freshness-badge badge-cached-5m">5m</span>;
@@ -167,24 +167,28 @@ const MetricCard = React.memo(function MetricCard({ label, value, sub, subCls, b
   const metadata = tooltipId ? METRIC_METADATA[tooltipId] : null;
   return (
     <div className="metric-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '2px', gap: '4px' }}>
-        {metadata ? (
-          <Tooltip content={metadata}>
-            <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block' }}>
-              {label}
-            </span>
-          </Tooltip>
-        ) : (
-          <span className="metric-label font-mono">{label}</span>
-        )}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-          {origin && <DataOriginBadge origin={origin} iconOnly compact />}
-          {freshness && <FreshnessBadge type={freshness} />}
-        </span>
+      <div className="metric-card-row">
+        <div className="metric-card-label-wrap">
+          {metadata ? (
+            <Tooltip content={metadata}>
+              <span className="metric-label metric-label--help">
+                {label}
+              </span>
+            </Tooltip>
+          ) : (
+            <span className="metric-label">{label}</span>
+          )}
+          {sub && <span className={`metric-sub ${subCls || 'text-slate-400'}`}>{sub}</span>}
+        </div>
+        <div className="metric-card-val-wrap">
+          <span className="metric-value">{value}</span>
+          <div className="metric-meta-inline">
+            {badge && <span className={`metric-badge ${badgeCls || ''}`}>{badge}</span>}
+            {origin && <DataOriginBadge origin={origin} iconOnly compact />}
+            {freshness && <FreshnessBadge type={freshness} />}
+          </div>
+        </div>
       </div>
-      <span className="metric-value font-mono">{value}</span>
-      {sub && <span className={`metric-sub font-mono ${subCls || 'text-slate-400'}`}>{sub}</span>}
-      {badge && <span className={`metric-badge font-mono ${badgeCls || ''}`}>{badge}</span>}
     </div>
   );
 });
@@ -387,11 +391,11 @@ function useDraggableScroll() {
 }
 
 const NAV_TABS_CONFIG = [
-  { id: 'overview',  icon: <BarChart2 size={13} />, label: 'OVERVIEW' },
-  { id: 'orderflow', icon: <Crosshair size={13} />, label: 'ORDER FLOW' },
-  { id: 'scanner',   icon: <Zap size={13} />,       label: 'ALTCOIN SCANNER' },
-  { id: 'ailab',     icon: <Sparkles size={13} />,  label: 'AI DECISION LAB' },
-  { id: 'system',    icon: <BookOpen size={13} />,  label: 'SYSTEM & DOCS' },
+  { id: 'overview',  icon: <BarChart2 size={15} />, label: 'Overview' },
+  { id: 'orderflow', icon: <Crosshair size={15} />, label: 'Order Flow' },
+  { id: 'scanner',   icon: <Zap size={15} />,       label: 'Altcoin Scanner' },
+  { id: 'ailab',     icon: <Sparkles size={15} />,  label: 'AI Decision Lab' },
+  { id: 'system',    icon: <BookOpen size={15} />,  label: 'System & Docs' },
 ];
 
 function AppContent() {
@@ -786,7 +790,9 @@ function AppContent() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
-      return localStorage.getItem('sidebar_collapsed') === 'true';
+      const saved = localStorage.getItem('sidebar_collapsed');
+      if (saved !== null) return saved === 'true';
+      return typeof window !== 'undefined' && window.innerWidth <= 768;
     } catch {
       return false;
     }
@@ -1524,40 +1530,47 @@ function AppContent() {
           <button
             className="btn-icon btn-sidebar-toggle"
             onClick={toggleSidebar}
-            title={sidebarCollapsed ? 'Hiện Sidebar' : 'Ẩn Sidebar'}
-            aria-label={sidebarCollapsed ? 'Hiện Sidebar' : 'Ẩn Sidebar'}
+            title={sidebarCollapsed ? 'Hiện bảng chỉ số' : 'Ẩn bảng chỉ số'}
+            aria-label={sidebarCollapsed ? 'Hiện bảng chỉ số' : 'Ẩn bảng chỉ số'}
             aria-expanded={!sidebarCollapsed}
           >
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
-          <div className="logo-box" aria-hidden="true">
-            <svg viewBox="0 0 512 512" width="100%" height="100%">
-              <defs>
-                <linearGradient id="sovereignLogoBg" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#0f172a" />
-                  <stop offset="100%" stopColor="#070a12" />
-                </linearGradient>
-                <linearGradient id="sovereignLogoGold" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#ffb84d" />
-                  <stop offset="55%" stopColor="#f7931a" />
-                  <stop offset="100%" stopColor="#d97706" />
-                </linearGradient>
-              </defs>
-              <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#sovereignLogoBg)" stroke="#f7931a" strokeOpacity="0.35" strokeWidth="14" />
-              <circle cx="256" cy="256" r="176" fill="none" stroke="url(#sovereignLogoGold)" strokeWidth="16" strokeOpacity="0.22" />
-              <rect x="206" y="96" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
-              <rect x="268" y="96" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
-              <rect x="206" y="364" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
-              <rect x="268" y="364" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
-              <path
-                d="M174 140 H282 C332 140 364 166 364 204 C364 230 348 248 326 256 C356 264 374 286 374 316 C374 358 338 384 286 384 H174 Z M226 184 V238 H278 C300 238 314 226 314 211 C314 196 300 184 278 184 Z M226 278 V340 H284 C308 340 324 328 324 309 C324 290 308 278 284 278 Z"
-                fill="url(#sovereignLogoGold)"
-                fillRule="evenodd"
-              />
-            </svg>
-          </div>
+          <a
+            href="#overview"
+            onClick={(e) => { e.preventDefault(); setActiveTab('overview'); }}
+            className="brand-lockup"
+          >
+            <div className="logo-box" aria-hidden="true">
+              <svg viewBox="0 0 512 512" width="100%" height="100%">
+                <defs>
+                  <linearGradient id="sovereignLogoBg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#161d29" />
+                    <stop offset="100%" stopColor="#0b0e14" />
+                  </linearGradient>
+                  <linearGradient id="sovereignLogoGold" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#f5c96b" />
+                    <stop offset="55%" stopColor="#e5a93c" />
+                    <stop offset="100%" stopColor="#b87308" />
+                  </linearGradient>
+                </defs>
+                <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#sovereignLogoBg)" stroke="#e5a93c" strokeOpacity="0.45" strokeWidth="16" />
+                <circle cx="256" cy="256" r="176" fill="none" stroke="url(#sovereignLogoGold)" strokeWidth="14" strokeOpacity="0.24" />
+                <rect x="206" y="96" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+                <rect x="268" y="96" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+                <rect x="206" y="364" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+                <rect x="268" y="364" width="32" height="52" rx="10" fill="url(#sovereignLogoGold)" />
+                <path
+                  d="M174 140 H282 C332 140 364 166 364 204 C364 230 348 248 326 256 C356 264 374 286 374 316 C374 358 338 384 286 384 H174 Z M226 184 V238 H278 C300 238 314 226 314 211 C314 196 300 184 278 184 Z M226 278 V340 H284 C308 340 324 328 324 309 C324 290 308 278 284 278 Z"
+                  fill="url(#sovereignLogoGold)"
+                  fillRule="evenodd"
+                />
+              </svg>
+            </div>
+            <span className="brand-wordmark">Sovereign Macro</span>
+          </a>
         </div>
-        <nav className="tabs-nav header-tabs-nav font-mono">
+        <nav className="tabs-nav header-tabs-nav" aria-label="Điều hướng chính">
           {tabOrder
             .map(id => NAV_TABS_CONFIG.find(t => t.id === id))
             .filter(t => t && (!t.moduleId || !isModuleHidden(t.moduleId)))
@@ -1569,63 +1582,67 @@ function AppContent() {
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => handleDrop(e, t.id)}
                 className={`tab-btn-wrapper ${draggedTabId === t.id ? 'is-dragging' : ''}`}
-                title="Kéo thả để sắp xếp lại vị trí Menu Tab"
+                title="Kéo thả để sắp xếp lại vị trí tab"
                 style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
               >
                 <button
                   className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
                   onClick={() => setActiveTab(t.id)}
                 >
-                  {t.icon} {t.label}
+                  {t.icon} <span>{t.label}</span>
                 </button>
               </div>
             ))}
         </nav>
         <div className="header-right">
           <div className="header-icon-group">
-            <button className="btn-icon" onClick={() => setTooltipsEnabled(!tooltipsEnabled)} title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"} style={{ background: tooltipsEnabled ? 'rgba(16,185,129,0.1)' : 'transparent', border: '1px solid var(--border-panel)', color: tooltipsEnabled ? 'var(--color-emerald-400)' : 'var(--text-slate-500)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
-              <HelpCircle size={15} />
+            <button
+              className={`header-icon-btn ${tooltipsEnabled ? 'is-active' : ''}`}
+              onClick={() => setTooltipsEnabled(!tooltipsEnabled)}
+              title={tooltipsEnabled ? "Tắt Tooltip (Alt+T)" : "Bật Tooltip (Alt+T)"}
+              aria-label="Chuyển đổi tooltip"
+            >
+              <HelpCircle size={16} />
             </button>
             <button
-              className="btn-icon"
+              className={`header-icon-btn ${isEditLayoutMode ? 'is-active' : ''}`}
               onClick={toggleEditLayoutMode}
-              title={isEditLayoutMode ? "Thoát chế độ sắp xếp module" : "Sắp xếp vị trí module (Kéo-thả)"}
-              style={{
-                background: isEditLayoutMode ? 'rgba(16,185,129,0.16)' : 'transparent',
-                border: isEditLayoutMode ? '1px solid rgba(16,185,129,0.5)' : '1px solid var(--border-panel)',
-                color: isEditLayoutMode ? 'var(--color-emerald-400)' : 'var(--text-slate-400)',
-                padding: '7px',
-                borderRadius: '50%',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.25s ease'
-              }}
+              title={isEditLayoutMode ? "Thoát chế độ sắp xếp module" : "Sắp xếp vị trí module"}
+              aria-label="Sắp xếp vị trí module"
             >
-              <LayoutGrid size={15} />
+              <LayoutGrid size={16} />
             </button>
-            <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
-              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+            <button
+              className="header-icon-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+              aria-label="Đổi giao diện sáng tối"
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button className="btn-icon" onClick={() => setShowSettings(true)} title="API Settings" style={{ background: 'transparent', border: '1px solid var(--border-panel)', color: 'var(--text-slate-400)', padding: '7px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.25s ease' }}>
-              <Settings size={15} />
+            <button
+              className="header-icon-btn"
+              onClick={() => setShowSettings(true)}
+              title="Cài đặt API"
+              aria-label="Cài đặt API"
+            >
+              <Settings size={16} />
             </button>
           </div>
           <span className="header-divider" aria-hidden="true" />
           <div className="header-actions-group">
-            <button className="btn-sync font-mono" onClick={() => syncData(true, ['hot', 'warm', 'cold'])} disabled={isSyncing}>
-              <RefreshCw size={13} className={isSyncing ? 'spinning' : ''} />
-              {isSyncing ? 'ĐANG ĐỒNG BỘ...' : 'SYNC NGAY'}
-            </button>
             <button
-              className="btn-sync font-mono btn-export-md"
+              className="btn-header-secondary"
               onClick={handleExportMarkdown}
               disabled={isExportingMd}
-              title="Xuất toàn bộ 12 mục dữ liệu Terminal (Market Bias, Options Deribit, ETF Flow, CME COT, Macro v2, CVD, Flow Regime, L/S, OI, Whale Walls, OBI, Altcoin Scanner - Mới nhất & Lịch sử) ra file Markdown (.md)"
+              title="Xuất toàn bộ 12 mục dữ liệu Terminal ra file Markdown (.md)"
             >
-              <FileDown size={13} className={isExportingMd ? 'spinning' : ''} />
-              {isExportingMd ? 'ĐANG XUẤT MD...' : 'XUẤT DATA MD'}
+              <FileDown size={14} className={isExportingMd ? 'spinning' : ''} />
+              <span>{isExportingMd ? 'Đang xuất...' : 'Xuất MD'}</span>
+            </button>
+            <button className="btn-sync" onClick={() => syncData(true, ['hot', 'warm', 'cold'])} disabled={isSyncing}>
+              <RefreshCw size={14} className={isSyncing ? 'spinning' : ''} />
+              <span>{isSyncing ? 'Đang đồng bộ...' : 'Sync ngay'}</span>
             </button>
           </div>
         </div>
@@ -1714,40 +1731,34 @@ function AppContent() {
 
             {/* BTC Price row */}
             <div className="sidebar-top-row">
-              <div className="btc-hero" style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <div className="btc-hero">
+                <div className="btc-hero-top">
+                  <span className="btc-hero-label">
                     <Tooltip content={METRIC_METADATA.btcPrice}>
-                      <span className="metric-label font-mono" style={{ cursor: 'help', borderBottom: '1px dashed var(--text-slate-500)', display: 'inline-block', margin: 0 }}>
-                        BITCOIN {wsStatus === 'connected' && <span className="ws-live-tag font-mono">⚡</span>}
+                      <span className="metric-label metric-label--help">
+                        Bitcoin {wsStatus === 'connected' ? '· WS' : ''}
                       </span>
                     </Tooltip>
                     <DataOriginBadge origin="snapshot" iconOnly compact />
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`btc-price font-mono${livePrice ? ' ws-price-live' : ''}`} style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
-                      ${btcDisplay?.price ? fmt(btcDisplay.price, 0) : '---'}
+                  {btcDisplay?.volume != null && (
+                    <span className="btc-hero-vol">
+                      Vol 24h {fmtB(btcDisplay.volume)}
                     </span>
-                    {btcDisplay?.change != null && (
-                      <span className={`btc-change font-mono ${btcDisplay.change >= 0 ? 'text-emerald' : 'text-rose'}`} style={{ fontSize: '0.65rem', fontWeight: 600, margin: 0 }}>
-                        ({btcDisplay.change >= 0 ? '+' : ''}{btcDisplay.change.toFixed(2)}%)
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
-                {btcDisplay?.volume != null && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
-                    <span className="font-mono text-slate-400" style={{ fontSize: '0.65rem' }}>
-                      Vol 24H: {fmtB(btcDisplay.volume)}
+                <div className="btc-hero-price-row">
+                  <span className={`btc-price${livePrice ? ' ws-price-live' : ''}`}>
+                    ${btcDisplay?.price ? fmt(btcDisplay.price, 0) : '---'}
+                  </span>
+                  {btcDisplay?.change != null && (
+                    <span className={`btc-change ${btcDisplay.change >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                      {btcDisplay.change >= 0 ? '+' : ''}{btcDisplay.change.toFixed(2)}%
                     </span>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
-
-            <DataOriginLegend compact style={{ marginBottom: '8px', padding: '6px 8px' }} />
-
-            <div className="sidebar-divider" />
 
             {getGroupOrder('sidebar').map((sidebarId) => {
               if (sidebarId === 'sidebar_derivatives') {
@@ -1756,30 +1767,30 @@ function AppContent() {
                   <SortableModuleItem key={sidebarId} groupKey="sidebar" itemId={sidebarId} label={MODULES_CONFIG[sidebarId]?.label}>
               <div className="sidebar-accordion">
                 <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('derivatives')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('derivatives')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <LiveDot /> PHÁI SINH & TÂM LÝ (DERIVATIVES)
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <LiveDot /> Phái sinh &amp; Tâm lý
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <ModuleMenu moduleId="sidebar_derivatives" />
-                    {accordionOpen.derivatives ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {accordionOpen.derivatives ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                   </span>
                 </div>
                 {accordionOpen.derivatives && (
                   <div className="sidebar-accordion-body">
                     <div className="metrics-grid">
                       <MetricCard
-                        label="FUNDING RATE"
+                        label="Funding Rate"
                         value={fund != null ? `${(fund * 100).toFixed(4)}%` : '---'}
                         sub={fundInfo.text}
                         subCls={fundInfo.cls}
-                        badge={liveFunding != null ? '⚡WS' : null}
+                        badge={liveFunding != null ? 'WS' : null}
                         badgeCls="badge-ws"
                         tooltipId="funding"
                         freshness="live"
                         origin="snapshot"
                       />
                       <MetricCard
-                        label="OPEN INTEREST"
+                        label="Open Interest"
                         value={data.openInterest ? `${(data.openInterest / 1000).toFixed(1)}K BTC` : '---'}
                         sub="Derivatives"
                         subCls="text-slate-400"
@@ -1788,7 +1799,7 @@ function AppContent() {
                         origin="snapshot"
                       />
                       <MetricCard
-                        label="L/S RATIO"
+                        label="L/S Ratio"
                         value={currentLS ? parseFloat(currentLS.longShortRatio).toFixed(3) : '---'}
                         sub={currentLS ? `Long ${(parseFloat(currentLS.longAccount) * 100).toFixed(1)}%` : ''}
                         subCls={currentLS && parseFloat(currentLS.longAccount) > 0.55 ? 'text-rose' : 'text-emerald'}
@@ -1797,7 +1808,7 @@ function AppContent() {
                         origin="history"
                       />
                       <MetricCard
-                        label="BTC DOMINANCE"
+                        label="BTC Dominance"
                         value={data.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---'}
                         sub={data.globalData?.ethDominance ? `ETH ${data.globalData.ethDominance}%` : ''}
                         subCls="text-slate-400"
@@ -1806,7 +1817,7 @@ function AppContent() {
                         origin="snapshot"
                       />
                       <MetricCard
-                        label="STABLECOIN CAP"
+                        label="Stablecoin Cap"
                         value={data.stablecoins ? fmtB(data.stablecoins.total) : '---'}
                         sub={data.stablecoins ? `USDT ${fmtB(data.stablecoins.usdt)}` : ''}
                         subCls="text-slate-400"
@@ -1815,7 +1826,7 @@ function AppContent() {
                         origin="snapshot"
                       />
                       <MetricCard
-                        label="TOTAL MARKET CAP"
+                        label="Total Market Cap"
                         value={data.globalData ? fmtT(data.globalData.totalMarketCap) : '---'}
                         sub={data.globalData?.marketCapChange24h ? `${data.globalData.marketCapChange24h}% 24h` : ''}
                         subCls={data.globalData?.marketCapChange24h > 0 ? 'text-emerald' : 'text-rose'}
@@ -1824,7 +1835,7 @@ function AppContent() {
                         origin="snapshot"
                       />
                       <MetricCard
-                        label="BTC 24H VOL"
+                        label="BTC 24h Vol"
                         value={btcDisplay ? fmtB(btcDisplay.volume) : '---'}
                         sub="USDT Volume"
                         subCls="text-slate-400"
@@ -1832,7 +1843,7 @@ function AppContent() {
                         freshness="live"
                       />
                       <MetricCard
-                        label="24H RANGE"
+                        label="24h Range"
                         value={btcDisplay ? `${fmt(btcDisplay.low, 0)}` : '---'}
                         sub={btcDisplay ? `H: ${fmt(btcDisplay.high, 0)}` : ''}
                         subCls="text-slate-400"
@@ -1853,29 +1864,29 @@ function AppContent() {
                   <SortableModuleItem key={sidebarId} groupKey="sidebar" itemId={sidebarId} label={MODULES_CONFIG[sidebarId]?.label}>
               <div className="sidebar-accordion">
                 <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('macro')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('macro')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <LiveDot /> VĨ MÔ KINH TẾ MỸ (MACRO)
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <LiveDot /> Vĩ mô kinh tế Mỹ
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <ModuleMenu moduleId="sidebar_macro" />
-                    {accordionOpen.macro ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {accordionOpen.macro ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                   </span>
                 </div>
                 {accordionOpen.macro && (
                   <div className="sidebar-accordion-body">
                     <div className="metrics-grid">
                       <MetricCard
-                        label="CPI YOY"
+                        label="CPI YoY"
                         value={isPlausibleCpiYoY(data.cpi) ? `${Number(data.cpi).toFixed(2)}%` : '---'}
-                        sub="Lạm phát so với cùng kỳ"
+                        sub="Lạm phát cùng kỳ"
                         subCls="text-slate-400"
                         tooltipId="cpi"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="UNEMPLOYMENT"
+                        label="Thất nghiệp"
                         value={data.unrate ? `${data.unrate}%` : '---'}
-                        sub="Tỷ lệ thất nghiệp"
+                        sub="US Unemployment"
                         subCls="text-slate-400"
                         tooltipId="unrate"
                         freshness="1h"
@@ -1894,12 +1905,12 @@ function AppContent() {
                   <SortableModuleItem key={sidebarId} groupKey="sidebar" itemId={sidebarId} label={MODULES_CONFIG[sidebarId]?.label}>
               <div className="sidebar-accordion">
                 <div className="sidebar-accordion-header" role="button" tabIndex={0} onClick={() => toggleAccordion('onchain')} onKeyDown={(e) => e.key === 'Enter' && toggleAccordion('onchain')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <LiveDot /> BTC NETWORK & ON-CHAIN
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <LiveDot /> BTC Network &amp; On-chain
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <ModuleMenu moduleId="sidebar_onchain" />
-                    {accordionOpen.onchain ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {accordionOpen.onchain ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                   </span>
                 </div>
                 {accordionOpen.onchain && (
@@ -1910,7 +1921,6 @@ function AppContent() {
                         label="BTC SSR"
                         value={(() => {
                           const p = btcDisplay?.price;
-                          // Use DefiLlama total from our new endpoint if available, else fallback
                           const m = (typeof data.ssrMa === 'object' && data.ssrMa?.stablecoinTotal) || data.stablecoins?.total;
                           if (p && m) {
                             const btcCap = p * 19740000;
@@ -1927,42 +1937,35 @@ function AppContent() {
                             const ssr = (p * 19740000) / m;
                             const ma = ssrObj.ma200;
                             const stdDev = ssrObj.stdDev200;
-                            
-                            // Realtime Z-Score
                             const z = stdDev > 0 ? (ssr - ma) / stdDev : 0;
-                            
+
                             let status = 'Bình thường';
                             let cls = 'text-slate-400';
-                            
-                            if (z < -2) { status = 'Mua mạnh (Oversold) ↑'; cls = 'text-emerald-400'; }
-                            else if (z < -1) { status = 'Vùng mua (Buy Zone) ↗'; cls = 'text-emerald-400'; }
-                            else if (z > 2) { status = 'Bán mạnh (Overheated) ↓'; cls = 'text-rose-400'; }
-                            else if (z > 1) { status = 'Rủi ro cao (Sell Zone) ↘'; cls = 'text-rose-400'; }
+
+                            if (z < -2) { status = 'Mua mạnh ↑'; cls = 'text-emerald'; }
+                            else if (z < -1) { status = 'Vùng mua ↗'; cls = 'text-emerald'; }
+                            else if (z > 2) { status = 'Bán mạnh ↓'; cls = 'text-rose'; }
+                            else if (z > 1) { status = 'Rủi ro cao ↘'; cls = 'text-rose'; }
 
                             return (
-                              <div style={{ fontSize: '10px', marginTop: '4px', lineHeight: '1.45', textAlign: 'left' }}>
-                                <div style={{ opacity: 0.7, color: 'var(--text-slate-400)' }}>
-                                  SMA200: {ma}
-                                </div>
-                                <div className={cls} style={{ fontWeight: 600 }}>
-                                  Z-Score: {z > 0 ? '+' : ''}{z.toFixed(2)} • {status}
-                                </div>
-                              </div>
+                              <span className={cls}>
+                                Z {z > 0 ? '+' : ''}{z.toFixed(2)} · {status} (MA {ma})
+                              </span>
                             );
                           }
-                          return 'Đang tải SSR Oscillator...';
+                          return 'Đang tải SSR...';
                         })()}
                         tooltipId="ssr"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="PRODUCTION COST"
+                        label="Production Cost"
                         value={(() => {
                           const pc = data.onChain?.productionCost;
                           if (!pc) return '---';
                           if (typeof pc === 'object' && pc.low != null && pc.high != null) {
-                            const fmt = (n) => `$${Math.round(n / 1000)}k`;
-                            return `${fmt(pc.low)} → ${fmt(pc.high)}`;
+                            const fmtK = (n) => `$${Math.round(n / 1000)}k`;
+                            return `${fmtK(pc.low)} → ${fmtK(pc.high)}`;
                           }
                           const n = parseInt(pc, 10);
                           return Number.isFinite(n) ? `$${n.toLocaleString()}` : '---';
@@ -1970,9 +1973,9 @@ function AppContent() {
                         sub={(() => {
                           const pc = data.onChain?.productionCost;
                           if (pc && typeof pc === 'object' && pc.mid != null) {
-                            return `mid ~$${Math.round(pc.mid / 1000)}k · 1 BTC est.`;
+                            return `Mid ~$${Math.round(pc.mid / 1000)}k`;
                           }
-                          return '1 BTC (range est.)';
+                          return '1 BTC est.';
                         })()}
                         subCls="text-slate-400"
                         tooltipId="productionCost"
@@ -1981,23 +1984,23 @@ function AppContent() {
                       <MetricCard
                         label="BTC MVRV"
                         value={data.onChainMetrics?.mvrv || '---'}
-                        sub={data.onChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.onChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                        sub={data.onChainMetrics?.mvrv > 3.5 ? 'Định giá cao' : data.onChainMetrics?.mvrv < 1 ? 'Định giá thấp' : 'Hợp lý'}
                         subCls={data.onChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.onChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
                         tooltipId="mvrv"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="BTC NUPL (LÃI/LỖ)"
+                        label="BTC NUPL"
                         value={btcNuplVal?.percentStr || '---'}
-                        sub={btcNuplVal?.subStr || 'Net Unrealized Profit'}
+                        sub={btcNuplVal?.subStr || 'Lãi/lỗ chưa thực hiện'}
                         subCls={btcNuplVal?.cls || 'text-slate-400'}
                         tooltipId="btcNupl"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="BTC COIN LỜI (EST)"
+                        label="BTC Coin lời"
                         value={btcSupplyProfitEst?.valStr || '---'}
-                        sub={btcSupplyProfitEst?.subStr || 'Supply in Profit'}
+                        sub={btcSupplyProfitEst?.subStr || 'Nguồn cung có lời'}
                         subCls={btcSupplyProfitEst?.cls || 'text-slate-400'}
                         tooltipId="btcSupplyProfit"
                         freshness="1h"
@@ -2005,30 +2008,29 @@ function AppContent() {
                       <MetricCard
                         label="ETH MVRV"
                         value={data.ethOnChainMetrics?.mvrv || '---'}
-                        sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Overvalued ⚠' : data.ethOnChainMetrics?.mvrv < 1 ? 'Undervalued ✓' : 'Fair Value'}
+                        sub={data.ethOnChainMetrics?.mvrv > 3.5 ? 'Định giá cao' : data.ethOnChainMetrics?.mvrv < 1 ? 'Định giá thấp' : 'Hợp lý'}
                         subCls={data.ethOnChainMetrics?.mvrv > 3.5 ? 'text-rose' : data.ethOnChainMetrics?.mvrv < 1 ? 'text-emerald' : 'text-slate-400'}
                         tooltipId="ethMvrv"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="ETH NUPL (LÃI/LỖ)"
+                        label="ETH NUPL"
                         value={ethNuplVal?.percentStr || '---'}
-                        sub={ethNuplVal?.subStr || 'Net Unrealized Profit'}
+                        sub={ethNuplVal?.subStr || 'Lãi/lỗ chưa thực hiện'}
                         subCls={ethNuplVal?.cls || 'text-slate-400'}
                         tooltipId="ethNupl"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="ETH COIN LỜI (EST)"
+                        label="ETH Coin lời"
                         value={ethSupplyProfitEst?.valStr || '---'}
-                        sub={ethSupplyProfitEst?.subStr || 'Supply in Profit'}
+                        sub={ethSupplyProfitEst?.subStr || 'Nguồn cung có lời'}
                         subCls={ethSupplyProfitEst?.cls || 'text-slate-400'}
                         tooltipId="ethSupplyProfit"
                         freshness="1h"
                       />
-                      {/* Secondary Network & Miner Metrics */}
                       <MetricCard
-                        label="HASH RATE"
+                        label="Hash Rate"
                         value={data.onChain?.hashRate ? `${data.onChain.hashRate} EH/s` : '---'}
                         sub="Mining Power"
                         subCls="text-slate-400"
@@ -2036,33 +2038,33 @@ function AppContent() {
                         freshness="1h"
                       />
                       <MetricCard
-                        label="ACTIVE ADDR"
+                        label="Active Addr"
                         value={data.onChainMetrics?.activeAddresses || '---'}
-                        sub="Unique senders/day"
+                        sub="Địa chỉ hoạt động"
                         subCls="text-slate-400"
                         tooltipId="activeAddr"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="DIFFICULTY"
+                        label="Difficulty"
                         value={data.onChain?.difficulty ? `${data.onChain.difficulty}T` : '---'}
-                        sub="Mining Difficulty"
+                        sub="Độ khó đào"
                         subCls="text-slate-400"
                         tooltipId="difficulty"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="TX / 24H"
+                        label="Tx / 24h"
                         value={data.onChain?.txCount24h ? data.onChain.txCount24h.toLocaleString() : '---'}
-                        sub="Transactions"
+                        sub="Giao dịch"
                         subCls="text-slate-400"
                         tooltipId="txCount"
                         freshness="1h"
                       />
                       <MetricCard
-                        label="BLOCK TIME"
+                        label="Block Time"
                         value={data.onChain?.minutesBetweenBlocks ? `${data.onChain.minutesBetweenBlocks}m` : '---'}
-                        sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Fast ↑' : 'Normal'}
+                        sub={data.onChain?.minutesBetweenBlocks < 10 ? 'Nhanh ↑' : 'Bình thường'}
                         subCls={data.onChain?.minutesBetweenBlocks < 10 ? 'text-emerald' : 'text-slate-400'}
                         tooltipId="blockTime"
                         freshness="1h"
@@ -2528,7 +2530,7 @@ function AppContent() {
                       type="button"
                       onClick={showAllModules}
                       className="text-emerald"
-                      style={{ background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                      style={{ background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', cursor: 'pointer', transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease' }}
                     >
                       Hiển thị tất cả ({hiddenModules.length})
                     </button>
@@ -2565,7 +2567,7 @@ function AppContent() {
                               border: '1px solid var(--border-panel)',
                               position: 'relative',
                               cursor: 'pointer',
-                              transition: 'all 0.25s ease',
+                              transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
                               padding: 0
                             }}
                             className="module-toggle-off"
@@ -2579,7 +2581,7 @@ function AppContent() {
                               position: 'absolute',
                               top: '2px',
                               left: '2px',
-                              transition: 'all 0.25s ease'
+                              transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease'
                             }} />
                           </button>
                         </div>

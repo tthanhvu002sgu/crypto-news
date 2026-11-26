@@ -63,8 +63,6 @@ export default function DashboardTab({
 
   return (
     <div className="dashboard-layout">
-      <DataOriginLegend style={{ marginBottom: '-4px' }} />
-
       {/* ── HERO: Market Bias Engine Card ── */}
       {!isModuleHidden('dash_bias') && (
         <MarketBiasCard data={data} etfHistory={etfHistory} btcDisplay={btcDisplay} theme={theme} moduleId="dash_bias" />
@@ -79,15 +77,13 @@ export default function DashboardTab({
           return false;
         });
 
-        return visibleSectionIds.map((secId, secIdx) => {
-          const secNum = String(secIdx + 1).padStart(2, '0');
-
+        return visibleSectionIds.map((secId) => {
           if (secId === 'dash_sec1') {
             return (
               <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label="Nhóm: Vĩ Mô & Thác Thanh Khoản" className="dashboard-layout">
-                <div className="overview-section-header font-mono">
-                  <span className="overview-section-badge">{secNum} // VĨ MÔ &amp; THÁC THANH KHOẢN</span>
-                  <span className="overview-section-desc text-slate-500">Chu kỳ kinh tế, van thanh khoản vĩ mô &amp; lịch sự kiện</span>
+                <div className="overview-section-header">
+                  <h2 className="overview-section-title">Vĩ mô &amp; Thác thanh khoản</h2>
+                  <span className="overview-section-desc">Chu kỳ kinh tế, van thanh khoản vĩ mô và lịch sự kiện</span>
                 </div>
 
                 {getGroupOrder('dash_sec1').map((id) => {
@@ -95,124 +91,75 @@ export default function DashboardTab({
           if (isModuleHidden('dash_macro')) return null;
           return (
             <SortableModuleItem key={id} groupKey="dash_sec1" itemId={id} label={MODULES_CONFIG[id]?.label}>
-        <div className="glass-panel" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
-                <span className="dot dot-emerald" /> MACRO PULSE
+        <div className="glass-panel panel-padded">
+          <div className="panel-top-bar">
+            <div className="panel-title-group">
+              <h3 className="chart-title" style={{ margin: 0 }}>
+                Macro Pulse
               </h3>
-              <DataOriginBadge origin="history" label="LỊCH SỬ API" compact />
+              <DataOriginBadge origin="history" label="Lịch sử API" compact />
             </div>
             <ModuleMenu moduleId="dash_macro" />
           </div>
 
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', 
-            gap: '10px' 
-          }}>
-            {/* DXY */}
-            <div style={{ 
-              background: 'var(--bg-slate-950)', 
-              border: '1px solid var(--border-panel)', 
-              borderRadius: '6px', 
-              padding: '10px 12px' 
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>DXY</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
-                {getMacroValue('dxy')}
-              </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: data?.dxy > 104 ? 'var(--color-rose-400)' : 'var(--color-emerald-400)' }}>
+          <div className="hairline-bento-grid">
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">DXY</div>
+              <div className="hairline-cell-val">{getMacroValue('dxy')}</div>
+              <div className="hairline-cell-sub" style={{ color: data?.dxy > 104 ? 'var(--color-rose-400)' : 'var(--color-emerald-400)' }}>
                 {data?.dxy > 104 ? 'Risk Off ↑' : data?.dxy < 100 ? 'Risk On ↓' : 'Neutral'}
               </div>
             </div>
 
-            {/* VIX */}
-            <div style={{ 
-              background: 'var(--bg-slate-950)', 
-              border: '1px solid var(--border-panel)', 
-              borderRadius: '6px', 
-              padding: '10px 12px' 
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>VIX</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
-                {getMacroValue('vix')}
-              </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: data?.vix?.price < 18 ? 'var(--color-emerald-400)' : data?.vix?.price > 28 ? 'var(--color-rose-400)' : 'var(--text-slate-400)' }}>
-                {data?.vix?.price < 18 ? 'Low Volatility' : data?.vix?.price > 28 ? 'High Fear' : 'Normal'}
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">VIX</div>
+              <div className="hairline-cell-val">{getMacroValue('vix')}</div>
+              <div className="hairline-cell-sub" style={{ color: data?.vix?.price < 18 ? 'var(--color-emerald-400)' : data?.vix?.price > 28 ? 'var(--color-rose-400)' : 'var(--text-slate-400)' }}>
+                {data?.vix?.price < 18 ? 'Biến động thấp' : data?.vix?.price > 28 ? 'Hoảng loạn cao' : 'Bình thường'}
               </div>
             </div>
 
-            {/* 10Y Yield + Real Rate */}
-            <div style={{ 
-              background: 'var(--bg-slate-950)', 
-              border: '1px solid var(--border-panel)', 
-              borderRadius: '6px', 
-              padding: '10px 12px' 
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>10Y Yield / Real Rate</div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">10Y Yield / Lãi suất thực</div>
+              <div className="hairline-cell-val">
                 {data?.tenYearYield ? `${data.tenYearYield}%` : '---'}
                 {data?.fedFundsRate != null && isPlausibleCpiYoY(data?.cpi) && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-slate-400)' }}> / {(data.fedFundsRate - data.cpi).toFixed(1)}%</span>
+                  <span className="text-slate-400" style={{ fontSize: 'var(--text-body)', fontWeight: 500 }}> / {(data.fedFundsRate - data.cpi).toFixed(1)}%</span>
                 )}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                Proxy lãi suất thực = Fed - CPI YoY
+              <div className="hairline-cell-sub text-slate-400">
+                Fed Funds trừ CPI YoY
               </div>
             </div>
 
-            {/* Fear & Greed */}
-            <div style={{ 
-              background: 'var(--bg-slate-950)', 
-              border: '1px solid var(--border-panel)', 
-              borderRadius: '6px', 
-              padding: '10px 12px' 
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>Fear & Greed</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
-                {data?.fngData?.value ?? '---'}
-              </div>
-              <div style={{ 
-                fontSize: '0.6rem', 
-                marginTop: '2px', 
-                color: data?.fngData?.value >= 75 ? 'var(--color-rose-400)' : data?.fngData?.value <= 25 ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' 
-              }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">Fear &amp; Greed</div>
+              <div className="hairline-cell-val">{data?.fngData?.value ?? '---'}</div>
+              <div className="hairline-cell-sub" style={{ color: data?.fngData?.value >= 75 ? 'var(--color-rose-400)' : data?.fngData?.value <= 25 ? 'var(--color-emerald-400)' : 'var(--text-slate-400)' }}>
                 {data?.fngData?.sentiment || 'Neutral'}
               </div>
             </div>
 
-            {/* S&P 500 */}
-            <div style={{ 
-              background: 'var(--bg-slate-950)', 
-              border: '1px solid var(--border-panel)', 
-              borderRadius: '6px', 
-              padding: '10px 12px' 
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>S&P 500</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">S&amp;P 500</div>
+              <div className="hairline-cell-val">
                 {data?.sp500?.price ? data.sp500.price.toFixed(0) : '---'}
                 {data?.sp500?.change != null && (
-                  <span style={{ fontSize: '0.7rem', marginLeft: '4px', color: data.sp500.change >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)' }}>
+                  <span style={{ fontSize: 'var(--text-sm)', marginLeft: '6px', color: data.sp500.change >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)' }}>
                     {data.sp500.change >= 0 ? '+' : ''}{data.sp500.change.toFixed(1)}%
                   </span>
                 )}
               </div>
+              <div className="hairline-cell-sub text-slate-400">Chứng khoán Mỹ</div>
             </div>
 
-            {/* BTC Dominance */}
-            <div style={{ 
-              background: 'var(--bg-slate-950)', 
-              border: '1px solid var(--border-panel)', 
-              borderRadius: '6px', 
-              padding: '10px 12px' 
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>BTC Dominance</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-contrast)' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">BTC Dominance</div>
+              <div className="hairline-cell-val">
                 {data?.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---'}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                Market Structure
+              <div className="hairline-cell-sub text-slate-400">
+                Cấu trúc vốn hóa
               </div>
             </div>
           </div>
@@ -261,9 +208,9 @@ export default function DashboardTab({
           if (secId === 'dash_options_regime') {
             return (
               <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label={MODULES_CONFIG[secId]?.label} className="dashboard-layout">
-                <div className="overview-section-header font-mono">
-                  <span className="overview-section-badge">{secNum} // OPTIONS &amp; GAMMA EXPOSURE</span>
-                  <span className="overview-section-desc text-slate-500">Call/Put Wall, GEX Flip, Max Pain &amp; Gamma Regime từ Deribit</span>
+                <div className="overview-section-header">
+                  <h2 className="overview-section-title">Options &amp; Gamma Exposure</h2>
+                  <span className="overview-section-desc">Call/Put Wall, GEX Flip, Max Pain và Gamma Regime từ Deribit</span>
                 </div>
                 <OptionsRegimePanel moduleId="dash_options_regime" />
               </SortableModuleItem>
@@ -273,9 +220,9 @@ export default function DashboardTab({
           if (secId === 'dash_sec2') {
             return (
               <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label="Nhóm: Tổ Chức TradFi & Định Giá Chu Kỳ" className="dashboard-layout">
-                <div className="overview-section-header font-mono">
-                  <span className="overview-section-badge">{secNum} // TỔ CHỨC TRADFI &amp; ĐỊNH GIÁ CHU KỲ</span>
-                  <span className="overview-section-desc text-slate-500">Dòng vốn Spot ETF, vị thế phái sinh CME COT &amp; mô hình định giá chu kỳ</span>
+                <div className="overview-section-header">
+                  <h2 className="overview-section-title">Tổ chức TradFi &amp; Định giá chu kỳ</h2>
+                  <span className="overview-section-desc">Dòng vốn Spot ETF, vị thế phái sinh CME COT và mô hình định giá chu kỳ</span>
                 </div>
 
                 {getGroupOrder('dash_sec2').map((id) => {
@@ -290,59 +237,59 @@ export default function DashboardTab({
                     return (
                       <SortableModuleItem key={pairId} groupKey="dash_etf_pair" itemId={pairId} isHorizontal label={MODULES_CONFIG[pairId]?.label} style={{ minWidth: 0 }}>
             <div className="glass-panel whale-panel">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                    <span className="dot dot-emerald" /> US SPOT BITCOIN ETFS (TOTAL: {fmt(etfHoldings.total, 0)} BTC)
+              <div className="panel-top-bar">
+                <div className="panel-title-group">
+                  <h3 className="chart-title" style={{ margin: 0 }}>
+                    US Spot Bitcoin ETFs ({fmt(etfHoldings.total, 0)} BTC)
                   </h3>
-                  <DataOriginBadge origin="history" label="LỊCH SỬ ETF" compact />
+                  <DataOriginBadge origin="history" label="Lịch sử ETF" compact />
                 </div>
                 <ModuleMenu moduleId="dash_etf_holdings" />
               </div>
-              <div className="etf-summary font-mono">
+              <div className="etf-summary">
                 <div className="etf-sum-card">
-                  <span className="etf-sum-label">TOTAL AUM</span>
+                  <span className="etf-sum-label">Tổng AUM</span>
                   <span className="etf-sum-val text-emerald">${fmt((etfHoldings.total * (btcDisplay?.price || 60000)) / 1e9, 2)}B</span>
                 </div>
                 <div className="etf-sum-card">
-                  <span className="etf-sum-label">NET FLOWS (24H)</span>
+                  <span className="etf-sum-label">Dòng ròng 24h</span>
                   <span className={`etf-sum-val ${etfHistory[etfHistory.length - 1]?.flow >= 0 ? 'text-emerald' : 'text-rose'}`}>
                     {etfHistory[etfHistory.length - 1]?.flow >= 0 ? '+' : ''}{etfHistory[etfHistory.length - 1]?.flow}M
                   </span>
                 </div>
                 <div className="etf-sum-card">
-                  <span className="etf-sum-label">% SUPPLY HELD</span>
-                  <span className="etf-sum-val text-slate-300">
+                  <span className="etf-sum-label">Tỷ lệ cung nắm giữ</span>
+                  <span className="etf-sum-val text-slate-200">
                     ~{((etfHoldings.total / (data.node?.circulatingSupply || 20039293.75)) * 100).toFixed(1)}%
                   </span>
                 </div>
                 <div className="etf-sum-card">
-                  <span className="etf-sum-label">AUM TREND ({aumChangeStats.oldestDate} → NAY)</span>
-                  <span className={`etf-sum-val ${aumChangeStats.direction === 'up' ? 'text-emerald' : aumChangeStats.direction === 'down' ? 'text-rose' : 'text-slate-300'}`}>
-                    {aumChangeStats.direction === 'up' ? '▲' : aumChangeStats.direction === 'down' ? '▼' : ''} {Math.abs(aumChangeStats.diffPct).toFixed(1)}% 
-                    <span style={{ fontSize: '0.55rem', marginLeft: '4px', fontWeight: 'normal', color: 'var(--text-slate-500)' }}>
+                  <span className="etf-sum-label">Xu hướng AUM ({aumChangeStats.oldestDate} → nay)</span>
+                  <span className={`etf-sum-val ${aumChangeStats.direction === 'up' ? 'text-emerald' : aumChangeStats.direction === 'down' ? 'text-rose' : 'text-slate-200'}`}>
+                    {aumChangeStats.direction === 'up' ? '▲' : aumChangeStats.direction === 'down' ? '▼' : ''} {Math.abs(aumChangeStats.diffPct).toFixed(1)}%
+                    <span className="etf-sum-delta">
                       ({aumChangeStats.diffUsd >= 0 ? '+' : ''}{aumChangeStats.diffUsd.toFixed(2)}B)
                     </span>
                   </span>
                 </div>
               </div>
               <div style={{ overflowX: 'auto' }}>
-                <table className="whale-table font-mono" style={{ width: '100%', fontSize: '0.62rem' }}>
+                <table className="whale-table">
                   <thead>
                     <tr>
-                      <th style={{ textAlign: 'left', padding: '6px 4px' }}>ETF FUND</th>
-                      <th style={{ textAlign: 'right', padding: '6px 4px' }}>HOLDINGS</th>
-                      <th style={{ textAlign: 'right', padding: '6px 4px' }}>VALUE</th>
-                      <th style={{ textAlign: 'right', padding: '6px 4px' }}>SHARE</th>
+                      <th style={{ textAlign: 'left' }}>Quỹ ETF</th>
+                      <th style={{ textAlign: 'right' }}>Nắm giữ</th>
+                      <th style={{ textAlign: 'right' }}>Giá trị</th>
+                      <th style={{ textAlign: 'right' }}>Thị phần</th>
                     </tr>
                   </thead>
                   <tbody>
                     {etfHoldings.funds.map((e, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--border-panel)' }}>
-                        <td style={{ padding: '8px 4px', color: 'var(--text-contrast)' }}>{e.name}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right' }}>{e.holdings.toLocaleString()} BTC</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right', color: 'var(--text-contrast)' }}>${fmt((e.holdings * (btcDisplay?.price || 60000)) / 1e9, 2)}B</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'right', color: 'var(--text-slate-400)' }}>{e.marketShare}</td>
+                      <tr key={idx}>
+                        <td style={{ color: 'var(--text-contrast)', fontWeight: 500 }}>{e.name}</td>
+                        <td style={{ textAlign: 'right' }}>{e.holdings.toLocaleString()} BTC</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-contrast)', fontWeight: 600 }}>${fmt((e.holdings * (btcDisplay?.price || 60000)) / 1e9, 2)}B</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-slate-400)' }}>{e.marketShare}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -357,24 +304,25 @@ export default function DashboardTab({
                     return (
                       <SortableModuleItem key={pairId} groupKey="dash_etf_pair" itemId={pairId} isHorizontal label={MODULES_CONFIG[pairId]?.label} style={{ minWidth: 0 }}>
             <div className="glass-panel whale-panel">
-              <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <h3 className="chart-title font-mono text-emerald" style={{ margin: 0 }}>
-                    <span className="dot dot-emerald" /> {etfChartType === 'flows' ? 'LỊCH SỬ DÒNG TIỀN RÒNG (NET FLOWS)' : 'XU HƯỚNG TỔNG TÀI SẢN (AUM TREND)'}
+              <div className="chart-header panel-top-bar">
+                <div className="panel-title-group">
+                  <h3 className="chart-title" style={{ margin: 0 }}>
+                    {etfChartType === 'flows' ? 'Lịch sử dòng tiền ròng ETF' : 'Xu hướng tổng tài sản AUM'}
                   </h3>
-                  <DataOriginBadge origin="history" label="LỊCH SỬ ETF" compact />
+                  <DataOriginBadge origin="history" label="Lịch sử ETF" compact />
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   {etfChartType === 'flows' && (
-                    <div className="etf-timeframe-toggle font-mono">
+                    <div className="segmented-control">
                       {[
                         { key: 'D', title: 'Theo ngày' },
                         { key: 'W', title: 'Theo tuần' },
                       ].map(tf => (
                         <button
                           key={tf.key}
+                          type="button"
                           onClick={() => setEtfFlowTimeframe(tf.key)}
-                          className={`toggle-btn ${etfFlowTimeframe === tf.key ? 'active' : ''}`}
+                          className={`segmented-btn ${etfFlowTimeframe === tf.key ? 'is-active' : ''}`}
                           title={tf.title}
                         >
                           {tf.key}
@@ -383,30 +331,33 @@ export default function DashboardTab({
                     </div>
                   )}
                   {etfChartType === 'aum' && (
-                    <div className="etf-timeframe-toggle font-mono">
+                    <div className="segmented-control">
                       {['30D', '90D', 'ALL'].map(tf => (
                         <button
                           key={tf}
+                          type="button"
                           onClick={() => setEtfAumTimeframe(tf)}
-                          className={`toggle-btn ${etfAumTimeframe === tf ? 'active' : ''}`}
+                          className={`segmented-btn ${etfAumTimeframe === tf ? 'is-active' : ''}`}
                         >
                           {tf}
                         </button>
                       ))}
                     </div>
                   )}
-                  <div className="etf-chart-toggle font-mono">
-                    <button 
-                      onClick={() => setEtfChartType('flows')} 
-                      className={`toggle-btn ${etfChartType === 'flows' ? 'active' : ''}`}
+                  <div className="segmented-control">
+                    <button
+                      type="button"
+                      onClick={() => setEtfChartType('flows')}
+                      className={`segmented-btn ${etfChartType === 'flows' ? 'is-active' : ''}`}
                     >
-                      DÒNG TIỀN
+                      Dòng tiền
                     </button>
-                    <button 
-                      onClick={() => setEtfChartType('aum')} 
-                      className={`toggle-btn ${etfChartType === 'aum' ? 'active' : ''}`}
+                    <button
+                      type="button"
+                      onClick={() => setEtfChartType('aum')}
+                      className={`segmented-btn ${etfChartType === 'aum' ? 'is-active' : ''}`}
                     >
-                      XU HƯỚNG AUM
+                      Xu hướng AUM
                     </button>
                   </div>
                   <ModuleMenu moduleId="dash_etf_flows" />
@@ -415,9 +366,9 @@ export default function DashboardTab({
               {etfHistory.length > 0 ? (
                 etfChartType === 'flows' ? (
                   <div className="etf-flow-subpanel">
-                    <div className="etf-flow-subpanel-header font-mono">
+                    <div className="etf-flow-subpanel-header">
                       <span className="etf-flow-tf-badge">
-                        {etfFlowTimeframe === 'D' ? 'D · NGÀY' : 'W · TUẦN'}
+                        {etfFlowTimeframe === 'D' ? 'Theo ngày' : 'Theo tuần'}
                       </span>
                       {(() => {
                         const latestItem = etfFlowTimeframe === 'D'
@@ -488,9 +439,9 @@ export default function DashboardTab({
           if (secId === 'dash_sec3') {
             return (
               <SortableModuleItem key={secId} groupKey="dash_sections" itemId={secId} label="Nhóm: Tin Tức & Dự Báo Phi Tập Trung" className="dashboard-layout">
-                <div className="overview-section-header font-mono">
-                  <span className="overview-section-badge">{secNum} // TIN TỨC &amp; DỰ BÁO PHI TẬP TRUNG</span>
-                  <span className="overview-section-desc text-slate-500">Dòng tin tức thị trường &amp; cược thông minh Polymarket</span>
+                <div className="overview-section-header">
+                  <h2 className="overview-section-title">Tin tức &amp; Dự báo phi tập trung</h2>
+                  <span className="overview-section-desc">Dòng tin tức thị trường và thị trường dự báo Polymarket</span>
                 </div>
 
                 {getGroupOrder('dash_sec3').map((id) => {

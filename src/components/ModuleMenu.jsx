@@ -81,8 +81,8 @@ export default function ModuleMenu({ moduleId, className = "", style = {} }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transition: 'all 0.2s ease',
-          opacity: 0.6
+          transition: 'color 160ms ease, opacity 160ms ease',
+          opacity: 0.7
         }}
       >
         <MoreVertical size={16} />

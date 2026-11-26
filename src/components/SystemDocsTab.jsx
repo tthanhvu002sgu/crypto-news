@@ -38,23 +38,24 @@ export default function SystemDocsTab({
   const [activeSubtab, setActiveSubtab] = useState('glossary');
 
   const subtabs = [
-    { id: 'glossary', label: 'CẨM NANG THUẬT NGỮ', icon: <BookOpen size={14} /> },
-    { id: 'crawler',  label: 'CRAWLER ACTIVITY LOGS', icon: <Terminal size={14} /> },
-    { id: 'settings', label: 'CÀI ĐẶT & TÍCH HỢP', icon: <Settings size={14} /> },
+    { id: 'glossary', label: 'Cẩm nang thuật ngữ', icon: <BookOpen size={15} /> },
+    { id: 'crawler',  label: 'Nhật ký hoạt động', icon: <Terminal size={15} /> },
+    { id: 'settings', label: 'Cài đặt & Tích hợp', icon: <Settings size={15} /> },
   ];
 
   return (
-    <div className="system-docs-layout" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+    <div className="system-docs-layout" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Subnav toolbar */}
-      <div className="system-subnav glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px' }}>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div className="segmented-control" role="tablist">
           {subtabs.map(st => (
             <button
               key={st.id}
               type="button"
-              className={`category-btn font-mono ${activeSubtab === st.id ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeSubtab === st.id}
+              className={`segmented-btn ${activeSubtab === st.id ? 'is-active' : ''}`}
               onClick={() => setActiveSubtab(st.id)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               {st.icon}
               <span>{st.label}</span>

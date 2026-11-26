@@ -1509,7 +1509,7 @@ function AdvancedChart({ theme = 'dark', whaleData, moduleId, children }) {
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              transition: 'all 0.2s',
+              transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
               fontWeight: 600
             }}
           >

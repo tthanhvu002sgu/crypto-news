@@ -146,7 +146,7 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
     {
       key: 'institutional',
       code: '01',
-      title: 'DÒNG TIỀN ĐỊNH CHẾ',
+      title: 'Dòng tiền định chế',
       weight: '40%',
       subtext: 'BTC Spot ETF 7D Net Flow, CME COT',
       score: bias.pillars.institutional,
@@ -155,16 +155,16 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
     {
       key: 'onChain',
       code: '02',
-      title: 'ON-CHAIN & MẠNG LƯỚI',
+      title: 'On-chain & Mạng lưới',
       weight: '25%',
-      subtext: 'MVRV Anchor, SSR Z-Score, Addrs, Mining Floor, Tx Demand',
+      subtext: 'MVRV Anchor, SSR Z-Score, Addrs, Mining Floor, Tx',
       score: bias.pillars.onChain,
       maxPts: 100,
     },
     {
       key: 'newsRisk',
       code: '03',
-      title: 'VĨ MÔ & THANH KHOẢN',
+      title: 'Vĩ mô & Thanh khoản',
       weight: '20%',
       subtext: 'Fed/CPI Pulse, Net Liquidity, HY Spread, DXY, 10Y, VIX',
       score: bias.pillars.newsRisk,
@@ -173,9 +173,9 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
     {
       key: 'microstructure',
       code: '04',
-      title: 'VI CẤU TRÚC & XU HƯỚNG',
+      title: 'Vi cấu trúc & Xu hướng',
       weight: '15%',
-      subtext: 'BTC Daily MA50/200, CVD, Funding Confluence, OI, F&G',
+      subtext: 'BTC Daily MA50/200, CVD, Funding, OI, F&G',
       score: bias.pillars.microstructure,
       maxPts: 100,
     },
@@ -207,99 +207,98 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
       <div className="bias-card-header">
         <div className="bias-header-left">
           <div className="bias-title-badge">
-            <Gauge size={16} className="text-emerald-400" />
-            <h3 className="bias-title font-mono">MARKET BIAS ENGINE</h3>
+            <Gauge size={18} style={{ color: 'var(--color-accent)' }} />
+            <h2 className="bias-title">Market Bias Engine</h2>
           </div>
-          <span className="bias-confidence-pill font-mono">
-            ĐỘ TIN CẬY: <strong className="text-contrast">{bias.confidence}%</strong>
+          <span className="bias-meta-text">
+            Độ tin cậy <strong className="text-contrast">{bias.confidence}%</strong>
           </span>
-          <span className="bias-benchmark-badge font-mono">
-            BENCHMARK ĐỐI CHỨNG
-          </span>
-          <DataOriginBadge origin="hybrid" label="LỊCH SỬ + MỞ TAB" compact />
+          <DataOriginBadge origin="hybrid" label="Lịch sử + Mở tab" compact />
         </div>
 
         <div className="bias-header-right">
           {activePillarFilter && (
             <button
               type="button"
-              className="bias-clear-filter-btn font-mono"
+              className="bias-clear-filter-btn"
               onClick={() => setActivePillarFilter(null)}
               title="Bỏ lọc trụ cột"
             >
-              <X size={12} />
-              <span>BỎ LỌC TRỤ CỘT</span>
+              <X size={13} />
+              <span>Bỏ lọc</span>
             </button>
           )}
 
-          <button
-            type="button"
-            className={`bias-toggle-btn font-mono ${showChart ? 'is-active-btn' : ''}`}
-            onClick={() => setShowChart(!showChart)}
-            title="Xem biểu đồ đối chiếu song song Bias Score & Giá BTC (7D / 30D)"
-          >
-            <LineChart size={13} />
-            <span>{showChart ? 'ẨN ĐỐI CHIẾU' : 'ĐỐI CHIẾU 7D/30D'}</span>
-          </button>
+          <div className="segmented-control" role="group" aria-label="Chế độ xem Market Bias">
+            <button
+              type="button"
+              className={`segmented-btn ${showChart ? 'is-active' : ''}`}
+              onClick={() => setShowChart(!showChart)}
+              title="Xem biểu đồ đối chiếu song song Bias Score & Giá BTC (7D / 30D)"
+            >
+              <LineChart size={14} />
+              <span>Đối chiếu 7D/30D</span>
+            </button>
 
-          <button
-            type="button"
-            className={`bias-toggle-btn font-mono ${showSnapshots ? 'is-active-btn' : ''}`}
-            onClick={() => setShowSnapshots(!showSnapshots)}
-            title="Xem lịch sử snapshot thực tế (Không look-ahead)"
-          >
-            <History size={13} />
-            <span>{showSnapshots ? 'ẨN LỊCH SỬ' : 'LỊCH SỬ SNAPSHOT'}</span>
-          </button>
+            <button
+              type="button"
+              className={`segmented-btn ${showSnapshots ? 'is-active' : ''}`}
+              onClick={() => setShowSnapshots(!showSnapshots)}
+              title="Xem lịch sử snapshot thực tế (Không look-ahead)"
+            >
+              <History size={14} />
+              <span>Lịch sử</span>
+            </button>
 
-          <button
-            type="button"
-            className="bias-toggle-btn font-mono"
-            onClick={() => setExpanded(!expanded)}
-          >
-            <Activity size={13} />
-            <span>{expanded ? 'THU GỌN' : 'CHI TIẾT TÍN HIỆU'}</span>
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </button>
+            <button
+              type="button"
+              className={`segmented-btn ${expanded ? 'is-active' : ''}`}
+              onClick={() => setExpanded(!expanded)}
+            >
+              <Activity size={14} />
+              <span>Chi tiết tín hiệu</span>
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
           <ModuleMenu moduleId={moduleId} />
         </div>
       </div>
 
-      {/* ── 3-Layer Bias Regime Chips ─────────────────────────────────── */}
-      <div className="bias-regime-bar font-mono">
+      {/* ── 3-Layer Bias Regime Strip (Hairline-divided) ───────────────── */}
+      <div className="bias-regime-bar">
         <div className="bias-regime-chip">
-          <span className="chip-label">TREND: </span>
-          <strong style={{ color: regime.trend?.includes('UPTREND') ? '#34d399' : regime.trend?.includes('DOWNTREND') ? '#f87171' : 'var(--text-contrast)' }}>
+          <span className="chip-label">Xu hướng</span>
+          <strong style={{ color: regime.trend?.includes('UPTREND') ? 'var(--color-emerald-400)' : regime.trend?.includes('DOWNTREND') ? 'var(--color-rose-400)' : 'var(--text-contrast)' }}>
             {regime.trend || 'UNKNOWN'}
           </strong>
         </div>
         <div className="bias-regime-chip">
-          <span className="chip-label">VALUATION: </span>
-          <strong style={{ color: regime.valuation === 'DEEP_VALUE' || regime.valuation === 'UNDERVALUED' ? '#34d399' : regime.valuation === 'OVERHEATED' ? '#f87171' : 'var(--text-contrast)' }}>
+          <span className="chip-label">Định giá</span>
+          <strong style={{ color: regime.valuation === 'DEEP_VALUE' || regime.valuation === 'UNDERVALUED' ? 'var(--color-emerald-400)' : regime.valuation === 'OVERHEATED' ? 'var(--color-rose-400)' : 'var(--text-contrast)' }}>
             {regime.valuation || 'FAIR_VALUE'}
           </strong>
         </div>
         <div className="bias-regime-chip">
-          <span className="chip-label">LIQUIDITY: </span>
-          <strong style={{ color: regime.liquidity === 'EXPANDING' ? '#34d399' : regime.liquidity === 'CONTRACTING' ? '#f87171' : 'var(--text-contrast)' }}>
+          <span className="chip-label">Thanh khoản</span>
+          <strong style={{ color: regime.liquidity === 'EXPANDING' ? 'var(--color-emerald-400)' : regime.liquidity === 'CONTRACTING' ? 'var(--color-rose-400)' : 'var(--text-contrast)' }}>
             {regime.liquidity || 'NEUTRAL'}
           </strong>
         </div>
         <div className="bias-regime-chip">
-          <span className="chip-label">TACTICAL: </span>
-          <strong style={{ color: regime.tactical?.includes('SHORT_SQUEEZE') || regime.tactical?.includes('ACCUMULATION') ? '#34d399' : regime.tactical?.includes('LONG_SQUEEZE') || regime.tactical?.includes('DISTRIBUTION') ? '#f87171' : 'var(--text-contrast)' }}>
+          <span className="chip-label">Chiến thuật</span>
+          <strong style={{ color: regime.tactical?.includes('SHORT_SQUEEZE') || regime.tactical?.includes('ACCUMULATION') ? 'var(--color-emerald-400)' : regime.tactical?.includes('LONG_SQUEEZE') || regime.tactical?.includes('DISTRIBUTION') ? 'var(--color-rose-400)' : 'var(--text-contrast)' }}>
             {regime.tactical || 'BALANCED'}
           </strong>
         </div>
       </div>
 
-      {/* ── Dual-Benchmark Cards Grid (BTC Price vs Market Bias) ────── */}
+      {/* ── Dual-Benchmark Stage (BTC Price vs Market Bias) ───────────── */}
       <div className="bias-dual-grid">
         {/* Left: BTC Price Benchmark (Đối chứng khách quan) */}
-        <div className="bias-benchmark-card font-mono">
+        <div className="bias-benchmark-card">
           <div className="bias-card-top-tag">
-            <span className="tag-label">BTC PRICE</span>
-            <span className="tag-role-pill">ĐỐI CHỨNG KHÁCH QUAN</span>
+            <span className="tag-label">Giá BTC giao ngay</span>
+            <span className="tag-confidence-badge">Đối chứng khách quan</span>
           </div>
 
           <div className="bias-benchmark-val-row">
@@ -307,27 +306,27 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
               {livePrice ? `$${fmt(livePrice, 0)}` : '---'}
               <span className="bias-currency-unit"> USD</span>
             </div>
-            <div className={`bias-change-pill ${liveChange >= 0 ? 'is-up text-emerald' : 'is-down text-rose'}`}>
-              {liveChange >= 0 ? '▲ +' : '▼ '}{liveChange != null ? liveChange.toFixed(2) : '0.00'}% (24H)
+            <div className={`bias-change-val ${liveChange >= 0 ? 'text-emerald' : 'text-rose'}`}>
+              {liveChange >= 0 ? '+' : ''}{liveChange != null ? liveChange.toFixed(2) : '0.00'}% (24h)
             </div>
           </div>
 
           <div className="bias-benchmark-meta-footer">
             <span className="meta-item">
-              <Clock size={11} className="meta-icon text-slate-400" /> Price updated: <strong className="text-contrast">{bias.freshness?.priceUpdatedStr || 'Live'}</strong>
+              <Clock size={13} className="meta-icon text-slate-400" /> Cập nhật: <strong className="text-contrast">{bias.freshness?.priceUpdatedStr || 'Live'}</strong>
             </span>
             <span className="meta-item">
-              Vol 24H: <strong className="text-contrast">{data?.btc?.volume ? fmtB(data.btc.volume) : '---'}</strong>
+              Vol 24h: <strong className="text-contrast">{data?.btc?.volume ? fmtB(data.btc.volume) : '---'}</strong>
             </span>
           </div>
         </div>
 
         {/* Right: Market Bias Engine Model */}
-        <div className="bias-benchmark-card font-mono" style={{ borderColor: `${bias.color}40`, background: bias.bgGradient }}>
+        <div className="bias-benchmark-card bias-benchmark-card--model">
           <div className="bias-card-top-tag">
-            <span className="tag-label">MARKET BIAS SCORE</span>
+            <span className="tag-label">Điểm Market Bias</span>
             <span className="tag-confidence-badge">
-              Confidence: <strong className="text-contrast">{bias.confidence}%</strong>
+              Tin cậy <strong className="text-contrast">{bias.confidence}%</strong>
             </span>
           </div>
 
@@ -343,10 +342,10 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
 
           <div className="bias-benchmark-meta-footer">
             <span className="meta-item">
-              <Database size={11} className="meta-icon text-slate-400" /> Data oldest: <strong className="text-contrast">{bias.freshness?.oldestDataStr || 'Live'}</strong>
+              <Database size={13} className="meta-icon text-slate-400" /> Dữ liệu cũ nhất: <strong className="text-contrast">{bias.freshness?.oldestDataStr || 'Live'}</strong>
             </span>
             <span className="meta-item">
-              Zero-Fallback: <strong className="text-emerald">{bias.confidence >= 60 ? 'PASS' : 'PARTIAL'}</strong>
+              Zero-Fallback: <strong className="text-emerald">{bias.confidence >= 60 ? 'Pass' : 'Partial'}</strong>
             </span>
           </div>
         </div>
@@ -354,28 +353,18 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
 
       {/* ── Bias–Price Confirmation / Divergence Status Banner ───────── */}
       <div
-        className="bias-confirmation-banner font-mono"
+        className="bias-confirmation-banner"
         style={{
-          borderColor: confirmation.border || 'rgba(148,163,184,0.25)',
-          backgroundColor: confirmation.bg || 'rgba(148,163,184,0.08)',
+          borderLeftColor: confirmation.color || 'var(--border-strong)',
         }}
       >
         <div className="bias-confirmation-header">
           <div className="bias-conf-title-group">
-            <Zap size={14} style={{ color: confirmation.color || '#94a3b8' }} />
-            <span className="bias-conf-title" style={{ color: confirmation.color || '#94a3b8' }}>
-              TRẠNG THÁI KẾT HỢP: <strong>{confirmation.label?.toUpperCase() || 'TRUNG LẬP'}</strong>
+            <Zap size={15} style={{ color: confirmation.color || 'var(--text-slate-400)' }} />
+            <span className="bias-conf-title" style={{ color: confirmation.color || 'var(--text-slate-300)' }}>
+              Trạng thái kết hợp: <strong>{confirmation.label || 'Trung lập'}</strong>
             </span>
           </div>
-          <span
-            className="bias-conf-badge"
-            style={{
-              color: confirmation.color || '#94a3b8',
-              borderColor: confirmation.border || 'rgba(148,163,184,0.3)',
-            }}
-          >
-            {confirmation.shortLabel || 'TRUNG LẬP ⚖'}
-          </span>
         </div>
         <div className="bias-conf-desc">
           {confirmation.description || 'Tín hiệu Bias và hành vi giá đang ở trạng thái cân bằng.'}
@@ -406,29 +395,28 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
             style={{
               left: `calc(${scorePercent}% - 3px)`,
               backgroundColor: bias.color,
-              boxShadow: `0 0 10px ${bias.color}, 0 0 2px #fff`,
             }}
           >
             <div className="bias-pointer-head" style={{ borderTopColor: bias.color }} />
           </div>
         </div>
 
-        <div className="bias-scale-labels font-mono">
-          <span className="scale-bear text-rose-400">BEARISH (-100)</span>
-          <span className="scale-neutral">NEUTRAL (0)</span>
-          <span className="scale-bull text-emerald-400">BULLISH (+100)</span>
+        <div className="bias-scale-labels">
+          <span className="scale-bear text-rose">Bearish (-100)</span>
+          <span className="scale-neutral">Neutral (0)</span>
+          <span className="scale-bull text-emerald">Bullish (+100)</span>
         </div>
       </div>
 
       {/* ── Transparency & Weight Disclaimer Note ────────────────────── */}
-      <div className="bias-transparency-note font-mono">
-        <HelpCircle size={13} className="text-amber-400 note-icon" />
+      <div className="bias-transparency-note">
+        <HelpCircle size={14} className="note-icon" style={{ color: 'var(--color-accent)' }} />
         <span>
-          <strong>Lưu ý tính độc lập:</strong> Bias Engine bao gồm <strong>3%</strong> tín hiệu xu hướng giá (BTC Daily MA50/200 &amp; Realized Vol); <strong>97%</strong> còn lại được tổng hợp độc lập từ dòng tiền định chế (ETF, COT), on-chain, vĩ mô và vi cấu trúc phái sinh (CVD, Funding, OI). BTC Price tại đây đóng vai trò <em>đối chứng khách quan</em>, không phải bằng chứng mặc định Bias dự báo đúng.
+          <strong>Tính độc lập:</strong> Bias Engine gồm <strong>3%</strong> xu hướng giá (MA50/200 &amp; Realized Vol); <strong>97%</strong> còn lại tổng hợp độc lập từ dòng tiền định chế (ETF, COT), on-chain, vĩ mô và vi cấu trúc phái sinh. Giá BTC đóng vai trò đối chứng khách quan.
         </span>
       </div>
 
-      {/* ── 4 Pillars Bento Grid (Interactive Filter Buttons) ────────────── */}
+      {/* ── 4 Pillars Ledger Grid (Interactive Filter Controls) ─────────── */}
       <div className="bias-pillars-grid">
         {pillarsList.map((pillar) => {
           const status = getPillarStatus(pillar.score);
@@ -440,34 +428,26 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
               key={pillar.key}
               className={`bias-pillar-card ${isSelected ? 'is-active-pillar' : ''}`}
               onClick={() => handlePillarClick(pillar.key)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlePillarClick(pillar.key); } }}
               style={{
-                borderColor: isSelected ? status.color : status.border,
-                boxShadow: isSelected ? `0 0 14px ${status.color}35` : 'none',
-                transform: isSelected ? 'translateY(-2px)' : 'none',
-                cursor: 'pointer',
+                borderTopColor: isSelected ? status.color : 'transparent',
               }}
-              title="Click để lọc 10+ tín hiệu định lượng bên dưới"
+              title="Nhấn để lọc tín hiệu định lượng thuộc trụ cột này"
             >
               <div>
-                {/* Header: Code + Name + Score */}
                 <div className="pillar-card-header">
-                  <div className="pillar-card-title-group">
-                    <span className="pillar-code-badge font-mono">{pillar.code}</span>
-                    <span className="pillar-title font-mono">{pillar.title}</span>
-                  </div>
-
-                  <span className="pillar-score-val font-mono" style={{ color: status.color }}>
+                  <span className="pillar-title">{pillar.title}</span>
+                  <span className="pillar-score-val" style={{ color: status.color }}>
                     {formatPillarScore(pillar.score)}
                   </span>
                 </div>
-
-                {/* Subtext */}
-                <div className="pillar-subtext font-mono">
+                <div className="pillar-subtext">
                   {pillar.subtext}
                 </div>
               </div>
 
-              {/* Progress Bar & Status Pill */}
               <div className="pillar-card-footer">
                 <div className="pillar-progress-track">
                   <div
@@ -478,17 +458,10 @@ export default function MarketBiasCard({ data, etfHistory, btcDisplay, theme = '
                     }}
                   />
                 </div>
-                <div className="pillar-meta-row font-mono">
-                  <span className="pillar-weight">Trọng số: {pillar.weight}</span>
-                  <span
-                    className="pillar-status-badge"
-                    style={{
-                      color: status.color,
-                      backgroundColor: status.bg,
-                      borderColor: status.border,
-                    }}
-                  >
-                    {isSelected ? 'ĐANG LỌC 🎯' : status.label}
+                <div className="pillar-meta-row">
+                  <span className="pillar-weight">Trọng số {pillar.weight}</span>
+                  <span className="pillar-status-text" style={{ color: status.color }}>
+                    {isSelected ? 'Đang lọc' : status.label}
                   </span>
                 </div>
               </div>

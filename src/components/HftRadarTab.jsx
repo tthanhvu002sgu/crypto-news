@@ -2316,14 +2316,11 @@ export default function HftRadarTab({
 
   return (
     <div className="hft-radar-layout">
-      <div className="hft-radar-header glass-panel">
-        <h2 className="hft-radar-title font-mono">
-          <span className="hft-icon-lg">🎯</span> ORDER FLOW — DERIVATIVES MICROSTRUCTURE
-        </h2>
-        <p className="hft-radar-desc font-mono">
-          Phân tích vi cấu trúc dòng tiền phái sinh theo thời gian thực: CVD Spot vs Futures, L/S Ratio, Open Interest, OBI &amp; Whale Trades
-        </p>
-        <DataOriginLegend style={{ marginTop: '8px' }} />
+      <div className="overview-section-header" style={{ marginTop: 0 }}>
+        <h2 className="overview-section-title">Order Flow &amp; Vi cấu trúc phái sinh</h2>
+        <span className="overview-section-desc">
+          Phân tích thời gian thực: CVD Spot vs Futures, L/S Ratio, Open Interest, OBI và dòng lệnh cá voi
+        </span>
       </div>
 
       <div className="hft-grid">

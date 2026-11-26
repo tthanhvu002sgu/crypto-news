@@ -1695,12 +1695,12 @@ ${promptData}
 
       {/* ── AI Market Decision Lab Main Panel ── */}
       {!isSummaryHidden && (
-        <div className="summary-tab glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <h3 className="panel-title font-mono text-emerald" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-          <Sparkles size={18} /> AI MARKET DECISION LAB
-        </h3>
-        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="summary-tab glass-panel panel-padded" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div className="panel-top-bar" style={{ marginBottom: 0 }}>
+        <h2 className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+          <Sparkles size={18} style={{ color: 'var(--color-accent)' }} /> AI Market Decision Lab
+        </h2>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Language Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} className="font-mono">
             <span style={{ fontSize: '0.62rem', color: 'var(--text-slate-400)' }}>
@@ -1899,7 +1899,7 @@ ${promptData}
                       : '1px solid var(--border-emerald-500)',
                   cursor: isExporting || isAiLoading ? 'not-allowed' : 'pointer',
                   boxShadow: 'none',
-                  transition: 'all 0.2s ease',
+                  transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
                 }}
                 onMouseOver={(e) => {
                   if (!isExporting && !isAiLoading) {
@@ -1951,7 +1951,7 @@ ${promptData}
                     border: isExportingMd || isAiLoading ? '1px solid var(--border-panel)' : '1px solid rgba(56, 189, 248, 0.5)',
                     cursor: isExportingMd || isAiLoading ? 'not-allowed' : 'pointer',
                     boxShadow: 'none',
-                    transition: 'all 0.2s ease',
+                    transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
                   }}
                   onMouseOver={(e) => {
                     if (!isExportingMd && !isAiLoading) {

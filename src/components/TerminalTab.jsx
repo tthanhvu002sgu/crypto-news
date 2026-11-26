@@ -17,16 +17,16 @@ export default function TerminalTab({
 
   return (
     <div className="glass-panel panel-section">
-      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
-          <span className="dot dot-emerald" /> SOVEREIGN CRAWLER — ACTIVITY LOG
-        </h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="panel-badge font-mono">{data.logs?.length || 0} entries</span>
-          <ModuleMenu moduleId="tab_terminal" />
+      <div className="panel-top-bar">
+        <div className="panel-title-group">
+          <h3 className="chart-title" style={{ margin: 0 }}>
+            Sovereign Crawler · Activity Log
+          </h3>
+          <span className="text-slate-400" style={{ fontSize: 'var(--text-sm)' }}>{data.logs?.length || 0} entries</span>
         </div>
+        <ModuleMenu moduleId="tab_terminal" />
       </div>
-      <div className="terminal-log font-mono">
+      <div className="terminal-log font-code">
         {!data.logs || data.logs.length === 0
           ? <div className="text-slate-500">Nhấn SYNC để xem log hoạt động...</div>
           : data.logs.map((l, i) => (

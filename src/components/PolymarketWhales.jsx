@@ -34,15 +34,15 @@ const categorizeMarket = (m) => {
 };
 
 const TOPICS = [
-  { id: 'no_sports', label: '🔥 TÀI CHÍNH & MACRO' },
-  { id: 'crypto', label: '🪙 CRYPTO' },
-  { id: 'economy', label: '🏛️ KINH TẾ - FED' },
-  { id: 'politics', label: '🌐 CHÍNH TRỊ' }
+  { id: 'no_sports', label: 'Tài chính & Macro' },
+  { id: 'crypto', label: 'Crypto' },
+  { id: 'economy', label: 'Kinh tế & Fed' },
+  { id: 'politics', label: 'Chính trị' }
 ];
 
 const VOL_FILTERS = [
-  { id: 'top9', label: '🏆 Top 9 Vol Lớn Nhất' },
-  { id: 'top15', label: 'Top 15 Vol Lớn Nhất' },
+  { id: 'top9', label: 'Top 9 Vol' },
+  { id: 'top15', label: 'Top 15 Vol' },
   { id: 'min5m', label: 'Vol > $5M' },
   { id: 'all', label: 'Tất cả' }
 ];
@@ -101,112 +101,64 @@ export default function PolymarketWhales({ fmt, moduleId }) {
   if (moduleId && isModuleHidden(moduleId)) return null;
 
   return (
-    <div className="glass-panel whale-panel" style={{ marginTop: 16, marginBottom: 16, border: '1px solid rgba(16, 185, 129, 0.25)', boxShadow: '0 8px 32px rgba(16, 185, 129, 0.05)' }}>
+    <div className="glass-panel whale-panel panel-padded">
       {/* Header */}
-      <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-            <span className="dot dot-emerald" />
-            <span className="font-mono text-emerald" style={{ fontSize: '0.68rem', fontWeight: 600, letterSpacing: '0.5px' }}>
-              POLYMARKET WHALES TRACKER
-            </span>
-          </div>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.68rem' }}>
-            TOP HIGHEST VOLUME VOTES
-          </span>
-          <DataOriginBadge origin="snapshot" label="TỨC THỜI (POLYMARKET)" compact />
+      <div className="panel-top-bar">
+        <div className="panel-title-group">
+          <h3 className="chart-title" style={{ margin: 0 }}>
+            Polymarket Whales Tracker
+          </h3>
+          <DataOriginBadge origin="snapshot" label="Tức thời" compact />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           {filteredMarkets.length > 0 && (
-            <div className="font-mono" style={{ fontSize: '0.68rem', display: 'flex', gap: 12, alignItems: 'center' }}>
-              <span>HIỂN THỊ: <strong className="text-emerald">{filteredMarkets.length}</strong> VOTE</span>
-              <span>VOL 24H: <strong className="text-emerald">${fmt ? fmt(totalVolFiltered / 1e6, 2) : (totalVolFiltered / 1e6).toFixed(2)}M</strong></span>
+            <div style={{ fontSize: 'var(--text-sm)', display: 'flex', gap: '12px', alignItems: 'center', color: 'var(--text-slate-400)' }}>
+              <span>Hiển thị: <strong className="text-contrast">{filteredMarkets.length}</strong> vote</span>
+              <span>Vol 24h: <strong className="text-emerald">${fmt ? fmt(totalVolFiltered / 1e6, 2) : (totalVolFiltered / 1e6).toFixed(2)}M</strong></span>
             </div>
           )}
 
           <button
+            type="button"
             onClick={() => fetchRealData(true)}
             disabled={loading || refreshing}
-            className="font-mono"
-            style={{
-              padding: '4px 10px',
-              fontSize: '0.65rem',
-              borderRadius: 6,
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--border-panel)',
-              color: 'var(--text-slate-200)',
-              cursor: (loading || refreshing) ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transition: 'all 0.2s'
-            }}
+            className="btn-header-secondary"
             title="Làm mới dữ liệu từ Polymarket Gamma API"
           >
-            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} /> LÀM MỚI
+            <RefreshCw size={13} className={refreshing ? 'spinning' : ''} />
+            <span>Làm mới</span>
           </button>
           {moduleId && <ModuleMenu moduleId={moduleId} />}
         </div>
       </div>
 
-      {/* Filters Section (Topic & Volume) */}
-      <div style={{ margin: '12px 0', borderBottom: '1px solid var(--border-panel)', paddingBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Topic Tabs */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 4 }}>
-          {TOPICS.map(t => {
-            const isActive = selectedTopic === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setSelectedTopic(t.id)}
-                className={`font-mono ${isActive ? 'text-emerald' : 'text-slate-400'}`}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 6,
-                  fontSize: '0.66rem',
-                  fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                  border: isActive ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-panel)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
+      {/* Filters Section (Connected Segmented Controls) */}
+      <div style={{ margin: '0 0 14px 0', borderBottom: '1px solid var(--border-panel)', paddingBottom: '12px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+        <div className="segmented-control" role="group" aria-label="Chủ đề Polymarket">
+          {TOPICS.map(t => (
+            <button
+              type="button"
+              key={t.id}
+              onClick={() => setSelectedTopic(t.id)}
+              className={`segmented-btn ${selectedTopic === t.id ? 'is-active' : ''}`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* Volume Threshold Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}>
-          <span className="font-mono text-slate-400" style={{ fontSize: '0.65rem', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <TrendingUp size={11} className="text-amber" /> LỌC THEO VOLUME:
-          </span>
-          {VOL_FILTERS.map(vf => {
-            const isActive = volumeFilter === vf.id;
-            return (
-              <button
-                key={vf.id}
-                onClick={() => setVolumeFilter(vf.id)}
-                className="font-mono"
-                style={{
-                  padding: '3px 9px',
-                  borderRadius: 4,
-                  fontSize: '0.64rem',
-                  background: isActive ? 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(234,88,12,0.2))' : 'rgba(255, 255, 255, 0.03)',
-                  color: isActive ? 'var(--color-amber-400)' : 'var(--text-slate-300)',
-                  border: isActive ? '1px solid rgba(245,158,11,0.4)' : '1px solid var(--border-panel)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  fontWeight: isActive ? 600 : 400
-                }}
-              >
-                {vf.label}
-              </button>
-            );
-          })}
+        <div className="segmented-control" role="group" aria-label="Lọc theo khối lượng">
+          {VOL_FILTERS.map(vf => (
+            <button
+              type="button"
+              key={vf.id}
+              onClick={() => setVolumeFilter(vf.id)}
+              className={`segmented-btn ${volumeFilter === vf.id ? 'is-active' : ''}`}
+            >
+              {vf.label}
+            </button>
+          ))}
         </div>
       </div>
 

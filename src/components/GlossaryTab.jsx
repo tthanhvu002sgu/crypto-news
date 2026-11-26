@@ -30,14 +30,14 @@ export default function GlossaryTab() {
 
   return (
     <div className="glass-panel panel-section glossary-section">
-      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
-          <HelpCircle size={15} /> 📖 CẨM NANG THUẬT NGỮ &amp; ĐỊNH NGHĨA
-        </h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="panel-badge font-mono">{filteredData.length} thuật ngữ</span>
-          <ModuleMenu moduleId="tab_glossary" />
+      <div className="panel-top-bar">
+        <div className="panel-title-group">
+          <h3 className="chart-title" style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <HelpCircle size={17} style={{ color: 'var(--color-accent)' }} /> Cẩm nang thuật ngữ &amp; Định nghĩa
+          </h3>
+          <span className="text-slate-400" style={{ fontSize: 'var(--text-sm)' }}>{filteredData.length} thuật ngữ</span>
         </div>
+        <ModuleMenu moduleId="tab_glossary" />
       </div>
 
       <p className="text-xs text-slate-400 mb-4" style={{ lineHeight: 1.7 }}>

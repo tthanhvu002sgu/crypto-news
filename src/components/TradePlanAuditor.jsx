@@ -399,7 +399,7 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
                 color: tradeDirection === 'LONG' ? 'var(--color-emerald-400)' : 'var(--text-slate-400)',
                 border: tradeDirection === 'LONG' ? '1px solid var(--color-emerald-500)' : '1px solid var(--border-panel)',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
               }}
             >
               <ArrowUpRight size={14} /> LONG
@@ -420,7 +420,7 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
                 color: tradeDirection === 'SHORT' ? 'var(--color-rose-400)' : 'var(--text-slate-400)',
                 border: tradeDirection === 'SHORT' ? '1px solid var(--color-rose-500)' : '1px solid var(--border-panel)',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
               }}
             >
               <ArrowDownRight size={14} /> SHORT
@@ -479,7 +479,7 @@ REQUIRED AUDIT FORMAT (Always keep a blank line between bullet items):
               color: isAuditing ? 'var(--text-slate-500)' : '#ffffff',
               border: '1px solid var(--color-emerald-400)',
               cursor: isAuditing ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 180ms ease',
               boxShadow: isAuditing ? 'none' : '0 0 10px rgba(16, 185, 129, 0.3)',
             }}
           >

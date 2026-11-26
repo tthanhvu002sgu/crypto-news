@@ -640,34 +640,29 @@ export default function ScannerTab() {
   };
 
   return (
-    <div className="scanner-tab-container font-mono">
+    <div className="scanner-tab-container">
       {/* ── 1. HEADER CONTROL BAR ────────────────────────────────────────── */}
       <div className="scanner-header-card glass-panel">
         <div className="scanner-header-left">
           <div className="scanner-title-row">
-            <span className="scanner-icon-badge">
-              <Zap size={18} className="text-amber-400" />
-            </span>
             <div className="scanner-heading-group">
-              <h2 className="scanner-main-title">ALTCOIN SCANNER V9</h2>
-              <span className="scanner-version-badge">RANKING ENGINE {SCANNER_VERSION.toUpperCase()}</span>
-              <DataOriginBadge origin="history" label="LỊCH SỬ + SNAPSHOT NGÀY" compact />
+              <h2 className="scanner-main-title">Altcoin Scanner {SCANNER_VERSION}</h2>
+              <DataOriginBadge origin="history" label="Lịch sử + Snapshot ngày" compact />
             </div>
           </div>
-          <p className="scanner-subtitle text-muted">
-            Xếp hạng 50 Altcoin thanh khoản Spot cao nhất từ 4 Trụ Cột: RS (40%), Dòng Tiền (25%), Fundamentals (25%), Thanh Khoản (10%).
+          <p className="scanner-subtitle">
+            Xếp hạng 50 Altcoin thanh khoản Spot cao nhất từ 4 trụ cột: RS (40%), Dòng tiền (25%), Fundamentals (25%) và Thanh khoản (10%).
           </p>
-          <DataOriginLegend compact style={{ marginTop: '6px' }} />
         </div>
 
         <div className="scanner-header-right">
           {/* Snapshot Date Selector */}
           <div className="scanner-control-group">
-            <label className="text-xs text-muted flex items-center">
-              <Clock size={12} className="mr-1" /> Snapshot:
+            <label className="text-xs text-muted flex items-center" style={{ gap: '4px' }}>
+              <Clock size={13} /> Snapshot:
             </label>
             <select
-              className="scanner-select font-mono"
+              className="scanner-select"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
             >
@@ -680,11 +675,12 @@ export default function ScannerTab() {
           </div>
 
           {/* Window Selector */}
-          <div className="scanner-window-pill-group">
+          <div className="segmented-control">
             {WINDOWS.map(winKey => (
               <button
+                type="button"
                 key={winKey}
-                className={`scanner-win-btn ${selectedWindow === winKey ? 'is-active' : ''}`}
+                className={`segmented-btn ${selectedWindow === winKey ? 'is-active' : ''}`}
                 onClick={() => setSelectedWindow(winKey)}
               >
                 {WINDOW_LABELS[winKey]}
@@ -695,35 +691,39 @@ export default function ScannerTab() {
           {/* Actions */}
           <div className="scanner-actions-row">
             <button
-              className="scanner-btn-secondary"
+              type="button"
+              className="btn-header-secondary"
               onClick={() => setIsDrawerOpen(true)}
               title="Xem phương pháp luận"
             >
-              <Info size={14} className="mr-1" /> Phương Pháp Luận
+              <Info size={14} /> <span>Phương pháp luận</span>
             </button>
 
             <button
-              className="scanner-btn-secondary"
+              type="button"
+              className="btn-header-secondary"
               onClick={handleExportCsv}
               title="Xuất CSV"
             >
-              <Download size={14} className="mr-1" /> CSV
+              <Download size={14} /> <span>CSV</span>
             </button>
 
             <button
-              className="scanner-btn-secondary"
+              type="button"
+              className="btn-header-secondary"
               onClick={handleExportJson}
               title="Xuất JSON"
             >
-              <Download size={14} className="mr-1" /> JSON
+              <Download size={14} /> <span>JSON</span>
             </button>
 
             <button
-              className={`scanner-refresh-btn ${isLoading ? 'is-loading' : ''}`}
+              type="button"
+              className={`btn-header-secondary ${isLoading ? 'is-loading' : ''}`}
               onClick={handleRefresh}
               title="Làm mới snapshot"
             >
-              <RefreshCw size={14} />
+              <RefreshCw size={14} className={isLoading ? 'spinning' : ''} />
             </button>
           </div>
         </div>

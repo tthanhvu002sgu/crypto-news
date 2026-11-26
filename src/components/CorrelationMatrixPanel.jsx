@@ -81,170 +81,61 @@ export default function CorrelationMatrixPanel({ moduleId = 'dash_correlation_ma
   const btcMatrix = matrixResult?.matrix?.BTC || {};
 
   return (
-    <div
-      className="macro-card glass-panel"
-      style={{
-        borderRadius: '8px',
-        padding: '16px',
-        marginBottom: '16px',
-        border: '1px solid var(--border-panel)',
-        background: 'var(--bg-card)',
-      }}
-    >
+    <div className="macro-card glass-panel panel-padded">
       {/* Panel Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '10px',
-          marginBottom: '14px',
-          borderBottom: '1px solid var(--border-panel)',
-          paddingBottom: '10px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <h3
-            className="font-mono"
-            style={{
-              margin: 0,
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: 'var(--text-contrast)',
-            }}
-          >
-            <Activity size={16} className="text-cyan-400" />
-            <span>MACRO CORRELATION MATRIX</span>
+      <div className="panel-top-bar">
+        <div className="panel-title-group">
+          <h3 className="chart-title" style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <Activity size={17} style={{ color: 'var(--color-accent)' }} />
+            <span>Ma trận tương quan vĩ mô</span>
           </h3>
-          <DataOriginBadge origin="history" label={`LỊCH SỬ ${windowDays}D`} compact />
-          <span
-            className="font-mono text-slate-400"
-            style={{
-              fontSize: '0.62rem',
-              background: 'var(--bg-slate-900)',
-              border: '1px solid var(--border-panel)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-            }}
-          >
-            ROLLING {windowDays}D · INNER-JOIN SESSIONS
-          </span>
+          <DataOriginBadge origin="history" label={`Lịch sử ${windowDays}d`} compact />
         </div>
 
         {/* Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Timeframe Toggle */}
-          <div
-            style={{
-              display: 'inline-flex',
-              background: 'var(--bg-slate-900)',
-              borderRadius: '4px',
-              border: '1px solid var(--border-panel)',
-              overflow: 'hidden',
-            }}
-          >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="segmented-control">
             <button
               type="button"
-              className="font-mono"
+              className={`segmented-btn ${windowDays === 30 ? 'is-active' : ''}`}
               onClick={() => setWindowDays(30)}
-              style={{
-                fontSize: '0.65rem',
-                padding: '3px 8px',
-                border: 'none',
-                cursor: 'pointer',
-                background: windowDays === 30 ? 'var(--color-emerald-500, #10B981)' : 'transparent',
-                color: windowDays === 30 ? '#FFFFFF' : 'var(--text-slate-400)',
-                fontWeight: windowDays === 30 ? 700 : 500,
-              }}
             >
               30D
             </button>
             <button
               type="button"
-              className="font-mono"
+              className={`segmented-btn ${windowDays === 90 ? 'is-active' : ''}`}
               onClick={() => setWindowDays(90)}
-              style={{
-                fontSize: '0.65rem',
-                padding: '3px 8px',
-                border: 'none',
-                cursor: 'pointer',
-                background: windowDays === 90 ? 'var(--color-emerald-500, #10B981)' : 'transparent',
-                color: windowDays === 90 ? '#FFFFFF' : 'var(--text-slate-400)',
-                fontWeight: windowDays === 90 ? 700 : 500,
-              }}
             >
               90D
             </button>
           </div>
 
-          {/* View Mode Toggle */}
-          <div
-            style={{
-              display: 'inline-flex',
-              background: 'var(--bg-slate-900)',
-              borderRadius: '4px',
-              border: '1px solid var(--border-panel)',
-              overflow: 'hidden',
-            }}
-          >
+          <div className="segmented-control">
             <button
               type="button"
-              className="font-mono"
+              className={`segmented-btn ${viewMode === 'focused' ? 'is-active' : ''}`}
               onClick={() => setViewMode('focused')}
-              style={{
-                fontSize: '0.65rem',
-                padding: '3px 8px',
-                border: 'none',
-                cursor: 'pointer',
-                background: viewMode === 'focused' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                color: viewMode === 'focused' ? '#38BDF8' : 'var(--text-slate-400)',
-                fontWeight: viewMode === 'focused' ? 700 : 500,
-              }}
             >
               Crypto vs Macro (3×4)
             </button>
             <button
               type="button"
-              className="font-mono"
+              className={`segmented-btn ${viewMode === 'full' ? 'is-active' : ''}`}
               onClick={() => setViewMode('full')}
-              style={{
-                fontSize: '0.65rem',
-                padding: '3px 8px',
-                border: 'none',
-                cursor: 'pointer',
-                background: viewMode === 'full' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                color: viewMode === 'full' ? '#38BDF8' : 'var(--text-slate-400)',
-                fontWeight: viewMode === 'full' ? 700 : 500,
-              }}
             >
               Toàn bộ (7×7)
             </button>
           </div>
 
-          {/* Sync Button */}
           <button
             type="button"
             title="Làm mới chuỗi dữ liệu liên tài sản"
             onClick={() => loadData(true)}
             disabled={loading || refreshing}
-            className="font-mono text-slate-400 hover:text-slate-200"
-            style={{
-              background: 'var(--bg-slate-900)',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '4px',
-              padding: '4px 8px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              cursor: 'pointer',
-              fontSize: '0.65rem',
-            }}
+            className="btn-header-secondary"
           >
-            <RefreshCw size={12} className={refreshing ? 'spin-animation' : ''} />
+            <RefreshCw size={13} className={refreshing ? 'spinning' : ''} />
             <span>Sync</span>
           </button>
 
@@ -267,49 +158,23 @@ export default function CorrelationMatrixPanel({ moduleId = 'dash_correlation_ma
 
       {matrixResult && (
         <>
-          {/* BTC Macro Regime Quick Badges */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-              gap: '8px',
-              marginBottom: '14px',
-            }}
-          >
+          {/* BTC Macro Regime Quick Summary (Hairline Grid) */}
+          <div className="hairline-bento-grid" style={{ marginBottom: '16px' }}>
             {MACRO_ASSETS.map((asset) => {
               const r = btcMatrix[asset];
               const colors = getCorrelationColor(r);
               const info = ASSET_INFO[asset];
 
               return (
-                <div
-                  key={asset}
-                  style={{
-                    background: 'var(--bg-slate-950)',
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: '6px',
-                    padding: '8px 10px',
-                  }}
-                >
+                <div key={asset} className="hairline-cell">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                    <span className="font-mono text-slate-400" style={{ fontSize: '0.58rem', letterSpacing: '0.04em' }}>
-                      BTC / {asset}
-                    </span>
-                    <span className="font-mono text-slate-500" style={{ fontSize: '0.52rem' }}>
-                      {info.tag}
-                    </span>
+                    <span className="hairline-cell-label">BTC / {asset}</span>
+                    <span className="text-slate-500" style={{ fontSize: 'var(--text-sm)' }}>{info.label}</span>
                   </div>
-                  <div
-                    className="font-mono"
-                    style={{
-                      fontSize: '1.05rem',
-                      fontWeight: 700,
-                      color: colors.text,
-                    }}
-                  >
+                  <div className="hairline-cell-val" style={{ color: colors.text }}>
                     {formatCorrelation(r)}
                   </div>
-                  <div className="font-mono text-slate-400" style={{ fontSize: '0.55rem', marginTop: '2px' }}>
+                  <div className="hairline-cell-sub text-slate-400">
                     {r >= 0.5 ? 'Tương quan dương cao' : r <= -0.5 ? 'Nghịch biến mạnh' : Math.abs(r || 0) < 0.2 ? 'Phi tương quan' : 'Tương quan vừa'}
                   </div>
                 </div>

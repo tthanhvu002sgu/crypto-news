@@ -136,39 +136,40 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
       : 'Trung tính';
 
   return (
-    <div className="glass-panel" style={{ padding: '16px 20px' }}>
+    <div className="glass-panel panel-padded">
       {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <h3 className="chart-title font-mono text-emerald" style={{ margin: 0, fontSize: '0.95rem' }}>
-            <span className="dot dot-emerald" /> OPTIONS REGIME — {currency} (DERIBIT)
+      <div className="panel-top-bar">
+        <div className="panel-title-group">
+          <h3 className="chart-title" style={{ margin: 0 }}>
+            Options Regime · {currency} (Deribit)
           </h3>
-          <DataOriginBadge origin="snapshot" label="TỨC THỜI (DERIBIT)" compact />
+          <DataOriginBadge origin="snapshot" label="Tức thời" compact />
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {/* Asset Toggle (BTC / ETH) */}
-          <div className="etf-chart-toggle font-mono">
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="segmented-control">
             <button
+              type="button"
               onClick={() => handleCurrencyChange('BTC')}
-              className={`toggle-btn ${currency === 'BTC' ? 'active' : ''}`}
+              className={`segmented-btn ${currency === 'BTC' ? 'is-active' : ''}`}
             >
               BTC
             </button>
             <button
+              type="button"
               onClick={() => handleCurrencyChange('ETH')}
-              className={`toggle-btn ${currency === 'ETH' ? 'active' : ''}`}
+              className={`segmented-btn ${currency === 'ETH' ? 'is-active' : ''}`}
             >
               ETH
             </button>
           </div>
 
-          {/* DTE Toggle */}
-          <div className="etf-chart-toggle font-mono">
+          <div className="segmented-control">
             {DTE_OPTIONS.map(opt => (
               <button
+                type="button"
                 key={opt.label}
                 onClick={() => setDteFilter(opt.value)}
-                className={`toggle-btn ${dteFilter === opt.value ? 'active' : ''}`}
+                className={`segmented-btn ${dteFilter === opt.value ? 'is-active' : ''}`}
               >
                 {opt.label}
               </button>
@@ -180,28 +181,20 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
 
       {/* ── Loading / Error States ── */}
       {loading && !chain && (
-        <div className="chart-empty font-mono" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: '0.7rem' }}>
+        <div className="chart-empty" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-slate-400)', fontSize: 'var(--text-body)' }}>
           Đang tải dữ liệu Options từ Deribit...
         </div>
       )}
 
       {error && !chain && (
-        <div className="chart-empty font-mono" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-rose-400)', fontSize: '0.7rem' }}>
-          <div style={{ marginBottom: '8px' }}>
+        <div className="chart-empty" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-rose-400)', fontSize: 'var(--text-body)' }}>
+          <div style={{ marginBottom: '10px' }}>
             {error.startsWith('Không') || error.startsWith('Lỗi') ? error : `Lỗi kết nối Deribit: ${error}`}
           </div>
           <button
             type="button"
             onClick={() => loadData(true)}
-            style={{
-              padding: '4px 12px',
-              fontSize: '0.65rem',
-              background: 'transparent',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '4px',
-              color: 'var(--text-slate-300)',
-              cursor: 'pointer'
-            }}
+            className="btn-header-secondary"
           >
             Thử lại
           </button>
@@ -209,20 +202,12 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
       )}
 
       {!loading && !error && !chain && (
-        <div className="chart-empty font-mono" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-rose-400)', fontSize: '0.7rem' }}>
-          <div style={{ marginBottom: '8px' }}>Không có dữ liệu Options từ Deribit</div>
+        <div className="chart-empty" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-rose-400)', fontSize: 'var(--text-body)' }}>
+          <div style={{ marginBottom: '10px' }}>Không có dữ liệu Options từ Deribit</div>
           <button
             type="button"
             onClick={() => loadData(true)}
-            style={{
-              padding: '4px 12px',
-              fontSize: '0.65rem',
-              background: 'transparent',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '4px',
-              color: 'var(--text-slate-300)',
-              cursor: 'pointer'
-            }}
+            className="btn-header-secondary"
           >
             Thử lại
           </button>
@@ -231,107 +216,62 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
 
       {filtered && (
         <>
-          {/* ── Bento Summary: 4 Key Metrics + Regime Badge ── */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
-            gap: '10px',
-            marginBottom: '14px'
-          }}>
-            {/* Call Wall */}
-            <div style={{
-              background: 'var(--bg-slate-950)',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '6px',
-              padding: '10px 12px'
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>CALL WALL (Khang cu)</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-rose-400)' }}>
+          {/* ── Hairline Summary Grid: 6 Key Metrics ── */}
+          <div className="hairline-bento-grid" style={{ marginBottom: '16px' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">Call Wall (Kháng cự)</div>
+              <div className="hairline-cell-val text-rose">
                 {filtered.callWall?.strike != null ? fmtStrike(filtered.callWall.strike) : '---'}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
+              <div className="hairline-cell-sub text-slate-400">
                 {filtered.callWall?.oi != null ? `OI: ${filtered.callWall.oi.toLocaleString()} ${currency}` : 'N/A'}
               </div>
             </div>
 
-            {/* Put Wall */}
-            <div style={{
-              background: 'var(--bg-slate-950)',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '6px',
-              padding: '10px 12px'
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>PUT WALL (Ho tro)</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-emerald-400)' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">Put Wall (Hỗ trợ)</div>
+              <div className="hairline-cell-val text-emerald">
                 {filtered.putWall?.strike != null ? fmtStrike(filtered.putWall.strike) : '---'}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
+              <div className="hairline-cell-sub text-slate-400">
                 {filtered.putWall?.oi != null ? `OI: ${filtered.putWall.oi.toLocaleString()} ${currency}` : 'N/A'}
               </div>
             </div>
 
-            {/* Max Pain */}
-            <div style={{
-              background: 'var(--bg-slate-950)',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '6px',
-              padding: '10px 12px'
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>MAX PAIN (Luc hut dao han)</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-amber-400)' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">Max Pain</div>
+              <div className="hairline-cell-val text-amber">
                 {filtered.maxPain?.maxPainPrice != null ? fmtStrike(filtered.maxPain.maxPainPrice) : '---'}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                {filtered.meta?.underlyingPrice
-                  ? `Spot: ${fmtStrike(filtered.meta.underlyingPrice)}`
-                  : ''}
+              <div className="hairline-cell-sub text-slate-400">
+                {filtered.meta?.underlyingPrice ? `Spot: ${fmtStrike(filtered.meta.underlyingPrice)}` : 'Đáo hạn'}
               </div>
             </div>
 
-            {/* GEX Flip */}
-            <div style={{
-              background: 'var(--bg-slate-950)',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '6px',
-              padding: '10px 12px'
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>GEX FLIP (Ranh gioi bien dong)</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--color-cyan-400)' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">GEX Flip</div>
+              <div className="hairline-cell-val" style={{ color: 'var(--color-cyan-400)' }}>
                 {filtered.gexFlipPrice != null ? fmtStrike(Math.round(filtered.gexFlipPrice)) : '---'}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                Zero Gamma Level
-              </div>
+              <div className="hairline-cell-sub text-slate-400">Zero Gamma Level</div>
             </div>
 
-            {/* PCR */}
-            <div style={{
-              background: 'var(--bg-slate-950)',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '6px',
-              padding: '10px 12px'
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>PUT/CALL RATIO</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: filtered?.pcr?.pcr > 1.0 ? 'var(--color-rose-400)' : filtered?.pcr?.pcr < 0.7 ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">Put/Call Ratio</div>
+              <div className="hairline-cell-val" style={{ color: filtered?.pcr?.pcr > 1.0 ? 'var(--color-rose-400)' : filtered?.pcr?.pcr < 0.7 ? 'var(--color-emerald-400)' : 'var(--text-contrast)' }}>
                 {filtered?.pcr?.pcr != null ? filtered.pcr.pcr.toFixed(2) : '---'}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: 'var(--text-slate-400)' }}>
-                {filtered?.pcr?.pcr > 1.2 ? 'Hedging cao' : filtered?.pcr?.pcr < 0.6 ? 'Bullish skew' : 'Can bang'}
+              <div className="hairline-cell-sub text-slate-400">
+                {filtered?.pcr?.pcr > 1.2 ? 'Hedging cao' : filtered?.pcr?.pcr < 0.6 ? 'Bullish skew' : 'Cân bằng'}
               </div>
             </div>
 
-            {/* Gamma Regime Badge */}
-            <div style={{
-              background: 'var(--bg-slate-950)',
-              border: `1px solid ${regimeColor}`,
-              borderRadius: '6px',
-              padding: '10px 12px'
-            }}>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-slate-400)', marginBottom: '4px' }}>GAMMA REGIME</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: regimeColor, letterSpacing: '0.04em' }}>
-                {regime?.regime === 'POSITIVE_GAMMA' ? '+GEX STICKY' : regime?.regime === 'NEGATIVE_GAMMA' ? '-GEX VOLATILE' : 'NEUTRAL'}
+            <div className="hairline-cell">
+              <div className="hairline-cell-label">Gamma Regime</div>
+              <div className="hairline-cell-val" style={{ color: regimeColor }}>
+                {regime?.regime === 'POSITIVE_GAMMA' ? '+GEX Sticky' : regime?.regime === 'NEGATIVE_GAMMA' ? '-GEX Volatile' : 'Trung tính'}
               </div>
-              <div style={{ fontSize: '0.6rem', marginTop: '2px', color: regimeColor, opacity: 0.8 }}>
+              <div className="hairline-cell-sub" style={{ color: regimeColor }}>
                 {regimeLabelVi}
               </div>
             </div>
@@ -339,64 +279,31 @@ export default function OptionsRegimePanel({ moduleId = 'dash_options_regime' })
 
           {/* ── ASP-100 Options Desk Brief ── */}
           {filtered.narrative && (
-            <div style={{
-              background: 'var(--bg-slate-950)',
-              border: '1px solid var(--border-panel)',
-              borderRadius: '6px',
-              padding: '12px 14px',
-              marginBottom: '14px',
-              position: 'relative'
-            }}>
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.8rem' }}>🧠</span>
-                  <span className="font-mono" style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-amber-400)', letterSpacing: '0.04em' }}>
-                    DIỄN GIẢI OPTIONS DESK (ASP-100)
+            <div className="options-desk-brief">
+              <div className="panel-top-bar" style={{ marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 'var(--text-body)', fontWeight: 600, color: 'var(--color-accent)' }}>
+                    Diễn giải Options Desk (ASP-100)
                   </span>
-                  <span className="font-mono" style={{
-                    fontSize: '0.55rem',
-                    padding: '1px 6px',
-                    borderRadius: '3px',
+                  <span style={{
+                    fontSize: 'var(--text-sm)',
                     fontWeight: 600,
-                    background: filtered.narrative.badgeType === 'positive'
-                      ? 'rgba(16, 185, 129, 0.15)'
-                      : filtered.narrative.badgeType === 'negative'
-                        ? 'rgba(244, 63, 94, 0.15)'
-                        : 'rgba(148, 163, 184, 0.15)',
                     color: filtered.narrative.badgeType === 'positive'
                       ? 'var(--color-emerald-400)'
                       : filtered.narrative.badgeType === 'negative'
                         ? 'var(--color-rose-400)'
                         : 'var(--text-slate-400)',
-                    border: `1px solid ${
-                      filtered.narrative.badgeType === 'positive'
-                        ? 'rgba(16, 185, 129, 0.3)'
-                        : filtered.narrative.badgeType === 'negative'
-                          ? 'rgba(244, 63, 94, 0.3)'
-                          : 'rgba(148, 163, 184, 0.3)'
-                    }`
                   }}>
-                    {filtered.narrative.badge}
+                    · {filtered.narrative.badge}
                   </span>
                 </div>
-                <span className="font-mono text-slate-500" style={{ fontSize: '0.55rem' }}>
-                  ~{filtered.narrative.wordCount} từ • Deribit {currency}
+                <span className="text-slate-400" style={{ fontSize: 'var(--text-sm)' }}>
+                  ~{filtered.narrative.wordCount} từ · Deribit {currency}
                 </span>
               </div>
 
-              {/* Executive 1-Liner Callout */}
-              <div style={{
-                background: 'rgba(245, 158, 11, 0.06)',
-                borderLeft: '3px solid var(--color-amber-400)',
-                padding: '7px 10px',
-                borderRadius: '0 4px 4px 0',
-                fontSize: '0.7rem',
-                lineHeight: 1.5,
-                color: 'var(--text-contrast)',
-                marginBottom: '10px'
-              }}>
-                <strong style={{ color: 'var(--color-amber-400)' }}>Tổng quan:</strong> {filtered.narrative.executive}
+              <div className="options-desk-executive">
+                <strong style={{ color: 'var(--color-accent)' }}>Tổng quan:</strong> {filtered.narrative.executive}
               </div>
 
               {/* 3 Trụ Cột ASP Grid */}

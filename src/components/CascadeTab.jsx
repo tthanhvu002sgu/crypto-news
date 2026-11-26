@@ -30,27 +30,27 @@ export default function CascadeTab({
       transition={{ duration: 0.4 }}
     >
       <div className="glass-panel panel-section">
-        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <h3 className="panel-title font-mono text-emerald" style={{ margin: 0 }}>
-              THÁC THANH KHOẢN — SƠ ĐỒ LƯU CHUYỂN DÒNG TIỀN VĨ MÔ
+        <div className="panel-top-bar">
+          <div className="panel-title-group">
+            <h3 className="chart-title" style={{ margin: 0 }}>
+              Thác thanh khoản vĩ mô
             </h3>
-            <DataOriginBadge origin="history" label="LỊCH SỬ API" compact />
+            <DataOriginBadge origin="history" label="Lịch sử API" compact />
           </div>
           <ModuleMenu moduleId="tab_cascade" />
         </div>
-        <p className="text-xs text-slate-400 mb-6" style={{ lineHeight: 1.7, textAlign: 'center' }}>
-          Tiền bắt đầu từ FED → chảy vào các thị trường theo thứ tự ưu tiên rủi ro. Sơ đồ minh họa phân bổ dòng tiền cơ sở.
+        <p className="text-xs text-slate-400" style={{ lineHeight: 1.6, marginBottom: '18px' }}>
+          Dòng tiền khởi nguồn từ FED và lưu chuyển qua các tầng tài sản theo thứ tự ưu tiên rủi ro.
         </p>
 
         <div className="cascade-flow">
           {[
             {
-              tier: 'TIER 0',
-              label: 'THƯỢNG NGUỒN VĨ MÔ',
+              tier: 'Tầng 0',
+              label: 'Thượng nguồn vĩ mô',
               desc: 'FED & Chu kỳ kinh tế',
-              status: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? '[🔴 RESTRICTIVE]' : '[🟢 ACCOMMODATIVE]') : '[🔴 RESTRICTIVE]',
-              statusColor: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? '#f43f5e' : '#10b981') : '#f43f5e',
+              status: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? 'Thắt chặt' : 'Nới lỏng') : 'Thắt chặt',
+              statusColor: data.fedFundsRate ? (data.fedFundsRate > 4.0 ? 'var(--color-rose-400)' : 'var(--color-emerald-400)') : 'var(--color-rose-400)',
               items: [
                 { k: 'Economic Cycle Phase', v: data.fedFundsRate > 4.0 ? (isPlausibleCpiYoY(data.cpi) && data.cpi > 3.5 ? 'Thắt chặt tiền tệ' : 'Lãi suất cao / Quan sát') : (data.fedFundsRate < 2.5 ? 'Nới lỏng tiền tệ' : 'Tăng trưởng kinh tế'), note: '4 giai đoạn dòng tiền' },
                 { k: 'Fed Funds Rate', v: data.fedFundsRate ? `${data.fedFundsRate}%` : '4.25–4.50%', note: 'Lãi suất điều hành' },
@@ -59,47 +59,47 @@ export default function CascadeTab({
                 { k: 'M2 Supply (Billion $)', v: data.m2Supply ? `$${fmt(data.m2Supply, 0)}` : '---', note: 'Tổng cung tiền M2' },
                 { k: 'US Net Liquidity (Billion $)', v: data.netLiquidity ? `$${fmt(data.netLiquidity, 0)}B` : '---', note: 'WALCL - TGA - RRP' },
               ],
-              color: '#6366f1',
+              color: 'var(--color-tier-0)',
             },
             {
-              tier: 'TIER 1',
-              label: 'CHI PHÍ VỐN & USD',
-              desc: 'Khóa van thanh khoản',
-              status: data.dxy > 103 ? '[🔴 TIGHTENING]' : '[🟢 EASING]',
-              statusColor: data.dxy > 103 ? '#f43f5e' : '#10b981',
+              tier: 'Tầng 1',
+              label: 'Chi phí vốn & USD',
+              desc: 'Van thanh khoản',
+              status: data.dxy > 103 ? 'Thắt chặt' : 'Nới lỏng',
+              statusColor: data.dxy > 103 ? 'var(--color-rose-400)' : 'var(--color-emerald-400)',
               items: [
                 { k: 'DXY (Dollar Index)', v: data.dxy ? fmt(data.dxy, 2) : '---', note: 'Sức mạnh USD' },
                 { k: '10Y Treasury Yield', v: data.tenYearYield ? `${data.tenYearYield}%` : '---', note: 'Lợi suất TP 10 năm' },
-                { k: 'VIX Volatility', v: data.vix ? `${fmt(data.vix.price, 2)}` : '---', note: 'Chỉ số hoảng loạn' },
+                { k: 'VIX Volatility', v: data.vix ? `${fmt(data.vix.price, 2)}` : '---', note: 'Chỉ số biến động' },
               ],
-              color: '#f59e0b',
+              color: 'var(--color-tier-1)',
             },
             {
-              tier: 'TIER 2',
-              label: 'TÀI SẢN RỦI RO',
+              tier: 'Tầng 2',
+              label: 'Tài sản rủi ro',
               desc: 'Dòng vốn Equity & Credit',
-              status: data.sp500?.changePercent > 0 ? '[🟢 EXPANDING]' : '[🔴 CONTRACTING]',
-              statusColor: data.sp500?.changePercent > 0 ? '#10b981' : '#f43f5e',
+              status: data.sp500?.changePercent > 0 ? 'Mở rộng' : 'Thu hẹp',
+              statusColor: data.sp500?.changePercent > 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
               items: [
                 { k: 'S&P 500 Index', v: data.sp500 ? `${fmt(data.sp500.price, 2)} (${data.sp500.changePercent >= 0 ? '+' : ''}${data.sp500.changePercent.toFixed(2)}%)` : '---', note: 'Chứng khoán Mỹ' },
                 { k: 'Nasdaq 100 Index', v: data.qqq ? `${fmt(data.qqq.price, 2)} (${data.qqq.changePercent >= 0 ? '+' : ''}${data.qqq.changePercent.toFixed(2)}%)` : '---', note: 'Cổ phiếu công nghệ' },
-                { k: 'High Yield Credit', v: data.highYield ? `${data.highYield}%` : '---', note: 'Rủi ro vỡ nợ' },
+                { k: 'High Yield Credit', v: data.highYield ? `${data.highYield}%` : '---', note: 'Rủi ro tín dụng' },
               ],
-              color: '#10b981',
+              color: 'var(--color-tier-2)',
             },
             {
-              tier: 'TIER 3',
-              label: 'HẠ NGUỒN CRYPTO',
+              tier: 'Tầng 3',
+              label: 'Hạ nguồn Crypto',
               desc: 'On-chain & Phái sinh',
-              status: btcDisplay?.change >= 0 ? '[🟢 INFLOW]' : '[🔴 OUTFLOW]',
-              statusColor: btcDisplay?.change >= 0 ? '#10b981' : '#f43f5e',
+              status: btcDisplay?.change >= 0 ? 'Dòng tiền vào' : 'Dòng tiền ra',
+              statusColor: btcDisplay?.change >= 0 ? 'var(--color-emerald-400)' : 'var(--color-rose-400)',
               items: [
                 { k: 'Stablecoin Supply', v: data.stablecoins ? fmtB(data.stablecoins.total) : '---', note: 'Sức mua cơ sở' },
                 { k: 'BTC Dominance', v: data.globalData?.btcDominance ? `${data.globalData.btcDominance}%` : '---', note: 'Dòng vốn Altcoin' },
                 { k: 'Funding Rate', v: fund != null ? `${(fund * 100).toFixed(4)}%` : '---', note: 'Lệch pha phái sinh' },
                 { k: 'MVRV Ratio', v: data.onChainMetrics?.mvrv || '---', note: 'Định giá On-chain' },
               ],
-              color: '#f43f5e',
+              color: 'var(--color-tier-3)',
             },
           ].map((tier, idx) => (
             <Fragment key={idx}>
