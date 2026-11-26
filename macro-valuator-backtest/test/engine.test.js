@@ -179,3 +179,18 @@ test('math_v3 SOP on BTCUSDT 1W: preserves exact 20 GB bars and detects ATH-only
     assert.equal(row.underwater, 0);
   }
 });
+
+test('LOGIC-001 & LOGIC-003 regressions: dynamic isClosed parity and non-positive OHLC rejection', () => {
+  const nowMs = Date.UTC(2026, 10, 26, 12, 0, 0);
+  const raw = [
+    { time: '2026-11-09T00:00:00Z', open: 0, high: 0, low: 0, close: 0, volume: 10 },
+    { time: '2026-11-16T00:00:00Z', open: -5, high: 10, low: -10, close: 5, volume: 10 },
+    { time: '2026-11-16T00:00:00Z', open: 60000, high: 65000, low: 55000, close: 61000, volume: -100, closeTime: nowMs - 1000, isClosed: false },
+    { time: '2026-11-23T00:00:00Z', open: 61000, high: 62000, low: 59000, close: 60500, volume: 500, closeTime: nowMs + 60000, isClosed: true },
+  ];
+  const normalized = normalizeMacroCandles(raw, nowMs);
+  assert.equal(normalized.length, 2);
+  assert.equal(normalized[0].isClosed, true);
+  assert.equal(normalized[0].volume, 0);
+  assert.equal(normalized[1].isClosed, false);
+});

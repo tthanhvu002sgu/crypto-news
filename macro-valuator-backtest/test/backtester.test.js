@@ -7,6 +7,7 @@ import {
   computeForwardStudy,
   exportBacktestArtifacts,
   runBacktest,
+  simulateGreenBubbleDcaSuite,
   simulateTargetExposureStrategy,
 } from '../src/backtester.js';
 import { loadCandlesFromFile, saveCandlesToFile } from '../src/dataLoader.js';
@@ -118,6 +119,65 @@ test('runBacktest end-to-end and artifact export', async () => {
   assert.ok(files.includes('summary.json'));
   assert.ok(files.includes('series.csv'));
   assert.ok(files.includes('trades.csv'));
+
+  const exportedSummary = JSON.parse(await fs.readFile(path.join(tmpDir, 'summary.json'), 'utf8'));
+  assert.ok(Array.isArray(exportedSummary.greenBubbleDca));
+  assert.equal(exportedSummary.greenBubbleDca.length, report.greenBubbleDca.length);
+
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test('LOGIC-002 & LOGIC-004 regressions: timeframe-aware APY compounding and h=1 forward study in next_open', () => {
+  // 1. Daily 365-bar reserve at 4% APY should compound to ~$372,400 (not ~$420,000 from 1/52 bug)
+  const dailySeries = Array.from({ length: 366 }, (_, i) => ({
+    time: new Date(Date.UTC(2025, 0, 1 + i)),
+    open: 100,
+    high: 100,
+    low: 100,
+    close: 100,
+    composite: 0,
+    divergence: false,
+  }));
+  const suiteD = simulateGreenBubbleDcaSuite({
+    series: dailySeries,
+    startIndex: 0,
+    endIndex: 365,
+    dcaBaseAmount: 1000,
+    cashYieldApy: 0.04,
+    timeframe: 'D',
+  });
+  assert.ok(suiteD[0].cashReserve > 371500 && suiteD[0].cashReserve < 373500, `Unexpected daily reserve: ${suiteD[0].cashReserve}`);
+
+  // 2. computeForwardStudy supports h=1 in next_open (bar 1 open -> bar 1 close)
+  const tiny = [
+    { time: new Date('2025-01-01'), open: 100, high: 105, low: 95, close: 100, decision: 'STRONG ACCUM' },
+    { time: new Date('2025-01-08'), open: 100, high: 120, low: 90, close: 115, decision: 'NEUTRAL' },
+  ];
+  const study = computeForwardStudy(tiny, {
+    startIndex: 0,
+    endIndex: 0,
+    horizons: [1],
+    executionMode: 'next_open',
+  });
+  assert.equal(study[0].horizons[1].count, 1);
+  assert.ok(Math.abs(study[0].horizons[1].meanPct - 15) < 1e-9);
+  assert.ok(Math.abs(study[0].horizons[1].meanMaePct - (-10)) < 1e-9);
+});
+
+test('LOGIC-001 regression: loadCandlesFromFile respects future closeTime on raw Binance kline arrays', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mv-raw-'));
+  const futureClose = Date.now() + 3600 * 1000;
+  const pastClose = Date.now() - 3600 * 1000;
+  const rawFile = path.join(tmpDir, 'raw.json');
+  await fs.writeFile(rawFile, JSON.stringify([
+    [pastClose - 60000, '100', '110', '95', '105', '50', pastClose],
+    [futureClose - 60000, '105', '112', '100', '108', '20', futureClose],
+  ]), 'utf8');
+
+  const loaded = await loadCandlesFromFile(rawFile);
+  assert.equal(loaded.length, 2);
+  assert.equal(loaded[0].isClosed, true);
+  assert.equal(loaded[1].isClosed, false);
 
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

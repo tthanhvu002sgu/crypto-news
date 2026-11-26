@@ -85,3 +85,23 @@ test('fetchCached falls back to in-memory cache when payload exceeds localStorag
   assert.equal(readCacheValue('huge_feed_test')?.blob.length, 460_000);
   assert.equal(getCacheMetadata('huge_feed_test', 60_000).isFresh, true);
 });
+
+test('LOGIC-002 regression: fetchCached preserves Array type on stale fallback and does not overwrite valid cache on error', async () => {
+  const storage = createQuotaStorage(10_000_000);
+  globalThis.localStorage = storage;
+
+  const seed = [{ time: 1, close: 100 }, { time: 2, close: 200 }];
+  const first = await fetchCached('array_stale_test', async () => seed, 1);
+  assert.ok(Array.isArray(first));
+  assert.equal(first.length, 2);
+
+  await new Promise((resolve) => setTimeout(resolve, 15));
+
+  const fallback = await fetchCached('array_stale_test', async () => {
+    throw new Error('Binance 429');
+  }, 1);
+
+  assert.ok(Array.isArray(fallback), 'Stale fallback for Array cache must remain an Array');
+  assert.equal(fallback.length, 2);
+  assert.equal(fallback[1].close, 200);
+});

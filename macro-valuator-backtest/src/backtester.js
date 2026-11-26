@@ -84,7 +84,8 @@ export function computeForwardStudy(series, {
 
     for (const h of horizons) {
       const targetIdx = i + h;
-      if (targetIdx >= series.length || targetIdx <= entryIdx) continue;
+      const invalidHorizon = executionMode === 'next_open' ? targetIdx < entryIdx : targetIdx <= entryIdx;
+      if (targetIdx >= series.length || invalidHorizon) continue;
       const exitPrice = series[targetIdx].close;
       let minLow = Infinity;
       for (let k = entryIdx; k <= targetIdx; k += 1) {
@@ -481,9 +482,10 @@ export function simulateGreenBubbleDcaSuite({
   feeBps = 10,
   executionMode = 'next_open',
   cashYieldApy = 0,
+  timeframe = 'W',
 }) {
   const feeRate = feeBps / 10000;
-  const weeklyYield = cashYieldApy > 0 ? Math.pow(1 + cashYieldApy, 1 / 52) - 1 : 0;
+  const barYield = cashYieldApy > 0 ? Math.pow(1 + cashYieldApy, 1 / barsPerYear(timeframe)) - 1 : 0;
   const isGB = (row) => row.composite >= 3 && !row.divergence;
   const isRB = (row) => row.composite <= -3 && !row.divergence;
 
@@ -582,7 +584,7 @@ export function simulateGreenBubbleDcaSuite({
       const execPrice = executionMode === 'next_open' ? series[execIdx].open : series[execIdx].close;
       if (!(execPrice > 0)) continue;
 
-      reserve = reserve * (1 + weeklyYield) + dcaBaseAmount;
+      reserve = reserve * (1 + barYield) + dcaBaseAmount;
       totalBudget += dcaBaseAmount;
 
       const act = mode.decide({ row: series[i], reserve, units, state }) || {};
@@ -801,6 +803,7 @@ export function runBacktest(candles, options = {}) {
     dcaBaseAmount,
     feeBps,
     executionMode,
+    timeframe: tf,
   });
 
   return {
@@ -842,6 +845,7 @@ export async function exportBacktestArtifacts(outDir, report) {
     currentSnapshot: report.currentSnapshot,
     forwardStudies: report.forwardStudies,
     dcaComparison: report.dcaComparison,
+    greenBubbleDca: report.greenBubbleDca,
     strategies: report.strategies.map((s) => ({
       name: s.name,
       description: s.description,

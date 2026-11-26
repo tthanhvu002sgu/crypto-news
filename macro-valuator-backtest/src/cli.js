@@ -57,6 +57,8 @@ function parseArgs(argv) {
   const args = {
     symbol: 'BTCUSDT',
     timeframe: MACRO_DASHBOARD_DEFAULTS.timeframe,
+    timeframeExplicit: false,
+    preset: null,
     limit: 10000,
     input: null,
     saveData: null,
@@ -74,6 +76,14 @@ function parseArgs(argv) {
     outDir: path.join(ROOT_DIR, 'outputs'),
     exportFiles: true,
     settings: {},
+  };
+
+  const parseFiniteArg = (flag, raw, { min = -Infinity } = {}) => {
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num < min) {
+      throw new Error(`Invalid numeric value for ${flag}: ${raw}`);
+    }
+    return num;
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -94,10 +104,11 @@ function parseArgs(argv) {
         break;
       case '--timeframe':
         args.timeframe = next();
+        args.timeframeExplicit = true;
         args.settings.timeframe = args.timeframe;
         break;
       case '--limit':
-        args.limit = Number(next());
+        args.limit = parseFiniteArg(flag, next(), { min: 2 });
         break;
       case '--input':
         args.input = path.resolve(next());
@@ -114,8 +125,7 @@ function parseArgs(argv) {
       case '--preset': {
         const preset = next().toLowerCase();
         if (preset !== 'sop') throw new Error(`Unknown preset: ${preset}`);
-        Object.assign(args.settings, MACRO_SOP_PRESET);
-        args.timeframe = MACRO_SOP_PRESET.timeframe;
+        args.preset = preset;
         break;
       }
       case '--engine-mode':
@@ -137,13 +147,13 @@ function parseArgs(argv) {
         args.settings.sigmaMethod = next();
         break;
       case '--long-lookback':
-        args.settings.longLookback = Number(next());
+        args.settings.longLookback = parseFiniteArg(flag, next(), { min: 2 });
         break;
       case '--short-lookback':
-        args.settings.shortLookback = Number(next());
+        args.settings.shortLookback = parseFiniteArg(flag, next(), { min: 2 });
         break;
       case '--percentile-lookback':
-        args.settings.percentileLookback = Number(next());
+        args.settings.percentileLookback = parseFiniteArg(flag, next(), { min: 2 });
         break;
       case '--no-dual':
         args.settings.useDualWindow = false;
@@ -158,7 +168,7 @@ function parseArgs(argv) {
         args.to = next();
         break;
       case '--warmup':
-        args.warmup = Number(next());
+        args.warmup = parseFiniteArg(flag, next(), { min: 0 });
         break;
       case '--include-unclosed':
         args.includeUnclosed = true;
@@ -167,10 +177,10 @@ function parseArgs(argv) {
         args.exec = next();
         break;
       case '--capital':
-        args.capital = Number(next());
+        args.capital = parseFiniteArg(flag, next(), { min: 1 });
         break;
       case '--fee-bps':
-        args.feeBps = Number(next());
+        args.feeBps = parseFiniteArg(flag, next(), { min: 0 });
         break;
       case '--horizons':
         args.horizons = next().split(',').map((v) => Number(v.trim())).filter((n) => Number.isFinite(n) && n > 0);
@@ -190,6 +200,13 @@ function parseArgs(argv) {
         break;
       default:
         throw new Error(`Unknown argument: ${flag}`);
+    }
+  }
+
+  if (args.preset === 'sop') {
+    args.settings = { ...MACRO_SOP_PRESET, ...args.settings };
+    if (!args.timeframeExplicit) {
+      args.timeframe = MACRO_SOP_PRESET.timeframe;
     }
   }
   return args;
@@ -267,7 +284,8 @@ async function main() {
   console.log(`Timeframe: ${meta.settings.timeframe} | Total Bars: ${meta.totalBars} | Warmup: ${meta.warmupBars} | Eval Bars: ${meta.evalBars}`);
   console.log(`Eval Window: ${meta.evalStartTime.slice(0, 10)} (${fmtUsd(meta.evalStartPrice)}) -> ${meta.evalEndTime.slice(0, 10)} (${fmtUsd(meta.evalEndPrice)})`);
   console.log(`Execution: ${meta.executionMode} | Fee: ${meta.feeBps} bps | Capital: ${fmtUsd(meta.initialCapital)}`);
-  console.log(`Settings: Engine=${meta.settings.engineMode}, Cost=${meta.settings.costMethod}, Weight=${meta.settings.weightScheme}, PnLZone=${meta.settings.zoneMethod}, ZMode=${meta.settings.zMode}, Sigma=${meta.settings.sigmaMethod}, Dual=${meta.settings.useDualWindow}, Hysteresis=${meta.settings.useHysteresis}`);
+  const scaleLabel = meta.settings.engineMode === 'math_v3' ? 'MAD 4Y + RV2Y' : meta.settings.sigmaMethod;
+  console.log(`Settings: Engine=${meta.settings.engineMode}, Cost=${meta.settings.costMethod}, Weight=${meta.settings.weightScheme}, PnLZone=${meta.settings.zoneMethod}, ZMode=${meta.settings.zMode}, Scale=${scaleLabel}, Dual=${meta.settings.useDualWindow}, Hysteresis=${meta.settings.useHysteresis}`);
 
   console.log('\n--- Latest Closed Bar Snapshot ---');
   console.log(

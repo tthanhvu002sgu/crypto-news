@@ -128,7 +128,7 @@ export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', req
   const targetLimit = Math.max(2, Math.min(Math.trunc(requestedLimit), 10000));
   const cacheKey = `btcMacroKlines_${symbol}_${interval}_${targetLimit}`;
 
-  return fetchCached(cacheKey, async () => {
+  const cached = await fetchCached(cacheKey, async () => {
     const rows = [];
     let endTime;
 
@@ -155,6 +155,8 @@ export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', req
         .sort((left, right) => Number(left[0]) - Number(right[0]))
         .slice(-targetLimit);
 
+      if (uniqueRows.length === 0) return null;
+
       return uniqueRows.map((row) => ({
         time: new Date(Number(row[0])),
         open: parseFloat(row[1]),
@@ -169,9 +171,11 @@ export const getBTCMacroKlines = async (symbol = 'BTCUSDT', timeframe = 'W', req
       }));
     } catch (error) {
       console.error(`[API] Macro Dashboard klines (${symbol}, ${interval}):`, error.message);
-      return [];
+      throw error;
     }
   }, 60 * 60 * 1000, null, null, force);
+
+  return Array.isArray(cached) ? cached : [];
 };
 
 /** Get CVD from the start of the local day using 5m klines */

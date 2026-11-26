@@ -23,7 +23,9 @@ export async function fetchBinanceKlines({
   force = false,
 } = {}) {
   const interval = INTERVAL_MAP[timeframe] || '1w';
-  const targetLimit = Math.max(2, Math.min(Math.trunc(limit), 10000));
+  const parsedLimit = Number(limit);
+  const safeLimit = Number.isFinite(parsedLimit) ? Math.trunc(parsedLimit) : 10000;
+  const targetLimit = Math.max(2, Math.min(safeLimit, 10000));
   const cacheFile = cacheDir
     ? path.join(cacheDir, `${symbol}_${interval}_${targetLimit}.json`)
     : null;
@@ -136,6 +138,7 @@ export async function loadCandlesFromFile(filePath) {
     }
     const mapped = list.map((row) => {
       if (Array.isArray(row)) {
+        const closeTime = row[6] != null ? Number(row[6]) : null;
         return {
           time: parseTimestamp(row[0]),
           open: Number(row[1]),
@@ -143,8 +146,8 @@ export async function loadCandlesFromFile(filePath) {
           low: Number(row[3]),
           close: Number(row[4]),
           volume: Number(row[5] ?? 0),
-          closeTime: row[6] != null ? Number(row[6]) : null,
-          isClosed: true,
+          closeTime,
+          ...(closeTime == null ? { isClosed: true } : {}),
         };
       }
       return {

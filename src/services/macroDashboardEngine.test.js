@@ -273,6 +273,16 @@ test('LOGIC-005 regression: CY-4 triggers at most once per cycle between Green B
   assert.equal(reEntryRb.cy4.alreadyTriggeredInCycle, true);
   assert.equal(reEntryRb.cy4.firstTriggerTime.toISOString().slice(0, 10), '2024-11-18');
 
+  // Post-RB neutral cooldown in same cycle: action must reflect already-triggered state (no contradiction)
+  const postRbNeutral = evaluateSopAction({
+    settings: MACRO_SOP_PRESET,
+    series: [...sameCycleSeries, mkRow('2025-01-06', 1)],
+  });
+  assert.equal(postRbNeutral.cy4.active, false);
+  assert.equal(postRbNeutral.cy4.alreadyTriggeredInCycle, true);
+  assert.ok(postRbNeutral.cy4.action.includes('2024-11-18'));
+  assert.ok(!postRbNeutral.cy4.action.includes('CHƯA KÍCH HOẠT'));
+
   // New Cycle 2: another GB resets CY-4 so RB3 triggers again
   const nextCycleSeries = [
     ...sameCycleSeries,
@@ -283,4 +293,14 @@ test('LOGIC-005 regression: CY-4 triggers at most once per cycle between Green B
   assert.equal(nextCycleRb.cy4.active, true);
   assert.equal(nextCycleRb.cy4.isFirstWeek, true);
   assert.equal(nextCycleRb.cy4.alreadyTriggeredInCycle, false);
+});
+
+test('LOGIC-003 regression: normalizeMacroCandles filters non-positive OHLC and clamps negative volume', () => {
+  const normalized = normalizeMacroCandles([
+    { time: '2026-11-09T00:00:00Z', open: 0, high: 0, low: 0, close: 0, volume: 10 },
+    { time: '2026-11-16T00:00:00Z', open: 100, high: 110, low: 95, close: 105, volume: -5 },
+  ]);
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0].close, 105);
+  assert.equal(normalized[0].volume, 0);
 });

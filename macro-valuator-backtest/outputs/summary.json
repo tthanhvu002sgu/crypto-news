@@ -1304,6 +1304,104 @@
       "roiOnDeployedPct": 287.05625842395307
     }
   },
+  "greenBubbleDca": [
+    {
+      "key": "gb_paced_3x",
+      "name": "GB Paced 3x ($3k/GB wk)",
+      "totalBudget": 443000,
+      "deployed": 38000,
+      "cashReserve": 405000,
+      "avgCost": 6423.23187494584,
+      "finalValue": 767481.2376899647,
+      "roiPct": 73.24632904965344,
+      "buyCount": 15,
+      "sellCount": 0
+    },
+    {
+      "key": "gb_paced_5x",
+      "name": "GB Paced 5x ($5k/GB wk)",
+      "totalBudget": 443000,
+      "deployed": 60000,
+      "cashReserve": 383000,
+      "avgCost": 6409.886040226195,
+      "finalValue": 956530.4460842287,
+      "roiPct": 115.92109392420514,
+      "buyCount": 15,
+      "sellCount": 0
+    },
+    {
+      "key": "gb_confirmed_2w_25pct",
+      "name": "GB Confirmed >=2w (25% Reserve)",
+      "totalBudget": 443000,
+      "deployed": 169934.4482421875,
+      "cashReserve": 273065.5517578125,
+      "avgCost": 12402.90843412545,
+      "finalValue": 1112551.485908152,
+      "roiPct": 151.14029027272056,
+      "buyCount": 9,
+      "sellCount": 0
+    },
+    {
+      "key": "gb_frac_25_rb_scale_25",
+      "name": "GB Frac 25% + RB Scale-Out 25%/wk",
+      "totalBudget": 443000,
+      "deployed": 423772.5688021458,
+      "cashReserve": 2949805.757634066,
+      "avgCost": null,
+      "finalValue": 2956063.8384631127,
+      "roiPct": 567.283033513118,
+      "buyCount": 15,
+      "sellCount": 38
+    },
+    {
+      "key": "gb_paced_5x_rb_scale_25",
+      "name": "GB Paced 5x + RB Scale-Out 25%/wk",
+      "totalBudget": 443000,
+      "deployed": 60000,
+      "cashReserve": 920733.4118770584,
+      "avgCost": null,
+      "finalValue": 921207.5714750694,
+      "roiPct": 107.94753306434974,
+      "buyCount": 15,
+      "sellCount": 38
+    },
+    {
+      "key": "gb_frac_50_cy4_ath",
+      "name": "GB Frac 50% + CY-4 Once/Cycle",
+      "totalBudget": 443000,
+      "deployed": 379687.88798055716,
+      "cashReserve": 1469370.217941256,
+      "avgCost": null,
+      "finalValue": 2234789.7293111477,
+      "roiPct": 404.46720751944645,
+      "buyCount": 15,
+      "sellCount": 2
+    },
+    {
+      "key": "gb_all_in_100",
+      "name": "GB-7: All-In 100% Reserve",
+      "totalBudget": 443000,
+      "deployed": 242000,
+      "cashReserve": 201000,
+      "avgCost": 11602.93710552294,
+      "finalValue": 1478917.9293268886,
+      "roiPct": 233.84151903541505,
+      "buyCount": 15,
+      "sellCount": 0
+    },
+    {
+      "key": "gb_all_in_100_cy4_ath",
+      "name": "GB-7: All-In 100% + CY-4 Once/Cycle",
+      "totalBudget": 443000,
+      "deployed": 396441.8576676758,
+      "cashReserve": 1528346.1597767554,
+      "avgCost": null,
+      "finalValue": 2333505.5322345616,
+      "roiPct": 426.7506844773277,
+      "buyCount": 15,
+      "sellCount": 2
+    }
+  ],
   "strategies": [
     {
       "name": "Buy & Hold",

@@ -875,7 +875,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
                   <div><span>Hiệu quả vốn</span><b>XIRR +24.2%/năm · Sharpe 0.89</b></div>
                   <div><span>Tại đỉnh 09/2025 ($123k)</span><b>ROI +252.8% · MaxDD -20.9% · Sharpe 1.37</b></div>
                   <div><span>Đa chu kỳ 8.3 năm (2018–2026)</span><b>Avg $12,502 · ROI +208.2% (+226.1% @ 4% APY) · Sharpe 0.87</b></div>
-                  <div><span>CY-4 (ATH-only RB · 1 lần/chu kỳ)</span><b>ROI +418.2% ($2,300,964 @ 4% APY) · 2 lần chốt đỉnh</b></div>
+                  <div><span>CY-4 (ATH-only RB · 1 lần/chu kỳ)</span><b>ROI +418.2% ($2,300,964) | +479.3% ($2,572,265 @ 4% APY) · 2 lần chốt đỉnh</b></div>
                 </div>
               </article>
 
@@ -899,7 +899,7 @@ export default function MacroDashboardCard({ livePrice, theme, moduleId = 'dash_
                   <div><span>Hiệu quả vốn</span><b>XIRR +23.6%/năm · Sharpe 0.88 · MaxDD -41.4%</b></div>
                   <div><span>Tại đỉnh 09/2025 ($123k)</span><b>ROI +243.6% · MaxDD -20.7% · Sharpe 1.36</b></div>
                   <div><span>Đa chu kỳ 8.3 năm (2018–2026)</span><b>Avg $12,868 · ROI +197.0% (+215.5% @ 4% APY) · Sharpe 0.89 (CY-4)</b></div>
-                  <div><span>CY-4 (ATH-only RB · 1 lần/chu kỳ)</span><b>ROI +396.4% ($2,203,904 @ 4% APY) · 2 lần chốt đỉnh</b></div>
+                  <div><span>CY-4 (ATH-only RB · 1 lần/chu kỳ)</span><b>ROI +396.4% ($2,203,904) | +456.3% ($2,470,059 @ 4% APY) · 2 lần chốt đỉnh</b></div>
                 </div>
               </article>
             </div>

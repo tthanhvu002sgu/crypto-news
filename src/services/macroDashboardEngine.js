@@ -284,17 +284,17 @@ export const normalizeMacroCandles = (candles, nowMs = Date.now()) => (Array.isA
       high: finite(candle.high),
       low: finite(candle.low),
       close: finite(candle.close),
-      volume: finite(candle.volume, 0),
+      volume: Math.max(0, finite(candle.volume, 0)),
       closeTime,
       isClosed: closeTime !== null ? closeTime < nowMs : candle.isClosed !== false,
     };
   })
   .filter((candle) => (
     !Number.isNaN(candle.time.getTime())
-    && candle.open !== null
-    && candle.high !== null
-    && candle.low !== null
-    && candle.close !== null
+    && candle.open > 0
+    && candle.high > 0
+    && candle.low > 0
+    && candle.close > 0
   ))
   .sort((left, right) => left.time - right.time);
 
@@ -317,11 +317,44 @@ export const applyLivePriceToMacroCandles = (candles, livePrice, nowMs = Date.no
   return rows;
 };
 
-const medianOf = (values) => {
-  if (values.length === 0) return 0;
-  const sorted = values.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? sorted[mid] : 0.5 * (sorted[mid - 1] + sorted[mid]);
+const quickselectInPlace = (arr, left, right, k) => {
+  let lo = left;
+  let hi = right;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (arr[mid] < arr[lo]) { const t = arr[lo]; arr[lo] = arr[mid]; arr[mid] = t; }
+    if (arr[hi] < arr[lo]) { const t = arr[lo]; arr[lo] = arr[hi]; arr[hi] = t; }
+    if (arr[mid] < arr[hi]) { const t = arr[mid]; arr[mid] = arr[hi]; arr[hi] = t; }
+    const pivot = arr[hi];
+    let i = lo;
+    let j = hi - 1;
+    while (true) {
+      while (i <= j && arr[i] < pivot) i += 1;
+      while (i <= j && arr[j] > pivot) j -= 1;
+      if (i >= j) break;
+      const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      i += 1;
+      j -= 1;
+    }
+    const t = arr[i]; arr[i] = arr[hi]; arr[hi] = t;
+    if (i === k) return arr[k];
+    if (k < i) hi = i - 1;
+    else lo = i + 1;
+  }
+  return arr[lo];
+};
+
+const medianOfBuf = (buf, len) => {
+  if (len === 0) return 0;
+  if (len === 1) return buf[0];
+  const mid = len >> 1;
+  const upper = quickselectInPlace(buf, 0, len - 1, mid);
+  if (len % 2 === 1) return upper;
+  let lower = -Infinity;
+  for (let i = 0; i < mid; i += 1) {
+    if (buf[i] > lower) lower = buf[i];
+  }
+  return 0.5 * (lower + upper);
 };
 
 const calculateMathV3ValuatorSeries = (closes, settings, lookback, madLookback) => {
@@ -360,11 +393,14 @@ const calculateMathV3ValuatorSeries = (closes, settings, lookback, madLookback) 
     deviations[index] = deviation;
   }
 
+  const buf = new Float64Array(madLookback);
   return regression.map((row, index) => {
     const start = Math.max(0, index - madLookback + 1);
-    const hist = Array.from(deviations.subarray(start, index + 1));
-    const loc = medianOf(hist);
-    const mad = 1.4826 * medianOf(hist.map((d) => Math.abs(d - loc)));
+    const len = index - start + 1;
+    for (let k = 0; k < len; k += 1) buf[k] = deviations[start + k];
+    const loc = medianOfBuf(buf, len);
+    for (let k = 0; k < len; k += 1) buf[k] = Math.abs(deviations[start + k] - loc);
+    const mad = 1.4826 * medianOfBuf(buf, len);
     const scale = Math.max(mad, 0.18);
     const z = (row.deviation - loc) / scale;
     const fairValue = Math.exp(row.a + loc);
@@ -396,11 +432,12 @@ const calculateMathV3Dashboard = (candles, settings) => {
 
   // Cap relative volume at 3x causal 1Y rolling median to immunize against exchange wash-volume regimes.
   const volWindow = Math.max(4, Math.round(B));
+  const volBuf = new Float64Array(volWindow);
   const relVol = candles.map((candle, index) => {
     const start = Math.max(0, index - volWindow + 1);
-    const vols = [];
-    for (let k = start; k <= index; k += 1) vols.push(candles[k].volume);
-    const med = medianOf(vols);
+    const len = index - start + 1;
+    for (let k = 0; k < len; k += 1) volBuf[k] = candles[start + k].volume;
+    const med = medianOfBuf(volBuf, len);
     return med > 0 ? Math.min(candle.volume / med, 3.0) : 1.0;
   });
 
@@ -526,6 +563,9 @@ const calculateMathV3Dashboard = (candles, settings) => {
 
   const rv2Y = new Float64Array(n);
   const high4Y = new Float64Array(n);
+  const highDeque = new Int32Array(n);
+  let dqHead = 0;
+  let dqTail = 0;
   const valOverheatZ = new Float64Array(n);
   const shortLogDev = new Float64Array(n);
   const pnlOverheatZ = new Float64Array(n);
@@ -550,13 +590,14 @@ const calculateMathV3Dashboard = (candles, settings) => {
       rv2Y[index] = Math.max(Math.sqrt((sumSq / volCount) * B), 0.25);
     }
 
-    // Causal 4Y rolling high.
-    let hi = 0;
+    // Causal 4Y rolling high via O(n) monotonic deque.
     const hiLo = Math.max(0, index - cycleBars + 1);
-    for (let k = hiLo; k <= index; k += 1) {
-      if (candles[k].high > hi) hi = candles[k].high;
-    }
-    high4Y[index] = hi;
+    while (dqHead < dqTail && highDeque[dqHead] < hiLo) dqHead += 1;
+    const curHigh = candles[index].high;
+    while (dqHead < dqTail && candles[highDeque[dqTail - 1]].high <= curHigh) dqTail -= 1;
+    highDeque[dqTail] = index;
+    dqTail += 1;
+    high4Y[index] = Math.max(0, candles[highDeque[dqHead]].high);
 
     const longLo = Math.max(0, index - scaledLongLookback + 1);
     const meanLogLong = (prefLogCloses[index + 1] - prefLogCloses[longLo]) / (index - longLo + 1);
@@ -597,7 +638,7 @@ const calculateMathV3Dashboard = (candles, settings) => {
     const pnl = pnlMetrics[index];
     const shortGiftOk = !settings.useDualWindow || short.z < settings.valCheap;
 
-    const nearAth = candle.close >= 0.85 * high4Y[index];
+    const nearAth = high4Y[index] > 0 && candle.close >= 0.85 * high4Y[index];
     const allProfitable = pnl.underwater === 0;
     const shortTopOk = !settings.useDualWindow || shortLogDev[index] > 0;
     const enterBubble = nearAth && shortTopOk && valOverheatZ[index] >= 2.20 && valOverheatPct[index] >= settings.pnlBubble;
@@ -635,9 +676,9 @@ const calculateMathV3Dashboard = (candles, settings) => {
       pnlZone = ZONES.GIFT;
     } else if (pnl.percentile < settings.pnlCheap && pnl.meanLogMoneyness <= 0.05) {
       pnlZone = ZONES.CHEAP;
-    } else if (nearAth && allProfitable && pnlOverheatPct[index] > settings.pnlBubble && pnlOverheatZ[index] >= 2.20) {
+    } else if (nearAth && allProfitable && pnlOverheatPct[index] >= settings.pnlBubble && pnlOverheatZ[index] >= 2.20) {
       pnlZone = ZONES.BUBBLE;
-    } else if (allProfitable && pnlOverheatPct[index] > settings.pnlExpensive && pnlOverheatZ[index] >= 1.90) {
+    } else if (allProfitable && pnlOverheatPct[index] >= settings.pnlExpensive && pnlOverheatZ[index] >= 1.90) {
       pnlZone = ZONES.EXP;
     } else {
       pnlZone = ZONES.FAIR;
@@ -1078,7 +1119,9 @@ export const evaluateSopAction = (dashboard, options = {}) => {
           : (rbClustersSinceLastGb > 1
             ? `ĐÃ KÍCH HOẠT CY-4 TRONG CHU KỲ NÀY (${cy4FirstDateStr}) → GIỮ NGUYÊN 50% CORE HOLD`
             : 'ĐÃ QUA TUẦN RB #1 → GIỮ NGUYÊN 50% CORE HOLD (KHÔNG BÁN THÊM)'))
-        : 'CHƯA KÍCH HOẠT (CHỈ KÍCH HOẠT KHI RED BUBBLE: SCORE <= -3 & !DIV)',
+        : (cy4AlreadyTriggered
+          ? `ĐÃ CHỐT 50% TRONG CHU KỲ NÀY (${cy4FirstDateStr}) → GIỮ 50% CORE HOLD CHỜ GREEN BUBBLE MỚI`
+          : 'CHƯA KÍCH HOẠT (CHỈ KÍCH HOẠT KHI RED BUBBLE: SCORE <= -3 & !DIV)'),
     },
   };
 };

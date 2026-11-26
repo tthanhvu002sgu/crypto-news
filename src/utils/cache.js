@@ -222,7 +222,7 @@ export async function fetchCached(cacheKey, fetchFn, expiryMs, addLog, label, fo
         const ageHours = ((Date.now() - cachedTime) / 3600000).toFixed(1);
         addLog(`⚠ ${label} — lỗi truy vấn, dùng tạm cache (${ageHours}h trước)`, 'warning');
       }
-      if (cachedVal && typeof cachedVal === 'object') {
+      if (cachedVal && typeof cachedVal === 'object' && !Array.isArray(cachedVal)) {
         return {
           ...cachedVal,
           isStale: true,
