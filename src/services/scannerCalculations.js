@@ -930,7 +930,9 @@ export function calculateTrackingDeltas(currentAsset, priorSnapshot1d, priorSnap
     return { deltaScore, deltaRank };
   };
 
-  const isNewInUniverse = priorSnapshot1d ? !a1d : false;
+  const isNewInUniverse = priorSnapshot1d?.assets
+    ? !priorSnapshot1d.assets.some(a => a.symbol === currentAsset.symbol)
+    : false;
 
   return {
     isNewInUniverse,
